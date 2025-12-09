@@ -1,6 +1,5 @@
 /**
  * Hypatia Zero - Entry point
- * Browser-only weather visualization with WebGPU
  */
 
 import './styles/theme.css';
@@ -9,6 +8,9 @@ import './styles/panels.css';
 import './styles/controls.css';
 import './styles/dialogs.css';
 import './styles/widgets.css';
+
+import { App } from './app';
+import { setupCameraControls } from './services/camera-controls';
 
 async function main(): Promise<void> {
   const canvas = document.getElementById('globe') as HTMLCanvasElement | null;
@@ -21,7 +23,7 @@ async function main(): Promise<void> {
     document.body.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:center;height:100%;text-align:center;padding:20px;">
         <div>
-          <h1>WebGPU Not Supported</h1>
+          <h1 style="font-weight:300;letter-spacing:2px;">WebGPU Not Supported</h1>
           <p style="opacity:0.6;margin-top:12px;">
             Your browser does not support WebGPU.<br>
             Try Chrome 113+ or Edge 113+.
@@ -32,11 +34,24 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Phase 1: Just show black canvas
-  // WebGPU initialization will come in Phase 4
+  const app = new App(canvas);
+  await app.bootstrap();
+
+  // Setup camera controls after bootstrap
+  const renderer = app.getRenderer();
+  if (renderer) {
+    setupCameraControls(canvas, renderer.camera, app.getServices().state);
+  }
+
+  // Expose for debugging
+  if (location.hostname === 'localhost') {
+    (window as unknown as { __hypatia: object }).__hypatia = {
+      app,
+      ...app.getServices(),
+    };
+  }
+
   console.log('[Zero] Hypatia Zero initialized');
-  console.log('[Zero] Canvas:', canvas.width, 'x', canvas.height);
-  console.log('[Zero] WebGPU:', navigator.gpu ? 'supported' : 'not supported');
 }
 
 main().catch((error: unknown) => {
