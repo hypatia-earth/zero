@@ -1,6 +1,20 @@
 /**
- * DataService - Load weather data for GPU upload
+ * DataService - Fetch weather data from Open-Meteo S3
+ *
+ * Uses @openmeteo/file-reader to fetch only needed chunks via Range requests.
+ * Tracks download progress for UI feedback.
  */
+
+import { OmFileReader, OmHttpBackend, OmDataType } from '@openmeteo/file-reader';
+import type { TrackerService } from './tracker-service';
+
+const BASE_URL = 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs';
+
+export interface TempTimestep {
+  time: Date;
+  data: Float32Array;
+  status: 'pending' | 'loading' | 'loaded' | 'failed';
+}
 
 export interface TempData {
   time0: Date;
@@ -9,34 +23,132 @@ export interface TempData {
   data1: Float32Array;
 }
 
+/**
+ * Build Open-Meteo URL for a given timestamp
+ */
+function buildOmUrl(time: Date): string {
+  // Find model run (00Z, 06Z, 12Z, 18Z) - use the one at or before current hour
+  const runHour = Math.floor(time.getUTCHours() / 6) * 6;
+  const runDate = new Date(time);
+  runDate.setUTCHours(runHour, 0, 0, 0);
+
+  const year = runDate.getUTCFullYear();
+  const month = String(runDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(runDate.getUTCDate()).padStart(2, '0');
+  const run = String(runHour).padStart(2, '0');
+
+  // Timestamp format: 2025-12-09T12:00
+  const ts = time.toISOString().slice(0, 13).replace('T', 'T') + '00';
+
+  return `${BASE_URL}/${year}/${month}/${day}/${run}00Z/${ts}.om`;
+}
+
+/**
+ * Get two adjacent hourly timestamps for interpolation
+ */
+function getAdjacentTimestamps(time: Date): [Date, Date] {
+  const t0 = new Date(time);
+  t0.setUTCMinutes(0, 0, 0);
+
+  const t1 = new Date(t0);
+  t1.setUTCHours(t1.getUTCHours() + 1);
+
+  return [t0, t1];
+}
+
 export class DataService {
   private tempData: TempData | null = null;
+  private trackerService: TrackerService;
+  private loadingPromise: Promise<TempData> | null = null;
 
-  async loadTempData(url0: string, url1: string, time0: Date, time1: Date): Promise<TempData> {
-    console.log(`[Data] Loading temp data...`);
-    const t0 = performance.now();
+  constructor(trackerService: TrackerService) {
+    this.trackerService = trackerService;
+  }
 
-    const [resp0, resp1] = await Promise.all([
-      fetch(url0),
-      fetch(url1)
-    ]);
+  /**
+   * Load temperature data for timestamps adjacent to given time
+   */
+  async loadTempForTime(time: Date): Promise<TempData> {
+    const [time0, time1] = getAdjacentTimestamps(time);
 
-    if (!resp0.ok || !resp1.ok) {
-      throw new Error(`Failed to fetch temp data: ${resp0.status}, ${resp1.status}`);
+    // Check if we already have this data
+    if (this.tempData &&
+        this.tempData.time0.getTime() === time0.getTime() &&
+        this.tempData.time1.getTime() === time1.getTime()) {
+      return this.tempData;
     }
 
-    const [buf0, buf1] = await Promise.all([
-      resp0.arrayBuffer(),
-      resp1.arrayBuffer()
-    ]);
+    // Avoid concurrent loads
+    if (this.loadingPromise) {
+      return this.loadingPromise;
+    }
 
-    const data0 = new Float32Array(buf0);
-    const data1 = new Float32Array(buf1);
+    console.log(`[Data] Loading temp for ${time0.toISOString()} - ${time1.toISOString()}`);
+    const t = performance.now();
 
-    console.log(`[Data] Loaded ${data0.length.toLocaleString()} points x2 in ${(performance.now() - t0).toFixed(0)}ms`);
+    this.loadingPromise = (async () => {
+      try {
+        const [data0, data1] = await Promise.all([
+          this.fetchTempTimestep(time0),
+          this.fetchTempTimestep(time1),
+        ]);
 
-    this.tempData = { time0, time1, data0, data1 };
-    return this.tempData;
+        this.tempData = { time0, time1, data0, data1 };
+        console.log(`[Data] Loaded ${data0.length.toLocaleString()} points x2 in ${(performance.now() - t).toFixed(0)}ms`);
+
+        return this.tempData;
+      } finally {
+        this.loadingPromise = null;
+        this.trackerService.onDownloadComplete();
+      }
+    })();
+
+    return this.loadingPromise;
+  }
+
+  /**
+   * Fetch temperature data for a single timestep from Open-Meteo
+   */
+  private async fetchTempTimestep(time: Date): Promise<Float32Array> {
+    const url = buildOmUrl(time);
+    console.log(`[Data] Fetching: ${url}`);
+
+    const backend = new OmHttpBackend({ url });
+    const reader = await OmFileReader.create(backend);
+
+    // Find temperature variable
+    const numChildren = reader.numberOfChildren();
+    let tempVar: OmFileReader | null = null;
+
+    for (let i = 0; i < numChildren; i++) {
+      const child = await reader.getChild(i);
+      if (!child) continue;
+      const name = child.getName();
+      if (name === 'temperature_2m' || name === 'temperature') {
+        tempVar = child;
+        break;
+      }
+    }
+
+    if (!tempVar) {
+      throw new Error(`No temperature variable found in ${url}`);
+    }
+
+    const dims = tempVar.getDimensions();
+
+    // Read all data - library fetches only needed chunks
+    const data = await tempVar.read({
+      type: OmDataType.FloatArray,
+      ranges: [
+        { start: 0, end: dims[0]! },
+        { start: 0, end: dims[1]! },
+      ],
+    });
+
+    // Track bytes (approximate - actual tracking would need backend wrapper)
+    this.trackerService.onBytesReceived(data.byteLength);
+
+    return data;
   }
 
   getTempData(): TempData | null {
@@ -58,5 +170,16 @@ export class DataService {
     if (tc >= t1) return 1;
 
     return (tc - t0) / (t1 - t0);
+  }
+
+  /**
+   * Check if we need to load new data for the given time
+   */
+  needsLoad(time: Date): boolean {
+    if (!this.tempData) return true;
+
+    const [time0, time1] = getAdjacentTimestamps(time);
+    return this.tempData.time0.getTime() !== time0.getTime() ||
+           this.tempData.time1.getTime() !== time1.getTime();
   }
 }

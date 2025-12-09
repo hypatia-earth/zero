@@ -9,4 +9,7 @@ export default defineConfig({
     target: 'esnext',
     outDir: 'dist',
   },
+  optimizeDeps: {
+    exclude: ['@openmeteo/file-format-wasm'],
+  },
 });

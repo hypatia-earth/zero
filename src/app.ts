@@ -38,7 +38,7 @@ export class App {
     this.stateService = new StateService(this.configService.getDefaultLayers());
     this.trackerService = new TrackerService();
     this.dateTimeService = new DateTimeService(this.configService.getDataWindowDays());
-    this.dataService = new DataService();
+    this.dataService = new DataService(this.trackerService);
   }
 
   async bootstrap(): Promise<void> {
@@ -132,16 +132,9 @@ export class App {
 
   private async loadTempData(): Promise<void> {
     try {
-      // Load test data (11 days apart for visual testing)
-      const time0 = new Date('2025-12-01T00:00:00Z');
-      const time1 = new Date('2025-12-12T00:00:00Z');
-
-      this.tempData = await this.dataService.loadTempData(
-        '/test/data/2025-12-09T06.temp.bin',
-        '/test/data/2025-12-09T07.temp.bin',
-        time0,
-        time1
-      );
+      // Load temp data for current time from state
+      const currentTime = this.stateService.getTime();
+      this.tempData = await this.dataService.loadTempForTime(currentTime);
 
       // Upload to GPU
       this.renderer!.uploadTempData(this.tempData.data0, this.tempData.data1);
