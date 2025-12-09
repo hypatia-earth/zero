@@ -1,0 +1,37 @@
+/**
+ * Layout - Media queries, spacing, positioning
+ *
+ * Breakpoints:
+ * - Mobile:  < 640px  (default)
+ * - Tablet:  >= 640px
+ * - Desktop: >= 1024px
+ * - Large:   >= 1440px
+ */
+
+/* === Mobile (default) === */
+:root {
+  --layout-font-size: 16px;
+  --layout-margin-top: max(16px, env(safe-area-inset-top, 0px));
+  --layout-margin-right: max(16px, env(safe-area-inset-right, 0px));
+  --layout-margin-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  --layout-margin-left: max(16px, env(safe-area-inset-left, 0px));
+  /* Logo: 280x64 native, capped at 44vw on narrow screens */
+  --layout-logo-width: min(280px, 44vw);
+  --layout-logo-height: 64px;
+  /* Timecircle: 140px native, capped at 44vw on narrow screens */
+  --layout-timecircle-size: min(140px, 44vw);
+  --layout-panel-gap: 60px;
+  --layout-timebar-height: 100px;
+  /* Dynamic viewport height - accounts for browser chrome on mobile */
+  --layout-vh: 100dvh;
+}
+
+/* === Large === */
+@media (min-width: 1440px) {
+  :root {
+    --layout-margin-top: max(24px, env(safe-area-inset-top, 0px));
+    --layout-margin-right: max(24px, env(safe-area-inset-right, 0px));
+    --layout-margin-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+    --layout-margin-left: max(24px, env(safe-area-inset-left, 0px));
+  }
+}

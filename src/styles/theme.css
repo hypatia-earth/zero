@@ -1,0 +1,109 @@
+/**
+ * Theme - Colors, fonts, CSS variables
+ */
+
+:root {
+  /* Core colors */
+  --color-bg-primary: #161616;
+  --color-bg-modal: #454545;
+  --color-text-primary: #fff;
+
+  /* Dialog */
+  --dialog-window-bg: rgba(20, 25, 35, 0.95);
+  --dialog-window-radius: 12px;
+  --dialog-backdrop: rgba(0, 0, 0, 0.4);
+  --dialog-backdrop-transparent: transparent;
+
+  /* UI surfaces */
+  --color-surface: rgba(255, 255, 255, 0.1);
+  --color-surface-hover: rgba(255, 255, 255, 0.2);
+  --color-surface-active: rgba(255, 255, 255, 0.15);
+  --color-surface-dark: rgba(0, 0, 0, 0.85);
+  --color-surface-dark-hover: rgba(0, 0, 0, 0.95);
+  --color-surface-dark-light: rgba(0, 0, 0, 0.7);
+
+  /* Borders */
+  --color-border: rgba(255, 255, 255, 0.3);
+  --color-border-light: rgba(255, 255, 255, 0.1);
+  --color-border-hover: rgba(255, 255, 255, 0.4);
+  --color-border-subtle: rgba(255, 255, 255, 0.2);
+
+  /* Error */
+  --color-error-bg: rgba(255, 50, 50, 0.1);
+  --color-error-border: rgba(255, 50, 50, 0.3);
+
+  /* Primary accent (blue) */
+  --color-primary: #4a9eff;
+  --color-primary-bg: rgba(74, 158, 255, 0.2);
+  --color-primary-bg-hover: rgba(74, 158, 255, 0.3);
+  --color-primary-bg-active: rgba(74, 158, 255, 0.35);
+  --color-primary-border: rgba(74, 158, 255, 0.3);
+  --color-primary-border-selected: rgba(74, 158, 255, 0.4);
+  --color-primary-border-focus: rgba(74, 158, 255, 0.5);
+
+  /* Danger (red) */
+  --color-danger-bg: rgba(255, 100, 100, 0.15);
+  --color-danger-bg-hover: rgba(255, 100, 100, 0.25);
+  --color-danger-bg-active: rgba(255, 100, 100, 0.3);
+  --color-danger-border: rgba(255, 100, 100, 0.3);
+
+  /* Text */
+  --color-text-muted: rgba(255, 255, 255, 0.5);
+  --color-text-subtle: rgba(255, 255, 255, 0.4);
+  --color-text-faint: rgba(255, 255, 255, 0.3);
+
+  /* Effects */
+  --color-glow: rgba(255, 255, 255, 0.6);
+  --color-shadow: rgba(0, 0, 0, 0.3);
+  --color-shadow-strong: rgba(0, 0, 0, 0.5);
+
+  /* Layer accent colors - OKLCH for perceptual uniformity */
+  --color-layer-temp: oklch(70% 0.18 30);       /* orange */
+  --color-layer-rain: oklch(70% 0.18 250);      /* blue */
+  --color-layer-wind: oklch(70% 0.18 170);      /* teal */
+  --color-layer-pressure: oklch(70% 0.18 320);  /* magenta */
+  --color-layer-humidity: oklch(70% 0.18 100);  /* yellow-green */
+  --color-layer-clouds: #ffffff;                 /* white */
+  --color-layer-waves: oklch(70% 0.18 210);     /* cyan */
+  --color-layer-earth: oklch(65% 0.12 250);
+  --color-layer-sun: #feca57;
+  --color-layer-graticule: #ffffff;
+  --color-layer-text: #ffffff;
+  --color-layer-debug: #ffffff;
+}
+
+/* Bar helper - flexbox row */
+.bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+/* Col helper - flexbox column */
+.col {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Group - container for related items */
+.group {
+  margin-top: 12px;
+}
+
+.group h4 {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.5;
+  margin: 0 0 6px 0;
+  padding: 0 12px;
+}
+
+/* Widget - complex component container */
+.widget {
+  position: relative;
+  margin-bottom: 10px;
+}

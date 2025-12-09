@@ -1,0 +1,96 @@
+/* Base panel styles */
+.panel {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 20;
+}
+
+.dialog {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 30;
+}
+
+.modal {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 40;
+}
+
+/* Individual panel positioning */
+.panel.logo {
+  top: var(--layout-margin-top);
+  left: var(--layout-margin-left);
+}
+
+.panel.logo .brand-logo {
+  width: var(--layout-logo-width);
+  height: auto;
+}
+
+.panel.layers {
+  top: calc(var(--layout-margin-top) + var(--layout-logo-height) + var(--layout-panel-gap));
+  left: var(--layout-margin-left);
+  width: 150px;
+  max-height: calc(var(--layout-vh) - var(--layout-margin-top) - var(--layout-logo-height) - var(--layout-panel-gap) - var(--layout-timebar-height) - var(--layout-margin-bottom) - var(--layout-panel-gap));
+  overflow-y: auto;
+  padding-right: 16px;
+}
+
+.panel.timecircle {
+  top: 20px;
+  right: 20px;
+  width: var(--layout-timecircle-size);
+  height: var(--layout-timecircle-size);
+}
+
+.panel.queue {
+  top: calc(20px + var(--layout-timecircle-size) + 10px);
+  right: 20px;
+}
+
+.panel.fullscreen {
+  top: calc(20px + var(--layout-timecircle-size) + 55px);
+  right: 20px;
+  width: 48px;
+  height: 48px;
+}
+
+.panel.timebar {
+  left: var(--layout-margin-left);
+  right: var(--layout-margin-right);
+  bottom: var(--layout-margin-bottom);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+@media (min-width: 1440px) {
+  .panel.timebar {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 1200px;
+  }
+}
+
+.timeslider {
+  pointer-events: auto;
+  position: relative;
+  padding: 16px 24px;
+}
+
+.timesteps {
+  pointer-events: auto;
+  margin-top: 12px;
+}
+
+/* Re-enable pointer events on nested elements */
+.group,
+.widget,
+.timeslider,
+.timesteps,
+.date-time {
+  pointer-events: auto;
+}

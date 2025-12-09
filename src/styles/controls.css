@@ -1,0 +1,76 @@
+/**
+ * Controls - buttons, sliders, inputs
+ */
+
+/* Control base style */
+.control {
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 21px;
+  backdrop-filter: blur(10px);
+  width: 100%;
+  cursor: pointer;
+  font-size: 14px;
+  color: inherit;
+  font-family: inherit;
+}
+
+@media (hover: hover) {
+  .control:not(.nohover):hover {
+    background: rgba(40, 40, 40, 1);
+  }
+}
+
+/* Touch/click feedback - all platforms */
+.control:not(.nohover):active {
+  background: rgba(60, 60, 60, 1);
+}
+
+.control.circle {
+  border-radius: 50%;
+  width: auto;
+}
+
+.control.pill {
+  width: auto;
+  padding: 6px 14px;
+}
+
+/* Circle controls fill their panel */
+.panel.fullscreen > .control.circle,
+.panel.timecircle > .control.circle {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+/* Panel icons */
+.fullscreen-icon {
+  width: 24px;
+  height: 24px;
+  display: block;
+  filter: invert(1);
+}
+
+/* Time circle display */
+.time-year {
+  font-size: 14px;
+  opacity: 0.6;
+  margin-bottom: 4px;
+}
+
+.time-date {
+  font-size: 28px;
+  font-weight: 300;
+  margin-bottom: 4px;
+}
+
+.time-time {
+  font-size: 16px;
+  opacity: 0.8;
+  font-family: 'Courier New', monospace;
+}
