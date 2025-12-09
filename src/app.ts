@@ -11,7 +11,7 @@ import { TrackerService } from './services/tracker-service';
 import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
 import { KeyboardService } from './services/keyboard-service';
-import { DataService, TempData } from './services/data-service';
+import { DataService, ProgressUpdate } from './services/data-service';
 import { GlobeRenderer } from './render/globe-renderer';
 import { generateGaussianLUTs } from './render/gaussian-grid';
 import { getSunDirection } from './utils/sun-position';
@@ -30,7 +30,7 @@ export class App {
   private dataService: DataService;
   private keyboardService: KeyboardService | null = null;
   private renderer: GlobeRenderer | null = null;
-  private tempData: TempData | null = null;
+  private tempLoadedPoints = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.configService = new ConfigService();
@@ -132,13 +132,23 @@ export class App {
 
   private async loadTempData(): Promise<void> {
     try {
-      // Load temp data for current time from state
       const currentTime = this.stateService.getTime();
-      this.tempData = await this.dataService.loadTempForTime(currentTime);
 
-      // Upload to GPU
-      this.renderer!.uploadTempData(this.tempData.data0, this.tempData.data1);
-      console.log('[App] Temp data uploaded to GPU');
+      // Progressive loading with chunk callbacks
+      await this.dataService.loadProgressiveInterleaved(
+        currentTime,
+        (update: ProgressUpdate) => {
+          // Upload chunk to GPU
+          this.renderer!.uploadTempDataChunk(update.data0, update.data1, update.offset);
+          this.tempLoadedPoints = update.loadedPoints;
+
+          // Update bootstrap progress (55-95% range)
+          const progress = 55 + (update.loadedPoints / update.totalPoints) * 40;
+          BootstrapService.setProgress(progress);
+        }
+      );
+
+      console.log('[App] Temp data fully loaded');
     } catch (err) {
       console.warn('[App] Failed to load temp data:', err);
     }
@@ -174,9 +184,10 @@ export class App {
         earthOpacity: earthEnabled ? options.earth.opacity : 0,
         tempOpacity: tempEnabled ? options.temp.opacity : 0,
         rainOpacity: rainEnabled ? options.rain.opacity : 0,
-        tempDataReady: this.tempData !== null,
+        tempDataReady: this.tempLoadedPoints > 0,
         rainDataReady: false,
         tempLerp,
+        tempLoadedPoints: this.tempLoadedPoints,
       });
 
       this.renderer!.render();

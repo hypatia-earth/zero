@@ -19,7 +19,8 @@ export interface GlobeUniforms {
   rainOpacity: number;
   tempDataReady: boolean;
   rainDataReady: boolean;
-  tempLerp: number;  // 0-1 interpolation between temp buffers
+  tempLerp: number;
+  tempLoadedPoints: number;  // progressive loading: cells 0..N valid
 }
 
 export class GlobeRenderer {
@@ -184,6 +185,10 @@ export class GlobeRenderer {
     view.setUint32(offset, uniforms.rainDataReady ? 1 : 0, true); offset += 4;
     view.setFloat32(offset, uniforms.tempLerp, true); offset += 4;
 
+    // tempLoadedPoints + padding (16 bytes)
+    view.setUint32(offset, uniforms.tempLoadedPoints, true); offset += 4;
+    offset += 12; // vec3f padding
+
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
   }
 
@@ -252,6 +257,15 @@ export class GlobeRenderer {
   uploadTempData(data0: Float32Array, data1: Float32Array): void {
     this.device.queue.writeBuffer(this.tempData0Buffer, 0, data0.buffer, data0.byteOffset, data0.byteLength);
     this.device.queue.writeBuffer(this.tempData1Buffer, 0, data1.buffer, data1.byteOffset, data1.byteLength);
+  }
+
+  /**
+   * Upload partial temp data chunk at offset (for progressive loading)
+   */
+  uploadTempDataChunk(data0: Float32Array, data1: Float32Array, offset: number): void {
+    const byteOffset = offset * 4; // Float32 = 4 bytes
+    this.device.queue.writeBuffer(this.tempData0Buffer, byteOffset, data0.buffer, data0.byteOffset, data0.byteLength);
+    this.device.queue.writeBuffer(this.tempData1Buffer, byteOffset, data1.buffer, data1.byteOffset, data1.byteLength);
   }
 
   uploadRainData(data: Float32Array, offset: number = 0): void {

@@ -19,6 +19,8 @@ struct Uniforms {
   tempDataReady: u32,
   rainDataReady: u32,
   tempLerp: f32,          // interpolation factor 0-1 between tempData0 and tempData1
+  tempLoadedPoints: u32,  // progressive loading: cells 0..N are valid
+  tempLoadedPad: vec3f,   // padding to 16-byte alignment
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -180,6 +182,9 @@ fn colormapRain(mm: f32) -> vec4f {
 fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
   if (u.tempDataReady == 0u || u.tempOpacity <= 0.0) { return color; }
   let cell = latLonToCell(lat, lon);
+
+  // Progressive loading: skip cells not yet loaded
+  if (cell >= u.tempLoadedPoints) { return color; }
 
   // Read from both buffers and interpolate
   let temp0 = tempData0[cell];
