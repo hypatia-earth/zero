@@ -10,6 +10,7 @@ import { StateService } from './services/state-service';
 import { TrackerService } from './services/tracker-service';
 import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
+import { KeyboardService } from './services/keyboard-service';
 import { GlobeRenderer } from './render/globe-renderer';
 import { generateGaussianLUTs } from './render/gaussian-grid';
 import { getSunDirection } from './utils/sun-position';
@@ -25,6 +26,7 @@ export class App {
   private stateService: StateService;
   private trackerService: TrackerService;
   private dateTimeService: DateTimeService;
+  private _keyboardService: KeyboardService | null = null;
   private renderer: GlobeRenderer | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -72,6 +74,7 @@ export class App {
 
       // Step 7: Finalize
       BootstrapService.complete();
+      this._keyboardService = new KeyboardService(this.stateService);
       console.log('[App] Bootstrap complete');
 
       // Mount UI
