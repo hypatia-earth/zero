@@ -19,6 +19,7 @@ export interface GlobeUniforms {
   rainOpacity: number;
   tempDataReady: boolean;
   rainDataReady: boolean;
+  tempLerp: number;  // 0-1 interpolation between temp buffers
 }
 
 export class GlobeRenderer {
@@ -31,7 +32,8 @@ export class GlobeRenderer {
   private basemapSampler!: GPUSampler;
   private gaussianLatsBuffer!: GPUBuffer;
   private ringOffsetsBuffer!: GPUBuffer;
-  private tempDataBuffer!: GPUBuffer;
+  private tempData0Buffer!: GPUBuffer;
+  private tempData1Buffer!: GPUBuffer;
   private rainDataBuffer!: GPUBuffer;
 
   readonly camera: Camera;
@@ -77,7 +79,11 @@ export class GlobeRenderer {
 
     // Weather data (6.6M points)
     const dataSize = 6_599_680 * 4;
-    this.tempDataBuffer = this.device.createBuffer({
+    this.tempData0Buffer = this.device.createBuffer({
+      size: dataSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.tempData1Buffer = this.device.createBuffer({
       size: dataSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
@@ -97,6 +103,7 @@ export class GlobeRenderer {
         { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
         { binding: 5, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
         { binding: 6, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
+        { binding: 7, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
       ],
     });
 
@@ -115,8 +122,9 @@ export class GlobeRenderer {
         { binding: 2, resource: this.basemapSampler },
         { binding: 3, resource: { buffer: this.gaussianLatsBuffer } },
         { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
-        { binding: 5, resource: { buffer: this.tempDataBuffer } },
-        { binding: 6, resource: { buffer: this.rainDataBuffer } },
+        { binding: 5, resource: { buffer: this.tempData0Buffer } },
+        { binding: 6, resource: { buffer: this.tempData1Buffer } },
+        { binding: 7, resource: { buffer: this.rainDataBuffer } },
       ],
     });
 
@@ -170,10 +178,11 @@ export class GlobeRenderer {
     view.setFloat32(offset, uniforms.earthOpacity, true); offset += 4;
     view.setFloat32(offset, uniforms.tempOpacity, true); offset += 4;
 
-    // rainOpacity, tempDataReady, rainDataReady
+    // rainOpacity, tempDataReady, rainDataReady, tempLerp
     view.setFloat32(offset, uniforms.rainOpacity, true); offset += 4;
     view.setUint32(offset, uniforms.tempDataReady ? 1 : 0, true); offset += 4;
     view.setUint32(offset, uniforms.rainDataReady ? 1 : 0, true); offset += 4;
+    view.setFloat32(offset, uniforms.tempLerp, true); offset += 4;
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
   }
@@ -228,8 +237,9 @@ export class GlobeRenderer {
         { binding: 2, resource: this.basemapSampler },
         { binding: 3, resource: { buffer: this.gaussianLatsBuffer } },
         { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
-        { binding: 5, resource: { buffer: this.tempDataBuffer } },
-        { binding: 6, resource: { buffer: this.rainDataBuffer } },
+        { binding: 5, resource: { buffer: this.tempData0Buffer } },
+        { binding: 6, resource: { buffer: this.tempData1Buffer } },
+        { binding: 7, resource: { buffer: this.rainDataBuffer } },
       ],
     });
   }
@@ -239,8 +249,9 @@ export class GlobeRenderer {
     this.device.queue.writeBuffer(this.ringOffsetsBuffer, 0, offsets.buffer, offsets.byteOffset, offsets.byteLength);
   }
 
-  uploadTempData(data: Float32Array, offset: number = 0): void {
-    this.device.queue.writeBuffer(this.tempDataBuffer, offset, data.buffer, data.byteOffset, data.byteLength);
+  uploadTempData(data0: Float32Array, data1: Float32Array): void {
+    this.device.queue.writeBuffer(this.tempData0Buffer, 0, data0.buffer, data0.byteOffset, data0.byteLength);
+    this.device.queue.writeBuffer(this.tempData1Buffer, 0, data1.buffer, data1.byteOffset, data1.byteLength);
   }
 
   uploadRainData(data: Float32Array, offset: number = 0): void {
@@ -252,7 +263,8 @@ export class GlobeRenderer {
     this.basemapTexture?.destroy();
     this.gaussianLatsBuffer?.destroy();
     this.ringOffsetsBuffer?.destroy();
-    this.tempDataBuffer?.destroy();
+    this.tempData0Buffer?.destroy();
+    this.tempData1Buffer?.destroy();
     this.rainDataBuffer?.destroy();
   }
 }

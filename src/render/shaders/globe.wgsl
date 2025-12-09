@@ -18,6 +18,7 @@ struct Uniforms {
   rainOpacity: f32,
   tempDataReady: u32,
   rainDataReady: u32,
+  tempLerp: f32,          // interpolation factor 0-1 between tempData0 and tempData1
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -25,8 +26,9 @@ struct Uniforms {
 @group(0) @binding(2) var basemapSampler: sampler;
 @group(0) @binding(3) var<storage, read> gaussianLats: array<f32>;
 @group(0) @binding(4) var<storage, read> ringOffsets: array<u32>;
-@group(0) @binding(5) var<storage, read> tempData: array<f32>;
-@group(0) @binding(6) var<storage, read> rainData: array<f32>;
+@group(0) @binding(5) var<storage, read> tempData0: array<f32>;
+@group(0) @binding(6) var<storage, read> tempData1: array<f32>;
+@group(0) @binding(7) var<storage, read> rainData: array<f32>;
 
 const PI: f32 = 3.14159265359;
 const TAU: f32 = 6.28318530718;
@@ -178,9 +180,15 @@ fn colormapRain(mm: f32) -> vec4f {
 fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
   if (u.tempDataReady == 0u || u.tempOpacity <= 0.0) { return color; }
   let cell = latLonToCell(lat, lon);
-  let tempK = tempData[cell];
-  if (tempK < 100.0) { return color; } // Invalid data
-  let tempC = tempK - 273.15;
+
+  // Read from both buffers and interpolate
+  let temp0 = tempData0[cell];
+  let temp1 = tempData1[cell];
+  let tempC = mix(temp0, temp1, u.tempLerp);  // Data is already in Celsius
+
+  // Skip invalid data
+  if (tempC < -100.0 || tempC > 100.0) { return color; }
+
   let tempColor = colormapTemp(tempC);
   return vec4f(mix(color.rgb, tempColor, u.tempOpacity), color.a);
 }

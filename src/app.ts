@@ -11,6 +11,7 @@ import { TrackerService } from './services/tracker-service';
 import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
 import { KeyboardService } from './services/keyboard-service';
+import { DataService, TempData } from './services/data-service';
 import { GlobeRenderer } from './render/globe-renderer';
 import { generateGaussianLUTs } from './render/gaussian-grid';
 import { getSunDirection } from './utils/sun-position';
@@ -26,8 +27,10 @@ export class App {
   private stateService: StateService;
   private trackerService: TrackerService;
   private dateTimeService: DateTimeService;
-  private _keyboardService: KeyboardService | null = null;
+  private dataService: DataService;
+  private keyboardService: KeyboardService | null = null;
   private renderer: GlobeRenderer | null = null;
+  private tempData: TempData | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.configService = new ConfigService();
@@ -35,6 +38,7 @@ export class App {
     this.stateService = new StateService(this.configService.getDefaultLayers());
     this.trackerService = new TrackerService();
     this.dateTimeService = new DateTimeService(this.configService.getDataWindowDays());
+    this.dataService = new DataService();
   }
 
   async bootstrap(): Promise<void> {
@@ -68,13 +72,14 @@ export class App {
       this.setupResizeHandler();
       this.stateService.enableSync();
 
-      // Step 6: Load Data (placeholder - no actual data loading yet)
+      // Step 6: Load Data
       BootstrapService.setStep('LOAD_DATA');
       BootstrapService.setProgress(80);
+      await this.loadTempData();
 
       // Step 7: Finalize
       BootstrapService.complete();
-      this._keyboardService = new KeyboardService(this.stateService);
+      this.keyboardService = new KeyboardService(this.stateService);
       console.log('[App] Bootstrap complete');
 
       // Mount UI
@@ -125,27 +130,60 @@ export class App {
     await this.renderer!.loadBasemap(faces);
   }
 
+  private async loadTempData(): Promise<void> {
+    try {
+      // Load test data (11 days apart for visual testing)
+      const time0 = new Date('2025-12-01T00:00:00Z');
+      const time1 = new Date('2025-12-12T00:00:00Z');
+
+      this.tempData = await this.dataService.loadTempData(
+        '/test/data/2025-12-09T06.temp.bin',
+        '/test/data/2025-12-09T07.temp.bin',
+        time0,
+        time1
+      );
+
+      // Upload to GPU
+      this.renderer!.uploadTempData(this.tempData.data0, this.tempData.data1);
+      console.log('[App] Temp data uploaded to GPU');
+    } catch (err) {
+      console.warn('[App] Failed to load temp data:', err);
+    }
+  }
+
   private startRenderLoop(): void {
     const render = () => {
       requestAnimationFrame(render);
 
       const options = this.optionsService.options.value;
       const state = this.stateService.get();
+      const layers = state.layers;
+
+      // Layer enabled from URL state, opacity from options
+      const earthEnabled = layers.includes('earth');
+      const sunEnabled = layers.includes('sun');
+      const gridEnabled = layers.includes('grid');
+      const tempEnabled = layers.includes('temp');
+      const rainEnabled = layers.includes('rain');
+
+      // Calculate temp interpolation
+      const tempLerp = this.dataService.getTempInterpolation(state.time);
 
       this.renderer!.updateUniforms({
         viewProjInverse: this.renderer!.camera.getViewProjInverse(),
         eyePosition: this.renderer!.camera.getEyePosition(),
         resolution: new Float32Array([this.canvas.width, this.canvas.height]),
         time: performance.now() / 1000,
-        sunEnabled: options.sun.enabled,
+        sunEnabled,
         sunDirection: getSunDirection(state.time),
-        gridEnabled: options.grid.enabled,
+        gridEnabled,
         gridOpacity: options.grid.opacity,
-        earthOpacity: options.earth.opacity,
-        tempOpacity: options.temp.opacity,
-        rainOpacity: options.rain.opacity,
-        tempDataReady: false,
+        earthOpacity: earthEnabled ? options.earth.opacity : 0,
+        tempOpacity: tempEnabled ? options.temp.opacity : 0,
+        rainOpacity: rainEnabled ? options.rain.opacity : 0,
+        tempDataReady: this.tempData !== null,
         rainDataReady: false,
+        tempLerp,
       });
 
       this.renderer!.render();
@@ -200,6 +238,8 @@ export class App {
       state: this.stateService,
       tracker: this.trackerService,
       dateTime: this.dateTimeService,
+      keyboard: this.keyboardService,
+      data: this.dataService,
     };
   }
 }
