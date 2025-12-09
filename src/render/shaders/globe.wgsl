@@ -50,18 +50,32 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f 
 }
 
 fn computeRay(fragCoord: vec2f) -> vec3f {
+  // Compute NDC (-1 to 1)
   let ndc = vec2f(
     (fragCoord.x / u.resolution.x) * 2.0 - 1.0,
     1.0 - (fragCoord.y / u.resolution.y) * 2.0
   );
-  // WebGPU depth range is 0-1 (not -1 to 1 like OpenGL)
-  let clipNear = vec4f(ndc, 0.0, 1.0);
-  let clipFar = vec4f(ndc, 1.0, 1.0);
-  var worldNear = u.viewProjInverse * clipNear;
-  var worldFar = u.viewProjInverse * clipFar;
-  worldNear /= worldNear.w;
-  worldFar /= worldFar.w;
-  return normalize(worldFar.xyz - worldNear.xyz);
+
+  // Camera always looks at origin, so forward = -normalize(eyePosition)
+  let forward = -normalize(u.eyePosition);
+
+  // Compute right and up from forward and world up (0,1,0)
+  let worldUp = vec3f(0.0, 1.0, 0.0);
+  let right = normalize(cross(forward, worldUp));
+  let up = cross(right, forward);
+
+  // FOV = 75 degrees, tan(37.5°) ≈ 0.767
+  let tanFov = 0.76732698797896544;
+  let aspect = u.resolution.x / u.resolution.y;
+
+  // Compute ray direction
+  let rayDir = normalize(
+    forward +
+    right * ndc.x * tanFov * aspect +
+    up * ndc.y * tanFov
+  );
+
+  return rayDir;
 }
 
 fn raySphereIntersect(rayOrigin: vec3f, rayDir: vec3f, radius: f32) -> RayHit {

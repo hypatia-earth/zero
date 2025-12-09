@@ -65,23 +65,58 @@ export class Camera {
     this.lookAt(this.viewMatrix, eye, [0, 0, 0], [0, 1, 0]);
     this.perspective(this.projMatrix, this.fov, this.aspect, 0.1, 1000);
     this.multiply(this.viewProjMatrix, this.projMatrix, this.viewMatrix);
-    this.invert(this.viewProjInverse, this.viewProjMatrix);
+
+    // Compute inverses separately (more stable than inverting combined matrix)
+    const viewInverse = new Float32Array(16);
+    const projInverse = new Float32Array(16);
+    this.invertView(viewInverse, this.viewMatrix, eye);
+    this.invertPerspective(projInverse, this.fov, this.aspect, 0.1, 1000);
+    this.multiply(this.viewProjInverse, viewInverse, projInverse);
+  }
+
+  private invertView(out: Float32Array, view: Float32Array, eye: Float32Array): void {
+    // View inverse: transpose rotation, transform eye position
+    // R^-1 = R^T for orthonormal, t^-1 = -R^T * t but we have eye position directly
+    out[0] = view[0];  out[1] = view[4];  out[2] = view[8];   out[3] = 0;
+    out[4] = view[1];  out[5] = view[5];  out[6] = view[9];   out[7] = 0;
+    out[8] = view[2];  out[9] = view[6];  out[10] = view[10]; out[11] = 0;
+    out[12] = eye[0]!; out[13] = eye[1]!; out[14] = eye[2]!;  out[15] = 1;
+  }
+
+  private invertPerspective(out: Float32Array, fov: number, aspect: number, near: number, far: number): void {
+    // Inverse of WebGPU perspective matrix (0-1 depth range)
+    const f = Math.tan(fov / 2);
+    out[0] = f * aspect; out[1] = 0; out[2] = 0; out[3] = 0;
+    out[4] = 0; out[5] = f; out[6] = 0; out[7] = 0;
+    out[8] = 0; out[9] = 0; out[10] = 0; out[11] = (near - far) / (far * near);
+    out[12] = 0; out[13] = 0; out[14] = -1; out[15] = 1 / near;
   }
 
   private lookAt(out: Float32Array, eye: Float32Array, center: number[], up: number[]): void {
-    const zx = eye[0]! - center[0]!, zy = eye[1]! - center[1]!, zz = eye[2]! - center[2]!;
-    let len = 1 / Math.sqrt(zx * zx + zy * zy + zz * zz);
-    const z0 = zx * len, z1 = zy * len, z2 = zz * len;
-    const x0 = up[1]! * z2 - up[2]! * z1, x1 = up[2]! * z0 - up[0]! * z2, x2 = up[0]! * z1 - up[1]! * z0;
-    len = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2);
-    const xx = x0 / len, xy = x1 / len, xz = x2 / len;
-    const yx = z1 * xz - z2 * xy, yy = z2 * xx - z0 * xz, yz = z0 * xy - z1 * xx;
-    out[0] = xx; out[1] = yx; out[2] = z0; out[3] = 0;
-    out[4] = xy; out[5] = yy; out[6] = z1; out[7] = 0;
-    out[8] = xz; out[9] = yz; out[10] = z2; out[11] = 0;
-    out[12] = -(xx * eye[0]! + xy * eye[1]! + xz * eye[2]!);
-    out[13] = -(yx * eye[0]! + yy * eye[1]! + yz * eye[2]!);
-    out[14] = -(z0 * eye[0]! + z1 * eye[1]! + z2 * eye[2]!);
+    // Forward vector (from target to eye)
+    let fx = eye[0]! - center[0]!, fy = eye[1]! - center[1]!, fz = eye[2]! - center[2]!;
+    let len = 1 / Math.sqrt(fx * fx + fy * fy + fz * fz);
+    fx *= len; fy *= len; fz *= len;
+
+    // Right vector = up × forward
+    let rx = up[1]! * fz - up[2]! * fy;
+    let ry = up[2]! * fx - up[0]! * fz;
+    let rz = up[0]! * fy - up[1]! * fx;
+    len = Math.sqrt(rx * rx + ry * ry + rz * rz);
+    rx /= len; ry /= len; rz /= len;
+
+    // Recompute up = forward × right
+    const ux = fy * rz - fz * ry;
+    const uy = fz * rx - fx * rz;
+    const uz = fx * ry - fy * rx;
+
+    // Column-major order for WebGPU
+    out[0] = rx;  out[1] = ux;  out[2] = fx;  out[3] = 0;
+    out[4] = ry;  out[5] = uy;  out[6] = fy;  out[7] = 0;
+    out[8] = rz;  out[9] = uz;  out[10] = fz; out[11] = 0;
+    out[12] = -(rx * eye[0]! + ry * eye[1]! + rz * eye[2]!);
+    out[13] = -(ux * eye[0]! + uy * eye[1]! + uz * eye[2]!);
+    out[14] = -(fx * eye[0]! + fy * eye[1]! + fz * eye[2]!);
     out[15] = 1;
   }
 
