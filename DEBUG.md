@@ -78,6 +78,14 @@ __hypatia.state.toggleLayer('grid')
 __hypatia.state.toggleLayer('sun')
 ```
 
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| ← / → | ±1 hour (to full hour) |
+| Shift + ← / → | ±10 minutes (to 10-min mark) |
+| Ctrl/Cmd + ← / → | ±24 hours |
+
 ## Common Issues
 
 ### Black screen
