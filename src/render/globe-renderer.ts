@@ -153,9 +153,10 @@ export class GlobeRenderer {
     view.setFloat32(offset, uniforms.resolution[1]!, true); offset += 4;
     offset += 8;
 
-    // time, sunEnabled
+    // time, sunEnabled + padding to align sunDirection to 16 bytes
     view.setFloat32(offset, uniforms.time, true); offset += 4;
     view.setUint32(offset, uniforms.sunEnabled ? 1 : 0, true); offset += 4;
+    offset += 8; // padding for vec3f alignment
 
     // vec3 sunDirection + padding (16 bytes)
     view.setFloat32(offset, uniforms.sunDirection[0]!, true); offset += 4;

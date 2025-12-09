@@ -1,16 +1,17 @@
 // Globe shader - ray-sphere intersection with layer compositing
 
 struct Uniforms {
-  viewProjInverse: mat4x4f,
-  eyePosition: vec3f,
-  _pad0: f32,
-  resolution: vec2f,
-  _pad1: vec2f,
-  time: f32,
-  sunEnabled: u32,
-  sunDirection: vec3f,
-  _pad2: f32,
-  gridEnabled: u32,
+  viewProjInverse: mat4x4f,  // 64 bytes
+  eyePosition: vec3f,         // 12 + 4 pad = 16 bytes
+  eyePad: f32,
+  resolution: vec2f,          // 8 + 8 pad = 16 bytes
+  resPad: vec2f,
+  time: f32,                  // 4 bytes
+  sunEnabled: u32,            // 4 bytes
+  sunPad: vec2f,              // 8 bytes pad for vec3f alignment
+  sunDirection: vec3f,        // 12 + 4 pad = 16 bytes
+  sunDirPad: f32,
+  gridEnabled: u32,           // remaining fields tightly packed
   gridOpacity: f32,
   earthOpacity: f32,
   tempOpacity: f32,

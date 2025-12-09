@@ -10,8 +10,8 @@ export function getSunDirection(date: Date): Float32Array {
   // Solar declination (approximate)
   const declination = -23.45 * Math.cos(2 * Math.PI * (dayOfYear + 10) / 365) * Math.PI / 180;
 
-  // Hour angle (sun at noon = 0, moves 15 deg/hour)
-  const hourAngle = (hourUTC - 12) * 15 * Math.PI / 180;
+  // Hour angle (sun at noon = 0, moves 15 deg/hour westward)
+  const hourAngle = (12 - hourUTC) * 15 * Math.PI / 180;
 
   // Convert to Cartesian (sun direction in world space)
   const x = Math.cos(declination) * Math.sin(hourAngle);
