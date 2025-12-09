@@ -84,7 +84,8 @@ fn raySphereIntersect(rayOrigin: vec3f, rayDir: vec3f, radius: f32) -> RayHit {
 }
 
 fn blendBasemap(color: vec4f, hitPoint: vec3f) -> vec4f {
-  let texColor = textureSample(basemap, basemapSampler, hitPoint);
+  // Use textureSampleLevel to avoid non-uniform control flow issues
+  let texColor = textureSampleLevel(basemap, basemapSampler, hitPoint, 0.0);
   return vec4f(mix(color.rgb, texColor.rgb, u.earthOpacity), 1.0);
 }
 
