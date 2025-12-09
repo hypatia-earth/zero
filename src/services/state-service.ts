@@ -68,15 +68,15 @@ function parseUrl(): Partial<UrlState> {
 }
 
 function writeUrl(state: UrlState): void {
-  const params = new URLSearchParams();
-  params.set('dt', formatDateForUrl(state.time));
-  params.set('ll', `${state.lat.toFixed(1)},${state.lon.toFixed(1)}`);
-  params.set('alt', Math.round(state.altitude).toString());
+  // Build URL manually to avoid encoding commas
+  const dt = formatDateForUrl(state.time);
+  const ll = `${state.lat.toFixed(1)},${state.lon.toFixed(1)}`;
+  const alt = Math.round(state.altitude).toString();
+  let search = `?dt=${dt}&ll=${ll}&alt=${alt}`;
   if (state.layers.length > 0) {
-    params.set('layers', state.layers.join(','));
+    search += `&layers=${state.layers.join(',')}`;
   }
-  const url = `${window.location.pathname}?${params.toString()}`;
-  window.history.replaceState(null, '', url);
+  window.history.replaceState(null, '', search);
 }
 
 // ============================================================
