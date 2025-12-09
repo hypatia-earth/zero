@@ -71,19 +71,15 @@ export class App {
       this.startRenderLoop();
       this.setupResizeHandler();
       this.stateService.enableSync();
-
-      // Step 6: Load Data
-      BootstrapService.setStep('LOAD_DATA');
-      BootstrapService.setProgress(80);
-      await this.loadTempData();
-
-      // Step 7: Finalize
-      BootstrapService.complete();
       this.keyboardService = new KeyboardService(this.stateService);
+
+      // Mount UI immediately (before data loading)
+      this.mountUI();
+      BootstrapService.complete();
       console.log('[App] Bootstrap complete');
 
-      // Mount UI
-      this.mountUI();
+      // Step 6: Load Data (background, don't block UI)
+      this.loadTempData();
 
       // React to options changes
       effect(() => {
