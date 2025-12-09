@@ -54,7 +54,8 @@ fn computeRay(fragCoord: vec2f) -> vec3f {
     (fragCoord.x / u.resolution.x) * 2.0 - 1.0,
     1.0 - (fragCoord.y / u.resolution.y) * 2.0
   );
-  let clipNear = vec4f(ndc, -1.0, 1.0);
+  // WebGPU depth range is 0-1 (not -1 to 1 like OpenGL)
+  let clipNear = vec4f(ndc, 0.0, 1.0);
   let clipFar = vec4f(ndc, 1.0, 1.0);
   var worldNear = u.viewProjInverse * clipNear;
   var worldFar = u.viewProjInverse * clipFar;

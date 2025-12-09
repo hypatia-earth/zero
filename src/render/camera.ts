@@ -18,7 +18,7 @@ export class Camera {
   private viewProjMatrix = new Float32Array(16);
   private viewProjInverse = new Float32Array(16);
   private aspect = 1;
-  private fov = Math.PI / 4;
+  private fov = 75 * Math.PI / 180; // 75 degrees
 
   constructor(state?: CameraState) {
     if (state) {
@@ -63,7 +63,7 @@ export class Camera {
   private updateMatrices(): void {
     const eye = this.getEyePosition();
     this.lookAt(this.viewMatrix, eye, [0, 0, 0], [0, 1, 0]);
-    this.perspective(this.projMatrix, this.fov, this.aspect, 0.1, 100);
+    this.perspective(this.projMatrix, this.fov, this.aspect, 0.1, 1000);
     this.multiply(this.viewProjMatrix, this.projMatrix, this.viewMatrix);
     this.invert(this.viewProjInverse, this.viewProjMatrix);
   }
@@ -86,11 +86,12 @@ export class Camera {
   }
 
   private perspective(out: Float32Array, fov: number, aspect: number, near: number, far: number): void {
+    // WebGPU uses 0-1 depth range (not -1 to 1 like OpenGL)
     const f = 1 / Math.tan(fov / 2);
     out[0] = f / aspect; out[1] = 0; out[2] = 0; out[3] = 0;
     out[4] = 0; out[5] = f; out[6] = 0; out[7] = 0;
-    out[8] = 0; out[9] = 0; out[10] = (far + near) / (near - far); out[11] = -1;
-    out[12] = 0; out[13] = 0; out[14] = (2 * far * near) / (near - far); out[15] = 0;
+    out[8] = 0; out[9] = 0; out[10] = far / (near - far); out[11] = -1;
+    out[12] = 0; out[13] = 0; out[14] = (far * near) / (near - far); out[15] = 0;
   }
 
   private multiply(out: Float32Array, a: Float32Array, b: Float32Array): void {
