@@ -10,6 +10,7 @@ import type { TrackerService } from './tracker-service';
 
 const BASE_URL = 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs';
 const TOTAL_POINTS = 6_599_680;
+const MIN_BATCH_SIZE = 500_000; // ~2MB, prevents request overhead spiral
 
 export interface ProgressUpdate {
   data0: Float32Array;
@@ -68,7 +69,10 @@ function getAdjacentTimestamps(time: Date): [Date, Date] {
  */
 async function createTempReader(url: string): Promise<OmFileReader> {
   console.log(`[Data] Opening: ${url}`);
-  const backend = new OmHttpBackend({ url });
+  const backend = new OmHttpBackend({
+    url,
+    eTagValidation: false,  // Disable to allow browser caching
+  });
   const reader = await OmFileReader.create(backend);
 
   const numChildren = reader.numberOfChildren();
@@ -138,12 +142,11 @@ export class DataService {
       }
 
       // Dynamic batch = ~0.5s worth per timestep (1s total for both)
-      const batchSize = Math.max(
-        10000, // Minimum batch
-        Math.min(
-          Math.floor(speed * 0.5),
-          total - loaded
-        )
+      // Remaining points caps the batch size (fixes last chunk)
+      const remaining = total - loaded;
+      const batchSize = Math.min(
+        remaining,
+        Math.max(MIN_BATCH_SIZE, Math.floor(speed * 0.5))
       );
 
       const t = performance.now();
