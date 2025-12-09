@@ -56,6 +56,7 @@ export class Camera {
   }
 
   getViewProjInverse(): Float32Array {
+    this.updateMatrices();
     return this.viewProjInverse;
   }
 
