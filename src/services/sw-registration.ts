@@ -15,7 +15,7 @@ export async function registerServiceWorker(): Promise<void> {
   }
 
   try {
-    const reg = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.register('/sw.js');
     console.log('[SW] Registered for Range caching');
 
     // Wait for the SW to be ready

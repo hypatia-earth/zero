@@ -31,6 +31,7 @@ export interface TimestepSlot {
 export class BudgetService {
   private slots: Map<string, TimestepSlot> = new Map();
   private maxSlots: number;
+  private freeSlotIndices: number[] = [];  // Available GPU buffer positions
   private disposeEffect: (() => void) | null = null;
   private dataWindowStart: Date;
   private dataWindowEnd: Date;
@@ -48,6 +49,9 @@ export class BudgetService {
   ) {
     const budgetBytes = this.configService.getGpuBudgetMB() * 1024 * 1024;
     this.maxSlots = Math.floor(budgetBytes / BYTES_PER_TIMESTEP);
+
+    // Initialize free slot indices (all available at start)
+    this.freeSlotIndices = Array.from({ length: this.maxSlots }, (_, i) => i);
 
     // Calculate fixed data window at startup
     const window = this.dataService.getDataWindow();
@@ -86,7 +90,7 @@ export class BudgetService {
       this.activeT1 = t1;
       this.renderService.setTempSlots(slot0.slotIndex, slot1.slotIndex);
       this.renderService.setTempLoadedPoints(Math.min(slot0.loadedPoints, slot1.loadedPoints));
-      return;
+      // Don't return - continue to rebalance window
     }
 
     // Calculate ideal window and diff
@@ -101,15 +105,13 @@ export class BudgetService {
       console.log(`[Budget] Time ${time.toISOString()}: evict ${toEvict.length}, load ${toLoad.length}`);
     }
 
-    // Evict old slots (free up slot indices)
+    // Evict old slots - return their indices to the free pool
     for (const key of toEvict) {
-      this.slots.delete(key);
-    }
-
-    // Reassign slot indices after eviction
-    let nextSlotIndex = 0;
-    for (const slot of this.slots.values()) {
-      slot.slotIndex = nextSlotIndex++;
+      const slot = this.slots.get(key);
+      if (slot) {
+        this.freeSlotIndices.push(slot.slotIndex);
+        this.slots.delete(key);
+      }
     }
 
     // Prioritize loading t0 and t1 for current time first
@@ -123,12 +125,14 @@ export class BudgetService {
     for (const timestamp of orderedToLoad) {
       const key = timestamp.toISOString();
       if (this.loadingTimestamps.has(key)) continue;  // Already loading
+      if (this.slots.has(key)) continue;  // Already have this slot
 
       // Only allow one concurrent load to avoid WASM OOM
       if (this.loadingTimestamps.size > 0) break;
 
-      const newSlotIndex = nextSlotIndex++;
-      if (newSlotIndex >= this.maxSlots) break;  // Budget full
+      // Get a free slot index
+      if (this.freeSlotIndices.length === 0) break;  // Budget full
+      const newSlotIndex = this.freeSlotIndices.pop()!;
 
       this.slots.set(key, {
         timestamp,
@@ -418,34 +422,38 @@ export class BudgetService {
       const currentTime = this.stateService.getTime();
       const [t0, t1] = this.dataService.getAdjacentTimestamps(currentTime);
 
-      // Register slots for t0 and t1
+      // Allocate slots for t0 and t1 from free pool
+      const slot0Index = this.freeSlotIndices.pop()!;
+      const slot1Index = this.freeSlotIndices.pop()!;
+
       this.slots.set(t0.toISOString(), {
         timestamp: t0,
-        slotIndex: 0,
+        slotIndex: slot0Index,
         loaded: false,
         loadedPoints: 0,
       });
       this.slots.set(t1.toISOString(), {
         timestamp: t1,
-        slotIndex: 1,
+        slotIndex: slot1Index,
         loaded: false,
         loadedPoints: 0,
       });
 
-      console.log(`[Budget] Loading initial timesteps: ${t0.toISOString()} → slot 0, ${t1.toISOString()} → slot 1`);
+      console.log(`[Budget] Loading initial timesteps: ${t0.toISOString()} → slot ${slot0Index}, ${t1.toISOString()} → slot ${slot1Index}`);
 
       // Set active pair immediately so shader can render progressive data
       this.activeT0 = t0;
       this.activeT1 = t1;
-      this.renderService.setTempSlots(0, 1);
+      this.renderService.setTempSlots(slot0Index, slot1Index);
 
       // Progressive loading with chunk callbacks
       await this.dataService.loadProgressiveInterleaved(
         currentTime,
         async (update: ProgressUpdate) => {
-          // Upload to slots 0 and 1
+          // Upload to the allocated slots
           const renderer = this.renderService.getRenderer();
-          await renderer.uploadTempData(update.data0, update.data1);
+          await renderer.uploadTempDataToSlot(update.data0, slot0Index);
+          await renderer.uploadTempDataToSlot(update.data1, slot1Index);
           this.renderService.setTempLoadedPoints(update.data0.length);
 
           // Update slot metadata

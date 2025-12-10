@@ -297,8 +297,8 @@ export async function streamOmVariable(
   const chunksPerSlice = Math.floor(numChunks / slices);
   const firstSliceChunks = numChunks - chunksPerSlice * (slices - 1);
 
-  console.log(`[OM] ${numChunks} chunks, ${(totalCompressed / 1024).toFixed(0)} KB total`);
-  console.log(`[OM] Slice distribution: first=${firstSliceChunks}, rest=${chunksPerSlice} chunks each`);
+  console.log(`[OM] ${numChunks} chunks, ${(totalCompressed / 1024).toFixed(0)} KB, slices: first=${firstSliceChunks}, rest=${chunksPerSlice}`);
+  const sliceStartTime = performance.now();
 
   // Allocate output and decode buffer
   const outputPtr = wasm._malloc(outputElements * 4);
@@ -326,7 +326,6 @@ export async function streamOmVariable(
     // Fetch this slice
     const sliceData = await fetchRange(url, firstChunk.dataOffset, sliceSize);
     allDataBuffer.set(sliceData, sliceByteStart);
-    console.log(`[OM] Slice ${sliceIdx + 1}/${slices}: ${sliceChunkCount} chunks (${(sliceSize / 1024).toFixed(0)} KB)`);
 
     // Decode all chunks in this slice (guaranteed complete since chunk-aligned)
     while (nextChunkIdx < sliceEndChunk) {
@@ -405,6 +404,9 @@ export async function streamOmVariable(
       done: sliceIdx === slices - 1
     });
   }
+
+  const sliceElapsed = ((performance.now() - sliceStartTime) / 1000).toFixed(1);
+  console.log(`[OM] ${slices} slices loaded in ${sliceElapsed}s`);
 
   const result = new Float32Array(outputElements);
   result.set(new Float32Array(wasm.HEAPU8.buffer, outputPtr, outputElements));
