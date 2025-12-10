@@ -11,8 +11,11 @@ import './styles/widgets.css';
 
 import { App } from './app';
 import { setupCameraControls } from './services/camera-controls';
+import { registerServiceWorker, setupCacheUtils } from './services/sw-registration';
 
 async function main(): Promise<void> {
+  // Register Service Worker for Range request caching
+  await registerServiceWorker();
   const canvas = document.getElementById('globe') as HTMLCanvasElement | null;
   if (!canvas) {
     throw new Error('Canvas element #globe not found');
@@ -49,6 +52,7 @@ async function main(): Promise<void> {
       app,
       ...app.getServices(),
     };
+    setupCacheUtils();
   }
 
   console.log('[Zero] Hypatia Zero initialized');

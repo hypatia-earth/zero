@@ -128,12 +128,16 @@ export async function streamOmVariable(
   wasm._free(offsetPtr);
   wasm._free(sizePtr);
 
+  console.log(`[OM] File: ${fileSize} bytes, trailer: offset=${rootOffset}, size=${rootSize}`);
+
   // Phase 3: Root + children metadata
   const rootData = await fetchRange(url, rootOffset, rootSize);
 
   const rootPtr = wasm._malloc(rootData.length);
   wasm.HEAPU8.set(rootData, rootPtr);
+  console.log(`[OM] Root data first 16 bytes:`, Array.from(rootData.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' '));
   const rootVar = wasm._om_variable_init(rootPtr);
+  console.log(`[OM] rootVar pointer: ${rootVar}`);
   if (!rootVar) throw new Error('Failed to init root variable');
 
   const numChildren = wasm._om_variable_get_children_count(rootVar);
@@ -159,6 +163,17 @@ export async function streamOmVariable(
   const childOffsetPtr = wasm._malloc(8);
   const childSizePtr = wasm._malloc(8);
   const lengthPtr = wasm._malloc(2);
+  const availableVars: string[] = [];
+
+  // Check if root itself has the data (single-variable file)
+  const rootNamePtr = wasm._om_variable_get_name(rootVar, lengthPtr);
+  const rootNameLen = wasm.getValue(lengthPtr, 'i16') as number;
+  const rootName = rootNameLen > 0
+    ? new TextDecoder().decode(wasm.HEAPU8.subarray(rootNamePtr, rootNamePtr + rootNameLen))
+    : '(no name)';
+
+  const rootDimCount = Number(wasm._om_variable_get_dimensions_count(rootVar));
+  console.log(`[OM] Root: '${rootName}', children: ${numChildren}, dims: ${rootDimCount}`);
 
   for (let i = 0; i < numChildren; i++) {
     wasm._om_variable_get_children(rootVar, i, 1, childOffsetPtr, childSizePtr);
@@ -177,6 +192,7 @@ export async function streamOmVariable(
     if (nameLen > 0) {
       const nameBytes = wasm.HEAPU8.subarray(namePtr, namePtr + nameLen);
       const name = new TextDecoder().decode(nameBytes);
+      availableVars.push(name);
 
       if (name === param) {
         targetVarOffset = childOffset;
@@ -195,7 +211,9 @@ export async function streamOmVariable(
   wasm._free(lengthPtr);
   wasm._free(rootPtr);
 
-  if (!targetVarOffset) throw new Error(`Parameter '${param}' not found`);
+  if (!targetVarOffset) {
+    throw new Error(`Parameter '${param}' not found. Available: ${availableVars.join(', ')}`);
+  }
 
   // Phase 5: Discover all chunk ranges
   const targetChildData = allChildrenData.slice(
