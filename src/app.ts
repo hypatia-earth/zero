@@ -128,6 +128,9 @@ export class App {
 
   private async loadTempData(): Promise<void> {
     try {
+      // Initialize data service (find latest available run from S3)
+      await this.dataService.initialize();
+
       const currentTime = this.stateService.getTime();
 
       // Progressive loading with chunk callbacks
