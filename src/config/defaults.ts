@@ -12,8 +12,11 @@ export const defaultConfig: ZeroConfig = {
   prefetchCount: 24,
 
   camera: {
-    minDistance: 1.05,  // Just above surface
-    maxDistance: 5.0,   // Far view
+    fov: 75,              // Field of view in degrees
+    near: 0.1,            // Near clipping plane
+    far: 100,             // Far clipping plane
+    minDistance: 1.05,    // Just above surface (Earth radii)
+    maxDistance: 5.0,     // Far view
     defaultDistance: 3.0,
   },
 

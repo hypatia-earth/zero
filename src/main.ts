@@ -40,7 +40,7 @@ async function main(): Promise<void> {
   // Setup camera controls after bootstrap
   const renderer = app.getRenderer();
   if (renderer) {
-    setupCameraControls(canvas, renderer.camera, app.getServices().state);
+    setupCameraControls(canvas, renderer.camera, app.getServices().state, app.getServices().config);
   }
 
   // Expose for debugging

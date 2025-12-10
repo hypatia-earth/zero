@@ -57,7 +57,8 @@ export class App {
         this.canvas,
         this.optionsService,
         this.stateService,
-        this.dataService
+        this.dataService,
+        this.configService
       );
       await this.renderService.initialize();
 
@@ -71,7 +72,7 @@ export class App {
       this.setupResizeHandler();
       this.stateService.enableSync();
       this.keyboardService = new KeyboardService(this.stateService);
-      setupCameraControls(this.canvas, this.renderService.getRenderer().camera, this.stateService);
+      setupCameraControls(this.canvas, this.renderService.getRenderer().camera, this.stateService, this.configService);
 
       // Mount UI immediately (before data loading)
       this.mountUI();

@@ -21,10 +21,13 @@ export interface ZeroConfig {
   /** Number of timesteps to prefetch */
   prefetchCount: number;
 
-  /** Camera constraints */
+  /** Camera settings */
   camera: {
-    minDistance: number;
-    maxDistance: number;
+    fov: number;           // Field of view in degrees
+    near: number;          // Near clipping plane
+    far: number;           // Far clipping plane
+    minDistance: number;   // Closest zoom (Earth radii from center)
+    maxDistance: number;   // Furthest zoom
     defaultDistance: number;
   };
 

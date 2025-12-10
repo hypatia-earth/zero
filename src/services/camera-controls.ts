@@ -4,6 +4,7 @@
 
 import type { Camera } from '../render/camera';
 import type { StateService } from './state-service';
+import type { ConfigService } from './config-service';
 
 interface DragState {
   active: boolean;
@@ -16,7 +17,8 @@ interface DragState {
 export function setupCameraControls(
   canvas: HTMLCanvasElement,
   camera: Camera,
-  stateService: StateService
+  stateService: StateService,
+  configService: ConfigService
 ): void {
   const drag: DragState = {
     active: false,
@@ -26,10 +28,11 @@ export function setupCameraControls(
     velocityLon: 0,
   };
 
+  const cameraConfig = configService.getCameraConfig();
   const sensitivity = 0.3;
   const friction = 0.92;
-  const minDistance = 1.2;
-  const maxDistance = 5.0;
+  const minDistance = cameraConfig.minDistance;
+  const maxDistance = cameraConfig.maxDistance;
 
   // Sync camera from URL state
   const urlState = stateService.getCamera();

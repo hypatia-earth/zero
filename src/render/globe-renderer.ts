@@ -2,7 +2,7 @@
  * GlobeRenderer - WebGPU globe rendering
  */
 
-import { Camera } from './camera';
+import { Camera, type CameraConfig } from './camera';
 import globeShaderCode from './shaders/globe.wgsl?raw';
 
 export interface GlobeUniforms {
@@ -10,6 +10,7 @@ export interface GlobeUniforms {
   eyePosition: Float32Array;
   resolution: Float32Array;
   time: number;
+  tanFov: number;
   sunEnabled: boolean;
   sunDirection: Float32Array;
   gridEnabled: boolean;
@@ -41,8 +42,8 @@ export class GlobeRenderer {
   private uniformData = new ArrayBuffer(256);
   private uniformView = new DataView(this.uniformData);
 
-  constructor(private canvas: HTMLCanvasElement) {
-    this.camera = new Camera({ lat: 30, lon: 0, distance: 3 });
+  constructor(private canvas: HTMLCanvasElement, cameraConfig?: CameraConfig) {
+    this.camera = new Camera({ lat: 30, lon: 0, distance: 3 }, cameraConfig);
   }
 
   async initialize(): Promise<void> {
@@ -166,10 +167,11 @@ export class GlobeRenderer {
     view.setFloat32(offset, uniforms.eyePosition[2]!, true); offset += 4;
     offset += 4;
 
-    // vec2 resolution + padding (16 bytes)
+    // vec2 resolution + tanFov + padding (16 bytes)
     view.setFloat32(offset, uniforms.resolution[0]!, true); offset += 4;
     view.setFloat32(offset, uniforms.resolution[1]!, true); offset += 4;
-    offset += 8;
+    view.setFloat32(offset, uniforms.tanFov, true); offset += 4;
+    offset += 4; // padding
 
     // time, sunEnabled + padding to align sunDirection to 16 bytes
     view.setFloat32(offset, uniforms.time, true); offset += 4;

@@ -8,6 +8,12 @@ export interface CameraState {
   distance: number;
 }
 
+export interface CameraConfig {
+  fov: number;   // degrees
+  near: number;
+  far: number;
+}
+
 export class Camera {
   lat = 0;
   lon = 0;
@@ -18,15 +24,27 @@ export class Camera {
   private viewProjMatrix = new Float32Array(16);
   private viewProjInverse = new Float32Array(16);
   private aspect = 1;
-  private fov = 75 * Math.PI / 180; // 75 degrees
+  private fov: number;   // radians
+  private near: number;
+  private far: number;
 
-  constructor(state?: CameraState) {
+  constructor(state?: CameraState, config?: CameraConfig) {
+    // Apply config (defaults if not provided)
+    this.fov = (config?.fov ?? 75) * Math.PI / 180;
+    this.near = config?.near ?? 0.1;
+    this.far = config?.far ?? 100;
+
     if (state) {
       this.lat = state.lat;
       this.lon = state.lon;
       this.distance = state.distance;
     }
     this.updateMatrices();
+  }
+
+  /** Get tan(fov/2) for shader ray generation */
+  getTanFov(): number {
+    return Math.tan(this.fov / 2);
   }
 
   setAspect(width: number, height: number): void {
@@ -63,14 +81,14 @@ export class Camera {
   private updateMatrices(): void {
     const eye = this.getEyePosition();
     this.lookAt(this.viewMatrix, eye, [0, 0, 0], [0, 1, 0]);
-    this.perspective(this.projMatrix, this.fov, this.aspect, 0.1, 1000);
+    this.perspective(this.projMatrix, this.fov, this.aspect, this.near, this.far);
     this.multiply(this.viewProjMatrix, this.projMatrix, this.viewMatrix);
 
     // Compute inverses separately (more stable than inverting combined matrix)
     const viewInverse = new Float32Array(16);
     const projInverse = new Float32Array(16);
     this.invertView(viewInverse, this.viewMatrix, eye);
-    this.invertPerspective(projInverse, this.fov, this.aspect, 0.1, 1000);
+    this.invertPerspective(projInverse, this.fov, this.aspect, this.near, this.far);
     this.multiply(this.viewProjInverse, viewInverse, projInverse);
   }
 

@@ -4,8 +4,9 @@ struct Uniforms {
   viewProjInverse: mat4x4f,  // 64 bytes
   eyePosition: vec3f,         // 12 + 4 pad = 16 bytes
   eyePad: f32,
-  resolution: vec2f,          // 8 + 8 pad = 16 bytes
-  resPad: vec2f,
+  resolution: vec2f,          // 8 bytes
+  tanFov: f32,                // 4 bytes
+  resPad: f32,                // 4 bytes pad = 16 bytes total
   time: f32,                  // 4 bytes
   sunEnabled: u32,            // 4 bytes
   sunPad: vec2f,              // 8 bytes pad for vec3f alignment
@@ -69,15 +70,13 @@ fn computeRay(fragCoord: vec2f) -> vec3f {
   let right = normalize(cross(forward, worldUp));
   let up = cross(right, forward);
 
-  // FOV = 75 degrees, tan(37.5°) ≈ 0.767
-  let tanFov = 0.76732698797896544;
   let aspect = u.resolution.x / u.resolution.y;
 
-  // Compute ray direction
+  // Compute ray direction using tanFov from uniforms
   let rayDir = normalize(
     forward +
-    right * ndc.x * tanFov * aspect +
-    up * ndc.y * tanFov
+    right * ndc.x * u.tanFov * aspect +
+    up * ndc.y * u.tanFov
   );
 
   return rayDir;

@@ -7,6 +7,7 @@ import { generateGaussianLUTs } from '../render/gaussian-grid';
 import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
 import type { DataService } from './data-service';
+import type { ConfigService } from './config-service';
 import { getSunDirection } from '../utils/sun-position';
 
 export class RenderService {
@@ -18,11 +19,13 @@ export class RenderService {
     private canvas: HTMLCanvasElement,
     private optionsService: OptionsService,
     private stateService: StateService,
-    private dataService: DataService
+    private dataService: DataService,
+    private configService: ConfigService
   ) {}
 
   async initialize(): Promise<void> {
-    this.renderer = new GlobeRenderer(this.canvas);
+    const cameraConfig = this.configService.getCameraConfig();
+    this.renderer = new GlobeRenderer(this.canvas, cameraConfig);
     await this.renderer.initialize();
 
     // Upload Gaussian LUTs
@@ -67,6 +70,7 @@ export class RenderService {
         eyePosition: renderer.camera.getEyePosition(),
         resolution: new Float32Array([this.canvas.width, this.canvas.height]),
         time: performance.now() / 1000,
+        tanFov: renderer.camera.getTanFov(),
         sunEnabled,
         sunDirection: getSunDirection(state.time),
         gridEnabled,
