@@ -2,7 +2,7 @@
  * OmFileAdapter - Direct WASM access to Open-Meteo .om files
  *
  * Fetches .om files via HTTP range requests and decodes using WASM.
- * Ported from working PoC: /zero/scripts/render-png-from-om.js
+ * Supports streaming: fetch slice → decode complete chunks → yield → repeat
  */
 
 // WASM module type - functions have underscore prefix
@@ -20,7 +20,7 @@ interface OmWasm {
   _om_variable_get_children(varPtr: number, start: number, count: number, offsetPtr: number, sizePtr: number): void;
   _om_variable_get_name(varPtr: number, lengthPtr: number): number;
   _om_variable_get_dimensions_count(varPtr: number): number;
-  _om_variable_get_dimensions(varPtr: number): number; // returns pointer to dims array
+  _om_variable_get_dimensions(varPtr: number): number;
   _om_decoder_init(
     decoderPtr: number, varPtr: number, nDims: bigint,
     readOffset: number, readCount: number, cubeOffset: number, cubeDim: number,
@@ -73,28 +73,43 @@ export interface OmReadResult {
   dims: number[];
 }
 
-export interface OmProgress {
-  phase: string;
-  loaded: number;
-  total: number;
+export interface OmChunkData {
+  data: Float32Array;
+  offset: number;
+  count: number;
+  sliceIndex: number;
+  totalSlices: number;
+  done: boolean;
 }
 
-export async function readOmVariable(
+export type OmChunkCallback = (chunk: OmChunkData) => void;
+
+interface ChunkInfo {
+  dataOffset: number;
+  dataCount: number;
+  indexBlockIdx: number;
+  indexData: Uint8Array;
+  indexCount: number;
+}
+
+/**
+ * Stream-read a variable from an .om file
+ * Calls onChunk after each slice is fetched and its chunks decoded
+ */
+export async function streamOmVariable(
   url: string,
   param: string,
   slices: number,
-  onProgress?: (p: OmProgress) => void
+  onChunk: OmChunkCallback
 ): Promise<OmReadResult> {
   const wasm = await initOmWasm();
 
   // Phase 1: HEAD
-  onProgress?.({ phase: 'head', loaded: 0, total: 1 });
   const headResp = await fetch(url, { method: 'HEAD' });
   if (!headResp.ok) throw new Error(`File not found: ${url}`);
   const fileSize = parseInt(headResp.headers.get('content-length')!, 10);
 
   // Phase 2: Trailer
-  onProgress?.({ phase: 'trailer', loaded: 0, total: 1 });
   const trailerSize = wasm._om_trailer_size();
   const trailerData = await fetchRange(url, fileSize - trailerSize, trailerSize);
 
@@ -114,7 +129,6 @@ export async function readOmVariable(
   wasm._free(sizePtr);
 
   // Phase 3: Root + children metadata
-  onProgress?.({ phase: 'metadata', loaded: 0, total: 1 });
   const rootData = await fetchRange(url, rootOffset, rootSize);
 
   const rootPtr = wasm._malloc(rootData.length);
@@ -124,7 +138,6 @@ export async function readOmVariable(
 
   const numChildren = wasm._om_variable_get_children_count(rootVar);
 
-  // Find children range
   const o1Ptr = wasm._malloc(8);
   const s1Ptr = wasm._malloc(8);
   let childrenStart = Infinity, childrenEnd = 0;
@@ -146,7 +159,6 @@ export async function readOmVariable(
   const childOffsetPtr = wasm._malloc(8);
   const childSizePtr = wasm._malloc(8);
   const lengthPtr = wasm._malloc(2);
-  const availableParams: string[] = [];
 
   for (let i = 0; i < numChildren; i++) {
     wasm._om_variable_get_children(rootVar, i, 1, childOffsetPtr, childSizePtr);
@@ -160,13 +172,11 @@ export async function readOmVariable(
     wasm.HEAPU8.set(childData, childPtr);
     const childVar = wasm._om_variable_init(childPtr);
 
-    // _om_variable_get_name returns pointer, writes length to lengthPtr
     const namePtr = wasm._om_variable_get_name(childVar, lengthPtr);
     const nameLen = wasm.getValue(lengthPtr, 'i16') as number;
     if (nameLen > 0) {
       const nameBytes = wasm.HEAPU8.subarray(namePtr, namePtr + nameLen);
       const name = new TextDecoder().decode(nameBytes);
-      availableParams.push(name);
 
       if (name === param) {
         targetVarOffset = childOffset;
@@ -185,14 +195,9 @@ export async function readOmVariable(
   wasm._free(lengthPtr);
   wasm._free(rootPtr);
 
-  if (!targetVarOffset) {
-    console.log('[OM] Available params:', availableParams);
-    throw new Error(`Parameter '${param}' not found. Available: ${availableParams.join(', ')}`);
-  }
+  if (!targetVarOffset) throw new Error(`Parameter '${param}' not found`);
 
-  console.log(`[OM] Found ${param}, dims=${JSON.stringify(targetDims)}, offset=${targetVarOffset}, size=${targetVarSize}`);
-
-  // Phase 5: Discover data range via index
+  // Phase 5: Discover all chunk ranges
   const targetChildData = allChildrenData.slice(
     targetVarOffset - childrenStart,
     targetVarOffset - childrenStart + targetVarSize
@@ -228,14 +233,17 @@ export async function readOmVariable(
   const errorPtr = wasm._malloc(4);
   wasm.setValue(errorPtr, ERROR_OK, 'i32');
 
+  // Collect all chunk info and index blocks
   let minDataOffset = Infinity, maxDataEnd = 0;
   const indexBlocks: { offset: number; count: number; data: Uint8Array }[] = [];
+  const allChunks: ChunkInfo[] = [];
 
   while (wasm._om_decoder_next_index_read(decoderPtr, indexReadPtr)) {
     const indexOffset = Number(wasm.getValue(indexReadPtr, 'i64'));
     const indexCount = Number(wasm.getValue(indexReadPtr + 8, 'i64'));
 
     const indexData = await fetchRange(url, indexOffset, indexCount);
+    const blockIdx = indexBlocks.length;
     indexBlocks.push({ offset: indexOffset, count: indexCount, data: indexData });
 
     const indexDataPtr = wasm._malloc(indexData.length);
@@ -249,6 +257,14 @@ export async function readOmVariable(
       const dataCount = Number(wasm.getValue(dataReadPtr + 8, 'i64'));
       if (dataOffset < minDataOffset) minDataOffset = dataOffset;
       if (dataOffset + dataCount > maxDataEnd) maxDataEnd = dataOffset + dataCount;
+
+      allChunks.push({
+        dataOffset,
+        dataCount,
+        indexBlockIdx: blockIdx,
+        indexData,
+        indexCount
+      });
     }
 
     wasm._free(indexDataPtr);
@@ -256,70 +272,114 @@ export async function readOmVariable(
   }
 
   const totalCompressed = maxDataEnd - minDataOffset;
-
-  // Phase 6: Fetch data slices
   const sliceBytes = Math.ceil(totalCompressed / slices);
-  const allDataBuffer = new Uint8Array(totalCompressed);
-
-  for (let i = 0; i < slices; i++) {
-    onProgress?.({ phase: 'data', loaded: i, total: slices });
-    const sliceStart = i * sliceBytes;
-    const sliceEnd = Math.min(sliceStart + sliceBytes, totalCompressed);
-    const data = await fetchRange(url, minDataOffset + sliceStart, sliceEnd - sliceStart);
-    allDataBuffer.set(data, sliceStart);
-  }
-
-  // Phase 7: Decode
-  onProgress?.({ phase: 'decode', loaded: 0, total: 1 });
-
   const outputElements = targetDims.reduce((a, b) => a * b, 1);
+
+  // Allocate output and decode buffer
   const outputPtr = wasm._malloc(outputElements * 4);
   const chunkBufferSize = Number(wasm._om_decoder_read_buffer_size(decoderPtr));
   const chunkBufferPtr = wasm._malloc(chunkBufferSize);
 
-  const decoder2Ptr = wasm._malloc(SIZEOF_DECODER);
-  wasm._om_decoder_init(
-    decoder2Ptr, targetVar, BigInt(nDims),
-    readOffsetPtr, readCountPtr, cubeOffsetPtr, cubeDimPtr,
-    BigInt(2048), BigInt(65536)
-  );
+  // Track fetched data and decoded chunks
+  const allDataBuffer = new Uint8Array(totalCompressed);
+  let fetchedUpTo = 0;
+  let nextChunkIdx = 0;
 
-  const indexRead2Ptr = wasm._malloc(64);
-  wasm._om_decoder_init_index_read(decoder2Ptr, indexRead2Ptr);
+  // Phase 6+7: Fetch slices and decode progressively
+  for (let sliceIdx = 0; sliceIdx < slices; sliceIdx++) {
+    const sliceStart = sliceIdx * sliceBytes;
+    const sliceEnd = Math.min(sliceStart + sliceBytes, totalCompressed);
+    const sliceSize = sliceEnd - sliceStart;
 
-  let blockIdx = 0;
-  while (wasm._om_decoder_next_index_read(decoder2Ptr, indexRead2Ptr)) {
-    const block = indexBlocks[blockIdx++]!;
+    // Fetch this slice
+    const sliceData = await fetchRange(url, minDataOffset + sliceStart, sliceSize);
+    allDataBuffer.set(sliceData, sliceStart);
+    fetchedUpTo = sliceEnd;
+    console.log(`[OM] Slice ${sliceIdx + 1}/${slices} arrived (${(sliceSize / 1024).toFixed(0)} KB)`);
 
-    const indexDataPtr = wasm._malloc(block.data.length);
-    wasm.HEAPU8.set(block.data, indexDataPtr);
+    // Decode all chunks that are now complete (fully within fetched data)
+    let chunksDecodedThisSlice = 0;
+    while (nextChunkIdx < allChunks.length) {
+      const chunk = allChunks[nextChunkIdx]!;
+      const chunkStart = chunk.dataOffset - minDataOffset;
+      const chunkEnd = chunkStart + chunk.dataCount;
 
-    const dataRead2Ptr = wasm._malloc(64);
-    wasm._om_decoder_init_data_read(dataRead2Ptr, indexRead2Ptr);
+      // Check if chunk is fully fetched
+      if (chunkEnd > fetchedUpTo) break;
 
-    while (wasm._om_decoder_next_data_read(decoder2Ptr, dataRead2Ptr, indexDataPtr, BigInt(block.count), errorPtr)) {
-      const dataOffset = Number(wasm.getValue(dataRead2Ptr, 'i64'));
-      const dataCount = Number(wasm.getValue(dataRead2Ptr + 8, 'i64'));
-      const chunkIndexPtr = dataRead2Ptr + 32;
+      // Decode this chunk
+      const decoder2Ptr = wasm._malloc(SIZEOF_DECODER);
+      wasm._om_decoder_init(
+        decoder2Ptr, targetVar, BigInt(nDims),
+        readOffsetPtr, readCountPtr, cubeOffsetPtr, cubeDimPtr,
+        BigInt(2048), BigInt(65536)
+      );
 
-      const localOffset = dataOffset - minDataOffset;
-      const chunkData = allDataBuffer.slice(localOffset, localOffset + dataCount);
+      // Skip to the right index block and chunk
+      const indexRead2Ptr = wasm._malloc(64);
+      wasm._om_decoder_init_index_read(decoder2Ptr, indexRead2Ptr);
 
-      const dataBlockPtr = wasm._malloc(chunkData.length);
-      wasm.HEAPU8.set(chunkData, dataBlockPtr);
+      let foundChunk = false;
+      let currentBlockIdx = 0;
+      while (wasm._om_decoder_next_index_read(decoder2Ptr, indexRead2Ptr)) {
+        if (currentBlockIdx === chunk.indexBlockIdx) {
+          const indexDataPtr = wasm._malloc(chunk.indexData.length);
+          wasm.HEAPU8.set(chunk.indexData, indexDataPtr);
 
-      if (!wasm._om_decoder_decode_chunks(
-        decoder2Ptr, chunkIndexPtr, dataBlockPtr, BigInt(dataCount),
-        outputPtr, chunkBufferPtr, errorPtr
-      )) {
-        throw new Error(`Decode failed: ${wasm.getValue(errorPtr, 'i32')}`);
+          const dataRead2Ptr = wasm._malloc(64);
+          wasm._om_decoder_init_data_read(dataRead2Ptr, indexRead2Ptr);
+
+          while (wasm._om_decoder_next_data_read(decoder2Ptr, dataRead2Ptr, indexDataPtr, BigInt(chunk.indexCount), errorPtr)) {
+            const thisOffset = Number(wasm.getValue(dataRead2Ptr, 'i64'));
+            const thisCount = Number(wasm.getValue(dataRead2Ptr + 8, 'i64'));
+
+            if (thisOffset === chunk.dataOffset && thisCount === chunk.dataCount) {
+              const chunkIndexPtr = dataRead2Ptr + 32;
+              const localOffset = chunk.dataOffset - minDataOffset;
+              const chunkData = allDataBuffer.slice(localOffset, localOffset + chunk.dataCount);
+
+              const dataBlockPtr = wasm._malloc(chunkData.length);
+              wasm.HEAPU8.set(chunkData, dataBlockPtr);
+
+              if (!wasm._om_decoder_decode_chunks(
+                decoder2Ptr, chunkIndexPtr, dataBlockPtr, BigInt(chunk.dataCount),
+                outputPtr, chunkBufferPtr, errorPtr
+              )) {
+                throw new Error(`Decode failed: ${wasm.getValue(errorPtr, 'i32')}`);
+              }
+
+              wasm._free(dataBlockPtr);
+              foundChunk = true;
+              chunksDecodedThisSlice++;
+              break;
+            }
+          }
+
+          wasm._free(dataRead2Ptr);
+          wasm._free(indexDataPtr);
+        }
+        currentBlockIdx++;
+        if (foundChunk) break;
       }
 
-      wasm._free(dataBlockPtr);
+      wasm._free(indexRead2Ptr);
+      wasm._free(decoder2Ptr);
+
+      nextChunkIdx++;
     }
 
-    wasm._free(indexDataPtr);
-    wasm._free(dataRead2Ptr);
+    // Yield current state after each slice
+    const currentData = new Float32Array(outputElements);
+    currentData.set(new Float32Array(wasm.HEAPU8.buffer, outputPtr, outputElements));
+
+    onChunk({
+      data: currentData,
+      offset: 0,
+      count: outputElements,
+      sliceIndex: sliceIdx,
+      totalSlices: slices,
+      done: sliceIdx === slices - 1
+    });
   }
 
   const result = new Float32Array(outputElements);
@@ -328,8 +388,6 @@ export async function readOmVariable(
   // Cleanup
   wasm._free(outputPtr);
   wasm._free(chunkBufferPtr);
-  wasm._free(decoder2Ptr);
-  wasm._free(indexRead2Ptr);
   wasm._free(decoderPtr);
   wasm._free(indexReadPtr);
   wasm._free(errorPtr);
@@ -339,7 +397,22 @@ export async function readOmVariable(
   wasm._free(cubeDimPtr);
   wasm._free(targetPtr);
 
-  onProgress?.({ phase: 'done', loaded: 1, total: 1 });
-
   return { data: result, dims: targetDims };
+}
+
+/**
+ * Legacy non-streaming read (for compatibility)
+ */
+export async function readOmVariable(
+  url: string,
+  param: string,
+  slices: number
+): Promise<OmReadResult> {
+  let result: OmReadResult | null = null;
+  await streamOmVariable(url, param, slices, (chunk) => {
+    if (chunk.done) {
+      result = { data: chunk.data, dims: [] };
+    }
+  });
+  return result!;
 }

@@ -2,6 +2,7 @@
  * DataService - Fetch weather data from Open-Meteo S3
  *
  * Uses OmFileAdapter for direct WASM-based .om file reading.
+ * Supports progressive streaming: fetch slice → decode → render → repeat
  *
  * Timestep logic:
  * - Data window: wall time ±5 days (11 days total), always 00:00 to 00:00
@@ -9,7 +10,7 @@
  * - URL: {run_date}/{run}00Z/{target_timestamp}.om
  */
 
-import { readOmVariable, initOmWasm } from '../adapters/om-file-adapter';
+import { streamOmVariable, initOmWasm, type OmChunkData } from '../adapters/om-file-adapter';
 import type { TrackerService } from './tracker-service';
 
 const BASE_URL = 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs';
@@ -110,10 +111,9 @@ function getAdjacentTimestamps(time: Date, latestRun: Date): [Date, Date] {
 export interface ProgressUpdate {
   data0: Float32Array;
   data1: Float32Array;
-  offset: number;
-  loadedPoints: number;
-  totalPoints: number;
-  bytesPerSecond: number;
+  sliceIndex: number;
+  totalSlices: number;
+  done: boolean;
 }
 
 export type ProgressCallback = (update: ProgressUpdate) => void;
@@ -137,7 +137,6 @@ export class DataService {
   }
 
   async initialize(): Promise<void> {
-    // Pre-init WASM
     await initOmWasm();
     this.latestRun = await findLatestRun();
     const window = getDataWindow();
@@ -154,7 +153,8 @@ export class DataService {
   }
 
   /**
-   * Load temperature data for two adjacent timesteps
+   * Load temperature data with progressive streaming
+   * Fetches both timesteps in parallel, calls onProgress after each slice
    */
   async loadProgressiveInterleaved(time: Date, onProgress: ProgressCallback): Promise<TempData> {
     if (this.loadingAbort) this.loadingAbort.abort();
@@ -167,45 +167,55 @@ export class DataService {
     const url1 = buildOmUrl(time1, this.latestRun);
 
     console.log(`[Data] Loading: ${time0.toISOString()} - ${time1.toISOString()}`);
-    console.log(`[Data] URL0: ${url0}`);
-    console.log(`[Data] URL1: ${url1}`);
 
     const t0 = performance.now();
 
-    // Fetch both timesteps in parallel using adapter
-    const [result0, result1] = await Promise.all([
-      readOmVariable(url0, 'temperature_2m', DEFAULT_SLICES, (p) => {
-        console.log(`[Data] T0 ${p.phase}: ${p.loaded}/${p.total}`);
+    // Shared state for interleaved progress
+    let data0: Float32Array | null = null;
+    let data1: Float32Array | null = null;
+    let slice0 = 0, slice1 = 0;
+
+    const emitProgress = () => {
+      if (data0 && data1) {
+        const maxSlice = Math.max(slice0, slice1);
+        onProgress({
+          data0,
+          data1,
+          sliceIndex: maxSlice,
+          totalSlices: DEFAULT_SLICES,
+          done: slice0 >= DEFAULT_SLICES && slice1 >= DEFAULT_SLICES
+        });
+      }
+    };
+
+    // Stream both in parallel
+    await Promise.all([
+      streamOmVariable(url0, 'temperature_2m', DEFAULT_SLICES, (chunk: OmChunkData) => {
+        data0 = chunk.data;
+        slice0 = chunk.sliceIndex + 1;
+        emitProgress();
       }),
-      readOmVariable(url1, 'temperature_2m', DEFAULT_SLICES, (p) => {
-        console.log(`[Data] T1 ${p.phase}: ${p.loaded}/${p.total}`);
-      }),
+      streamOmVariable(url1, 'temperature_2m', DEFAULT_SLICES, (chunk: OmChunkData) => {
+        data1 = chunk.data;
+        slice1 = chunk.sliceIndex + 1;
+        emitProgress();
+      })
     ]);
 
     const elapsed = (performance.now() - t0) / 1000;
-    const totalBytes = (result0.data.byteLength + result1.data.byteLength);
+    const totalBytes = (data0!.byteLength + data1!.byteLength);
     console.log(`[Data] Complete: ${(totalBytes / 1024 / 1024).toFixed(1)} MB in ${elapsed.toFixed(1)}s`);
 
     this.tempData = {
       time0,
       time1,
-      data0: result0.data,
-      data1: result1.data,
-      loadedPoints: result0.data.length,
+      data0: data0!,
+      data1: data1!,
+      loadedPoints: data0!.length,
     };
 
     this.trackerService.onBytesReceived(totalBytes);
     this.trackerService.onDownloadComplete();
-
-    // Single progress callback with full data
-    onProgress({
-      data0: result0.data,
-      data1: result1.data,
-      offset: 0,
-      loadedPoints: result0.data.length,
-      totalPoints: result0.data.length,
-      bytesPerSecond: totalBytes / elapsed,
-    });
 
     return this.tempData;
   }

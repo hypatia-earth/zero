@@ -137,13 +137,15 @@ export class App {
       await this.dataService.loadProgressiveInterleaved(
         currentTime,
         (update: ProgressUpdate) => {
-          // Upload chunk to GPU
-          this.renderService!.getRenderer().uploadTempDataChunk(update.data0, update.data1, update.offset);
-          this.renderService!.setTempLoadedPoints(update.loadedPoints);
+          // Upload full arrays to GPU (streaming updates as slices arrive)
+          this.renderService!.getRenderer().uploadTempData(update.data0, update.data1);
+          this.renderService!.setTempLoadedPoints(update.data0.length);
 
           // Update bootstrap progress (55-95% range)
-          const progress = 55 + (update.loadedPoints / update.totalPoints) * 40;
+          const progress = 55 + (update.sliceIndex / update.totalSlices) * 40;
           BootstrapService.setProgress(progress);
+
+          console.log(`[App] Uploaded slice ${update.sliceIndex}/${update.totalSlices} to GPU${update.done ? ' - DONE' : ''}`);
         }
       );
 
