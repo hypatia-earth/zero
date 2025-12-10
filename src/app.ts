@@ -12,9 +12,8 @@ import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
 import { KeyboardService } from './services/keyboard-service';
 import { DataService, ProgressUpdate } from './services/data-service';
-import { GlobeRenderer } from './render/globe-renderer';
-import { generateGaussianLUTs } from './render/gaussian-grid';
-import { getSunDirection } from './utils/sun-position';
+import { RenderService } from './services/render-service';
+import { setupCameraControls } from './services/camera-controls';
 import { BootstrapModal } from './components/bootstrap-modal';
 import { LayersPanel } from './components/layers-panel';
 import { TimeCirclePanel } from './components/timecircle-panel';
@@ -28,9 +27,8 @@ export class App {
   private trackerService: TrackerService;
   private dateTimeService: DateTimeService;
   private dataService: DataService;
+  private renderService: RenderService | null = null;
   private keyboardService: KeyboardService | null = null;
-  private renderer: GlobeRenderer | null = null;
-  private tempLoadedPoints = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.configService = new ConfigService();
@@ -55,12 +53,13 @@ export class App {
 
       // Step 3: GPU Init
       BootstrapService.setStep('GPU_INIT');
-      this.renderer = new GlobeRenderer(this.canvas);
-      await this.renderer.initialize();
-
-      // Upload Gaussian LUTs
-      const luts = generateGaussianLUTs();
-      this.renderer.uploadGaussianLUTs(luts.lats, luts.offsets);
+      this.renderService = new RenderService(
+        this.canvas,
+        this.optionsService,
+        this.stateService,
+        this.dataService
+      );
+      await this.renderService.initialize();
 
       // Step 4: Basemap
       BootstrapService.setStep('BASEMAP');
@@ -68,10 +67,11 @@ export class App {
 
       // Step 5: Activate
       BootstrapService.setStep('ACTIVATE');
-      this.startRenderLoop();
+      this.renderService.start();
       this.setupResizeHandler();
       this.stateService.enableSync();
       this.keyboardService = new KeyboardService(this.stateService);
+      setupCameraControls(this.canvas, this.renderService.getRenderer().camera, this.stateService);
 
       // Mount UI immediately (before data loading)
       this.mountUI();
@@ -123,7 +123,7 @@ export class App {
       }
     }
 
-    await this.renderer!.loadBasemap(faces);
+    await this.renderService!.getRenderer().loadBasemap(faces);
   }
 
   private async loadTempData(): Promise<void> {
@@ -138,8 +138,8 @@ export class App {
         currentTime,
         (update: ProgressUpdate) => {
           // Upload chunk to GPU
-          this.renderer!.uploadTempDataChunk(update.data0, update.data1, update.offset);
-          this.tempLoadedPoints = update.loadedPoints;
+          this.renderService!.getRenderer().uploadTempDataChunk(update.data0, update.data1, update.offset);
+          this.renderService!.setTempLoadedPoints(update.loadedPoints);
 
           // Update bootstrap progress (55-95% range)
           const progress = 55 + (update.loadedPoints / update.totalPoints) * 40;
@@ -153,51 +153,9 @@ export class App {
     }
   }
 
-  private startRenderLoop(): void {
-    const render = () => {
-      requestAnimationFrame(render);
-
-      const options = this.optionsService.options.value;
-      const state = this.stateService.get();
-      const layers = state.layers;
-
-      // Layer enabled from URL state, opacity from options
-      const earthEnabled = layers.includes('earth');
-      const sunEnabled = layers.includes('sun');
-      const gridEnabled = layers.includes('grid');
-      const tempEnabled = layers.includes('temp');
-      const rainEnabled = layers.includes('rain');
-
-      // Calculate temp interpolation
-      const tempLerp = this.dataService.getTempInterpolation(state.time);
-
-      this.renderer!.updateUniforms({
-        viewProjInverse: this.renderer!.camera.getViewProjInverse(),
-        eyePosition: this.renderer!.camera.getEyePosition(),
-        resolution: new Float32Array([this.canvas.width, this.canvas.height]),
-        time: performance.now() / 1000,
-        sunEnabled,
-        sunDirection: getSunDirection(state.time),
-        gridEnabled,
-        gridOpacity: options.grid.opacity,
-        earthOpacity: earthEnabled ? options.earth.opacity : 0,
-        tempOpacity: tempEnabled ? options.temp.opacity : 0,
-        rainOpacity: rainEnabled ? options.rain.opacity : 0,
-        tempDataReady: this.tempLoadedPoints > 0,
-        rainDataReady: false,
-        tempLerp,
-        tempLoadedPoints: this.tempLoadedPoints,
-      });
-
-      this.renderer!.render();
-    };
-
-    render();
-  }
-
   private setupResizeHandler(): void {
     const handleResize = () => {
-      this.renderer?.resize();
+      this.renderService?.getRenderer().resize();
     };
     window.addEventListener('resize', handleResize);
   }
@@ -230,8 +188,8 @@ export class App {
     m.mount(uiContainer, AppUI);
   }
 
-  getRenderer(): GlobeRenderer | null {
-    return this.renderer;
+  getRenderer() {
+    return this.renderService?.getRenderer() ?? null;
   }
 
   getServices() {

@@ -350,10 +350,13 @@ export class DataService {
       // Track bytes
       this.trackerService.onBytesReceived(chunk0.byteLength + chunk1.byteLength);
 
-      // Callback for GPU upload and UI update
+      // Small delay to let GPU process previous uploads
+      await new Promise(resolve => setTimeout(resolve, 4));
+
+      // Callback for GPU upload and UI update (copy chunks to avoid reuse issues)
       onProgress({
-        data0: chunk0,
-        data1: chunk1,
+        data0: new Float32Array(chunk0),
+        data1: new Float32Array(chunk1),
         offset: loaded - batchSize,
         loadedPoints: loaded,
         totalPoints: total,

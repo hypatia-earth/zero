@@ -50,6 +50,15 @@ export class GlobeRenderer {
     if (!adapter) throw new Error('No WebGPU adapter found');
     this.device = await adapter.requestDevice();
 
+    // Handle device loss
+    this.device.lost.then((info) => {
+      console.error('[GlobeRenderer] WebGPU device lost:', info.message, info.reason);
+    });
+    console.log('[GlobeRenderer] Device ready, waiting for queue...');
+
+    // Wait for device to be fully ready
+    await this.device.queue.onSubmittedWorkDone();
+
     this.context = this.canvas.getContext('webgpu')!;
     const format = navigator.gpu.getPreferredCanvasFormat();
     this.context.configure({ device: this.device, format, alphaMode: 'premultiplied' });
