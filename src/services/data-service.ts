@@ -73,15 +73,20 @@ function getDataWindow(): { start: Date; end: Date } {
   return { start, end };
 }
 
-function getRunForTimestamp(targetTime: Date, latestRun: Date): Date {
-  const runHour = Math.floor(targetTime.getUTCHours() / 6) * 6;
-  const runTime = new Date(targetTime);
-  runTime.setUTCHours(runHour, 0, 0, 0);
-  return runTime > latestRun ? latestRun : runTime;
-}
-
 function buildOmUrl(targetTime: Date, latestRun: Date): string {
-  const run = getRunForTimestamp(targetTime, latestRun);
+  // For forecast (target >= run), use latestRun
+  // For analysis (target < run), need to find a run that was before targetTime
+  let run: Date;
+  if (targetTime >= latestRun) {
+    run = latestRun;
+  } else {
+    // Target is in the past - find appropriate run
+    // Use the 00Z/06Z/12Z/18Z run that is at or before targetTime
+    run = new Date(targetTime);
+    const runHour = Math.floor(targetTime.getUTCHours() / 6) * 6;
+    run.setUTCHours(runHour, 0, 0, 0);
+  }
+
   const year = run.getUTCFullYear();
   const month = String(run.getUTCMonth() + 1).padStart(2, '0');
   const day = String(run.getUTCDate()).padStart(2, '0');
@@ -146,6 +151,14 @@ export class DataService {
 
   getLatestRun(): Date | null {
     return this.latestRun;
+  }
+
+  /**
+   * Get timestamps for the pair bracketing the given time
+   */
+  getAdjacentTimestamps(time: Date): [Date, Date] {
+    if (!this.latestRun) throw new Error('DataService not initialized');
+    return getAdjacentTimestamps(time, this.latestRun);
   }
 
   getDataWindow(): { start: Date; end: Date } {
@@ -233,6 +246,34 @@ export class DataService {
     }
 
     return this.loadProgressiveInterleaved(time, () => {});
+  }
+
+  /**
+   * Load a single timestep's data
+   * Returns the full Float32Array when complete
+   */
+  async loadSingleTimestep(
+    timestamp: Date,
+    onProgress?: (loadedPoints: number, done: boolean) => void
+  ): Promise<Float32Array> {
+    if (!this.latestRun) throw new Error('DataService not initialized');
+
+    const url = buildOmUrl(timestamp, this.latestRun);
+    console.log(`[Data] Loading single timestep: ${timestamp.toISOString()}`);
+
+    let result: Float32Array | null = null;
+
+    await streamOmVariable(url, 'temperature_2m', DEFAULT_SLICES, (chunk: OmChunkData) => {
+      result = chunk.data;
+      const done = chunk.sliceIndex + 1 >= DEFAULT_SLICES;
+      onProgress?.(result.length, done);
+    });
+
+    if (!result) throw new Error(`Failed to load timestep: ${url}`);
+
+    const data: Float32Array = result;
+    this.trackerService.onBytesReceived(data.byteLength);
+    return data;
   }
 
   getTempData(): TempData | null {

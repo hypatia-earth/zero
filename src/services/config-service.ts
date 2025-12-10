@@ -24,6 +24,10 @@ export class ConfigService {
     return this.config.prefetchCount;
   }
 
+  getGpuBudgetMB(): number {
+    return this.config.gpuBudgetMB;
+  }
+
   getCameraConfig(): ZeroConfig['camera'] {
     return this.config.camera;
   }

@@ -11,8 +11,9 @@ import { TrackerService } from './services/tracker-service';
 import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
 import { KeyboardService } from './services/keyboard-service';
-import { DataService, ProgressUpdate } from './services/data-service';
+import { DataService } from './services/data-service';
 import { RenderService } from './services/render-service';
+import { BudgetService } from './services/budget-service';
 import { setupCameraControls } from './services/camera-controls';
 import { BootstrapModal } from './components/bootstrap-modal';
 import { LayersPanel } from './components/layers-panel';
@@ -28,6 +29,7 @@ export class App {
   private dateTimeService: DateTimeService;
   private dataService: DataService;
   private renderService: RenderService | null = null;
+  private budgetService: BudgetService | null = null;
   private keyboardService: KeyboardService | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -74,13 +76,21 @@ export class App {
       this.keyboardService = new KeyboardService(this.stateService);
       setupCameraControls(this.canvas, this.renderService.getRenderer().camera, this.stateService, this.configService);
 
+      // Create BudgetService (manages GPU timestep buffer)
+      this.budgetService = new BudgetService(
+        this.configService,
+        this.stateService,
+        this.dataService,
+        this.renderService
+      );
+
       // Mount UI immediately (before data loading)
       this.mountUI();
       BootstrapService.complete();
       console.log('[App] Bootstrap complete');
 
       // Step 6: Load Data (background, don't block UI)
-      this.loadTempData();
+      this.budgetService.loadInitialTimesteps();
 
       // React to options changes
       effect(() => {
@@ -125,35 +135,6 @@ export class App {
     }
 
     await this.renderService!.getRenderer().loadBasemap(faces);
-  }
-
-  private async loadTempData(): Promise<void> {
-    try {
-      // Initialize data service (find latest available run from S3)
-      await this.dataService.initialize();
-
-      const currentTime = this.stateService.getTime();
-
-      // Progressive loading with chunk callbacks
-      await this.dataService.loadProgressiveInterleaved(
-        currentTime,
-        async (update: ProgressUpdate) => {
-          // Upload full arrays to GPU (streaming updates as slices arrive)
-          await this.renderService!.getRenderer().uploadTempData(update.data0, update.data1);
-          this.renderService!.setTempLoadedPoints(update.data0.length);
-
-          // Update bootstrap progress (55-95% range)
-          const progress = 55 + (update.sliceIndex / update.totalSlices) * 40;
-          BootstrapService.setProgress(progress);
-
-          console.log(`[App] Uploaded slice ${update.sliceIndex}/${update.totalSlices} to GPU${update.done ? ' - DONE' : ''}`);
-        }
-      );
-
-      console.log('[App] Temp data fully loaded');
-    } catch (err) {
-      console.warn('[App] Failed to load temp data:', err);
-    }
   }
 
   private setupResizeHandler(): void {
@@ -204,6 +185,7 @@ export class App {
       dateTime: this.dateTimeService,
       keyboard: this.keyboardService,
       data: this.dataService,
+      budget: this.budgetService,
     };
   }
 }

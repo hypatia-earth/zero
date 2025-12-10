@@ -14,6 +14,9 @@ export class RenderService {
   private renderer: GlobeRenderer | null = null;
   private animationId: number | null = null;
   private tempLoadedPoints = 0;
+  private tempSlot0 = 0;  // Current active slot indices
+  private tempSlot1 = 1;
+  private tempLerpFn: ((time: Date) => number) | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -62,8 +65,14 @@ export class RenderService {
       const tempEnabled = layers.includes('temp');
       const rainEnabled = layers.includes('rain');
 
-      // Calculate temp interpolation
-      const tempLerp = this.dataService.getTempInterpolation(state.time);
+      // Calculate temp interpolation (from BudgetService if available, else DataService)
+      // Returns -1 if current time is outside loaded data range
+      const rawLerp = this.tempLerpFn
+        ? this.tempLerpFn(state.time)
+        : this.dataService.getTempInterpolation(state.time);
+
+      const tempLerp = rawLerp < 0 ? 0 : rawLerp;
+      const tempDataValid = rawLerp >= 0 && this.tempLoadedPoints > 0;
 
       const sunConfig = this.configService.getConfig().sun;
 
@@ -84,10 +93,12 @@ export class RenderService {
         earthOpacity: earthEnabled ? options.earth.opacity : 0,
         tempOpacity: tempEnabled ? options.temp.opacity : 0,
         rainOpacity: rainEnabled ? options.rain.opacity : 0,
-        tempDataReady: this.tempLoadedPoints > 0,
+        tempDataReady: tempDataValid,
         rainDataReady: false,
         tempLerp,
         tempLoadedPoints: this.tempLoadedPoints,
+        tempSlot0: this.tempSlot0,
+        tempSlot1: this.tempSlot1,
       });
 
       renderer.render();
@@ -109,6 +120,25 @@ export class RenderService {
 
   getTempLoadedPoints(): number {
     return this.tempLoadedPoints;
+  }
+
+  /**
+   * Set active slot indices for temperature interpolation
+   */
+  setTempSlots(slot0: number, slot1: number): void {
+    this.tempSlot0 = slot0;
+    this.tempSlot1 = slot1;
+  }
+
+  getTempSlots(): { slot0: number; slot1: number } {
+    return { slot0: this.tempSlot0, slot1: this.tempSlot1 };
+  }
+
+  /**
+   * Set the function to calculate temp lerp (from BudgetService)
+   */
+  setTempLerpFn(fn: (time: Date) => number): void {
+    this.tempLerpFn = fn;
   }
 
   dispose(): void {

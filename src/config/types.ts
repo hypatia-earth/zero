@@ -32,6 +32,9 @@ export interface ZeroConfig {
   /** Number of timesteps to prefetch */
   prefetchCount: number;
 
+  /** GPU memory budget for timestep data (MB) */
+  gpuBudgetMB: number;
+
   /** Camera settings */
   camera: {
     fov: number;           // Field of view in degrees

@@ -26,9 +26,11 @@ struct Uniforms {
   rainOpacity: f32,
   tempDataReady: u32,
   rainDataReady: u32,
-  tempLerp: f32,          // interpolation factor 0-1 between tempData0 and tempData1
+  tempLerp: f32,          // interpolation factor 0-1 between slot0 and slot1
   tempLoadedPoints: u32,  // progressive loading: cells 0..N are valid
-  tempLoadedPad: vec3f,   // padding to 16-byte alignment
+  tempSlot0: u32,         // slot index for time0 in tempData buffer
+  tempSlot1: u32,         // slot index for time1 in tempData buffer
+  tempLoadedPad: f32,     // padding to 16-byte alignment
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -36,9 +38,10 @@ struct Uniforms {
 @group(0) @binding(2) var basemapSampler: sampler;
 @group(0) @binding(3) var<storage, read> gaussianLats: array<f32>;
 @group(0) @binding(4) var<storage, read> ringOffsets: array<u32>;
-@group(0) @binding(5) var<storage, read> tempData0: array<f32>;
-@group(0) @binding(6) var<storage, read> tempData1: array<f32>;
-@group(0) @binding(7) var<storage, read> rainData: array<f32>;
+@group(0) @binding(5) var<storage, read> tempData: array<f32>;  // Large buffer with N slots
+@group(0) @binding(6) var<storage, read> rainData: array<f32>;
+
+const POINTS_PER_SLOT: u32 = 6599680u;  // Points per timestep slot
 
 const PI: f32 = 3.14159265359;
 const TAU: f32 = 6.28318530718;
@@ -241,6 +244,12 @@ fn colormapRain(mm: f32) -> vec4f {
   return vec4f(color, u.rainOpacity * min(t + 0.3, 1.0));
 }
 
+// Read temperature value from slot-based buffer
+fn getTempFromSlot(cell: u32, slot: u32) -> f32 {
+  let index = slot * POINTS_PER_SLOT + cell;
+  return tempData[index];
+}
+
 fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
   if (u.tempDataReady == 0u || u.tempOpacity <= 0.0) { return color; }
   let cell = latLonToCell(lat, lon);
@@ -248,9 +257,9 @@ fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
   // Progressive loading: skip cells not yet loaded
   if (cell >= u.tempLoadedPoints) { return color; }
 
-  // Read from both buffers and interpolate
-  let temp0 = tempData0[cell];
-  let temp1 = tempData1[cell];
+  // Read from slots and interpolate
+  let temp0 = getTempFromSlot(cell, u.tempSlot0);
+  let temp1 = getTempFromSlot(cell, u.tempSlot1);
   let tempC = mix(temp0, temp1, u.tempLerp);  // Data is already in Celsius
 
   // Skip invalid data
