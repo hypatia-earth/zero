@@ -15,11 +15,18 @@ export async function registerServiceWorker(): Promise<void> {
   }
 
   try {
-    await navigator.serviceWorker.register('/sw.js');
+    const reg = await navigator.serviceWorker.register('/sw.js');
     console.log('[SW] Registered for Range caching');
 
     // Wait for the SW to be ready
     await navigator.serviceWorker.ready;
+
+    // Log controller status
+    if (navigator.serviceWorker.controller) {
+      console.log('[SW] Controller active, fetch interception enabled');
+    } else {
+      console.log('[SW] No controller yet - refresh page for SW to take control');
+    }
   } catch (error) {
     console.error('[SW] Registration failed:', error);
   }

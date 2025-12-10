@@ -12,6 +12,13 @@ const S3_HOST = 'openmeteo.s3.amazonaws.com';
 const PAST_MAX_AGE = 30 * 24 * 3600 * 1000; // 30 days in ms
 const FUTURE_MAX_AGE = 3600 * 1000; // 1 hour in ms
 
+// Take control immediately on install/activate
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+  console.log('[SW] Activated and claiming clients');
+});
+
 /**
  * Extract valid time from URL path
  * e.g., /data_spatial/ecmwf_ifs/2025/12/08/1200Z/2025-12-08T1400.om → Date
