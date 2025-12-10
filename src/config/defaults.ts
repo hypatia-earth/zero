@@ -29,4 +29,11 @@ export const defaultConfig: ZeroConfig = {
   ],
 
   defaultLayers: ['earth', 'sun', 'temp'],
+
+  sun: {
+    coreRadius: 0.015,
+    glowRadius: 0.12,
+    coreColor: [1.0, 0.7, 0.3],
+    glowColor: [1.0, 0.6, 0.2],
+  },
 };

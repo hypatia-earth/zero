@@ -1,7 +1,41 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import fs from 'fs';
+import { execSync } from 'child_process';
+import path from 'path';
+
+/**
+ * Vite plugin to obfuscate WGSL shaders in production builds
+ */
+function wgslObfuscate(): Plugin {
+  return {
+    name: 'wgsl-obfuscate',
+    enforce: 'pre',
+    transform(code, id) {
+      // Only process .wgsl files imported with ?raw
+      if (!id.endsWith('.wgsl?raw')) return null;
+      // Only obfuscate in production
+      if (process.env.NODE_ENV !== 'production') return null;
+
+      const wgslPath = id.replace('?raw', '');
+      const tmpOut = path.join('/tmp', `wgsl-${Date.now()}.wgsl`);
+
+      try {
+        execSync(`npx wgsl-plus "${wgslPath}" -o "${tmpOut}" --obfuscate`, {
+          stdio: 'pipe',
+        });
+        const obfuscated = fs.readFileSync(tmpOut, 'utf-8');
+        fs.unlinkSync(tmpOut);
+        return `export default ${JSON.stringify(obfuscated)}`;
+      } catch (e) {
+        console.warn('[wgsl-obfuscate] Failed, using original:', e);
+        return null;
+      }
+    },
+  };
+}
 
 export default defineConfig({
+  plugins: [wgslObfuscate()],
   server: {
     port: 5173,
     strictPort: true,
@@ -16,8 +50,8 @@ export default defineConfig({
   build: {
     target: 'esnext',
     outDir: 'dist',
-  },
-  optimizeDeps: {
-    exclude: ['@openmeteo/file-format-wasm'],
+    rollupOptions: {
+      external: (id) => id === '@openmeteo/file-format-wasm',
+    },
   },
 });

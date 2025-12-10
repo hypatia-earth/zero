@@ -13,6 +13,10 @@ export interface GlobeUniforms {
   tanFov: number;
   sunEnabled: boolean;
   sunDirection: Float32Array;
+  sunCoreRadius: number;
+  sunGlowRadius: number;
+  sunCoreColor: Float32Array;
+  sunGlowColor: Float32Array;
   gridEnabled: boolean;
   gridOpacity: number;
   earthOpacity: number;
@@ -39,7 +43,7 @@ export class GlobeRenderer {
   private rainDataBuffer!: GPUBuffer;
 
   readonly camera: Camera;
-  private uniformData = new ArrayBuffer(256);
+  private uniformData = new ArrayBuffer(320);
   private uniformView = new DataView(this.uniformData);
 
   constructor(private canvas: HTMLCanvasElement, cameraConfig?: CameraConfig) {
@@ -65,7 +69,7 @@ export class GlobeRenderer {
     this.context.configure({ device: this.device, format, alphaMode: 'premultiplied' });
 
     this.uniformBuffer = this.device.createBuffer({
-      size: 256,
+      size: 320,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -182,6 +186,23 @@ export class GlobeRenderer {
     view.setFloat32(offset, uniforms.sunDirection[0]!, true); offset += 4;
     view.setFloat32(offset, uniforms.sunDirection[1]!, true); offset += 4;
     view.setFloat32(offset, uniforms.sunDirection[2]!, true); offset += 4;
+    offset += 4;
+
+    // sunCoreRadius, sunGlowRadius + padding (16 bytes)
+    view.setFloat32(offset, uniforms.sunCoreRadius, true); offset += 4;
+    view.setFloat32(offset, uniforms.sunGlowRadius, true); offset += 4;
+    offset += 8; // padding
+
+    // vec3 sunCoreColor + padding (16 bytes)
+    view.setFloat32(offset, uniforms.sunCoreColor[0]!, true); offset += 4;
+    view.setFloat32(offset, uniforms.sunCoreColor[1]!, true); offset += 4;
+    view.setFloat32(offset, uniforms.sunCoreColor[2]!, true); offset += 4;
+    offset += 4;
+
+    // vec3 sunGlowColor + padding (16 bytes)
+    view.setFloat32(offset, uniforms.sunGlowColor[0]!, true); offset += 4;
+    view.setFloat32(offset, uniforms.sunGlowColor[1]!, true); offset += 4;
+    view.setFloat32(offset, uniforms.sunGlowColor[2]!, true); offset += 4;
     offset += 4;
 
     // gridEnabled, gridOpacity, earthOpacity, tempOpacity

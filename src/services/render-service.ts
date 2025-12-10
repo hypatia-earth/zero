@@ -65,6 +65,8 @@ export class RenderService {
       // Calculate temp interpolation
       const tempLerp = this.dataService.getTempInterpolation(state.time);
 
+      const sunConfig = this.configService.getConfig().sun;
+
       renderer.updateUniforms({
         viewProjInverse: renderer.camera.getViewProjInverse(),
         eyePosition: renderer.camera.getEyePosition(),
@@ -73,6 +75,10 @@ export class RenderService {
         tanFov: renderer.camera.getTanFov(),
         sunEnabled,
         sunDirection: getSunDirection(state.time),
+        sunCoreRadius: sunConfig.coreRadius,
+        sunGlowRadius: sunConfig.glowRadius,
+        sunCoreColor: new Float32Array(sunConfig.coreColor),
+        sunGlowColor: new Float32Array(sunConfig.glowColor),
         gridEnabled,
         gridOpacity: options.grid.opacity,
         earthOpacity: earthEnabled ? options.earth.opacity : 0,

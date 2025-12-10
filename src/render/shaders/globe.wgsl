@@ -12,6 +12,13 @@ struct Uniforms {
   sunPad: vec2f,              // 8 bytes pad for vec3f alignment
   sunDirection: vec3f,        // 12 + 4 pad = 16 bytes
   sunDirPad: f32,
+  sunCoreRadius: f32,         // 4 bytes
+  sunGlowRadius: f32,         // 4 bytes
+  sunRadiiPad: vec2f,         // 8 bytes pad = 16 bytes
+  sunCoreColor: vec3f,        // 12 + 4 pad = 16 bytes
+  sunCoreColorPad: f32,
+  sunGlowColor: vec3f,        // 12 + 4 pad = 16 bytes
+  sunGlowColorPad: f32,
   gridEnabled: u32,           // remaining fields tightly packed
   gridOpacity: f32,
   earthOpacity: f32,
@@ -116,6 +123,62 @@ fn blendDayNight(color: vec4f, hitPoint: vec3f) -> vec4f {
   return vec4f(color.rgb * brightness, color.a);
 }
 
+fn blendSun(color: vec4f, fragCoord: vec2f) -> vec4f {
+  if (u.sunEnabled == 0u) { return color; }
+
+  // Project sun direction to screen space
+  let aspect = u.resolution.x / u.resolution.y;
+  let forward = -normalize(u.eyePosition);
+  let worldUp = vec3f(0.0, 1.0, 0.0);
+  let right = normalize(cross(forward, worldUp));
+  let up = cross(right, forward);
+
+  // Sun direction relative to camera
+  let sunLocal = vec3f(
+    dot(u.sunDirection, right),
+    dot(u.sunDirection, up),
+    dot(u.sunDirection, forward)
+  );
+
+  // Only render if sun is in front of camera
+  if (sunLocal.z <= 0.0) { return color; }
+
+  // Project to screen coords (normalized, no aspect correction yet)
+  let sunScreen = vec2f(
+    sunLocal.x / (sunLocal.z * u.tanFov),
+    sunLocal.y / (sunLocal.z * u.tanFov)
+  );
+
+  // Current pixel in NDC
+  let pixelNDC = vec2f(
+    (fragCoord.x / u.resolution.x) * 2.0 - 1.0,
+    1.0 - (fragCoord.y / u.resolution.y) * 2.0
+  );
+
+  // Compute difference, then correct X for aspect ratio
+  let diff = vec2f(
+    (pixelNDC.x - sunScreen.x) * aspect,
+    pixelNDC.y - sunScreen.y
+  );
+
+  // Distance in screen space (perfect circle)
+  let dist = length(diff);
+
+  // Core disc
+  if (dist < u.sunCoreRadius) {
+    return vec4f(u.sunCoreColor, 1.0);
+  }
+
+  // Glow falloff - directly outside core
+  if (dist < u.sunGlowRadius) {
+    let t = 1.0 - (dist - u.sunCoreRadius) / (u.sunGlowRadius - u.sunCoreRadius);
+    let glow = u.sunGlowColor * t * t * 0.4;
+    return vec4f(color.rgb + glow, 1.0);
+  }
+
+  return color;
+}
+
 fn blendGrid(color: vec4f, lat: f32, lon: f32) -> vec4f {
   if (u.gridEnabled == 0u) { return color; }
   let latDeg = degrees(lat);
@@ -212,7 +275,9 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> @location(0) vec4f {
   let hit = raySphereIntersect(u.eyePosition, rayDir, EARTH_RADIUS);
 
   if (!hit.valid) {
-    return BG_COLOR;
+    var bgColor = BG_COLOR;
+    bgColor = blendSun(bgColor, fragPos.xy);
+    return bgColor;
   }
 
   let lat = asin(hit.point.y);

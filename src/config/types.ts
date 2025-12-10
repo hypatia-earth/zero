@@ -11,6 +11,17 @@ export interface LayerConfig {
   defaultEnabled: boolean;
 }
 
+export interface SunConfig {
+  /** Core disc radius in NDC units */
+  coreRadius: number;
+  /** Glow radius in NDC units */
+  glowRadius: number;
+  /** Core color RGB (0-1) */
+  coreColor: [number, number, number];
+  /** Glow color RGB (0-1) */
+  glowColor: [number, number, number];
+}
+
 export interface ZeroConfig {
   /** Open-Meteo S3 base URL */
   dataBaseUrl: string;
@@ -36,4 +47,7 @@ export interface ZeroConfig {
 
   /** Default active layers */
   defaultLayers: LayerId[];
+
+  /** Sun rendering settings */
+  sun: SunConfig;
 }
