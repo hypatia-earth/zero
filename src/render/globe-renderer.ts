@@ -263,9 +263,11 @@ export class GlobeRenderer {
     this.device.queue.writeBuffer(this.ringOffsetsBuffer, 0, offsets.buffer, offsets.byteOffset, offsets.byteLength);
   }
 
-  uploadTempData(data0: Float32Array, data1: Float32Array): void {
+  async uploadTempData(data0: Float32Array, data1: Float32Array): Promise<void> {
     this.device.queue.writeBuffer(this.tempData0Buffer, 0, data0.buffer, data0.byteOffset, data0.byteLength);
     this.device.queue.writeBuffer(this.tempData1Buffer, 0, data1.buffer, data1.byteOffset, data1.byteLength);
+    await this.device.queue.onSubmittedWorkDone();
+    await new Promise(r => setTimeout(r, 100)); // Debug delay
   }
 
   /**

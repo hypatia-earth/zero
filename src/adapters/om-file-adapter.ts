@@ -82,7 +82,7 @@ export interface OmChunkData {
   done: boolean;
 }
 
-export type OmChunkCallback = (chunk: OmChunkData) => void;
+export type OmChunkCallback = (chunk: OmChunkData) => void | Promise<void>;
 
 interface ChunkInfo {
   dataOffset: number;
@@ -272,40 +272,47 @@ export async function streamOmVariable(
   }
 
   const totalCompressed = maxDataEnd - minDataOffset;
-  const sliceBytes = Math.ceil(totalCompressed / slices);
+  const numChunks = allChunks.length;
   const outputElements = targetDims.reduce((a, b) => a * b, 1);
+
+  // Calculate chunk-aligned slices: first slice gets remainder, rest get equal chunks
+  const chunksPerSlice = Math.floor(numChunks / slices);
+  const firstSliceChunks = numChunks - chunksPerSlice * (slices - 1);
+
+  console.log(`[OM] ${numChunks} chunks, ${(totalCompressed / 1024).toFixed(0)} KB total`);
+  console.log(`[OM] Slice distribution: first=${firstSliceChunks}, rest=${chunksPerSlice} chunks each`);
 
   // Allocate output and decode buffer
   const outputPtr = wasm._malloc(outputElements * 4);
   const chunkBufferSize = Number(wasm._om_decoder_read_buffer_size(decoderPtr));
   const chunkBufferPtr = wasm._malloc(chunkBufferSize);
 
-  // Track fetched data and decoded chunks
+  // Track fetched data
   const allDataBuffer = new Uint8Array(totalCompressed);
-  let fetchedUpTo = 0;
   let nextChunkIdx = 0;
 
-  // Phase 6+7: Fetch slices and decode progressively
+  // Phase 6+7: Fetch chunk-aligned slices and decode
   for (let sliceIdx = 0; sliceIdx < slices; sliceIdx++) {
-    const sliceStart = sliceIdx * sliceBytes;
-    const sliceEnd = Math.min(sliceStart + sliceBytes, totalCompressed);
-    const sliceSize = sliceEnd - sliceStart;
+    // Determine which chunks belong to this slice
+    const sliceChunkCount = sliceIdx === 0 ? firstSliceChunks : chunksPerSlice;
+    const sliceStartChunk = nextChunkIdx;
+    const sliceEndChunk = sliceStartChunk + sliceChunkCount;
+
+    // Calculate byte range for these chunks
+    const firstChunk = allChunks[sliceStartChunk]!;
+    const lastChunk = allChunks[sliceEndChunk - 1]!;
+    const sliceByteStart = firstChunk.dataOffset - minDataOffset;
+    const sliceByteEnd = (lastChunk.dataOffset - minDataOffset) + lastChunk.dataCount;
+    const sliceSize = sliceByteEnd - sliceByteStart;
 
     // Fetch this slice
-    const sliceData = await fetchRange(url, minDataOffset + sliceStart, sliceSize);
-    allDataBuffer.set(sliceData, sliceStart);
-    fetchedUpTo = sliceEnd;
-    console.log(`[OM] Slice ${sliceIdx + 1}/${slices} arrived (${(sliceSize / 1024).toFixed(0)} KB)`);
+    const sliceData = await fetchRange(url, firstChunk.dataOffset, sliceSize);
+    allDataBuffer.set(sliceData, sliceByteStart);
+    console.log(`[OM] Slice ${sliceIdx + 1}/${slices}: ${sliceChunkCount} chunks (${(sliceSize / 1024).toFixed(0)} KB)`);
 
-    // Decode all chunks that are now complete (fully within fetched data)
-    let chunksDecodedThisSlice = 0;
-    while (nextChunkIdx < allChunks.length) {
+    // Decode all chunks in this slice (guaranteed complete since chunk-aligned)
+    while (nextChunkIdx < sliceEndChunk) {
       const chunk = allChunks[nextChunkIdx]!;
-      const chunkStart = chunk.dataOffset - minDataOffset;
-      const chunkEnd = chunkStart + chunk.dataCount;
-
-      // Check if chunk is fully fetched
-      if (chunkEnd > fetchedUpTo) break;
 
       // Decode this chunk
       const decoder2Ptr = wasm._malloc(SIZEOF_DECODER);
@@ -350,7 +357,6 @@ export async function streamOmVariable(
 
               wasm._free(dataBlockPtr);
               foundChunk = true;
-              chunksDecodedThisSlice++;
               break;
             }
           }
@@ -372,7 +378,7 @@ export async function streamOmVariable(
     const currentData = new Float32Array(outputElements);
     currentData.set(new Float32Array(wasm.HEAPU8.buffer, outputPtr, outputElements));
 
-    onChunk({
+    await onChunk({
       data: currentData,
       offset: 0,
       count: outputElements,

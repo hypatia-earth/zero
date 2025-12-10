@@ -136,9 +136,9 @@ export class App {
       // Progressive loading with chunk callbacks
       await this.dataService.loadProgressiveInterleaved(
         currentTime,
-        (update: ProgressUpdate) => {
+        async (update: ProgressUpdate) => {
           // Upload full arrays to GPU (streaming updates as slices arrive)
-          this.renderService!.getRenderer().uploadTempData(update.data0, update.data1);
+          await this.renderService!.getRenderer().uploadTempData(update.data0, update.data1);
           this.renderService!.setTempLoadedPoints(update.data0.length);
 
           // Update bootstrap progress (55-95% range)
