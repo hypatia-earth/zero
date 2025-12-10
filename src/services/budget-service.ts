@@ -10,7 +10,7 @@
  * - Slot: One timestep's worth of GPU memory (~26.4 MB per param)
  */
 
-import { effect } from '@preact/signals-core';
+import { effect, signal } from '@preact/signals-core';
 import type { ConfigService } from './config-service';
 import type { StateService } from './state-service';
 import { DataService, type ProgressUpdate } from './data-service';
@@ -40,6 +40,9 @@ export class BudgetService {
   private initialized = false;
   private activeT0: Date | null = null;  // Currently active timestep pair
   private activeT1: Date | null = null;
+
+  /** Signal that increments when slots change (for UI reactivity) */
+  readonly slotsVersion = signal(0);
 
   constructor(
     private configService: ConfigService,
@@ -166,6 +169,7 @@ export class BudgetService {
       if (slot) {
         slot.loaded = true;
         slot.loadedPoints = data.length;
+        this.slotsVersion.value++;  // Trigger UI update
         console.log(`[Budget] Loaded ${key} → slot ${slotIndex}`);
       }
 
@@ -382,10 +386,27 @@ export class BudgetService {
   }
 
   /**
-   * Get all timestamps in the load window (for UI visualization)
+   * Get loaded timesteps for timebar visualization
+   * Returns timestamps that are fully loaded in GPU
    */
   getLoadedTimestamps(): Date[] {
-    return Array.from(this.slots.values()).map(s => s.timestamp);
+    const loaded: Date[] = [];
+    for (const slot of this.slots.values()) {
+      if (slot.loaded) {
+        loaded.push(slot.timestamp);
+      }
+    }
+    return loaded.sort((a, b) => a.getTime() - b.getTime());
+  }
+
+  /**
+   * Get the currently active interpolation pair
+   */
+  getActivePair(): { t0: Date; t1: Date } | null {
+    if (this.activeT0 && this.activeT1) {
+      return { t0: this.activeT0, t1: this.activeT1 };
+    }
+    return null;
   }
 
   /**
@@ -466,6 +487,9 @@ export class BudgetService {
           if (slot1) {
             slot1.loadedPoints = update.data1.length;
             slot1.loaded = update.done;
+          }
+          if (update.done) {
+            this.slotsVersion.value++;  // Trigger UI update
           }
 
           // Update bootstrap progress (55-95% range)

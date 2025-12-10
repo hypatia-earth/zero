@@ -164,6 +164,7 @@ export class App {
           m(TimeBarPanel, {
             stateService: this.stateService,
             dateTimeService: this.dateTimeService,
+            budgetService: this.budgetService!,
           }),
         ];
       },

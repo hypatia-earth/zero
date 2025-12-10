@@ -111,7 +111,7 @@ input[type=range].timeslider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 20px;
   height: 20px;
-  background: white;
+  background: rgba(255, 255, 255, 0.6);
   border-radius: 50%;
   cursor: pointer;
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
@@ -126,7 +126,7 @@ input[type=range].timeslider::-webkit-slider-thumb:hover {
 input[type=range].timeslider::-moz-range-thumb {
   width: 20px;
   height: 20px;
-  background: white;
+  background: rgba(255, 255, 255, 0.6);
   border-radius: 50%;
   cursor: pointer;
   border: none;
@@ -145,7 +145,7 @@ input[type=range].timeslider::-moz-range-thumb:hover {
   left: 21px;
   right: 21px;
   transform: translateY(-50%);
-  height: 40%;
+  height: 100%;
   z-index: 1;
 }
 

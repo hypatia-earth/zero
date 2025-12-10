@@ -3,17 +3,33 @@
  */
 
 import m from 'mithril';
+import { effect } from '@preact/signals-core';
 import type { StateService } from '../services/state-service';
 import type { DateTimeService } from '../services/datetime-service';
+import type { BudgetService } from '../services/budget-service';
 
 interface TimeBarPanelAttrs {
   stateService: StateService;
   dateTimeService: DateTimeService;
+  budgetService: BudgetService;
 }
 
+let unsubscribe: (() => void) | null = null;
+
 export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
+  oncreate({ attrs }) {
+    unsubscribe = effect(() => {
+      attrs.stateService.state.value;
+      attrs.budgetService.slotsVersion.value;  // Also watch slot changes
+      m.redraw();
+    });
+  },
+  onremove() {
+    unsubscribe?.();
+    unsubscribe = null;
+  },
   view({ attrs }) {
-    const { stateService, dateTimeService } = attrs;
+    const { stateService, dateTimeService, budgetService } = attrs;
     const currentTime = stateService.getTime();
     const window = dateTimeService.getDataWindow();
 
@@ -32,13 +48,31 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
       return `${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
     };
 
+    // Get loaded timesteps for tick visualization
+    const loadedTimestamps = budgetService.getLoadedTimestamps();
+    const activePair = budgetService.getActivePair();
+    console.log(`[Timebar] Loaded: ${loadedTimestamps.length}, active: ${activePair ? 'yes' : 'no'}`);
+
+    // Calculate position for a timestamp
+    const getPosition = (ts: Date) => ((ts.getTime() - window.start.getTime()) / windowMs) * 100;
+
     return m('.panel.timebar', [
       m('.control.timeslider', { style: 'width: 100%; height: 42px; position: relative;' }, [
-        // Track background
+        // Track background with loaded ticks
         m('.time-ticks', [
-          // Now marker
+          // Loaded timestep ticks
+          ...loadedTimestamps.map(ts => {
+            const isActive = activePair && (
+              ts.getTime() === activePair.t0.getTime() ||
+              ts.getTime() === activePair.t1.getTime()
+            );
+            return m('.time-tick', {
+              style: `left: ${getPosition(ts)}%; background: ${isActive ? '#0f0' : '#f00'};`,
+            });
+          }),
+          // Now marker (brighter)
           m('.time-tick', {
-            style: `left: ${((dateTimeService.getWallTime().getTime() - window.start.getTime()) / windowMs) * 100}%; background: rgba(255,255,255,0.5);`,
+            style: `left: ${getPosition(dateTimeService.getWallTime())}%; background: rgba(255,255,255,0.7); width: 3px;`,
           }),
         ]),
         // Slider input
