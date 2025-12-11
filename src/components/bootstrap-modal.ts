@@ -1,19 +1,45 @@
 /**
  * BootstrapModal - Loading progress overlay
+ *
+ * Shows during bootstrap with progress, fades out on success, stays on error.
  */
 
 import m from 'mithril';
 import { BootstrapService } from '../services/bootstrap-service';
 
-export const BootstrapModal: m.Component = {
-  view() {
-    const state = BootstrapService.state.value;
+interface BootstrapModalState {
+  fadingOut: boolean;
+  hidden: boolean;
+}
 
-    if (state.complete && !state.error) {
+export const BootstrapModal: m.Component<object, BootstrapModalState> = {
+  oninit(vnode) {
+    vnode.state.fadingOut = false;
+    vnode.state.hidden = false;
+  },
+
+  view(vnode) {
+    const state = BootstrapService.state.value;
+    const { fadingOut, hidden } = vnode.state;
+
+    // Already hidden after fade-out completed
+    if (hidden) {
       return null;
     }
 
-    return m('.dialog.bootstrap', [
+    // Start fade-out when complete without error
+    if (state.complete && !state.error && !fadingOut) {
+      vnode.state.fadingOut = true;
+      // Hide after animation completes
+      setTimeout(() => {
+        vnode.state.hidden = true;
+        m.redraw();
+      }, 300);
+    }
+
+    return m('.dialog.bootstrap', {
+      class: fadingOut ? 'fade-out' : ''
+    }, [
       m('.backdrop'),
       m('.window', [
         m('.branding', [

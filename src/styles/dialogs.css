@@ -39,9 +39,19 @@
   to { opacity: 1; }
 }
 
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes scaleOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.95); }
 }
 
 /* Bootstrap Dialog - Startup/Loading modal */
@@ -59,6 +69,16 @@
   text-align: left;
   animation: scaleIn 0.15s ease-out;
   gap: 24px;
+}
+
+/* Fade out when complete */
+.dialog.bootstrap.fade-out {
+  animation: fadeOut 0.3s ease-out forwards;
+  pointer-events: none;
+}
+
+.dialog.bootstrap.fade-out .window {
+  animation: scaleOut 0.3s ease-out forwards;
 }
 
 /* Branding section */

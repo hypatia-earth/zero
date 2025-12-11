@@ -1,6 +1,13 @@
 /**
  * Hypatia Zero - Entry point
+ *
+ * Mounts App component immediately. App handles:
+ * 1. "Please wait" guard until services init
+ * 2. Bootstrap modal with progress
+ * 3. UI visibility after bootstrap completes
  */
+
+import m from 'mithril';
 
 import './styles/theme.css';
 import './styles/layout.css';
@@ -10,54 +17,20 @@ import './styles/dialogs.css';
 import './styles/widgets.css';
 
 import { App } from './app';
-import { setupCameraControls } from './services/camera-controls';
 import { registerServiceWorker, setupCacheUtils } from './services/sw-registration';
 
-async function main(): Promise<void> {
-  // Register Service Worker for Range request caching
-  await registerServiceWorker();
-  const canvas = document.getElementById('globe') as HTMLCanvasElement | null;
-  if (!canvas) {
-    throw new Error('Canvas element #globe not found');
-  }
+// Register Service Worker (non-blocking)
+registerServiceWorker();
 
-  // Check WebGPU support
-  if (!navigator.gpu) {
-    document.body.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:center;height:100%;text-align:center;padding:20px;">
-        <div>
-          <h1 style="font-weight:300;letter-spacing:2px;">WebGPU Not Supported</h1>
-          <p style="opacity:0.6;margin-top:12px;">
-            Your browser does not support WebGPU.<br>
-            Try Chrome 113+ or Edge 113+.
-          </p>
-        </div>
-      </div>
-    `;
-    return;
-  }
+// Mount App immediately - it handles its own loading states
+const appContainer = document.getElementById('app');
+if (appContainer) {
+  m.mount(appContainer, App);
 
-  const app = new App(canvas);
-  await app.bootstrap();
-
-  // Setup camera controls after bootstrap
-  const renderer = app.getRenderer();
-  if (renderer) {
-    setupCameraControls(canvas, renderer.camera, app.getServices().state, app.getServices().config);
-  }
-
-  // Expose for debugging
+  // Setup cache utils for debugging (localhost only)
   if (location.hostname === 'localhost') {
-    (window as unknown as { __hypatia: object }).__hypatia = {
-      app,
-      ...app.getServices(),
-    };
     setupCacheUtils();
   }
-
-  console.log('[Zero] Hypatia Zero initialized');
+} else {
+  console.error('[Zero] App container #app not found');
 }
-
-main().catch((error: unknown) => {
-  console.error('[Zero] Fatal error:', error);
-});

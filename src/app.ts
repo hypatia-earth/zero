@@ -1,5 +1,9 @@
 /**
  * App - Main application orchestration
+ *
+ * Renders as Mithril component with two phases:
+ * 1. Bootstrap: Shows modal with progress, UI hidden
+ * 2. Ready: Modal fades out, UI fades in
  */
 
 import m from 'mithril';
@@ -21,27 +25,43 @@ import { TimeCirclePanel } from './components/timecircle-panel';
 import { TimeBarPanel } from './components/timebar-panel';
 import { LogoPanel } from './components/logo-panel';
 
-export class App {
-  private configService: ConfigService;
-  private optionsService: OptionsService;
-  private stateService: StateService;
-  private trackerService: TrackerService;
-  private dateTimeService: DateTimeService;
-  private dataService: DataService;
-  private renderService: RenderService | null = null;
-  private budgetService: BudgetService | null = null;
-  private keyboardService: KeyboardService | null = null;
+interface AppComponent extends m.Component {
+  configService?: ConfigService;
+  optionsService?: OptionsService;
+  stateService?: StateService;
+  trackerService?: TrackerService;
+  dateTimeService?: DateTimeService;
+  dataService?: DataService;
+  renderService?: RenderService;
+  budgetService?: BudgetService;
+  keyboardService?: KeyboardService;
+  canvas?: HTMLCanvasElement;
 
-  constructor(private canvas: HTMLCanvasElement) {
+  oninit(): Promise<void>;
+  loadBasemap(): Promise<void>;
+  setupResizeHandler(): void;
+  view(): m.Children;
+}
+
+export const App: AppComponent = {
+  async oninit() {
+    // Get canvas element
+    this.canvas = document.getElementById('globe') as HTMLCanvasElement;
+    if (!this.canvas) {
+      BootstrapService.setError('Canvas element #globe not found');
+      return;
+    }
+
+    // Initialize foundation services
     this.configService = new ConfigService();
     this.optionsService = new OptionsService();
     this.stateService = new StateService(this.configService.getDefaultLayers());
     this.trackerService = new TrackerService();
     this.dateTimeService = new DateTimeService(this.configService.getDataWindowDays());
     this.dataService = new DataService(this.trackerService);
-  }
 
-  async bootstrap(): Promise<void> {
+    m.redraw();
+
     try {
       // Step 1: Capabilities
       BootstrapService.setStep('CAPABILITIES');
@@ -84,27 +104,43 @@ export class App {
         this.renderService
       );
 
-      // Mount UI immediately (before data loading)
-      this.mountUI();
       BootstrapService.complete();
       console.log('[App] Bootstrap complete');
+      m.redraw();
 
       // Step 6: Load Data (background, don't block UI)
       this.budgetService.loadInitialTimesteps();
 
-      // React to options changes
+      // React to signal changes (options + bootstrap state)
       effect(() => {
+        // Subscribe to bootstrap state for UI visibility
+        BootstrapService.state.value;
         m.redraw();
       });
+
+      // Expose services for debugging (localhost only)
+      if (location.hostname === 'localhost') {
+        (window as unknown as { __hypatia: object }).__hypatia = {
+          configService: this.configService,
+          optionsService: this.optionsService,
+          stateService: this.stateService,
+          trackerService: this.trackerService,
+          dateTimeService: this.dateTimeService,
+          dataService: this.dataService,
+          renderService: this.renderService,
+          budgetService: this.budgetService,
+        };
+      }
 
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       BootstrapService.setError(message);
       console.error('[App] Bootstrap failed:', err);
+      m.redraw();
     }
-  }
+  },
 
-  private async loadBasemap(): Promise<void> {
+  async loadBasemap() {
     const faceNames = ['px', 'nx', 'py', 'ny', 'pz', 'nz'];
     const faces: ImageBitmap[] = [];
 
@@ -114,7 +150,6 @@ export class App {
         const response = await fetch(url);
         if (!response.ok) {
           console.warn(`[App] Basemap face ${name} not found, using placeholder`);
-          // Create gray placeholder
           const canvas = new OffscreenCanvas(256, 256);
           const ctx = canvas.getContext('2d')!;
           ctx.fillStyle = '#333';
@@ -125,7 +160,6 @@ export class App {
         const blob = await response.blob();
         faces.push(await createImageBitmap(blob));
       } catch {
-        // Create placeholder on error
         const canvas = new OffscreenCanvas(256, 256);
         const ctx = canvas.getContext('2d')!;
         ctx.fillStyle = '#333';
@@ -135,58 +169,46 @@ export class App {
     }
 
     await this.renderService!.getRenderer().loadBasemap(faces);
-  }
+  },
 
-  private setupResizeHandler(): void {
+  setupResizeHandler() {
     const handleResize = () => {
       this.renderService?.getRenderer().resize();
     };
     window.addEventListener('resize', handleResize);
-  }
+  },
 
-  private mountUI(): void {
-    const uiContainer = document.createElement('div');
-    uiContainer.id = 'ui';
-    uiContainer.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
-    document.getElementById('app')!.appendChild(uiContainer);
+  view() {
+    // Read bootstrap status for UI visibility
+    const bootstrapState = BootstrapService.state.value;
+    const showUI = bootstrapState.complete && !bootstrapState.error;
 
-    const AppUI: m.Component = {
-      view: () => {
-        return [
-          m(BootstrapModal),
-          m(LogoPanel),
-          m(LayersPanel, {
-            configService: this.configService,
-            stateService: this.stateService,
-            optionsService: this.optionsService,
-          }),
-          m(TimeCirclePanel, { stateService: this.stateService }),
-          m(TimeBarPanel, {
-            stateService: this.stateService,
-            dateTimeService: this.dateTimeService,
-            budgetService: this.budgetService!,
-          }),
-        ];
-      },
-    };
+    // Services not yet initialized - show modal only
+    if (!this.stateService) {
+      return m(BootstrapModal);
+    }
 
-    m.mount(uiContainer, AppUI);
-  }
+    return [
+      // Modal overlay (rendered FIRST, always available)
+      m(BootstrapModal),
 
-  getRenderer() {
-    return this.renderService?.getRenderer() ?? null;
-  }
-
-  getServices() {
-    return {
-      config: this.configService,
-      options: this.optionsService,
-      state: this.stateService,
-      tracker: this.trackerService,
-      dateTime: this.dateTimeService,
-      keyboard: this.keyboardService,
-      data: this.dataService,
-      budget: this.budgetService,
-    };
-  }
-}
+      // UI container (hidden during bootstrap)
+      m('div.ui-container', {
+        style: `position: absolute; inset: 0; pointer-events: none; ${showUI ? '' : 'display: none;'}`
+      }, [
+        m(LogoPanel),
+        m(LayersPanel, {
+          configService: this.configService!,
+          stateService: this.stateService!,
+          optionsService: this.optionsService!,
+        }),
+        m(TimeCirclePanel, { stateService: this.stateService! }),
+        this.budgetService && m(TimeBarPanel, {
+          stateService: this.stateService!,
+          dateTimeService: this.dateTimeService!,
+          budgetService: this.budgetService,
+        }),
+      ]),
+    ];
+  },
+};

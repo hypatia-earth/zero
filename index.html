@@ -22,9 +22,9 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     #app {
-      width: 100%;
-      height: 100%;
-      position: relative;
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
     }
     canvas {
       display: block;
@@ -34,9 +34,8 @@
   </style>
 </head>
 <body>
-  <div id="app">
-    <canvas id="globe"></canvas>
-  </div>
+  <canvas id="globe"></canvas>
+  <div id="app"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
