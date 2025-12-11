@@ -37,6 +37,7 @@ function wgslObfuscate(): Plugin {
 export default defineConfig({
   plugins: [wgslObfuscate()],
   server: {
+    host: true,  // Expose to network
     port: 5173,
     strictPort: true,
     https: {

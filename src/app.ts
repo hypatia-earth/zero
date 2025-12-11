@@ -133,7 +133,9 @@ export const App: AppComponent = {
       }
 
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = err instanceof Error
+        ? `${err.message}${err.stack ? '\n' + err.stack.split('\n').slice(1, 4).join('\n') : ''}`
+        : String(err);
       BootstrapService.setError(message);
       console.error('[ZERO] Bootstrap failed:', err);
       m.redraw();
@@ -179,22 +181,23 @@ export const App: AppComponent = {
   },
 
   view() {
-    // Read bootstrap status for UI visibility
     const bootstrapState = BootstrapService.state.value;
-    const showUI = bootstrapState.complete && !bootstrapState.error;
 
-    // Services not yet initialized - show modal only
-    if (!this.stateService) {
+    // During bootstrap - show modal only
+    if (!bootstrapState.complete) {
       return m(BootstrapModal);
     }
 
-    return [
-      // Modal overlay (rendered FIRST, always available)
-      m(BootstrapModal),
+    // Error state - show modal with error
+    if (bootstrapState.error) {
+      return m(BootstrapModal);
+    }
 
-      // UI container (hidden during bootstrap)
+    // Bootstrap complete - show modal (fading out) + UI
+    return [
+      m(BootstrapModal),
       m('div.ui-container', {
-        style: `position: absolute; inset: 0; pointer-events: none; ${showUI ? '' : 'display: none;'}`
+        style: 'position: absolute; inset: 0; pointer-events: none;'
       }, [
         m(LogoPanel),
         m(LayersPanel, {

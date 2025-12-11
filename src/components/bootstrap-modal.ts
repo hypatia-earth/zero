@@ -53,7 +53,7 @@ export const BootstrapModal: m.Component<object, BootstrapModalState> = {
           ]),
         ]),
         state.error && m('.error', [
-          m('p', 'Failed to initialize'),
+          m('p', `Failed at: ${state.step}`),
           m('.detail', state.error),
         ]),
       ]),

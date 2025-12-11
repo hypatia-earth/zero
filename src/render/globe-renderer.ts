@@ -57,6 +57,7 @@ export class GlobeRenderer {
   private rainDataBuffer!: GPUBuffer;
   private maxTempSlots!: number;
   private atmosphereLUTs!: AtmosphereLUTs;
+  private useFloat16Luts = false;
 
   readonly camera: Camera;
   private uniformData = new ArrayBuffer(336);  // Increased for new uniforms
@@ -75,8 +76,14 @@ export class GlobeRenderer {
     const adapterBufferLimit = adapter.limits.maxBufferSize;
     const cap = 2 * 1024 * 1024 * 1024; // Cap at 2 GB
 
+    // Check for float32-filterable support (use float16 LUTs if not available)
+    const hasFloat32Filterable = adapter.features.has('float32-filterable');
+    this.useFloat16Luts = !hasFloat32Filterable;
+
+    const requiredFeatures: GPUFeatureName[] = hasFloat32Filterable ? ['float32-filterable'] : [];
+
     this.device = await adapter.requestDevice({
-      requiredFeatures: ['float32-filterable'],  // Required for atmosphere LUT sampling
+      requiredFeatures,
       requiredLimits: {
         maxStorageBufferBindingSize: Math.min(adapterStorageLimit, cap),
         maxBufferSize: Math.min(adapterBufferLimit, cap),
@@ -146,8 +153,8 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Load atmosphere LUTs
-    this.atmosphereLUTs = await loadAtmosphereLUTs(this.device);
+    // Load atmosphere LUTs (float16 fallback for devices without float32-filterable)
+    this.atmosphereLUTs = await loadAtmosphereLUTs(this.device, this.useFloat16Luts);
 
     // Combine all shader modules in dependency order
     const combinedShaderCode = [
