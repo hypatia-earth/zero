@@ -4,6 +4,8 @@
 
 import { Camera, type CameraConfig } from './camera';
 import globeShaderCode from './shaders/globe.wgsl?raw';
+import atmosphereShaderCode from './shaders/atmosphere.wgsl?raw';
+import { loadAtmosphereLUTs, type AtmosphereLUTs } from './atmosphere-luts';
 
 export interface GlobeUniforms {
   viewProjInverse: Float32Array;
@@ -46,6 +48,7 @@ export class GlobeRenderer {
   private tempDataBuffer!: GPUBuffer;  // Single large buffer with slots
   private rainDataBuffer!: GPUBuffer;
   private maxTempSlots!: number;
+  private atmosphereLUTs!: AtmosphereLUTs;
 
   readonly camera: Camera;
   private uniformData = new ArrayBuffer(336);  // Increased for new uniforms
@@ -65,6 +68,7 @@ export class GlobeRenderer {
     const cap = 2 * 1024 * 1024 * 1024; // Cap at 2 GB
 
     this.device = await adapter.requestDevice({
+      requiredFeatures: ['float32-filterable'],  // Required for atmosphere LUT sampling
       requiredLimits: {
         maxStorageBufferBindingSize: Math.min(adapterStorageLimit, cap),
         maxBufferSize: Math.min(adapterBufferLimit, cap),
@@ -134,7 +138,12 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    const shaderModule = this.device.createShaderModule({ code: globeShaderCode });
+    // Load atmosphere LUTs
+    this.atmosphereLUTs = await loadAtmosphereLUTs(this.device);
+
+    // Combine atmosphere module with globe shader
+    const combinedShaderCode = atmosphereShaderCode + '\n' + globeShaderCode;
+    const shaderModule = this.device.createShaderModule({ code: combinedShaderCode });
 
     const bindGroupLayout = this.device.createBindGroupLayout({
       entries: [
@@ -145,6 +154,11 @@ export class GlobeRenderer {
         { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
         { binding: 5, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // tempData (large, slotted)
         { binding: 6, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // rainData
+        // Atmosphere LUTs
+        { binding: 7, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // transmittance (2D)
+        { binding: 8, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } },  // scattering (3D)
+        { binding: 9, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // irradiance (2D)
+        { binding: 10, visibility: GPUShaderStage.FRAGMENT, sampler: {} },  // atmosphere sampler
       ],
     });
 
@@ -165,6 +179,11 @@ export class GlobeRenderer {
         { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
         { binding: 5, resource: { buffer: this.tempDataBuffer } },
         { binding: 6, resource: { buffer: this.rainDataBuffer } },
+        // Atmosphere LUTs
+        { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
+        { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
+        { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
+        { binding: 10, resource: this.atmosphereLUTs.sampler },
       ],
     });
 
@@ -303,6 +322,11 @@ export class GlobeRenderer {
         { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
         { binding: 5, resource: { buffer: this.tempDataBuffer } },
         { binding: 6, resource: { buffer: this.rainDataBuffer } },
+        // Atmosphere LUTs
+        { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
+        { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
+        { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
+        { binding: 10, resource: this.atmosphereLUTs.sampler },
       ],
     });
   }

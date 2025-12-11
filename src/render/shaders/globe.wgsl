@@ -40,6 +40,11 @@ struct Uniforms {
 @group(0) @binding(4) var<storage, read> ringOffsets: array<u32>;
 @group(0) @binding(5) var<storage, read> tempData: array<f32>;  // Large buffer with N slots
 @group(0) @binding(6) var<storage, read> rainData: array<f32>;
+// Atmosphere LUTs (Bruneton precomputed scattering)
+@group(0) @binding(7) var atm_transmittance: texture_2d<f32>;
+@group(0) @binding(8) var atm_scattering: texture_3d<f32>;
+@group(0) @binding(9) var atm_irradiance: texture_2d<f32>;
+@group(0) @binding(10) var atm_sampler: sampler;
 
 const POINTS_PER_SLOT: u32 = 6599680u;  // Points per timestep slot
 
@@ -278,15 +283,37 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   return vec4f(mix(color.rgb, rainColor.rgb, rainColor.a), color.a);
 }
 
+// Tone mapping (Reinhard with exposure)
+fn toneMap(radiance: vec3f, exposure: f32) -> vec3f {
+  let white_point = vec3f(1.0, 1.0, 1.0);
+  return pow(vec3f(1.0) - exp(-radiance / white_point * exposure), vec3f(1.0 / 2.2));
+}
+
 @fragment
 fn fs_main(@builtin(position) fragPos: vec4f) -> @location(0) vec4f {
   let rayDir = computeRay(fragPos.xy);
   let hit = raySphereIntersect(u.eyePosition, rayDir, EARTH_RADIUS);
 
+  // Convert to km scale for atmosphere (zero uses unit sphere, atmosphere uses 6360km earth)
+  let camera_km = u.eyePosition * UNIT_TO_KM;
+  let exposure = 10.0;  // Adjust for brightness
+
   if (!hit.valid) {
-    var bgColor = BG_COLOR;
-    bgColor = blendSun(bgColor, fragPos.xy);
-    return bgColor;
+    // Ray misses earth - compute atmospheric scattering
+    let sky = GetSkyRadiance(
+      atm_transmittance, atm_scattering, atm_sampler,
+      camera_km, rayDir, u.sunDirection
+    );
+
+    // Add sun disc if looking toward sun
+    var radiance = sky.radiance;
+    let sun_cos = dot(rayDir, u.sunDirection);
+    if (sun_cos > cos(SUN_ANGULAR_RADIUS)) {
+      radiance = radiance + sky.transmittance * GetSolarRadiance();
+    }
+
+    let color = toneMap(radiance, exposure);
+    return vec4f(color, 1.0);
   }
 
   let lat = asin(hit.point.y);
@@ -300,5 +327,16 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> @location(0) vec4f {
   color = blendDayNight(color, hit.point);
   color = blendGrid(color, lat, lon);
 
-  return color;
+  // Add aerial perspective (atmospheric haze) for earth surface
+  let point_km = hit.point * UNIT_TO_KM;
+  let aerial = GetSkyRadianceToPoint(
+    atm_transmittance, atm_scattering, atm_sampler,
+    camera_km, point_km, u.sunDirection
+  );
+  // Blend atmosphere over earth: surface * transmittance + scattered light
+  let surface_radiance = color.rgb * 0.3;  // Convert display color to approximate radiance
+  let final_radiance = surface_radiance * aerial.transmittance + aerial.radiance;
+  let final_color = toneMap(final_radiance, exposure);
+
+  return vec4f(final_color, 1.0);
 }
