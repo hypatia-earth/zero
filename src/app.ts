@@ -105,7 +105,7 @@ export const App: AppComponent = {
       );
 
       BootstrapService.complete();
-      console.log('%c[App] Bootstrap complete', 'color: darkgreen; font-weight: bold');
+      console.log('%c[ZERO] Bootstrap complete', 'color: darkgreen; font-weight: bold');
       m.redraw();
 
       // Step 6: Load Data (background, don't block UI)
@@ -135,7 +135,7 @@ export const App: AppComponent = {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       BootstrapService.setError(message);
-      console.error('[App] Bootstrap failed:', err);
+      console.error('[ZERO] Bootstrap failed:', err);
       m.redraw();
     }
   },
@@ -149,7 +149,7 @@ export const App: AppComponent = {
       try {
         const response = await fetch(url);
         if (!response.ok) {
-          console.warn(`[App] Basemap face ${name} not found, using placeholder`);
+          console.warn(`[ZERO] Basemap face ${name} not found, using placeholder`);
           const canvas = new OffscreenCanvas(256, 256);
           const ctx = canvas.getContext('2d')!;
           ctx.fillStyle = '#333';

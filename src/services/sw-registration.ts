@@ -17,6 +17,11 @@ export async function registerServiceWorker(): Promise<void> {
   try {
     await navigator.serviceWorker.register('/sw.js');
     await navigator.serviceWorker.ready;
+
+    // Setup cache utils for debugging (localhost only)
+    if (location.hostname === 'localhost') {
+      setupCacheUtils();
+    }
   } catch (error) {
     console.error('[SW] Registration failed:', error);
   }

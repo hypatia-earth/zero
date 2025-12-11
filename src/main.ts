@@ -17,20 +17,18 @@ import './styles/dialogs.css';
 import './styles/widgets.css';
 
 import { App } from './app';
-import { registerServiceWorker, setupCacheUtils } from './services/sw-registration';
+import { registerServiceWorker } from './services/sw-registration';
 
-// Register Service Worker (non-blocking)
+console.log('%c[ZERO] loading ...', 'color: darkgreen; font-weight: bold');
+
+
+// Register Service Worker (non-blocking, sets up cache utils on localhost)
 registerServiceWorker();
 
 // Mount App immediately - it handles its own loading states
 const appContainer = document.getElementById('app');
 if (appContainer) {
   m.mount(appContainer, App);
-
-  // Setup cache utils for debugging (localhost only)
-  if (location.hostname === 'localhost') {
-    setupCacheUtils();
-  }
 } else {
   console.error('[Zero] App container #app not found');
 }
