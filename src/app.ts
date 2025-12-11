@@ -22,10 +22,12 @@ import { BudgetService } from './services/budget-service';
 import { setupCameraControls } from './services/camera-controls';
 import { initOmWasm } from './adapters/om-file-adapter';
 import { BootstrapModal } from './components/bootstrap-modal';
+import { OptionsDialog } from './components/options-dialog';
 import { LayersPanel } from './components/layers-panel';
 import { TimeCirclePanel } from './components/timecircle-panel';
 import { TimeBarPanel } from './components/timebar-panel';
 import { LogoPanel } from './components/logo-panel';
+import { GearIcon } from './components/GearIcon';
 
 interface AppComponent extends m.Component {
   configService?: ConfigService;
@@ -180,6 +182,7 @@ export const App: AppComponent = {
     // Bootstrap complete - show modal (fading out) + UI
     return [
       m(BootstrapModal),
+      m(OptionsDialog, { optionsService: this.optionsService! }),
       m('div.ui-container', {
         style: 'position: absolute; inset: 0; pointer-events: none;'
       }, [
@@ -195,6 +198,13 @@ export const App: AppComponent = {
           dateTimeService: this.dateTimeService!,
           budgetService: this.budgetService,
         }),
+        // Options gear button
+        m('div.options.panel', [
+          m('button.control.circle', {
+            onclick: () => this.optionsService!.openDialog(),
+            title: 'Options'
+          }, m(GearIcon))
+        ]),
       ]),
     ];
   },

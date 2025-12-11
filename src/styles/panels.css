@@ -56,6 +56,11 @@
   height: 48px;
 }
 
+.panel.options {
+  bottom: calc(var(--layout-margin-bottom) + var(--layout-timebar-height) + var(--layout-panel-gap));
+  right: var(--layout-margin-right);
+}
+
 .panel.timebar {
   left: var(--layout-margin-left);
   right: var(--layout-margin-right);

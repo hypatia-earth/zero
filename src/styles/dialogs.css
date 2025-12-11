@@ -150,3 +150,449 @@
   opacity: 0.7;
   font-family: 'Courier New', monospace;
 }
+
+/* =============================================================================
+   Options Dialog - Settings modal
+   ============================================================================= */
+
+.dialog.options .backdrop {
+  animation: fadeIn 0.15s ease-out;
+}
+
+.dialog.options .window {
+  width: 90%;
+  max-width: 480px;
+  animation: scaleIn 0.15s ease-out;
+}
+
+/* Draggable header on desktop */
+@media (min-width: 640px) {
+  .dialog.options .header {
+    cursor: move;
+    user-select: none;
+  }
+  .dialog.options .window.dragging {
+    transition: none;
+  }
+}
+
+/* Mobile: slide up from bottom */
+@media (max-width: 639px) {
+  .dialog.options {
+    align-items: flex-end;
+  }
+  .dialog.options .window {
+    width: 100%;
+    max-width: 100%;
+    max-height: 85vh;
+    border-radius: 16px 16px 0 0;
+    animation: slideUp 0.25s ease-out;
+  }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+/* Header */
+.dialog.options .header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.dialog.options .header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.dialog.options .close {
+  background: none;
+  border: none;
+  color: var(--color-glow);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+@media (hover: hover) {
+  .dialog.options .close:hover {
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+  }
+}
+
+/* Content */
+.dialog.options .content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+/* Option section */
+.dialog.options .section {
+  margin-bottom: 24px;
+}
+
+.dialog.options .section:last-child {
+  margin-bottom: 0;
+}
+
+.dialog.options .section > .title {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+}
+
+.dialog.options .section > .description {
+  margin: 0 0 12px 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--color-text-subtle);
+  background: none;
+  border: none;
+}
+
+/* Layer subgroup within section */
+.dialog.options .subsection {
+  margin-bottom: 16px;
+}
+
+.dialog.options .subsection:last-child {
+  margin-bottom: 0;
+}
+
+.dialog.options .subsection > .title {
+  margin: 0 0 8px 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+}
+
+/* Option row */
+.dialog.options .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-light);
+  gap: 16px;
+}
+
+.dialog.options .row:last-child {
+  border-bottom: none;
+}
+
+.dialog.options .row .info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dialog.options .row .label {
+  display: block;
+  font-size: 14px;
+  color: var(--color-text-primary);
+}
+
+.dialog.options .row .hint {
+  display: block;
+  font-size: 11px;
+  color: var(--color-text-subtle);
+  margin-top: 2px;
+}
+
+.dialog.options .row .controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Reset button */
+.dialog.options .reset {
+  background: none;
+  border: none;
+  color: var(--color-text-subtle);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+@media (hover: hover) {
+  .dialog.options .reset:hover {
+    color: var(--color-text-primary);
+    background: var(--color-surface);
+  }
+}
+
+/* Toggle switch */
+.dialog.options .toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.dialog.options .toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.dialog.options .toggle .track {
+  position: absolute;
+  inset: 0;
+  background: var(--color-surface-hover);
+  border-radius: 24px;
+  transition: background 0.2s;
+}
+
+.dialog.options .toggle .track::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  bottom: 3px;
+  background: var(--color-text-primary);
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.dialog.options .toggle input:checked + .track {
+  background: var(--color-primary);
+}
+
+.dialog.options .toggle input:checked + .track::before {
+  transform: translateX(20px);
+}
+
+/* Slider */
+.dialog.options .slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 160px;
+  flex-shrink: 0;
+}
+
+.dialog.options .slider input[type=range] {
+  width: 100px;
+  flex-shrink: 0;
+  height: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--color-surface-hover);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.dialog.options .slider input[type=range]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--color-text-primary);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 1px 4px var(--color-shadow);
+}
+
+.dialog.options .slider input[type=range]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--color-text-primary);
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 1px 4px var(--color-shadow);
+}
+
+.dialog.options .slider .value {
+  font-size: 12px;
+  color: var(--color-glow);
+  width: 44px;
+  flex-shrink: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Select dropdown */
+.dialog.options .select {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  padding: 6px 28px 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' fill-opacity='0.6' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+.dialog.options .select:focus {
+  outline: none;
+  border-color: var(--color-primary-border-focus);
+}
+
+/* Radio group */
+.dialog.options .radio-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dialog.options .radio {
+  display: flex;
+  align-items: center;
+  padding: 5px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+@media (hover: hover) {
+  .dialog.options .radio:hover {
+    background: var(--color-surface-hover);
+  }
+}
+
+.dialog.options .radio.selected {
+  background: var(--color-primary-bg);
+  border-color: var(--color-primary-border-selected);
+}
+
+.dialog.options .radio input[type="radio"] {
+  display: none;
+}
+
+.dialog.options .radio span {
+  font-size: 12px;
+  color: var(--color-glow);
+}
+
+.dialog.options .radio.selected span {
+  color: var(--color-primary);
+}
+
+/* Spinner for loading state */
+.dialog.options .spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  margin-right: 6px;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.dialog.options .spinner.visible {
+  border-color: var(--color-primary-bg-hover);
+  border-top-color: var(--color-primary);
+  animation: spin 0.8s linear infinite;
+  opacity: 1;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Advanced toggle */
+.dialog.options .advanced-toggle {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.dialog.options .advanced-toggle:has(input:checked) {
+  margin-bottom: 16px;
+}
+
+.dialog.options .advanced-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.dialog.options .advanced-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Footer */
+.dialog.options .footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.dialog.options .footer .actions {
+  display: flex;
+  gap: 12px;
+}
+
+.dialog.options .btn-reset {
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-bg-active);
+  color: #ff8888;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+@media (hover: hover) {
+  .dialog.options .btn-reset:hover {
+    background: var(--color-danger-bg-hover);
+  }
+}
+
+.dialog.options .btn-close {
+  background: var(--color-primary-bg);
+  border: 1px solid var(--color-primary-bg-hover);
+  color: var(--color-primary);
+  padding: 8px 24px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+@media (hover: hover) {
+  .dialog.options .btn-close:hover {
+    background: var(--color-primary-bg-hover);
+  }
+}
