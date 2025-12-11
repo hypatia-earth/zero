@@ -100,9 +100,6 @@ export class GlobeRenderer {
     // Cap slots to what GPU can handle
     const maxSlotsFromGpu = Math.floor(effectiveLimit / BYTES_PER_TIMESTEP);
     this.maxTempSlots = Math.min(requestedSlots, maxSlotsFromGpu);
-    if (this.maxTempSlots < requestedSlots) {
-      console.warn(`[GlobeRenderer] Requested ${requestedSlots} slots but GPU limit allows only ${this.maxTempSlots}`);
-    }
 
     // Handle device loss
     this.device.lost.then((info) => {
