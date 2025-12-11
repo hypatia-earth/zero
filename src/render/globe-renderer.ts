@@ -3,16 +3,7 @@
  */
 
 import { Camera, type CameraConfig } from './camera';
-// Shader modules - concatenated in order
-import atmosphereShaderCode from './shaders/atmosphere.wgsl?raw';
-import commonShaderCode from './shaders/common.wgsl?raw';
-import temperatureShaderCode from './shaders/temperature.wgsl?raw';
-import rainShaderCode from './shaders/rain.wgsl?raw';
-import basemapShaderCode from './shaders/basemap.wgsl?raw';
-import sunShaderCode from './shaders/sun.wgsl?raw';
-import gridShaderCode from './shaders/grid.wgsl?raw';
-import atmosphereBlendShaderCode from './shaders/atmosphere-blend.wgsl?raw';
-import globeShaderCode from './shaders/globe.wgsl?raw';
+import shaderCode from './shaders/zero.wgsl?raw';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 
 export interface GlobeUniforms {
@@ -152,19 +143,8 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Combine all shader modules in dependency order
-    const combinedShaderCode = [
-      atmosphereShaderCode,    // Bruneton LUT functions (defines UNIT_TO_KM, GetSkyRadiance, etc.)
-      commonShaderCode,        // Shared constants (COMMON_PI, COMMON_TAU, BG_COLOR, raySphereIntersect)
-      temperatureShaderCode,   // Temperature layer (blendTemp, colormap, gaussian grid lookup)
-      rainShaderCode,          // Rain layer (blendRain)
-      basemapShaderCode,       // Earth texture (blendBasemap)
-      sunShaderCode,           // Sun disc/glow (blendSun)
-      gridShaderCode,          // Lat/lon grid (blendGrid)
-      atmosphereBlendShaderCode, // Atmosphere blend functions (blendAtmosphereSpace/Globe, toneMap)
-      globeShaderCode,         // Main orchestrator (uniforms, bindings, vs_main, fs_main)
-    ].join('\n');
-    const shaderModule = this.device.createShaderModule({ code: combinedShaderCode });
+    // Shader code is pre-processed by wgsl-plus (see vite.config.ts)
+    const shaderModule = this.device.createShaderModule({ code: shaderCode });
 
     this.bindGroupLayout = this.device.createBindGroupLayout({
       entries: [

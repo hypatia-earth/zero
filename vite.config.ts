@@ -21,38 +21,56 @@ function cacheHeaders(): Plugin {
 }
 
 /**
- * Vite plugin to obfuscate WGSL shaders in production builds
+ * Vite plugin to process WGSL shaders with wgsl-plus
+ * - Watches all *.wgsl files in shaders folder
+ * - Runs wgsl-plus master.wgsl -o zero.wgsl on changes
+ * - Dev: link only, Prod: link + obfuscate
  */
-function wgslObfuscate(): Plugin {
+function wgslProcess(): Plugin {
+  const shadersDir = path.resolve(__dirname, 'src/render/shaders');
+  const masterPath = path.join(shadersDir, 'master.wgsl');
+  const outputPath = path.join(shadersDir, 'zero.wgsl');
+
+  function buildShaders(isProd: boolean) {
+    const obfuscateFlag = isProd ? ' --obfuscate' : '';
+    try {
+      execSync(`npx wgsl-plus "${masterPath}" -o "${outputPath}"${obfuscateFlag}`, {
+        stdio: 'pipe',
+        cwd: shadersDir,
+      });
+      console.log(`[wgsl] Built zero.wgsl (${isProd ? 'obfuscated' : 'linked'})`);
+    } catch (e) {
+      console.error('[wgsl] Build failed:', e);
+    }
+  }
+
   return {
-    name: 'wgsl-obfuscate',
-    enforce: 'pre',
-    transform(code, id) {
-      // Only process .wgsl files imported with ?raw
-      if (!id.endsWith('.wgsl?raw')) return null;
-      // Only obfuscate in production
-      if (process.env.NODE_ENV !== 'production') return null;
-
-      const wgslPath = id.replace('?raw', '');
-      const tmpOut = path.join('/tmp', `wgsl-${Date.now()}.wgsl`);
-
-      try {
-        execSync(`npx wgsl-plus "${wgslPath}" -o "${tmpOut}" --obfuscate`, {
-          stdio: 'pipe',
-        });
-        const obfuscated = fs.readFileSync(tmpOut, 'utf-8');
-        fs.unlinkSync(tmpOut);
-        return `export default ${JSON.stringify(obfuscated)}`;
-      } catch (e) {
-        console.warn('[wgsl-obfuscate] Failed, using original:', e);
-        return null;
-      }
+    name: 'wgsl-process',
+    buildStart() {
+      const isProd = process.env.NODE_ENV === 'production';
+      buildShaders(isProd);
+    },
+    configureServer(server) {
+      // Watch all .wgsl files except zero.wgsl
+      server.watcher.add(path.join(shadersDir, '*.wgsl'));
+      server.watcher.on('change', (file) => {
+        if (file.endsWith('.wgsl') && !file.endsWith('zero.wgsl')) {
+          console.log(`[wgsl] ${path.basename(file)} changed, rebuilding...`);
+          buildShaders(false);
+          // Trigger HMR by invalidating zero.wgsl
+          const mod = server.moduleGraph.getModuleById(outputPath + '?raw');
+          if (mod) {
+            server.moduleGraph.invalidateModule(mod);
+            server.ws.send({ type: 'full-reload' });
+          }
+        }
+      });
     },
   };
 }
 
 export default defineConfig({
-  plugins: [cacheHeaders(), wgslObfuscate()],
+  plugins: [cacheHeaders(), wgslProcess()],
   server: {
     host: true,  // Expose to network
     port: 5173,
@@ -68,8 +86,5 @@ export default defineConfig({
   build: {
     target: 'esnext',
     outDir: 'dist',
-    rollupOptions: {
-      external: (id) => id === '@openmeteo/file-format-wasm',
-    },
   },
 });

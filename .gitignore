@@ -4,3 +4,6 @@ dist/
 *.log
 test/data/
 scripts/data/
+
+# Generated shader (built by wgsl-plus from master.wgsl)
+src/render/shaders/zero.wgsl
