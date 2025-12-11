@@ -5,6 +5,8 @@
  * Supports streaming: fetch slice → decode complete chunks → yield → repeat
  */
 
+import type { FetchService } from '../services/fetch-service';
+
 // WASM module type - functions have underscore prefix
 interface OmWasm {
   _malloc(size: number): number;
@@ -46,28 +48,25 @@ const ERROR_OK = 0;
 
 let wasmInstance: OmWasm | null = null;
 
-export async function initOmWasm(): Promise<OmWasm> {
+/**
+ * Initialize WASM module with pre-loaded binary
+ * Binary is loaded by DataLoader during bootstrap
+ */
+export async function initOmWasm(wasmBinary: ArrayBuffer): Promise<OmWasm> {
   if (wasmInstance) return wasmInstance;
 
-  const wasmUrl = '/om-decoder.wasm';
-  const response = await fetch(wasmUrl);
-  const wasmBytes = await response.arrayBuffer();
-
   const { default: createModule } = await import('@openmeteo/file-format-wasm');
-  const instance = await createModule({ wasmBinary: wasmBytes }) as OmWasm;
+  const instance = await createModule({ wasmBinary }) as OmWasm;
   wasmInstance = instance;
 
   return instance;
 }
 
-async function fetchRange(url: string, offset: number, size: number): Promise<Uint8Array> {
-  const response = await fetch(url, {
-    headers: { Range: `bytes=${offset}-${offset + size - 1}` }
-  });
-  if (!response.ok && response.status !== 206) {
-    throw new Error(`HTTP ${response.status} fetching ${url}`);
-  }
-  return new Uint8Array(await response.arrayBuffer());
+/**
+ * Check if WASM is initialized
+ */
+export function isOmWasmInitialized(): boolean {
+  return wasmInstance !== null;
 }
 
 export interface OmReadResult {
@@ -102,18 +101,20 @@ export async function streamOmVariable(
   url: string,
   param: string,
   slices: number,
-  onChunk: OmChunkCallback
+  onChunk: OmChunkCallback,
+  fetchService: FetchService
 ): Promise<OmReadResult> {
-  const wasm = await initOmWasm();
+  if (!wasmInstance) {
+    throw new Error('WASM not initialized. Call initOmWasm first.');
+  }
+  const wasm = wasmInstance;
 
   // Phase 1: HEAD
-  const headResp = await fetch(url, { method: 'HEAD' });
-  if (!headResp.ok) throw new Error(`File not found: ${url}`);
-  const fileSize = parseInt(headResp.headers.get('content-length')!, 10);
+  const fileSize = await fetchService.fetchHead(url);
 
   // Phase 2: Trailer
   const trailerSize = wasm._om_trailer_size();
-  const trailerData = await fetchRange(url, fileSize - trailerSize, trailerSize);
+  const trailerData = await fetchService.fetchRange(url, fileSize - trailerSize, trailerSize);
 
   const trailerPtr = wasm._malloc(trailerSize);
   const offsetPtr = wasm._malloc(8);
@@ -133,7 +134,7 @@ export async function streamOmVariable(
   DEBUG && console.log(`[OM] File: ${fileSize} bytes, trailer: offset=${rootOffset}, size=${rootSize}`);
 
   // Phase 3: Root + children metadata
-  const rootData = await fetchRange(url, rootOffset, rootSize);
+  const rootData = await fetchService.fetchRange(url, rootOffset, rootSize);
 
   const rootPtr = wasm._malloc(rootData.length);
   wasm.HEAPU8.set(rootData, rootPtr);
@@ -158,7 +159,7 @@ export async function streamOmVariable(
   wasm._free(o1Ptr);
   wasm._free(s1Ptr);
 
-  const allChildrenData = await fetchRange(url, childrenStart, childrenEnd - childrenStart);
+  const allChildrenData = await fetchService.fetchRange(url, childrenStart, childrenEnd - childrenStart);
 
   // Phase 4: Find param
   let targetVarOffset = 0, targetVarSize = 0, targetDims: number[] = [];
@@ -262,7 +263,7 @@ export async function streamOmVariable(
     const indexOffset = Number(wasm.getValue(indexReadPtr, 'i64'));
     const indexCount = Number(wasm.getValue(indexReadPtr + 8, 'i64'));
 
-    const indexData = await fetchRange(url, indexOffset, indexCount);
+    const indexData = await fetchService.fetchRange(url, indexOffset, indexCount);
     const blockIdx = indexBlocks.length;
     indexBlocks.push({ offset: indexOffset, count: indexCount, data: indexData });
 
@@ -326,7 +327,7 @@ export async function streamOmVariable(
     const sliceSize = sliceByteEnd - sliceByteStart;
 
     // Fetch this slice
-    const sliceData = await fetchRange(url, firstChunk.dataOffset, sliceSize);
+    const sliceData = await fetchService.fetchRange(url, firstChunk.dataOffset, sliceSize);
     allDataBuffer.set(sliceData, sliceByteStart);
 
     // Decode all chunks in this slice (guaranteed complete since chunk-aligned)
@@ -434,13 +435,14 @@ export async function streamOmVariable(
 export async function readOmVariable(
   url: string,
   param: string,
-  slices: number
+  slices: number,
+  fetchService: FetchService
 ): Promise<OmReadResult> {
   let result: OmReadResult | null = null;
   await streamOmVariable(url, param, slices, (chunk) => {
     if (chunk.done) {
       result = { data: chunk.data, dims: [] };
     }
-  });
+  }, fetchService);
   return result!;
 }

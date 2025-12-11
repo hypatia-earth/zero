@@ -16,13 +16,16 @@ interface BootstrapModalState {
 
 export const BootstrapModal: m.Component<object, BootstrapModalState> = {
   oninit(vnode) {
+    
     vnode.state.fadingOut = false;
     vnode.state.hidden = false;
+
     // Subscribe to bootstrap state changes
     vnode.state.unsubscribe = effect(() => {
       BootstrapService.state.value;
       m.redraw();
     });
+    
   },
 
   onremove(vnode) {

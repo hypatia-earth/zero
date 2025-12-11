@@ -13,7 +13,7 @@ import sunShaderCode from './shaders/sun.wgsl?raw';
 import gridShaderCode from './shaders/grid.wgsl?raw';
 import atmosphereBlendShaderCode from './shaders/atmosphere-blend.wgsl?raw';
 import globeShaderCode from './shaders/globe.wgsl?raw';
-import { loadAtmosphereLUTs, type AtmosphereLUTs } from './atmosphere-luts';
+import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 
 export interface GlobeUniforms {
   viewProjInverse: Float32Array;
@@ -49,6 +49,7 @@ export class GlobeRenderer {
   private pipeline!: GPURenderPipeline;
   private uniformBuffer!: GPUBuffer;
   private bindGroup!: GPUBindGroup;
+  private bindGroupLayout!: GPUBindGroupLayout;
   private basemapTexture!: GPUTexture;
   private basemapSampler!: GPUSampler;
   private gaussianLatsBuffer!: GPUBuffer;
@@ -58,6 +59,7 @@ export class GlobeRenderer {
   private maxTempSlots!: number;
   private atmosphereLUTs!: AtmosphereLUTs;
   private useFloat16Luts = false;
+  private format!: GPUTextureFormat;
 
   readonly camera: Camera;
   private uniformData = new ArrayBuffer(336);  // Increased for new uniforms
@@ -112,8 +114,8 @@ export class GlobeRenderer {
     await this.device.queue.onSubmittedWorkDone();
 
     this.context = this.canvas.getContext('webgpu')!;
-    const format = navigator.gpu.getPreferredCanvasFormat();
-    this.context.configure({ device: this.device, format, alphaMode: 'premultiplied' });
+    this.format = navigator.gpu.getPreferredCanvasFormat();
+    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied' });
 
     this.uniformBuffer = this.device.createBuffer({
       size: 336,  // Increased for tempSlot0, tempSlot1
@@ -153,9 +155,6 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Load atmosphere LUTs (float16 fallback for devices without float32-filterable)
-    this.atmosphereLUTs = await loadAtmosphereLUTs(this.device, this.useFloat16Luts);
-
     // Combine all shader modules in dependency order
     const combinedShaderCode = [
       atmosphereShaderCode,    // Bruneton LUT functions (defines UNIT_TO_KM, GetSkyRadiance, etc.)
@@ -170,7 +169,7 @@ export class GlobeRenderer {
     ].join('\n');
     const shaderModule = this.device.createShaderModule({ code: combinedShaderCode });
 
-    const bindGroupLayout = this.device.createBindGroupLayout({
+    this.bindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
         { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: 'cube' } },
@@ -188,14 +187,30 @@ export class GlobeRenderer {
     });
 
     this.pipeline = this.device.createRenderPipeline({
-      layout: this.device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
       vertex: { module: shaderModule, entryPoint: 'vs_main' },
-      fragment: { module: shaderModule, entryPoint: 'fs_main', targets: [{ format }] },
+      fragment: { module: shaderModule, entryPoint: 'fs_main', targets: [{ format: this.format }] },
       primitive: { topology: 'triangle-list' },
     });
 
+    this.resize();
+  }
+
+  /**
+   * Create atmosphere LUT textures from pre-loaded data
+   * Called by DataLoader after fetching LUT files
+   */
+  createAtmosphereTextures(data: AtmosphereLUTData, useFloat16: boolean): void {
+    this.atmosphereLUTs = createAtmosphereLUTs(this.device, data, useFloat16);
+  }
+
+  /**
+   * Finalize renderer setup - creates bind group after all textures are loaded
+   * Must be called after createAtmosphereTextures() and loadBasemap()
+   */
+  finalize(): void {
     this.bindGroup = this.device.createBindGroup({
-      layout: bindGroupLayout,
+      layout: this.bindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.uniformBuffer } },
         { binding: 1, resource: this.basemapTexture.createView({ dimension: 'cube' }) },
@@ -211,8 +226,13 @@ export class GlobeRenderer {
         { binding: 10, resource: this.atmosphereLUTs.sampler },
       ],
     });
+  }
 
-    this.resize();
+  /**
+   * Get whether float16 LUTs should be used (determined during initialize)
+   */
+  getUseFloat16Luts(): boolean {
+    return this.useFloat16Luts;
   }
 
   resize(): void {

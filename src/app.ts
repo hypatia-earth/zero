@@ -11,13 +11,16 @@ import { ConfigService } from './services/config-service';
 import { OptionsService } from './services/options-service';
 import { StateService } from './services/state-service';
 import { TrackerService } from './services/tracker-service';
+import { FetchService } from './services/fetch-service';
 import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
 import { KeyboardService } from './services/keyboard-service';
 import { DataService } from './services/data-service';
+import { DataLoader } from './services/data-loader';
 import { RenderService } from './services/render-service';
 import { BudgetService } from './services/budget-service';
 import { setupCameraControls } from './services/camera-controls';
+import { initOmWasm } from './adapters/om-file-adapter';
 import { BootstrapModal } from './components/bootstrap-modal';
 import { LayersPanel } from './components/layers-panel';
 import { TimeCirclePanel } from './components/timecircle-panel';
@@ -29,15 +32,16 @@ interface AppComponent extends m.Component {
   optionsService?: OptionsService;
   stateService?: StateService;
   trackerService?: TrackerService;
+  fetchService?: FetchService;
   dateTimeService?: DateTimeService;
   dataService?: DataService;
+  dataLoader?: DataLoader;
   renderService?: RenderService;
   budgetService?: BudgetService;
   keyboardService?: KeyboardService;
   canvas?: HTMLCanvasElement;
 
   oninit(): Promise<void>;
-  loadBasemap(): Promise<void>;
   view(): m.Children;
 }
 
@@ -55,8 +59,10 @@ export const App: AppComponent = {
     this.optionsService = new OptionsService();
     this.stateService = new StateService(this.configService.getDefaultLayers());
     this.trackerService = new TrackerService();
+    this.fetchService = new FetchService(this.trackerService);
     this.dateTimeService = new DateTimeService(this.configService.getDataWindowDays());
-    this.dataService = new DataService(this.trackerService);
+    this.dataService = new DataService(this.fetchService);
+    this.dataLoader = new DataLoader(this.fetchService);
 
     m.redraw();
 
@@ -71,7 +77,7 @@ export const App: AppComponent = {
       BootstrapService.setStep('CONFIG');
       await this.optionsService.load();
 
-      // Step 3: GPU Init
+      // Step 3: GPU Init (no data loading)
       BootstrapService.setStep('GPU_INIT');
       this.renderService = new RenderService(
         this.canvas,
@@ -82,18 +88,31 @@ export const App: AppComponent = {
       );
       await this.renderService.initialize();
 
-      // Step 4: Basemap
-      BootstrapService.setStep('BASEMAP');
-      await this.loadBasemap();
+      // Step 4: DATA - Load all assets sequentially
+      BootstrapService.setStep('DATA');
+      const renderer = this.renderService.getRenderer();
 
-      // Step 5: Activate
-      BootstrapService.setStep('ACTIVATE');
-      this.renderService.start();
-      this.stateService.enableSync();
-      this.keyboardService = new KeyboardService(this.stateService);
-      setupCameraControls(this.canvas, this.renderService.getRenderer().camera, this.stateService, this.configService);
+      // 4a. WASM decoder
+      const wasmBinary = await this.dataLoader.loadWasm();
+      await initOmWasm(wasmBinary);
 
-      // Create BudgetService (manages GPU timestep buffer)
+      // 4b. Atmosphere LUTs
+      const useFloat16 = renderer.getUseFloat16Luts();
+      const lutData = await this.dataLoader.loadAtmosphereLUTs(useFloat16);
+      renderer.createAtmosphereTextures(lutData, useFloat16);
+
+      // 4c. Basemap
+      const faces = await this.dataLoader.loadBasemap();
+      await renderer.loadBasemap(faces);
+
+      // Finalize renderer (create bind group now that textures are loaded)
+      renderer.finalize();
+
+      // 4d. Initialize DataService (find latest run from S3)
+      await BootstrapService.updateProgress('Finding latest data...', 70);
+      await this.dataService.initialize();
+
+      // Create BudgetService (manages slots)
       this.budgetService = new BudgetService(
         this.configService,
         this.stateService,
@@ -101,12 +120,24 @@ export const App: AppComponent = {
         this.renderService
       );
 
+      // 4e. Temperature timesteps - use DataLoader for progress tracking
+      await this.dataLoader.loadTemperatureTimesteps(
+        this.budgetService.loadSingleInitialTimestep.bind(this.budgetService)
+      );
+
+      // 4f. Precipitation (placeholder)
+      await this.dataLoader.loadPrecipitationTimesteps();
+
+      // Step 5: Activate
+      BootstrapService.setStep('ACTIVATE');
+      this.renderService.start();
+      this.stateService.enableSync();
+      this.keyboardService = new KeyboardService(this.stateService);
+      setupCameraControls(this.canvas, renderer.camera, this.stateService, this.configService);
+
       BootstrapService.complete();
       console.log('%c[ZERO] Bootstrap complete', 'color: darkgreen; font-weight: bold');
       m.redraw();
-
-      // Step 6: Load Data (background, don't block UI)
-      this.budgetService.loadInitialTimesteps();
 
       // Expose services for debugging (localhost only)
       if (location.hostname === 'localhost') {
@@ -115,6 +146,7 @@ export const App: AppComponent = {
           optionsService: this.optionsService,
           stateService: this.stateService,
           trackerService: this.trackerService,
+          fetchService: this.fetchService,
           dateTimeService: this.dateTimeService,
           dataService: this.dataService,
           renderService: this.renderService,
@@ -130,37 +162,6 @@ export const App: AppComponent = {
       console.error('[ZERO] Bootstrap failed:', err);
       m.redraw();
     }
-  },
-
-  async loadBasemap() {
-    const faceNames = ['px', 'nx', 'py', 'ny', 'pz', 'nz'];
-    const faces: ImageBitmap[] = [];
-
-    for (const name of faceNames) {
-      const url = `/images/basemaps/rtopo2/${name}.png`;
-      try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          console.warn(`[ZERO] Basemap face ${name} not found, using placeholder`);
-          const canvas = new OffscreenCanvas(256, 256);
-          const ctx = canvas.getContext('2d')!;
-          ctx.fillStyle = '#333';
-          ctx.fillRect(0, 0, 256, 256);
-          faces.push(await createImageBitmap(canvas));
-          continue;
-        }
-        const blob = await response.blob();
-        faces.push(await createImageBitmap(blob));
-      } catch {
-        const canvas = new OffscreenCanvas(256, 256);
-        const ctx = canvas.getContext('2d')!;
-        ctx.fillStyle = '#333';
-        ctx.fillRect(0, 0, 256, 256);
-        faces.push(await createImageBitmap(canvas));
-      }
-    }
-
-    await this.renderService!.getRenderer().loadBasemap(faces);
   },
 
   view() {

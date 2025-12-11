@@ -10,8 +10,8 @@
  * - URL: {run_date}/{run}00Z/{target_timestamp}.om
  */
 
-import { streamOmVariable, initOmWasm, type OmChunkData } from '../adapters/om-file-adapter';
-import type { TrackerService } from './tracker-service';
+import { streamOmVariable, type OmChunkData } from '../adapters/om-file-adapter';
+import type { FetchService } from './fetch-service';
 
 const BASE_URL = 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs';
 const S3_LIST_URL = 'https://openmeteo.s3.amazonaws.com/?list-type=2';
@@ -133,16 +133,12 @@ export interface TempData {
 
 export class DataService {
   private tempData: TempData | null = null;
-  private trackerService: TrackerService;
   private loadingAbort: AbortController | null = null;
   private latestRun: Date | null = null;
 
-  constructor(trackerService: TrackerService) {
-    this.trackerService = trackerService;
-  }
+  constructor(private fetchService: FetchService) {}
 
   async initialize(): Promise<void> {
-    await initOmWasm();
     this.latestRun = await findLatestRun();
     const window = getDataWindow();
     console.log(`[Data] Initialized: latest run ${this.latestRun.toISOString()}`);
@@ -207,12 +203,12 @@ export class DataService {
         data0 = chunk.data;
         slice0 = chunk.sliceIndex + 1;
         emitProgress();
-      }),
+      }, this.fetchService),
       streamOmVariable(url1, 'temperature_2m', DEFAULT_SLICES, (chunk: OmChunkData) => {
         data1 = chunk.data;
         slice1 = chunk.sliceIndex + 1;
         emitProgress();
-      })
+      }, this.fetchService)
     ]);
 
     const elapsed = (performance.now() - t0) / 1000;
@@ -226,9 +222,6 @@ export class DataService {
       data1: data1!,
       loadedPoints: data0!.length,
     };
-
-    this.trackerService.onBytesReceived(totalBytes);
-    this.trackerService.onDownloadComplete();
 
     return this.tempData;
   }
@@ -267,13 +260,11 @@ export class DataService {
       result = chunk.data;
       const done = chunk.sliceIndex + 1 >= DEFAULT_SLICES;
       onProgress?.(result.length, done);
-    });
+    }, this.fetchService);
 
     if (!result) throw new Error(`Failed to load timestep: ${url}`);
 
-    const data: Float32Array = result;
-    this.trackerService.onBytesReceived(data.byteLength);
-    return data;
+    return result;
   }
 
   getTempData(): TempData | null {

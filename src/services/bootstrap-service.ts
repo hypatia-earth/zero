@@ -3,15 +3,14 @@
  */
 
 import { signal } from '@preact/signals-core';
+import { sleep } from '../utils/sleep';
 
 export type BootstrapStep =
   | 'CAPABILITIES'
   | 'CONFIG'
   | 'GPU_INIT'
-  | 'BASEMAP'
-  | 'ACTIVATE'
-  | 'LOAD_DATA'
-  | 'FINALIZE';
+  | 'DATA'
+  | 'ACTIVATE';
 
 export interface BootstrapState {
   step: BootstrapStep;
@@ -21,14 +20,12 @@ export interface BootstrapState {
   complete: boolean;
 }
 
-const STEP_PROGRESS: Record<BootstrapStep, { start: number; label: string }> = {
-  CAPABILITIES: { start: 0, label: 'Checking capabilities...' },
-  CONFIG: { start: 5, label: 'Loading configuration...' },
-  GPU_INIT: { start: 15, label: 'Initializing GPU...' },
-  BASEMAP: { start: 30, label: 'Loading basemap...' },
-  ACTIVATE: { start: 50, label: 'Starting renderer...' },
-  LOAD_DATA: { start: 55, label: 'Loading weather data...' },
-  FINALIZE: { start: 95, label: 'Ready' },
+const STEP_PROGRESS: Record<BootstrapStep, { start: number; end: number; label: string }> = {
+  CAPABILITIES: { start: 0, end: 5, label: 'Checking capabilities...' },
+  CONFIG: { start: 5, end: 10, label: 'Loading configuration...' },
+  GPU_INIT: { start: 10, end: 20, label: 'Initializing GPU...' },
+  DATA: { start: 20, end: 95, label: 'Loading data...' },
+  ACTIVATE: { start: 95, end: 100, label: 'Starting...' },
 };
 
 export class BootstrapService {
@@ -47,15 +44,22 @@ export class BootstrapService {
       progress: stepInfo.start,
       label: stepInfo.label,
       error: null,
-      complete: step === 'FINALIZE',
+      complete: false,
     };
   }
 
-  static setProgress(progress: number): void {
+  /**
+   * Update label and progress bar during DATA step
+   * @param label Text to show (e.g., "Loading basemap 3/6...")
+   * @param progress Absolute progress percentage (0-100)
+   */
+  static async updateProgress(label: string, progress: number): Promise<void> {
     this.state.value = {
       ...this.state.value,
+      label,
       progress: Math.min(100, Math.max(0, progress)),
     };
+    await sleep(10);
   }
 
   static setError(error: string): void {
@@ -68,7 +72,7 @@ export class BootstrapService {
 
   static complete(): void {
     this.state.value = {
-      step: 'FINALIZE',
+      step: 'ACTIVATE',
       progress: 100,
       label: 'Ready',
       error: null,

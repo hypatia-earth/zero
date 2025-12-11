@@ -1,9 +1,11 @@
 /**
- * Atmosphere LUT loader
- * Loads precomputed Bruneton atmospheric scattering lookup tables
+ * Atmosphere LUT texture creation
+ * Creates GPU textures from preloaded Bruneton atmospheric scattering LUT data
  *
  * Uses rgba32float on devices supporting float32-filterable,
  * falls back to rgba16float on others (e.g., iPad Safari).
+ *
+ * Note: Data loading moved to DataLoader for centralized fetch tracking
  */
 
 export interface AtmosphereLUTs {
@@ -11,6 +13,12 @@ export interface AtmosphereLUTs {
   scattering: GPUTexture;
   irradiance: GPUTexture;
   sampler: GPUSampler;
+}
+
+export interface AtmosphereLUTData {
+  transmittance: ArrayBuffer;
+  scattering: ArrayBuffer;
+  irradiance: ArrayBuffer;
 }
 
 // LUT dimensions (must match precomputed data and shader constants)
@@ -23,25 +31,16 @@ const SCATTERING_NU = 8;
 const IRRADIANCE_WIDTH = 64;
 const IRRADIANCE_HEIGHT = 16;
 
-async function loadBinaryData(url: string): Promise<ArrayBuffer> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to load ${url}: ${response.status}`);
-  }
-  return response.arrayBuffer();
-}
-
-export async function loadAtmosphereLUTs(device: GPUDevice, useFloat16: boolean): Promise<AtmosphereLUTs> {
-  const suffix = useFloat16 ? '-16' : '';
+/**
+ * Create atmosphere LUT textures from pre-loaded data
+ */
+export function createAtmosphereLUTs(
+  device: GPUDevice,
+  data: AtmosphereLUTData,
+  useFloat16: boolean
+): AtmosphereLUTs {
   const format: GPUTextureFormat = useFloat16 ? 'rgba16float' : 'rgba32float';
   const bytesPerPixel = useFloat16 ? 8 : 16;  // 4 channels × 2 or 4 bytes
-
-  // Load all data files in parallel
-  const [transmittanceData, scatteringData, irradianceData] = await Promise.all([
-    loadBinaryData(`/atmosphere/transmittance${suffix}.dat`),
-    loadBinaryData(`/atmosphere/scattering${suffix}.dat`),
-    loadBinaryData(`/atmosphere/irradiance${suffix}.dat`),
-  ]);
 
   // Create transmittance texture (2D, 256x64)
   const transmittance = device.createTexture({
@@ -51,7 +50,7 @@ export async function loadAtmosphereLUTs(device: GPUDevice, useFloat16: boolean)
   });
   device.queue.writeTexture(
     { texture: transmittance },
-    transmittanceData,
+    data.transmittance,
     { bytesPerRow: TRANSMITTANCE_WIDTH * bytesPerPixel },
     { width: TRANSMITTANCE_WIDTH, height: TRANSMITTANCE_HEIGHT }
   );
@@ -69,7 +68,7 @@ export async function loadAtmosphereLUTs(device: GPUDevice, useFloat16: boolean)
   });
   device.queue.writeTexture(
     { texture: scattering },
-    scatteringData,
+    data.scattering,
     { bytesPerRow: scatteringWidth * bytesPerPixel, rowsPerImage: scatteringHeight },
     { width: scatteringWidth, height: scatteringHeight, depthOrArrayLayers: scatteringDepth }
   );
@@ -82,7 +81,7 @@ export async function loadAtmosphereLUTs(device: GPUDevice, useFloat16: boolean)
   });
   device.queue.writeTexture(
     { texture: irradiance },
-    irradianceData,
+    data.irradiance,
     { bytesPerRow: IRRADIANCE_WIDTH * bytesPerPixel },
     { width: IRRADIANCE_WIDTH, height: IRRADIANCE_HEIGHT }
   );
@@ -96,7 +95,7 @@ export async function loadAtmosphereLUTs(device: GPUDevice, useFloat16: boolean)
     addressModeW: 'clamp-to-edge',
   });
 
-  console.log(`[Atmosphere] LUTs loaded (${useFloat16 ? 'float16' : 'float32'})`);
+  console.log(`[Atmosphere] LUTs created (${useFloat16 ? 'float16' : 'float32'})`);
 
   return { transmittance, scattering, irradiance, sampler };
 }

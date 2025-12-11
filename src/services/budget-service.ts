@@ -13,9 +13,8 @@
 import { effect, signal } from '@preact/signals-core';
 import type { ConfigService } from './config-service';
 import type { StateService } from './state-service';
-import { DataService, type ProgressUpdate } from './data-service';
+import { DataService } from './data-service';
 import type { RenderService } from './render-service';
-import { BootstrapService } from './bootstrap-service';
 
 const BYTES_PER_TIMESTEP = 6_599_680 * 4; // 6.6M floats × 4 bytes = ~26.4 MB
 
@@ -435,80 +434,60 @@ export class BudgetService {
   }
 
   /**
-   * Initialize data service and load initial timesteps for current time
-   * Called during bootstrap - loads t0 and t1 for immediate interpolation
+   * Load a single initial timestep during bootstrap
+   * Called by DataLoader for progress tracking
+   * @param index 0 for t0, 1 for t1
+   * @param total Total number of timesteps (always 2)
    */
-  async loadInitialTimesteps(): Promise<void> {
-    try {
-      // Initialize data service (find latest available run from S3)
-      await this.dataService.initialize();
+  async loadSingleInitialTimestep(index: number, total: number): Promise<void> {
+    const currentTime = this.stateService.getTime();
+    const [t0, t1] = this.dataService.getAdjacentTimestamps(currentTime);
+    const timestamp = index === 0 ? t0 : t1;
+    const key = timestamp.toISOString();
 
-      const currentTime = this.stateService.getTime();
-      const [t0, t1] = this.dataService.getAdjacentTimestamps(currentTime);
+    // Allocate slot from free pool
+    const slotIndex = this.freeSlotIndices.pop()!;
 
-      // Allocate slots for t0 and t1 from free pool
-      const slot0Index = this.freeSlotIndices.pop()!;
-      const slot1Index = this.freeSlotIndices.pop()!;
+    this.slots.set(key, {
+      timestamp,
+      slotIndex,
+      loaded: false,
+      loadedPoints: 0,
+    });
 
-      this.slots.set(t0.toISOString(), {
-        timestamp: t0,
-        slotIndex: slot0Index,
-        loaded: false,
-        loadedPoints: 0,
-      });
-      this.slots.set(t1.toISOString(), {
-        timestamp: t1,
-        slotIndex: slot1Index,
-        loaded: false,
-        loadedPoints: 0,
-      });
-
-      console.log(`[Budget] Loading initial timesteps: ${t0.toISOString()} → slot ${slot0Index}, ${t1.toISOString()} → slot ${slot1Index}`);
-
-      // Set active pair immediately so shader can render progressive data
+    // Set active pair on first load
+    if (index === 0) {
       this.activeT0 = t0;
       this.activeT1 = t1;
-      this.renderService.setTempSlots(slot0Index, slot1Index);
+    }
 
-      // Progressive loading with chunk callbacks
-      await this.dataService.loadProgressiveInterleaved(
-        currentTime,
-        async (update: ProgressUpdate) => {
-          // Upload to the allocated slots
-          const renderer = this.renderService.getRenderer();
-          await renderer.uploadTempDataToSlot(update.data0, slot0Index);
-          await renderer.uploadTempDataToSlot(update.data1, slot1Index);
-          this.renderService.setTempLoadedPoints(update.data0.length);
+    console.log(`[Budget] Loading ${key} → slot ${slotIndex}`);
 
-          // Update slot metadata
-          const slot0 = this.slots.get(t0.toISOString());
-          const slot1 = this.slots.get(t1.toISOString());
-          if (slot0) {
-            slot0.loadedPoints = update.data0.length;
-            slot0.loaded = update.done;
-          }
-          if (slot1) {
-            slot1.loadedPoints = update.data1.length;
-            slot1.loaded = update.done;
-          }
-          if (update.done) {
-            this.slotsVersion.value++;  // Trigger UI update
-          }
+    // Load the timestep
+    const data = await this.dataService.loadSingleTimestep(timestamp);
 
-          // Update bootstrap progress (55-95% range)
-          const progress = 55 + (update.sliceIndex / update.totalSlices) * 40;
-          BootstrapService.setProgress(progress);
+    // Upload to GPU
+    const renderer = this.renderService.getRenderer();
+    await renderer.uploadTempDataToSlot(data, slotIndex);
 
-          console.log(`[Budget] Uploaded slice ${update.sliceIndex}/${update.totalSlices} to GPU${update.done ? ' - DONE' : ''}`);
-        }
-      );
+    // Update slot metadata
+    const slot = this.slots.get(key);
+    if (slot) {
+      slot.loadedPoints = data.length;
+      slot.loaded = true;
+    }
 
-      // Mark as initialized - now time changes will trigger loading
+    // Set shader slots after second timestep loaded
+    if (index === total - 1) {
+      const slot0 = this.slots.get(t0.toISOString());
+      const slot1 = this.slots.get(t1.toISOString());
+      if (slot0 && slot1) {
+        this.renderService.setTempSlots(slot0.slotIndex, slot1.slotIndex);
+        this.renderService.setTempLoadedPoints(Math.min(slot0.loadedPoints, slot1.loadedPoints));
+      }
+      this.slotsVersion.value++;  // Trigger UI update
       this.initialized = true;
-
       console.log('[Budget] Initial timesteps loaded, budget service active');
-    } catch (err) {
-      console.warn('[Budget] Failed to load initial timesteps:', err);
     }
   }
 
