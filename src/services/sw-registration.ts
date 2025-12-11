@@ -9,11 +9,6 @@
  * Register the Service Worker
  */
 export async function registerServiceWorker(): Promise<void> {
-  if (!('serviceWorker' in navigator)) {
-    console.warn('[SW] Service Workers not supported');
-    return;
-  }
-
   try {
     await navigator.serviceWorker.register('/sw.js');
     await navigator.serviceWorker.ready;
