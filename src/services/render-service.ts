@@ -13,6 +13,7 @@ import { getSunDirection } from '../utils/sun-position';
 export class RenderService {
   private renderer: GlobeRenderer | null = null;
   private animationId: number | null = null;
+  private resizeObserver: ResizeObserver | null = null;
   private tempLoadedPoints = 0;
   private tempSlot0 = 0;  // Current active slot indices
   private tempSlot1 = 1;
@@ -25,6 +26,13 @@ export class RenderService {
     private dataService: DataService,
     private configService: ConfigService
   ) {}
+
+  private setupResizeObserver(): void {
+    this.resizeObserver = new ResizeObserver(() => {
+      this.renderer?.resize();
+    });
+    this.resizeObserver.observe(this.canvas);
+  }
 
   async initialize(): Promise<void> {
     const cameraConfig = this.configService.getCameraConfig();
@@ -55,6 +63,7 @@ export class RenderService {
       throw new Error('RenderService not initialized');
     }
 
+    this.setupResizeObserver();
     const renderer = this.renderer;
 
     const render = () => {
@@ -149,6 +158,8 @@ export class RenderService {
 
   dispose(): void {
     this.stop();
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.renderer?.dispose();
     this.renderer = null;
   }

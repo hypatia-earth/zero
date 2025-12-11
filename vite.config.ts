@@ -4,6 +4,23 @@ import { execSync } from 'child_process';
 import path from 'path';
 
 /**
+ * Vite plugin to add cache headers for static assets
+ */
+function cacheHeaders(): Plugin {
+  return {
+    name: 'cache-headers',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.endsWith('.dat')) {
+          res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 day
+        }
+        next();
+      });
+    },
+  };
+}
+
+/**
  * Vite plugin to obfuscate WGSL shaders in production builds
  */
 function wgslObfuscate(): Plugin {
@@ -35,7 +52,7 @@ function wgslObfuscate(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [wgslObfuscate()],
+  plugins: [cacheHeaders(), wgslObfuscate()],
   server: {
     host: true,  // Expose to network
     port: 5173,

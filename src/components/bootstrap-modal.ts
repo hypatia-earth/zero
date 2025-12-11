@@ -5,17 +5,28 @@
  */
 
 import m from 'mithril';
+import { effect } from '@preact/signals-core';
 import { BootstrapService } from '../services/bootstrap-service';
 
 interface BootstrapModalState {
   fadingOut: boolean;
   hidden: boolean;
+  unsubscribe: (() => void) | null;
 }
 
 export const BootstrapModal: m.Component<object, BootstrapModalState> = {
   oninit(vnode) {
     vnode.state.fadingOut = false;
     vnode.state.hidden = false;
+    // Subscribe to bootstrap state changes
+    vnode.state.unsubscribe = effect(() => {
+      BootstrapService.state.value;
+      m.redraw();
+    });
+  },
+
+  onremove(vnode) {
+    vnode.state.unsubscribe?.();
   },
 
   view(vnode) {

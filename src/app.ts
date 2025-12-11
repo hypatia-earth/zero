@@ -7,7 +7,6 @@
  */
 
 import m from 'mithril';
-import { effect } from '@preact/signals-core';
 import { ConfigService } from './services/config-service';
 import { OptionsService } from './services/options-service';
 import { StateService } from './services/state-service';
@@ -39,7 +38,6 @@ interface AppComponent extends m.Component {
 
   oninit(): Promise<void>;
   loadBasemap(): Promise<void>;
-  setupResizeHandler(): void;
   view(): m.Children;
 }
 
@@ -91,7 +89,6 @@ export const App: AppComponent = {
       // Step 5: Activate
       BootstrapService.setStep('ACTIVATE');
       this.renderService.start();
-      this.setupResizeHandler();
       this.stateService.enableSync();
       this.keyboardService = new KeyboardService(this.stateService);
       setupCameraControls(this.canvas, this.renderService.getRenderer().camera, this.stateService, this.configService);
@@ -110,13 +107,6 @@ export const App: AppComponent = {
 
       // Step 6: Load Data (background, don't block UI)
       this.budgetService.loadInitialTimesteps();
-
-      // React to signal changes (options + bootstrap state)
-      effect(() => {
-        // Subscribe to bootstrap state for UI visibility
-        BootstrapService.state.value;
-        m.redraw();
-      });
 
       // Expose services for debugging (localhost only)
       if (location.hostname === 'localhost') {
@@ -171,13 +161,6 @@ export const App: AppComponent = {
     }
 
     await this.renderService!.getRenderer().loadBasemap(faces);
-  },
-
-  setupResizeHandler() {
-    const handleResize = () => {
-      this.renderService?.getRenderer().resize();
-    };
-    window.addEventListener('resize', handleResize);
   },
 
   view() {
