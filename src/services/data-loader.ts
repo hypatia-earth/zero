@@ -59,18 +59,9 @@ export class DataLoader {
       const name = faceNames[i];
       await BootstrapService.updateProgress(`Loading basemap ${i + 1}/6...`, this.progress());
 
-      try {
-        const buffer = await this.fetchService.fetch(`/images/basemaps/rtopo2/${name}.png`);
-        const blob = new Blob([buffer], { type: 'image/png' });
-        faces.push(await createImageBitmap(blob));
-      } catch {
-        console.warn(`[DataLoader] Basemap face ${name} not found, using placeholder`);
-        const canvas = new OffscreenCanvas(256, 256);
-        const ctx = canvas.getContext('2d')!;
-        ctx.fillStyle = '#333';
-        ctx.fillRect(0, 0, 256, 256);
-        faces.push(await createImageBitmap(canvas));
-      }
+      const buffer = await this.fetchService.fetch(`/images/basemaps/rtopo2/${name}.png`);
+      const blob = new Blob([buffer], { type: 'image/png' });
+      faces.push(await createImageBitmap(blob));
 
       this.itemsLoaded++;
     }
