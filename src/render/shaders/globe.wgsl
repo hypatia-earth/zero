@@ -53,6 +53,12 @@ const TAU: f32 = 6.28318530718;
 const EARTH_RADIUS: f32 = 1.0;
 const BG_COLOR: vec4f = vec4f(0.086, 0.086, 0.086, 1.0);
 
+// Atmosphere tuning params
+const ATM_EXPOSURE: f32 = 4.0;            // Tone mapping exposure (higher = brighter)
+const ATM_MIE_REDUCTION: f32 = 0.3;       // Reduce white haze (0 = none, 1 = full Bruneton)
+const ATM_NIGHT_BRIGHTNESS: f32 = 0.15;   // Night side darkness (0 = black, 1 = same as day)
+const ATM_SURFACE_RADIANCE: f32 = 0.1;    // Earth brightness vs atmosphere (higher = earth shows more)
+
 struct RayHit {
   valid: bool,
   point: vec3f,
@@ -123,12 +129,51 @@ fn blendBasemap(color: vec4f, hitPoint: vec3f) -> vec4f {
   return vec4f(mix(color.rgb, texColor.rgb, u.earthOpacity), 1.0);
 }
 
-fn blendDayNight(color: vec4f, hitPoint: vec3f) -> vec4f {
+// blendDayNight removed - atmosphere handles day/night now
+
+fn blendAtmosphereSpace(color: vec4f, rayDir: vec3f, camera_km: vec3f, exposure: f32, fragPos: vec4f) -> vec4f {
   if (u.sunEnabled == 0u) { return color; }
+
+  // Compute atmospheric scattering for sky/space
+  let sky = GetSkyRadiance(
+    atm_transmittance, atm_scattering, atm_sampler,
+    camera_km, rayDir, u.sunDirection
+  );
+
+  // Blend atmosphere over background color (not pure black space)
+  let atm_color = toneMap(sky.radiance, exposure);
+  var sky_color = vec4f(color.rgb + atm_color, 1.0);
+
+  // Add sun disc/glow
+  sky_color = blendSun(sky_color, fragPos.xy);
+
+  return sky_color;
+}
+
+fn blendAtmosphereGlobe(color: vec4f, hitPoint: vec3f, camera_km: vec3f, exposure: f32) -> vec4f {
+  if (u.sunEnabled == 0u) { return color; }
+
+  // Aerial perspective (atmospheric haze) for earth surface
+  let point_km = hitPoint * UNIT_TO_KM;
+  let aerial = GetSkyRadianceToPoint(
+    atm_transmittance, atm_scattering, atm_sampler,
+    camera_km, point_km, u.sunDirection
+  );
+
+  // Reduce Mie (white haze) while keeping Rayleigh (blue tint)
+  let reduced_radiance = aerial.radiance * ATM_MIE_REDUCTION;
+
+  // Day/night factor for surface brightness
   let sunDot = dot(normalize(hitPoint), u.sunDirection);
   let dayFactor = smoothstep(-0.1, 0.1, sunDot);
-  let brightness = mix(0.3, 1.0, dayFactor);
-  return vec4f(color.rgb * brightness, color.a);
+  let dayNight = mix(ATM_NIGHT_BRIGHTNESS, 1.0, dayFactor);
+
+  // Blend atmosphere over earth: surface * transmittance + scattered light
+  let surface_radiance = color.rgb * ATM_SURFACE_RADIANCE * dayNight;
+  let final_radiance = surface_radiance * aerial.transmittance + reduced_radiance;
+  let final_color = toneMap(final_radiance, exposure);
+
+  return vec4f(final_color, 1.0);
 }
 
 fn blendSun(color: vec4f, fragCoord: vec2f) -> vec4f {
@@ -296,24 +341,10 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> @location(0) vec4f {
 
   // Convert to km scale for atmosphere (zero uses unit sphere, atmosphere uses 6360km earth)
   let camera_km = u.eyePosition * UNIT_TO_KM;
-  let exposure = 10.0;  // Adjust for brightness
 
   if (!hit.valid) {
-    // Ray misses earth - compute atmospheric scattering
-    let sky = GetSkyRadiance(
-      atm_transmittance, atm_scattering, atm_sampler,
-      camera_km, rayDir, u.sunDirection
-    );
-
-    // Add sun disc if looking toward sun
-    var radiance = sky.radiance;
-    let sun_cos = dot(rayDir, u.sunDirection);
-    if (sun_cos > cos(SUN_ANGULAR_RADIUS)) {
-      radiance = radiance + sky.transmittance * GetSolarRadiance();
-    }
-
-    let color = toneMap(radiance, exposure);
-    return vec4f(color, 1.0);
+    // Ray misses earth - render sky/space with atmosphere
+    return blendAtmosphereSpace(BG_COLOR, rayDir, camera_km, ATM_EXPOSURE, fragPos);
   }
 
   let lat = asin(hit.point.y);
@@ -324,19 +355,9 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> @location(0) vec4f {
   color = blendBasemap(color, hit.point);
   color = blendTemp(color, lat, lon);
   color = blendRain(color, lat, lon);
-  color = blendDayNight(color, hit.point);
   color = blendGrid(color, lat, lon);
 
-  // Add aerial perspective (atmospheric haze) for earth surface
-  let point_km = hit.point * UNIT_TO_KM;
-  let aerial = GetSkyRadianceToPoint(
-    atm_transmittance, atm_scattering, atm_sampler,
-    camera_km, point_km, u.sunDirection
-  );
-  // Blend atmosphere over earth: surface * transmittance + scattered light
-  let surface_radiance = color.rgb * 0.3;  // Convert display color to approximate radiance
-  let final_radiance = surface_radiance * aerial.transmittance + aerial.radiance;
-  let final_color = toneMap(final_radiance, exposure);
+  color = blendAtmosphereGlobe(color, hit.point, camera_km, ATM_EXPOSURE);
 
-  return vec4f(final_color, 1.0);
+  return color;
 }
