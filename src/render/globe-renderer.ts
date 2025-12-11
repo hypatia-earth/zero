@@ -32,7 +32,6 @@ export interface GlobeUniforms {
 
 const POINTS_PER_TIMESTEP = 6_599_680;
 const BYTES_PER_TIMESTEP = POINTS_PER_TIMESTEP * 4;  // ~26.4 MB per slot
-const DEFAULT_MAX_SLOTS = 7;  // ~185 MB for 200 MB budget
 
 export class GlobeRenderer {
   private device!: GPUDevice;
@@ -46,7 +45,7 @@ export class GlobeRenderer {
   private ringOffsetsBuffer!: GPUBuffer;
   private tempDataBuffer!: GPUBuffer;  // Single large buffer with slots
   private rainDataBuffer!: GPUBuffer;
-  private maxTempSlots: number = DEFAULT_MAX_SLOTS;
+  private maxTempSlots!: number;
 
   readonly camera: Camera;
   private uniformData = new ArrayBuffer(336);  // Increased for new uniforms
@@ -56,22 +55,33 @@ export class GlobeRenderer {
     this.camera = new Camera({ lat: 30, lon: 0, distance: 3 }, cameraConfig);
   }
 
-  async initialize(): Promise<void> {
+  async initialize(requestedSlots: number): Promise<void> {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) throw new Error('No WebGPU adapter found');
 
-    // Request higher storage buffer limit (default is only 128 MB)
-    const adapterLimit = adapter.limits.maxStorageBufferBindingSize;
-    const requestedLimit = Math.min(adapterLimit, 1024 * 1024 * 1024); // Cap at 1 GB
+    // Request higher limits (defaults are only 128-256 MB)
+    const adapterStorageLimit = adapter.limits.maxStorageBufferBindingSize;
+    const adapterBufferLimit = adapter.limits.maxBufferSize;
+    const cap = 2 * 1024 * 1024 * 1024; // Cap at 2 GB
 
     this.device = await adapter.requestDevice({
       requiredLimits: {
-        maxStorageBufferBindingSize: requestedLimit,
+        maxStorageBufferBindingSize: Math.min(adapterStorageLimit, cap),
+        maxBufferSize: Math.min(adapterBufferLimit, cap),
       },
     });
 
-    const actualLimit = this.device.limits.maxStorageBufferBindingSize;
-    console.log(`[GlobeRenderer] Storage buffer limit: ${(actualLimit / 1024 / 1024).toFixed(0)} MB (adapter: ${(adapterLimit / 1024 / 1024).toFixed(0)} MB)`);
+    const storageLimit = this.device.limits.maxStorageBufferBindingSize;
+    const bufferLimit = this.device.limits.maxBufferSize;
+    const effectiveLimit = Math.min(storageLimit, bufferLimit);
+    console.log(`[GlobeRenderer] Buffer limits: storage=${(storageLimit / 1024 / 1024).toFixed(0)} MB, buffer=${(bufferLimit / 1024 / 1024).toFixed(0)} MB`);
+
+    // Cap slots to what GPU can handle
+    const maxSlotsFromGpu = Math.floor(effectiveLimit / BYTES_PER_TIMESTEP);
+    this.maxTempSlots = Math.min(requestedSlots, maxSlotsFromGpu);
+    if (this.maxTempSlots < requestedSlots) {
+      console.warn(`[GlobeRenderer] Requested ${requestedSlots} slots but GPU limit allows only ${this.maxTempSlots}`);
+    }
 
     // Handle device loss
     this.device.lost.then((info) => {

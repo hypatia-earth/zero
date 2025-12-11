@@ -50,8 +50,8 @@ export class BudgetService {
     private dataService: DataService,
     private renderService: RenderService
   ) {
-    const budgetBytes = this.configService.getGpuBudgetMB() * 1024 * 1024;
-    this.maxSlots = Math.floor(budgetBytes / BYTES_PER_TIMESTEP);
+    // Get actual max slots from renderer (may be capped by GPU limits)
+    this.maxSlots = this.renderService.getRenderer().getMaxTempSlots();
 
     // Initialize free slot indices (all available at start)
     this.freeSlotIndices = Array.from({ length: this.maxSlots }, (_, i) => i);
@@ -61,7 +61,8 @@ export class BudgetService {
     this.dataWindowStart = window.start;
     this.dataWindowEnd = window.end;
 
-    console.log(`[Budget] Max slots: ${this.maxSlots} (${this.configService.getGpuBudgetMB()} MB budget)`);
+    const requestedSlots = Math.floor(this.configService.getGpuBudgetMB() * 1024 * 1024 / BYTES_PER_TIMESTEP);
+    console.log(`[Budget] Max slots: ${this.maxSlots} (requested ${requestedSlots} from ${this.configService.getGpuBudgetMB()} MB budget)`);
     console.log(`[Budget] Data window: ${this.dataWindowStart.toISOString()} - ${this.dataWindowEnd.toISOString()}`);
 
     // Wire up lerp calculation
@@ -96,26 +97,9 @@ export class BudgetService {
       // Don't return - continue to rebalance window
     }
 
-    // Calculate ideal window and diff
+    // Calculate ideal window - what we'd like to have loaded
     const idealWindow = this.calculateLoadWindow(time);
-    const current = new Set(this.slots.keys());
-    const ideal = new Set(idealWindow.map(t => t.toISOString()));
-
-    const toEvict = [...current].filter(k => !ideal.has(k));
-    const toLoad = idealWindow.filter(t => !current.has(t.toISOString()));
-
-    if (toEvict.length > 0 || toLoad.length > 0) {
-      console.log(`[Budget] Time ${time.toISOString()}: evict ${toEvict.length}, load ${toLoad.length}`);
-    }
-
-    // Evict old slots - return their indices to the free pool
-    for (const key of toEvict) {
-      const slot = this.slots.get(key);
-      if (slot) {
-        this.freeSlotIndices.push(slot.slotIndex);
-        this.slots.delete(key);
-      }
-    }
+    const toLoad = idealWindow.filter(t => !this.slots.has(t.toISOString()));
 
     // Prioritize loading t0 and t1 for current time first
     const priorityTimestamps = [t0, t1].filter(t => !this.slots.has(t.toISOString()));
@@ -123,6 +107,15 @@ export class BudgetService {
       t.toISOString() !== t0Key && t.toISOString() !== t1Key
     );
     const orderedToLoad = [...priorityTimestamps, ...otherTimestamps];
+
+    // Candidates for eviction: slots outside ideal window, sorted by distance from current time
+    const evictionCandidates = [...this.slots.entries()]
+      .filter(([key]) => !new Set(idealWindow.map(t => t.toISOString())).has(key))
+      .sort((a, b) => {
+        const distA = Math.abs(a[1].timestamp.getTime() - time.getTime());
+        const distB = Math.abs(b[1].timestamp.getTime() - time.getTime());
+        return distB - distA;  // Furthest first
+      });
 
     // Queue new timesteps for loading (one at a time to avoid WASM OOM)
     for (const timestamp of orderedToLoad) {
@@ -133,19 +126,29 @@ export class BudgetService {
       // Only allow one concurrent load to avoid WASM OOM
       if (this.loadingTimestamps.size > 0) break;
 
-      // Get a free slot index
-      if (this.freeSlotIndices.length === 0) break;  // Budget full
-      const newSlotIndex = this.freeSlotIndices.pop()!;
+      // Get a free slot index - evict only if needed
+      let slotIndex: number;
+      if (this.freeSlotIndices.length > 0) {
+        slotIndex = this.freeSlotIndices.pop()!;
+      } else if (evictionCandidates.length > 0) {
+        // Evict the furthest slot from current time
+        const [evictKey, evictSlot] = evictionCandidates.shift()!;
+        console.log(`[Budget] Evicting ${evictKey} (slot ${evictSlot.slotIndex}) for ${key}`);
+        this.slots.delete(evictKey);
+        slotIndex = evictSlot.slotIndex;
+      } else {
+        break;  // No free slots and nothing to evict
+      }
 
       this.slots.set(key, {
         timestamp,
-        slotIndex: newSlotIndex,
+        slotIndex,
         loaded: false,
         loadedPoints: 0,
       });
 
       // Load in background
-      this.loadTimestepToSlot(timestamp, newSlotIndex);
+      this.loadTimestepToSlot(timestamp, slotIndex);
     }
   }
 

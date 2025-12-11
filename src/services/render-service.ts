@@ -29,7 +29,13 @@ export class RenderService {
   async initialize(): Promise<void> {
     const cameraConfig = this.configService.getCameraConfig();
     this.renderer = new GlobeRenderer(this.canvas, cameraConfig);
-    await this.renderer.initialize();
+
+    // Calculate max slots from GPU budget (same formula as budget-service)
+    const BYTES_PER_TIMESTEP = 6_599_680 * 4; // ~26.4 MB
+    const budgetBytes = this.configService.getGpuBudgetMB() * 1024 * 1024;
+    const maxSlots = Math.floor(budgetBytes / BYTES_PER_TIMESTEP);
+
+    await this.renderer.initialize(maxSlots);
 
     // Upload Gaussian LUTs
     const luts = generateGaussianLUTs();
