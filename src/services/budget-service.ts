@@ -179,7 +179,9 @@ export class BudgetService {
       this.updateShaderSlotsIfReady();
 
     } catch (err) {
+      // TODO: show error in UI, allow retry
       console.warn(`[Budget] Failed to load ${key}:`, err);
+      throw err;
     } finally {
       this.loadingTimestamps.delete(key);
 

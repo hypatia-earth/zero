@@ -41,8 +41,9 @@ async function loadFromDB(): Promise<Partial<ZeroOptions> | null> {
       tx.oncomplete = () => db.close();
     });
   } catch (err) {
+    // TODO: show error in UI
     console.warn('[Options] IndexedDB load error:', err);
-    return null;
+    throw err;
   }
 }
 
@@ -57,7 +58,9 @@ async function saveToDB(options: Partial<ZeroOptions>): Promise<void> {
       tx.onerror = () => reject(tx.error);
     });
   } catch (err) {
+    // TODO: show error in UI
     console.warn('[Options] IndexedDB save error:', err);
+    throw err;
   }
 }
 
