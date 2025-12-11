@@ -16,17 +16,7 @@ export async function registerServiceWorker(): Promise<void> {
 
   try {
     await navigator.serviceWorker.register('/sw.js');
-    console.log('[SW] Registered for Range caching');
-
-    // Wait for the SW to be ready
     await navigator.serviceWorker.ready;
-
-    // Log controller status
-    if (navigator.serviceWorker.controller) {
-      console.log('[SW] Controller active, fetch interception enabled');
-    } else {
-      console.log('[SW] No controller yet - refresh page for SW to take control');
-    }
   } catch (error) {
     console.error('[SW] Registration failed:', error);
   }
@@ -100,5 +90,5 @@ export function setupCacheUtils(): void {
   };
 
   (window as unknown as { __omCache: typeof utils }).__omCache = utils;
-  console.log('[SW] Cache utils available: __omCache.clearCache(), __omCache.getCacheStats(), __omCache.clearOlderThan(days)');
+  console.log('[SW] Registered for Range caching, utils available');
 }

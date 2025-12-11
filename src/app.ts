@@ -105,7 +105,7 @@ export const App: AppComponent = {
       );
 
       BootstrapService.complete();
-      console.log('[App] Bootstrap complete');
+      console.log('%c[App] Bootstrap complete', 'color: darkgreen; font-weight: bold');
       m.redraw();
 
       // Step 6: Load Data (background, don't block UI)

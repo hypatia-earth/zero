@@ -29,16 +29,12 @@ async function loadBinaryData(url: string): Promise<ArrayBuffer> {
 }
 
 export async function loadAtmosphereLUTs(device: GPUDevice): Promise<AtmosphereLUTs> {
-  console.log('[Atmosphere] Loading LUTs...');
-
   // Load all data files in parallel
   const [transmittanceData, scatteringData, irradianceData] = await Promise.all([
     loadBinaryData('/atmosphere/transmittance.dat'),
     loadBinaryData('/atmosphere/scattering.dat'),
     loadBinaryData('/atmosphere/irradiance.dat'),
   ]);
-
-  console.log(`[Atmosphere] Loaded: transmittance=${transmittanceData.byteLength}, scattering=${scatteringData.byteLength}, irradiance=${irradianceData.byteLength}`);
 
   // Create transmittance texture (2D, 256x64, rgba32float)
   const transmittance = device.createTexture({

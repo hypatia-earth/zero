@@ -39,6 +39,8 @@ interface OmWasm {
   ): boolean;
 }
 
+const DEBUG = false;
+
 const SIZEOF_DECODER = 256;
 const ERROR_OK = 0;
 
@@ -128,16 +130,16 @@ export async function streamOmVariable(
   wasm._free(offsetPtr);
   wasm._free(sizePtr);
 
-  console.log(`[OM] File: ${fileSize} bytes, trailer: offset=${rootOffset}, size=${rootSize}`);
+  DEBUG && console.log(`[OM] File: ${fileSize} bytes, trailer: offset=${rootOffset}, size=${rootSize}`);
 
   // Phase 3: Root + children metadata
   const rootData = await fetchRange(url, rootOffset, rootSize);
 
   const rootPtr = wasm._malloc(rootData.length);
   wasm.HEAPU8.set(rootData, rootPtr);
-  console.log(`[OM] Root data first 16 bytes:`, Array.from(rootData.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+  DEBUG && console.log(`[OM] Root data first 16 bytes:`, Array.from(rootData.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' '));
   const rootVar = wasm._om_variable_init(rootPtr);
-  console.log(`[OM] rootVar pointer: ${rootVar}`);
+  DEBUG && console.log(`[OM] rootVar pointer: ${rootVar}`);
   if (!rootVar) throw new Error('Failed to init root variable');
 
   const numChildren = wasm._om_variable_get_children_count(rootVar);
@@ -173,7 +175,7 @@ export async function streamOmVariable(
     : '(no name)';
 
   const rootDimCount = Number(wasm._om_variable_get_dimensions_count(rootVar));
-  console.log(`[OM] Root: '${rootName}', children: ${numChildren}, dims: ${rootDimCount}`);
+  DEBUG && console.log(`[OM] Root: '${rootName}', children: ${numChildren}, dims: ${rootDimCount}`);
 
   for (let i = 0; i < numChildren; i++) {
     wasm._om_variable_get_children(rootVar, i, 1, childOffsetPtr, childSizePtr);
@@ -297,7 +299,7 @@ export async function streamOmVariable(
   const chunksPerSlice = Math.floor(numChunks / slices);
   const firstSliceChunks = numChunks - chunksPerSlice * (slices - 1);
 
-  console.log(`[OM] ${numChunks} chunks, ${(totalCompressed / 1024).toFixed(0)} KB, slices: first=${firstSliceChunks}, rest=${chunksPerSlice}`);
+  DEBUG && console.log(`[OM] ${numChunks} chunks, ${(totalCompressed / 1024).toFixed(0)} KB, slices: first=${firstSliceChunks}, rest=${chunksPerSlice}`);
   const sliceStartTime = performance.now();
 
   // Allocate output and decode buffer
@@ -406,7 +408,7 @@ export async function streamOmVariable(
   }
 
   const sliceElapsed = ((performance.now() - sliceStartTime) / 1000).toFixed(1);
-  console.log(`[OM] ${slices} slices loaded in ${sliceElapsed}s`);
+  DEBUG && console.log(`[OM] ${slices} slices loaded in ${sliceElapsed}s`);
 
   const result = new Float32Array(outputElements);
   result.set(new Float32Array(wasm.HEAPU8.buffer, outputPtr, outputElements));

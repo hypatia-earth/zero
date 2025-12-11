@@ -8,6 +8,8 @@ import type { StateService } from '../services/state-service';
 import type { DateTimeService } from '../services/datetime-service';
 import type { BudgetService } from '../services/budget-service';
 
+const DEBUG = false;
+
 interface TimeBarPanelAttrs {
   stateService: StateService;
   dateTimeService: DateTimeService;
@@ -51,7 +53,7 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
     // Get loaded timesteps for tick visualization
     const loadedTimestamps = budgetService.getLoadedTimestamps();
     const activePair = budgetService.getActivePair();
-    console.log(`[Timebar] Loaded: ${loadedTimestamps.length}, active: ${activePair ? 'yes' : 'no'}`);
+    DEBUG && console.log(`[Timebar] Loaded: ${loadedTimestamps.length}, active: ${activePair ? 'yes' : 'no'}`);
 
     // Calculate position for a timestamp
     const getPosition = (ts: Date) => ((ts.getTime() - window.start.getTime()) / windowMs) * 100;
