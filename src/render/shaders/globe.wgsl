@@ -33,7 +33,7 @@ struct Uniforms {
   tempLoadedPoints: u32,  // progressive loading: cells 0..N are valid
   tempSlot0: u32,         // slot index for time0 in tempData buffer
   tempSlot1: u32,         // slot index for time1 in tempData buffer
-  pixelSizeAtSurface: f32, // degrees per pixel at earth surface (for screen-space grid)
+  gridFontSize: f32, // font size in screen pixels for grid labels
   tempLoadedPad: f32,     // padding to 16-byte alignment
 }
 

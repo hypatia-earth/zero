@@ -390,6 +390,20 @@ export const optionsSchema = z.object({
         step: 0.05,
       }
     ),
+    fontSize: opt(
+      z.number().min(8).max(32).default(14),
+      {
+        label: 'Label size',
+        description: 'Font size for grid coordinate labels',
+        group: 'layers',
+        filter: 'global',
+        order: 5,
+        control: 'slider',
+        min: 8,
+        max: 32,
+        step: 2,
+      }
+    ),
   }),
 
   // ----------------------------------------------------------
@@ -722,7 +736,7 @@ export const defaultOptions: ZeroOptions = {
   },
   earth: { opacity: 1, blend: 0 },
   sun: { enabled: true },
-  grid: { enabled: true, opacity: 0.3 },
+  grid: { enabled: true, opacity: 0.3, fontSize: 14 },
   temp: { opacity: 0.6, resolution: '0p25' },
   rain: { opacity: 1.0, resolution: '0p25' },
   clouds: { opacity: 0.5, resolution: '0p25' },

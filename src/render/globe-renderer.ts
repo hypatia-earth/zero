@@ -20,6 +20,7 @@ export interface GlobeUniforms {
   sunGlowColor: Float32Array;
   gridEnabled: boolean;
   gridOpacity: number;
+  gridFontSize: number;
   earthOpacity: number;
   tempOpacity: number;
   rainOpacity: number;
@@ -29,7 +30,6 @@ export interface GlobeUniforms {
   tempLoadedPoints: number;  // progressive loading: cells 0..N valid
   tempSlot0: number;         // slot index for time0 in large buffer
   tempSlot1: number;         // slot index for time1 in large buffer
-  pixelSizeAtSurface: number; // degrees per pixel at earth surface
 }
 
 const POINTS_PER_TIMESTEP = 6_599_680;
@@ -303,11 +303,11 @@ export class GlobeRenderer {
     view.setUint32(offset, uniforms.rainDataReady ? 1 : 0, true); offset += 4;
     view.setFloat32(offset, uniforms.tempLerp, true); offset += 4;
 
-    // tempLoadedPoints, tempSlot0, tempSlot1, pixelSizeAtSurface (16 bytes)
+    // tempLoadedPoints, tempSlot0, tempSlot1, gridFontSize (16 bytes)
     view.setUint32(offset, uniforms.tempLoadedPoints, true); offset += 4;
     view.setUint32(offset, uniforms.tempSlot0, true); offset += 4;
     view.setUint32(offset, uniforms.tempSlot1, true); offset += 4;
-    view.setFloat32(offset, uniforms.pixelSizeAtSurface, true); offset += 4;
+    view.setFloat32(offset, uniforms.gridFontSize, true); offset += 4;
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
   }

@@ -94,8 +94,8 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
   let dist = length(hitPoint - u.eyePosition);
   let worldUnitsPerPixel = (2.0 * u.tanFov * dist) / u.resolution.y;
 
-  // Font size in screen pixels, converted to world units
-  let fontSizePx = 14.0;
+  // Font size in screen pixels (from uniform), converted to world units
+  let fontSizePx = u.gridFontSize;
   let fontSizeWorld = fontSizePx * worldUnitsPerPixel * 3.0;
 
   // MSDF screen pixel range for anti-aliasing
