@@ -5,7 +5,7 @@
  * Supports streaming: fetch slice → decode complete chunks → yield → repeat
  */
 
-import type { FetchService } from '../services/fetch-service';
+import type { FetchService, CacheLayer } from '../services/fetch-service';
 
 // WASM module type - functions have underscore prefix
 interface OmWasm {
@@ -93,6 +93,15 @@ interface ChunkInfo {
   indexCount: number;
 }
 
+/** Map param name to cache layer */
+function paramToLayer(param: string): CacheLayer {
+  if (param.includes('temperature')) return 'temp';
+  if (param.includes('wind') || param.includes('u_component') || param.includes('v_component')) return 'wind';
+  if (param.includes('precipitation') || param.includes('rain')) return 'rain';
+  if (param.includes('pressure') || param.includes('msl')) return 'pressure';
+  return 'meta';
+}
+
 /**
  * Stream-read a variable from an .om file
  * Calls onChunk after each slice is fetched and its chunks decoded
@@ -104,6 +113,7 @@ export async function streamOmVariable(
   onChunk: OmChunkCallback,
   fetchService: FetchService
 ): Promise<OmReadResult> {
+  const cacheLayer = paramToLayer(param);
   if (!wasmInstance) {
     throw new Error('WASM not initialized. Call initOmWasm first.');
   }
@@ -112,9 +122,9 @@ export async function streamOmVariable(
   // Phase 1: HEAD
   const fileSize = await fetchService.fetchHead(url);
 
-  // Phase 2: Trailer
+  // Phase 2: Trailer (metadata, not layer-specific)
   const trailerSize = wasm._om_trailer_size();
-  const trailerData = await fetchService.fetchRange(url, fileSize - trailerSize, trailerSize);
+  const trailerData = await fetchService.fetchRange(url, fileSize - trailerSize, trailerSize, 'meta');
 
   const trailerPtr = wasm._malloc(trailerSize);
   const offsetPtr = wasm._malloc(8);
@@ -134,7 +144,7 @@ export async function streamOmVariable(
   DEBUG && console.log(`[OM] File: ${fileSize} bytes, trailer: offset=${rootOffset}, size=${rootSize}`);
 
   // Phase 3: Root + children metadata
-  const rootData = await fetchService.fetchRange(url, rootOffset, rootSize);
+  const rootData = await fetchService.fetchRange(url, rootOffset, rootSize, 'meta');
 
   const rootPtr = wasm._malloc(rootData.length);
   wasm.HEAPU8.set(rootData, rootPtr);
@@ -159,7 +169,7 @@ export async function streamOmVariable(
   wasm._free(o1Ptr);
   wasm._free(s1Ptr);
 
-  const allChildrenData = await fetchService.fetchRange(url, childrenStart, childrenEnd - childrenStart);
+  const allChildrenData = await fetchService.fetchRange(url, childrenStart, childrenEnd - childrenStart, 'meta');
 
   // Phase 4: Find param
   let targetVarOffset = 0, targetVarSize = 0, targetDims: number[] = [];
@@ -263,7 +273,7 @@ export async function streamOmVariable(
     const indexOffset = Number(wasm.getValue(indexReadPtr, 'i64'));
     const indexCount = Number(wasm.getValue(indexReadPtr + 8, 'i64'));
 
-    const indexData = await fetchService.fetchRange(url, indexOffset, indexCount);
+    const indexData = await fetchService.fetchRange(url, indexOffset, indexCount, cacheLayer);
     const blockIdx = indexBlocks.length;
     indexBlocks.push({ offset: indexOffset, count: indexCount, data: indexData });
 
@@ -326,8 +336,8 @@ export async function streamOmVariable(
     const sliceByteEnd = (lastChunk.dataOffset - minDataOffset) + lastChunk.dataCount;
     const sliceSize = sliceByteEnd - sliceByteStart;
 
-    // Fetch this slice
-    const sliceData = await fetchService.fetchRange(url, firstChunk.dataOffset, sliceSize);
+    // Fetch this slice (use layer for caching)
+    const sliceData = await fetchService.fetchRange(url, firstChunk.dataOffset, sliceSize, cacheLayer);
     allDataBuffer.set(sliceData, sliceByteStart);
 
     // Decode all chunks in this slice (guaranteed complete since chunk-aligned)

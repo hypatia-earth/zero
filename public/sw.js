@@ -4,18 +4,43 @@
  * Cache strategy:
  * - Past data (validTime < now): cache 30 days (immutable reanalysis)
  * - Future data (forecasts): cache 1 hour (updated with new model runs)
+ * - Separate cache per layer (temp, wind, rain, pressure, meta)
  * - Cache key: path + range bytes
  */
 
-const CACHE_NAME = 'om-ranges-v1';
+const CACHE_PREFIX = 'om-';
+const CACHE_VERSION = 'v2';
 const S3_HOST = 'openmeteo.s3.amazonaws.com';
 const PAST_MAX_AGE = 30 * 24 * 3600 * 1000; // 30 days in ms
 const FUTURE_MAX_AGE = 3600 * 1000; // 1 hour in ms
 
+// Valid layer names
+const VALID_LAYERS = ['temp', 'wind', 'rain', 'pressure', 'meta'];
+
+/**
+ * Get cache name for a layer
+ */
+function getCacheName(layer) {
+  const validLayer = VALID_LAYERS.includes(layer) ? layer : 'meta';
+  return `${CACHE_PREFIX}${validLayer}-${CACHE_VERSION}`;
+}
+
 // Take control immediately on install/activate
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      // Clean up old caches
+      caches.keys().then(keys =>
+        Promise.all(
+          keys
+            .filter(k => k.startsWith(CACHE_PREFIX) && !k.endsWith(CACHE_VERSION))
+            .map(k => caches.delete(k))
+        )
+      )
+    ])
+  );
   console.log('[SW] Activated and claiming clients');
 });
 
@@ -73,23 +98,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  event.respondWith(handleRangeRequest(event.request, url, rangeHeader));
+  // Get layer from custom header
+  const layer = event.request.headers.get('X-Layer') || 'meta';
+
+  event.respondWith(handleRangeRequest(event.request, url, rangeHeader, layer));
 });
 
-async function handleRangeRequest(request, url, rangeHeader) {
-  const cache = await caches.open(CACHE_NAME);
+async function handleRangeRequest(request, url, rangeHeader, layer) {
+  const cacheName = getCacheName(layer);
+  const cache = await caches.open(cacheName);
   const cacheKey = buildCacheKey(url, rangeHeader);
   const validTime = parseValidTime(url);
 
   // Check cache
   const cachedResponse = await cache.match(cacheKey);
   if (cachedResponse && isEntryValid(cachedResponse, validTime)) {
-    console.log('[SW] Cache HIT:', cacheKey.slice(-50));
+    console.log(`[SW] Cache HIT (${layer}):`, cacheKey.slice(-50));
     return cachedResponse;
   }
 
   // Fetch from network
-  console.log('[SW] Cache MISS:', cacheKey.slice(-50));
+  console.log(`[SW] Cache MISS (${layer}):`, cacheKey.slice(-50));
   const networkResponse = await fetch(request);
 
   if (networkResponse.ok || networkResponse.status === 206) {
@@ -97,6 +126,7 @@ async function handleRangeRequest(request, url, rangeHeader) {
     const headers = new Headers(networkResponse.headers);
     headers.set('x-cached-at', Date.now().toString());
     headers.set('x-original-status', networkResponse.status.toString());
+    headers.set('x-layer', layer);
 
     const responseToCache = new Response(await networkResponse.clone().arrayBuffer(), {
       status: 200,
@@ -116,43 +146,102 @@ self.addEventListener('message', async (event) => {
   const { type } = event.data;
 
   if (type === 'CLEAR_CACHE') {
-    const deleted = await caches.delete(CACHE_NAME);
-    event.ports[0].postMessage({ success: deleted });
+    // Clear all layer caches
+    const keys = await caches.keys();
+    const deleted = await Promise.all(
+      keys.filter(k => k.startsWith(CACHE_PREFIX)).map(k => caches.delete(k))
+    );
+    event.ports[0].postMessage({ success: deleted.some(d => d) });
+  }
+
+  if (type === 'CLEAR_LAYER_CACHE') {
+    const { layer } = event.data;
+    const cacheName = getCacheName(layer);
+    const deleted = await caches.delete(cacheName);
+    event.ports[0].postMessage({ success: deleted, layer });
   }
 
   if (type === 'GET_CACHE_STATS') {
-    const cache = await caches.open(CACHE_NAME);
-    const keys = await cache.keys();
-    let totalSize = 0;
+    const keys = await caches.keys();
+    const layerCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
+    const stats = { layers: {}, totalEntries: 0, totalSizeMB: 0 };
 
-    for (const request of keys) {
+    for (const cacheName of layerCaches) {
+      const cache = await caches.open(cacheName);
+      const requests = await cache.keys();
+      let layerSize = 0;
+
+      for (const request of requests) {
+        const response = await cache.match(request);
+        if (response) {
+          const blob = await response.blob();
+          layerSize += blob.size;
+        }
+      }
+
+      // Extract layer name from cache name: om-temp-v2 → temp
+      const layerName = cacheName.replace(CACHE_PREFIX, '').replace(`-${CACHE_VERSION}`, '');
+      stats.layers[layerName] = {
+        entries: requests.length,
+        sizeMB: (layerSize / (1024 * 1024)).toFixed(2)
+      };
+      stats.totalEntries += requests.length;
+      stats.totalSizeMB += layerSize / (1024 * 1024);
+    }
+
+    stats.totalSizeMB = stats.totalSizeMB.toFixed(2);
+    event.ports[0].postMessage(stats);
+  }
+
+  if (type === 'GET_LAYER_STATS') {
+    const { layer } = event.data;
+    const cacheName = getCacheName(layer);
+    const cache = await caches.open(cacheName);
+    const requests = await cache.keys();
+    let totalSize = 0;
+    const entries = [];
+
+    for (const request of requests) {
       const response = await cache.match(request);
       if (response) {
         const blob = await response.blob();
+        const cachedAt = response.headers.get('x-cached-at');
+        entries.push({
+          url: request.url,
+          sizeMB: (blob.size / (1024 * 1024)).toFixed(3),
+          cachedAt: cachedAt ? new Date(parseInt(cachedAt)).toISOString() : null
+        });
         totalSize += blob.size;
       }
     }
 
     event.ports[0].postMessage({
-      entries: keys.length,
-      totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2)
+      layer,
+      entries: entries.length,
+      totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2),
+      items: entries
     });
   }
 
   if (type === 'CLEAR_OLDER_THAN') {
     const { days } = event.data;
     const cutoff = Date.now() - (days * 24 * 3600 * 1000);
-    const cache = await caches.open(CACHE_NAME);
-    const keys = await cache.keys();
+    const keys = await caches.keys();
+    const layerCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
     let deleted = 0;
 
-    for (const request of keys) {
-      const response = await cache.match(request);
-      if (response) {
-        const cachedAt = parseInt(response.headers.get('x-cached-at') || '0');
-        if (cachedAt < cutoff) {
-          await cache.delete(request);
-          deleted++;
+    for (const cacheName of layerCaches) {
+      const cache = await caches.open(cacheName);
+      const requests = await cache.keys();
+
+      for (const request of requests) {
+        const response = await cache.match(request);
+        if (response) {
+          const cachedAt = parseInt(response.headers.get('x-cached-at') || '0');
+          if (cachedAt < cutoff) {
+            await cache.delete(request);
+            deleted++;
+          }
         }
       }
     }

@@ -4,6 +4,30 @@
  * Registers the SW for Range request caching and exposes console utilities.
  */
 
+/** Layer stats from SW */
+interface LayerStats {
+  entries: number;
+  sizeMB: string;
+}
+
+/** Cache stats from SW */
+interface CacheStats {
+  layers: Record<string, LayerStats>;
+  totalEntries: number;
+  totalSizeMB: string;
+}
+
+/** Detailed layer stats from SW */
+interface LayerDetail {
+  layer: string;
+  entries: number;
+  totalSizeMB: string;
+  items: Array<{
+    url: string;
+    sizeMB: string;
+    cachedAt: string | null;
+  }>;
+}
 
 /**
  * Register the Service Worker
@@ -39,20 +63,45 @@ function sendMessage<T>(message: object): Promise<T> {
 }
 
 /**
- * Clear the entire cache
+ * Clear the entire cache (all layers)
  */
 async function clearCache(): Promise<boolean> {
   const result = await sendMessage<{ success: boolean }>({ type: 'CLEAR_CACHE' });
-  console.log(result.success ? '[SW] Cache cleared' : '[SW] No cache found');
+  console.log(result.success ? '[SW] All caches cleared' : '[SW] No caches found');
   return result.success;
 }
 
 /**
- * Get cache statistics
+ * Clear cache for a specific layer
  */
-async function getCacheStats(): Promise<{ entries: number; totalSizeMB: string }> {
-  const result = await sendMessage<{ entries: number; totalSizeMB: string }>({ type: 'GET_CACHE_STATS' });
-  console.log(`[SW] Cache: ${result.entries} entries, ${result.totalSizeMB} MB`);
+async function clearLayerCache(layer: string): Promise<boolean> {
+  const result = await sendMessage<{ success: boolean; layer: string }>({ type: 'CLEAR_LAYER_CACHE', layer });
+  console.log(result.success ? `[SW] Cache cleared for layer: ${layer}` : `[SW] No cache found for layer: ${layer}`);
+  return result.success;
+}
+
+/**
+ * Get cache statistics (per layer and total)
+ */
+async function getCacheStats(): Promise<CacheStats> {
+  const result = await sendMessage<CacheStats>({ type: 'GET_CACHE_STATS' });
+  console.log(`[SW] Cache total: ${result.totalEntries} entries, ${result.totalSizeMB} MB`);
+  console.table(result.layers);
+  return result;
+}
+
+/**
+ * Get detailed stats for a specific layer
+ */
+async function getLayerStats(layer: string): Promise<LayerDetail> {
+  const result = await sendMessage<LayerDetail>({ type: 'GET_LAYER_STATS', layer });
+  console.log(`[SW] Layer '${layer}': ${result.entries} entries, ${result.totalSizeMB} MB`);
+  if (result.items.length > 0) {
+    console.table(result.items.slice(0, 20)); // Show first 20
+    if (result.items.length > 20) {
+      console.log(`... and ${result.items.length - 20} more entries`);
+    }
+  }
   return result;
 }
 
@@ -73,8 +122,10 @@ async function unregister(): Promise<void> {
   for (const reg of registrations) {
     await reg.unregister();
   }
-  await caches.delete('om-ranges-v1');
-  console.log('[SW] Unregistered and cache cleared, reloading...');
+  // Clear all om- caches
+  const keys = await caches.keys();
+  await Promise.all(keys.filter(k => k.startsWith('om-')).map(k => caches.delete(k)));
+  console.log('[SW] Unregistered and caches cleared, reloading...');
   location.reload();
 }
 
@@ -84,11 +135,24 @@ async function unregister(): Promise<void> {
 export function setupCacheUtils(): void {
   const utils = {
     clearCache,
+    clearLayerCache,
     getCacheStats,
+    getLayerStats,
     clearOlderThan,
     unregister,
+    help: () => {
+      console.log(`
+__omCache utilities:
+  getCacheStats()         - Show all layer caches with entry count and size
+  getLayerStats('temp')   - Show detailed entries for a layer (temp, wind, rain, pressure, meta)
+  clearCache()            - Clear all layer caches
+  clearLayerCache('temp') - Clear a specific layer cache
+  clearOlderThan(7)       - Clear entries older than N days
+  unregister()            - Unregister SW and clear caches
+      `);
+    }
   };
 
   (window as unknown as { __omCache: typeof utils }).__omCache = utils;
-  console.log('[SW] Registered for Range caching, utils available');
+  console.log('[SW] Registered for Range caching. Type __omCache.help() for utilities.');
 }

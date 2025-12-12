@@ -5,9 +5,13 @@
  * - Bandwidth monitoring via TrackerService
  * - Sequential fetch queue (one request at a time during bootstrap)
  * - Consistent error handling
+ * - Layer-based SW caching via X-Layer header
  */
 
 import type { TrackerService } from './tracker-service';
+
+/** Layer identifier for SW caching */
+export type CacheLayer = 'temp' | 'wind' | 'rain' | 'pressure' | 'meta';
 
 export class FetchService {
   constructor(private tracker: TrackerService) {}
@@ -29,11 +33,14 @@ export class FetchService {
   /**
    * Range GET fetch, returns Uint8Array
    * Used for: .om file partial reads
+   * @param layer - Layer identifier for SW cache segregation
    */
-  async fetchRange(url: string, offset: number, size: number): Promise<Uint8Array> {
-    const response = await fetch(url, {
-      headers: { Range: `bytes=${offset}-${offset + size - 1}` },
-    });
+  async fetchRange(url: string, offset: number, size: number, layer: CacheLayer = 'meta'): Promise<Uint8Array> {
+    const headers: HeadersInit = {
+      Range: `bytes=${offset}-${offset + size - 1}`,
+      'X-Layer': layer,
+    };
+    const response = await fetch(url, { headers });
     if (!response.ok && response.status !== 206) {
       throw new Error(`HTTP ${response.status} fetching range ${url}`);
     }
