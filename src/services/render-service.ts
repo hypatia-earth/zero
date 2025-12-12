@@ -95,7 +95,7 @@ export class RenderService {
       // Formula: (2 * tan(fov/2) * distance) / screenHeight gives world units per pixel
       // Then convert to degrees: worldUnits * (180 / PI) since Earth radius = 1.0
       const eyePos = renderer.camera.getEyePosition();
-      const cameraDistance = Math.sqrt(eyePos[0] ** 2 + eyePos[1] ** 2 + eyePos[2] ** 2);
+      const cameraDistance = Math.sqrt(eyePos[0]! ** 2 + eyePos[1]! ** 2 + eyePos[2]! ** 2);
       const tanFov = renderer.camera.getTanFov();
       const worldUnitsPerPixel = (2 * tanFov * cameraDistance) / this.canvas.height;
       const pixelSizeAtSurface = worldUnitsPerPixel * (180 / Math.PI);
