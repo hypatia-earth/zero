@@ -161,64 +161,88 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
     baseOffsetY = marginY + lineHeight; // Below horizontal line
   }
 
-  // For W (left side), we need to right-align text
-  // Calculate max width based on character count
-  let latChars = select(2.0, 3.0, latTens > 0);  // "5N" or "15N"
-  let lonChars = select(2.0, select(3.0, 4.0, lonHundreds > 0), lonTens > 0 || lonHundreds > 0);
-  let maxChars = max(latChars, lonChars) + 0.2; // +0.2 for letter spacing
+  // Calculate character counts for each row
+  let latCharCount = select(2.0, 3.0, latTens > 0);  // "0N"=2 or "15N"=3
+  let lonCharCount = select(2.0, select(3.0, 4.0, lonHundreds > 0), lonTens > 0 || lonHundreds > 0);  // "0E"=2, "15E"=3, "180W"=4
 
-  var labelUV: vec2f;
-  if (isEast) {
-    // Left-aligned: start from margin
-    labelUV = vec2f(glyphUV.x - baseOffsetX, glyphUV.y - baseOffsetY);
-  } else {
-    // Right-aligned: offset by text width so it ends at margin
-    let textWidth = maxChars * glyphWidth;
-    labelUV = vec2f(glyphUV.x - baseOffsetX + textWidth, glyphUV.y - baseOffsetY);
-  }
+  // Base Y position
+  let baseY = glyphUV.y - baseOffsetY;
 
   var opacity = 0.0;
 
-  // Row 1: Latitude (e.g., "15N") - upper row
-  let latY = labelUV.y;
-  var latX = labelUV.x;
-
-  // Lat tens digit (skip if 0)
-  if (latTens > 0) {
-    opacity = max(opacity, sampleGlyph(getDigitGlyph(latTens), vec2f(latX, latY), screenPxRange));
-    latX -= glyphWidth;
-  }
-  // Lat ones digit
-  opacity = max(opacity, sampleGlyph(getDigitGlyph(latOnes), vec2f(latX, latY), screenPxRange));
-  latX -= glyphWidth * 1.2;
-  // N or S
-  if (isNorth) {
-    opacity = max(opacity, sampleGlyph(GLYPH_N_POS, vec2f(latX, latY), screenPxRange));
-  } else {
-    opacity = max(opacity, sampleGlyph(GLYPH_S_POS, vec2f(latX, latY), screenPxRange));
-  }
-
-  // Row 2: Longitude (e.g., "90W") - lower row
-  let lonY = labelUV.y + lineHeight;
-  var lonX = labelUV.x;
-
-  // Lon hundreds digit (skip if 0)
-  if (lonHundreds > 0) {
-    opacity = max(opacity, sampleGlyph(getDigitGlyph(lonHundreds), vec2f(lonX, lonY), screenPxRange));
-    lonX -= glyphWidth;
-  }
-  // Lon tens digit (skip if both hundreds and tens are 0)
-  if (lonHundreds > 0 || lonTens > 0) {
-    opacity = max(opacity, sampleGlyph(getDigitGlyph(lonTens), vec2f(lonX, lonY), screenPxRange));
-    lonX -= glyphWidth;
-  }
-  // Lon ones digit
-  opacity = max(opacity, sampleGlyph(getDigitGlyph(lonOnes), vec2f(lonX, lonY), screenPxRange));
-  lonX -= glyphWidth * 1.2;
-  // E or W
   if (isEast) {
+    // East: left-aligned, text starts at margin right of line
+    // Shift right and up by half glyph width
+    let startX = glyphUV.x - marginX - 0.5;
+    let baseYEast = baseY + 0.5;
+
+    // Row 1: Latitude
+    let latY = baseYEast;
+    var latX = startX;
+    if (latTens > 0) {
+      opacity = max(opacity, sampleGlyph(getDigitGlyph(latTens), vec2f(latX, latY), screenPxRange));
+      latX -= glyphWidth;
+    }
+    opacity = max(opacity, sampleGlyph(getDigitGlyph(latOnes), vec2f(latX, latY), screenPxRange));
+    latX -= glyphWidth * 1.2;
+    if (isNorth) {
+      opacity = max(opacity, sampleGlyph(GLYPH_N_POS, vec2f(latX, latY), screenPxRange));
+    } else {
+      opacity = max(opacity, sampleGlyph(GLYPH_S_POS, vec2f(latX, latY), screenPxRange));
+    }
+
+    // Row 2: Longitude
+    let lonY = baseYEast + lineHeight;
+    var lonX = startX;
+    if (lonHundreds > 0) {
+      opacity = max(opacity, sampleGlyph(getDigitGlyph(lonHundreds), vec2f(lonX, lonY), screenPxRange));
+      lonX -= glyphWidth;
+    }
+    if (lonHundreds > 0 || lonTens > 0) {
+      opacity = max(opacity, sampleGlyph(getDigitGlyph(lonTens), vec2f(lonX, lonY), screenPxRange));
+      lonX -= glyphWidth;
+    }
+    opacity = max(opacity, sampleGlyph(getDigitGlyph(lonOnes), vec2f(lonX, lonY), screenPxRange));
+    lonX -= glyphWidth * 1.2;
     opacity = max(opacity, sampleGlyph(GLYPH_E_POS, vec2f(lonX, lonY), screenPxRange));
+
   } else {
+    // West: right-aligned, text ends at margin left of line
+    // Each row starts at its own X based on its character count
+    let endX = glyphUV.x + marginX;
+    // Shift down by half glyph height
+    let baseYWest = baseY + 0.5;
+
+    // Row 1: Latitude - start position based on lat char count
+    let latY = baseYWest;
+    let latStartX = endX + (latCharCount + 0.2) * glyphWidth;
+    var latX = latStartX;
+    if (latTens > 0) {
+      opacity = max(opacity, sampleGlyph(getDigitGlyph(latTens), vec2f(latX, latY), screenPxRange));
+      latX -= glyphWidth;
+    }
+    opacity = max(opacity, sampleGlyph(getDigitGlyph(latOnes), vec2f(latX, latY), screenPxRange));
+    latX -= glyphWidth * 1.2;
+    if (isNorth) {
+      opacity = max(opacity, sampleGlyph(GLYPH_N_POS, vec2f(latX, latY), screenPxRange));
+    } else {
+      opacity = max(opacity, sampleGlyph(GLYPH_S_POS, vec2f(latX, latY), screenPxRange));
+    }
+
+    // Row 2: Longitude - start position based on lon char count
+    let lonY = baseYWest + lineHeight;
+    let lonStartX = endX + (lonCharCount + 0.2) * glyphWidth;
+    var lonX = lonStartX;
+    if (lonHundreds > 0) {
+      opacity = max(opacity, sampleGlyph(getDigitGlyph(lonHundreds), vec2f(lonX, lonY), screenPxRange));
+      lonX -= glyphWidth;
+    }
+    if (lonHundreds > 0 || lonTens > 0) {
+      opacity = max(opacity, sampleGlyph(getDigitGlyph(lonTens), vec2f(lonX, lonY), screenPxRange));
+      lonX -= glyphWidth;
+    }
+    opacity = max(opacity, sampleGlyph(getDigitGlyph(lonOnes), vec2f(lonX, lonY), screenPxRange));
+    lonX -= glyphWidth * 1.2;
     opacity = max(opacity, sampleGlyph(GLYPH_W_POS, vec2f(lonX, lonY), screenPxRange));
   }
 
