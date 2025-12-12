@@ -1,0 +1,9 @@
+{
+  "app": {
+    "name": "Hypatia Zero",
+    "version": "dev",
+    "hash": "local",
+    "timestamp": "",
+    "environment": "development"
+  }
+}
