@@ -1,7 +1,7 @@
 /**
  * TimeBarPanel - Time slider at bottom
  *
- * Shows time ticks per weather layer:
+ * Shows time ticks per weather layer on a canvas:
  * - Grey: cached in SW but not loaded to GPU
  * - Red: loaded in GPU slot
  * - Green: currently being rendered (active pair)
@@ -18,6 +18,16 @@ const DEBUG = false;
 /** Weather layers in display order (top to bottom) */
 const WEATHER_LAYERS = ['temp', 'rain'] as const;
 type WeatherLayer = typeof WEATHER_LAYERS[number];
+
+/** Tick colors */
+const COLOR_CACHED = '#666';    // Grey: only cached in SW
+const COLOR_LOADED = '#f00';    // Red: loaded in GPU slot
+const COLOR_ACTIVE = '#0f0';    // Green: active pair
+const COLOR_NOW = 'rgba(255,255,255,0.7)';  // Now marker
+
+/** Tick dimensions */
+const TICK_WIDTH = 2;
+const NOW_MARKER_WIDTH = 3;
 
 interface TimeBarPanelAttrs {
   stateService: StateService;
@@ -65,8 +75,87 @@ async function updateCachedTimestamps(): Promise<void> {
   cachedTimestamps.value = newCache;
 }
 
+/** Draw ticks on canvas */
+function drawTicks(
+  canvas: HTMLCanvasElement,
+  window: { start: Date; end: Date },
+  activeLayers: WeatherLayer[],
+  cachedMap: Map<WeatherLayer, Set<string>>,
+  loadedSet: Set<string>,
+  activeSet: Set<string>,
+  nowTime: Date
+): void {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  // Handle device pixel ratio for crisp rendering
+  const dpr = globalThis.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+
+  const width = rect.width;
+  const height = rect.height;
+  const windowMs = window.end.getTime() - window.start.getTime();
+
+  // Clear
+  ctx.clearRect(0, 0, width, height);
+
+  // Calculate position for a timestamp
+  const getX = (ts: Date | string): number => {
+    const time = typeof ts === 'string' ? new Date(ts).getTime() : ts.getTime();
+    return ((time - window.start.getTime()) / windowMs) * width;
+  };
+
+  // Height per layer row
+  const layerCount = activeLayers.length || 1;
+  const layerHeight = height / layerCount;
+
+  // Draw ticks for each layer
+  activeLayers.forEach((layer, rowIndex) => {
+    const cached = cachedMap.get(layer) || new Set();
+    const topY = rowIndex * layerHeight;
+
+    // Collect all timestamps for this layer
+    const allTimestamps = new Set<string>(cached);
+
+    // For temp, also add loaded slots
+    if (layer === 'temp') {
+      loadedSet.forEach(ts => allTimestamps.add(ts));
+    }
+
+    // Draw each tick
+    allTimestamps.forEach(tsKey => {
+      const x = getX(tsKey);
+      if (x < 0 || x > width) return;
+
+      // Determine color: green (active) > red (loaded) > grey (cached)
+      let color = COLOR_CACHED;
+      if (layer === 'temp') {
+        if (activeSet.has(tsKey)) {
+          color = COLOR_ACTIVE;
+        } else if (loadedSet.has(tsKey)) {
+          color = COLOR_LOADED;
+        }
+      }
+
+      ctx.fillStyle = color;
+      ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, layerHeight);
+    });
+  });
+
+  // Draw now marker (full height)
+  const nowX = getX(nowTime);
+  if (nowX >= 0 && nowX <= width) {
+    ctx.fillStyle = COLOR_NOW;
+    ctx.fillRect(nowX - NOW_MARKER_WIDTH / 2, 0, NOW_MARKER_WIDTH, height);
+  }
+}
+
 let unsubscribe: (() => void) | null = null;
 let cacheUpdateInterval: ReturnType<typeof setInterval> | null = null;
+let canvasRef: HTMLCanvasElement | null = null;
 
 export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
   oncreate({ attrs }) {
@@ -88,6 +177,7 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
       clearInterval(cacheUpdateInterval);
       cacheUpdateInterval = null;
     }
+    canvasRef = null;
   },
   view({ attrs }) {
     const { stateService, dateTimeService, budgetService } = attrs;
@@ -109,7 +199,7 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
       return `${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
     };
 
-    // Get slot data for temp layer (only temp has BudgetService currently)
+    // Get slot data for temp layer
     const loadedTimestamps = budgetService.getLoadedTimestamps();
     const loadedSet = new Set(loadedTimestamps.map(ts => ts.toISOString()));
     const activePair = budgetService.getActivePair();
@@ -121,63 +211,40 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
 
     DEBUG && console.log(`[Timebar] Loaded: ${loadedTimestamps.length}, active: ${activePair ? 'yes' : 'no'}`);
 
-    // Calculate position for a timestamp
-    const getPosition = (ts: Date | string) => {
-      const time = typeof ts === 'string' ? new Date(ts).getTime() : ts.getTime();
-      return ((time - window.start.getTime()) / windowMs) * 100;
-    };
-
     // Filter to only active weather layers
     const activeLayers = stateService.getLayers();
     const activeWeatherLayers = WEATHER_LAYERS.filter(l => activeLayers.includes(l));
 
-    // Height per layer row (50% each for 2 layers, 100% for 1)
-    const layerHeight = activeWeatherLayers.length > 0 ? 100 / activeWeatherLayers.length : 100;
-
-    // Build tick elements for each layer
-    const renderLayerTicks = (layer: WeatherLayer, rowIndex: number) => {
-      const cached = cachedTimestamps.value.get(layer) || new Set();
-      const topPercent = rowIndex * layerHeight;
-
-      // Collect all timestamps for this layer
-      const allTimestamps = new Set<string>(cached);
-
-      // For temp, also add loaded slots
-      if (layer === 'temp') {
-        loadedTimestamps.forEach(ts => allTimestamps.add(ts.toISOString()));
-      }
-
-      return [...allTimestamps].map(tsKey => {
-        const pos = getPosition(tsKey);
-        if (pos < 0 || pos > 100) return null;
-
-        // Determine color: green (active) > red (loaded) > grey (cached)
-        let color = '#666';  // Grey: only cached in SW
-        if (layer === 'temp') {
-          if (activeSet.has(tsKey)) {
-            color = '#0f0';  // Green: active pair
-          } else if (loadedSet.has(tsKey)) {
-            color = '#f00';  // Red: loaded in GPU slot
-          }
-        }
-
-        return m('.time-tick', {
-          key: `${layer}-${tsKey}`,
-          style: `left: ${pos}%; top: ${topPercent}%; height: ${layerHeight}%; background: ${color};`,
-        });
-      }).filter((v): v is m.Vnode => v !== null);
-    };
-
     return m('.panel.timebar', [
       m('.control.timeslider', { style: 'width: 100%; height: 42px; position: relative;' }, [
-        // Track background with layer ticks
+        // Canvas for ticks
         m('.time-ticks', [
-          // Render ticks for each active weather layer
-          ...activeWeatherLayers.flatMap((layer, idx) => renderLayerTicks(layer, idx)),
-          // Now marker (spans full height)
-          m('.time-tick.now-marker', {
-            key: 'now-marker',
-            style: `left: ${getPosition(dateTimeService.getWallTime())}%; background: rgba(255,255,255,0.7); width: 3px; height: 100%; top: 0;`,
+          m('canvas.time-ticks-canvas', {
+            style: 'width: 100%; height: 100%;',
+            oncreate: (vnode: m.VnodeDOM) => {
+              canvasRef = vnode.dom as HTMLCanvasElement;
+              drawTicks(
+                canvasRef,
+                window,
+                activeWeatherLayers,
+                cachedTimestamps.value,
+                loadedSet,
+                activeSet,
+                dateTimeService.getWallTime()
+              );
+            },
+            onupdate: (vnode: m.VnodeDOM) => {
+              canvasRef = vnode.dom as HTMLCanvasElement;
+              drawTicks(
+                canvasRef,
+                window,
+                activeWeatherLayers,
+                cachedTimestamps.value,
+                loadedSet,
+                activeSet,
+                dateTimeService.getWallTime()
+              );
+            },
           }),
         ]),
         // Slider input
