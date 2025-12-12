@@ -11,7 +11,7 @@ import type { FetchService } from './fetch-service';
 // Progress range for DATA step (20-95%)
 const DATA_START = 20;
 const DATA_END = 95;
-const TOTAL_ITEMS = 14;  // 1 WASM + 3 LUTs + 6 basemap + 2 temp + 2 precip
+const TOTAL_ITEMS = 15;  // 1 WASM + 3 LUTs + 6 basemap + 1 font + 2 temp + 2 precip
 
 export class DataLoader {
   private itemsLoaded = 0;
@@ -67,6 +67,15 @@ export class DataLoader {
     }
 
     return faces;
+  }
+
+  async loadFontAtlas(): Promise<ImageBitmap> {
+    await BootstrapService.updateProgress('Loading font atlas...', this.progress());
+    const buffer = await this.fetchService.fetch('/fonts/plex-mono.png');
+    const blob = new Blob([buffer], { type: 'image/png' });
+    const bitmap = await createImageBitmap(blob);
+    this.itemsLoaded++;
+    return bitmap;
   }
 
   async loadTemperatureTimesteps(

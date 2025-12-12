@@ -108,6 +108,10 @@ export const App: AppComponent = {
       const faces = await this.dataLoader.loadBasemap();
       await renderer.loadBasemap(faces);
 
+      // 4c2. Font atlas for grid labels
+      const fontAtlas = await this.dataLoader.loadFontAtlas();
+      await renderer.loadFontAtlas(fontAtlas);
+
       // Finalize renderer (create bind group now that textures are loaded)
       renderer.finalize();
 

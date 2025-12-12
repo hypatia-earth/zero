@@ -52,6 +52,8 @@ export class GlobeRenderer {
   private atmosphereLUTs!: AtmosphereLUTs;
   private useFloat16Luts = false;
   private format!: GPUTextureFormat;
+  private fontAtlasTexture!: GPUTexture;
+  private fontAtlasSampler!: GPUSampler;
 
   readonly camera: Camera;
   private uniformData = new ArrayBuffer(336);  // Increased for new uniforms
@@ -144,6 +146,17 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
+    // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
+    this.fontAtlasTexture = this.device.createTexture({
+      size: [1, 1],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    this.fontAtlasSampler = this.device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+    });
+
     // Shader code is pre-processed by wgsl-plus (see vite.config.ts)
     const shaderModule = this.device.createShaderModule({ code: shaderCode });
 
@@ -161,6 +174,9 @@ export class GlobeRenderer {
         { binding: 8, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } },  // scattering (3D)
         { binding: 9, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // irradiance (2D)
         { binding: 10, visibility: GPUShaderStage.FRAGMENT, sampler: {} },  // atmosphere sampler
+        // Font atlas for grid labels
+        { binding: 11, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+        { binding: 12, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       ],
     });
 
@@ -202,6 +218,9 @@ export class GlobeRenderer {
         { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
         { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
         { binding: 10, resource: this.atmosphereLUTs.sampler },
+        // Font atlas
+        { binding: 11, resource: this.fontAtlasTexture.createView() },
+        { binding: 12, resource: this.fontAtlasSampler },
       ],
     });
   }
@@ -350,8 +369,29 @@ export class GlobeRenderer {
         { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
         { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
         { binding: 10, resource: this.atmosphereLUTs.sampler },
+        // Font atlas
+        { binding: 11, resource: this.fontAtlasTexture.createView() },
+        { binding: 12, resource: this.fontAtlasSampler },
       ],
     });
+  }
+
+  /**
+   * Load MSDF font atlas for grid labels
+   */
+  async loadFontAtlas(imageBitmap: ImageBitmap): Promise<void> {
+    this.fontAtlasTexture.destroy();
+    this.fontAtlasTexture = this.device.createTexture({
+      size: [imageBitmap.width, imageBitmap.height],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
+    this.device.queue.copyExternalImageToTexture(
+      { source: imageBitmap },
+      { texture: this.fontAtlasTexture },
+      [imageBitmap.width, imageBitmap.height]
+    );
   }
 
   uploadGaussianLUTs(lats: Float32Array, offsets: Uint32Array): void {
@@ -417,5 +457,6 @@ export class GlobeRenderer {
     this.ringOffsetsBuffer?.destroy();
     this.tempDataBuffer?.destroy();
     this.rainDataBuffer?.destroy();
+    this.fontAtlasTexture?.destroy();
   }
 }

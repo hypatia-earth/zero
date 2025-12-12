@@ -49,6 +49,9 @@ struct Uniforms {
 @group(0) @binding(8) var atm_scattering: texture_3d<f32>;
 @group(0) @binding(9) var atm_irradiance: texture_2d<f32>;
 @group(0) @binding(10) var atm_sampler: sampler;
+// Font atlas for grid labels (declared in grid-text.wgsl)
+// @group(0) @binding(11) var fontAtlas: texture_2d<f32>;
+// @group(0) @binding(12) var fontSampler: sampler;
 
 // Fullscreen triangle vertex shader
 @vertex
@@ -110,6 +113,7 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> @location(0) vec4f {
   color = blendTemp(color, lat, lon);
   color = blendRain(color, lat, lon);
   color = blendGrid(color, lat, lon, hit.point);
+  color = blendGridText(color, lat, lon, hit.point);
   color = blendAtmosphereGlobe(color, hit.point, camera_km, ATM_EXPOSURE);
 
   return color;

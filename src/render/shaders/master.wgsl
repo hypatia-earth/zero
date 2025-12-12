@@ -12,5 +12,6 @@
 #include "basemap.wgsl"
 #include "sun.wgsl"
 #include "grid.wgsl"
+#include "grid-text.wgsl"
 #include "atmosphere-blend.wgsl"
 #include "globe.wgsl"
