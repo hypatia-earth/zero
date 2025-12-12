@@ -91,12 +91,21 @@ export class RenderService {
 
       const sunConfig = this.configService.getConfig().sun;
 
+      // Calculate degrees per pixel at earth surface for screen-space grid lines
+      // Formula: (2 * tan(fov/2) * distance) / screenHeight gives world units per pixel
+      // Then convert to degrees: worldUnits * (180 / PI) since Earth radius = 1.0
+      const eyePos = renderer.camera.getEyePosition();
+      const cameraDistance = Math.sqrt(eyePos[0] ** 2 + eyePos[1] ** 2 + eyePos[2] ** 2);
+      const tanFov = renderer.camera.getTanFov();
+      const worldUnitsPerPixel = (2 * tanFov * cameraDistance) / this.canvas.height;
+      const pixelSizeAtSurface = worldUnitsPerPixel * (180 / Math.PI);
+
       renderer.updateUniforms({
         viewProjInverse: renderer.camera.getViewProjInverse(),
-        eyePosition: renderer.camera.getEyePosition(),
+        eyePosition: eyePos,
         resolution: new Float32Array([this.canvas.width, this.canvas.height]),
         time: performance.now() / 1000,
-        tanFov: renderer.camera.getTanFov(),
+        tanFov,
         sunEnabled,
         sunDirection: getSunDirection(state.time),
         sunCoreRadius: sunConfig.coreRadius,
@@ -114,6 +123,7 @@ export class RenderService {
         tempLoadedPoints: this.tempLoadedPoints,
         tempSlot0: this.tempSlot0,
         tempSlot1: this.tempSlot1,
+        pixelSizeAtSurface,
       });
 
       renderer.render();

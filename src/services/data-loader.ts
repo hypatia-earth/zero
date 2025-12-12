@@ -59,7 +59,7 @@ export class DataLoader {
       const name = faceNames[i];
       await BootstrapService.updateProgress(`Loading basemap ${i + 1}/6...`, this.progress());
 
-      const buffer = await this.fetchService.fetch(`/images/basemaps/rtopo2/${name}.png`);
+      const buffer = await this.fetchService.fetch(`/images/basemaps/gmlc/${name}.png`);
       const blob = new Blob([buffer], { type: 'image/png' });
       faces.push(await createImageBitmap(blob));
 

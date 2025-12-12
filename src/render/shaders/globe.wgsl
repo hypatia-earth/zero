@@ -33,6 +33,7 @@ struct Uniforms {
   tempLoadedPoints: u32,  // progressive loading: cells 0..N are valid
   tempSlot0: u32,         // slot index for time0 in tempData buffer
   tempSlot1: u32,         // slot index for time1 in tempData buffer
+  pixelSizeAtSurface: f32, // degrees per pixel at earth surface (for screen-space grid)
   tempLoadedPad: f32,     // padding to 16-byte alignment
 }
 
@@ -108,7 +109,7 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> @location(0) vec4f {
   color = blendBasemap(color, hit.point);
   color = blendTemp(color, lat, lon);
   color = blendRain(color, lat, lon);
-  color = blendGrid(color, lat, lon);
+  color = blendGrid(color, lat, lon, hit.point);
   color = blendAtmosphereGlobe(color, hit.point, camera_km, ATM_EXPOSURE);
 
   return color;
