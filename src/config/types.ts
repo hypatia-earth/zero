@@ -22,7 +22,23 @@ export interface SunConfig {
   glowColor: [number, number, number];
 }
 
+export interface AppConfig {
+  /** Application name */
+  name: string;
+  /** Build version from package.json */
+  version: string;
+  /** Git commit hash */
+  hash: string;
+  /** Build timestamp */
+  timestamp: string;
+  /** Environment: development | production */
+  environment: string;
+}
+
 export interface ZeroConfig {
+  /** App metadata (injected at build) */
+  app: AppConfig;
+
   /** Open-Meteo S3 base URL */
   dataBaseUrl: string;
 

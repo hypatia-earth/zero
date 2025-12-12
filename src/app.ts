@@ -58,6 +58,7 @@ export const App: AppComponent = {
 
     // Initialize foundation services
     this.configService = new ConfigService();
+    await this.configService.init();  // Load runtime config overrides
     this.optionsService = new OptionsService();
     this.stateService = new StateService(this.configService.getDefaultLayers());
     this.trackerService = new TrackerService();

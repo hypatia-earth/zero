@@ -7,6 +7,14 @@ import type { ZeroConfig } from './types';
 export const EARTH_RADIUS = 6371000; // meters
 
 export const defaultConfig: ZeroConfig = {
+  app: {
+    name: 'Hypatia Zero',
+    version: '0.0.0',
+    hash: 'dev',
+    timestamp: '',
+    environment: 'development',
+  },
+
   dataBaseUrl: 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs',
   dataWindowDays: 5,
   prefetchCount: 24,
