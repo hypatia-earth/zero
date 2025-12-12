@@ -177,5 +177,4 @@ __omCache utilities:
   };
 
   (window as unknown as { __omCache: typeof utils }).__omCache = utils;
-  console.log('[SW] Registered for Range caching. Type __omCache.help() for utilities.');
 }
