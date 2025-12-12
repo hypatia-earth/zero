@@ -57,8 +57,11 @@ export const BootstrapModal: m.Component<object, BootstrapModalState> = {
       m('.backdrop'),
       m('.window', [
         m('.branding', [
-          m('.logo-text', { style: 'font-size: 28px; font-weight: 300; letter-spacing: 2px;' }, 'HYPATIA'),
-          m('.tagline', 'zero'),
+          m('img', {
+            src: '/zero.hypatia.earth-brand-white.svg',
+            alt: 'Zero - hypatia.earth',
+            style: 'height: 48px;',
+          }),
         ]),
         m('.progress', [
           m('.progress-text', state.label),
