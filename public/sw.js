@@ -25,18 +25,24 @@ function getCacheName(layer) {
   return `${CACHE_PREFIX}${validLayer}-${CACHE_VERSION}`;
 }
 
+// Legacy cache name to clean up
+const LEGACY_CACHE = 'om-ranges-v1';
+
 // Take control immediately on install/activate
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
-      // Clean up old caches
+      // Clean up old caches (legacy + old versions)
       caches.keys().then(keys =>
         Promise.all(
           keys
-            .filter(k => k.startsWith(CACHE_PREFIX) && !k.endsWith(CACHE_VERSION))
-            .map(k => caches.delete(k))
+            .filter(k => k === LEGACY_CACHE || (k.startsWith(CACHE_PREFIX) && !k.endsWith(CACHE_VERSION)))
+            .map(k => {
+              console.log(`[SW] Deleting old cache: ${k}`);
+              return caches.delete(k);
+            })
         )
       )
     ])
