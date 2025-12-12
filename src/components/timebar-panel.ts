@@ -12,6 +12,7 @@ import { effect, signal } from '@preact/signals-core';
 import type { StateService } from '../services/state-service';
 import type { DateTimeService } from '../services/datetime-service';
 import type { BudgetService } from '../services/budget-service';
+import { getSunDirection } from '../utils/sun-position';
 
 const DEBUG = false;
 
@@ -28,6 +29,24 @@ const COLOR_NOW = 'rgba(255,255,255,0.7)';  // Now marker
 /** Tick dimensions */
 const TICK_WIDTH = 2;
 const NOW_MARKER_WIDTH = 3;
+
+/** Calculate sun brightness for a point on globe at given time
+ *  Returns 0.5 (night) to 1.0 (day) */
+function getSunBrightness(lat: number, lon: number, time: Date): number {
+  const sunDir = getSunDirection(time);
+  // Convert lat/lon to unit vector (look-at point on globe)
+  const latRad = lat * Math.PI / 180;
+  const lonRad = lon * Math.PI / 180;
+  const lookAt = [
+    Math.cos(latRad) * Math.sin(lonRad),
+    Math.sin(latRad),
+    Math.cos(latRad) * Math.cos(lonRad),
+  ];
+  // Dot product: -1 (midnight) to +1 (noon)
+  const sunDot = sunDir[0]! * lookAt[0]! + sunDir[1]! * lookAt[1]! + sunDir[2]! * lookAt[2]!;
+  // Map to 0.5-1.0 range
+  return 0.75 + sunDot * 0.25;
+}
 
 interface TimeBarPanelAttrs {
   stateService: StateService;
@@ -83,7 +102,10 @@ function drawTicks(
   cachedMap: Map<WeatherLayer, Set<string>>,
   loadedSet: Set<string>,
   activeSet: Set<string>,
-  nowTime: Date
+  nowTime: Date,
+  cameraLat: number,
+  cameraLon: number,
+  sunEnabled: boolean
 ): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -140,8 +162,15 @@ function drawTicks(
         }
       }
 
+      // Apply sun brightness if enabled
+      if (sunEnabled) {
+        const brightness = getSunBrightness(cameraLat, cameraLon, new Date(tsKey));
+        ctx.globalAlpha = brightness;
+      }
+
       ctx.fillStyle = color;
       ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, layerHeight);
+      ctx.globalAlpha = 1.0;
     });
   });
 
@@ -215,6 +244,10 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
     const activeLayers = stateService.getLayers();
     const activeWeatherLayers = WEATHER_LAYERS.filter(l => activeLayers.includes(l));
 
+    // Get camera position and sun state for brightness calculation
+    const camera = stateService.getCamera();
+    const sunEnabled = activeLayers.includes('sun');
+
     return m('.panel.timebar', [
       m('.control.timeslider', { style: 'width: 100%; height: 42px; position: relative;' }, [
         // Canvas for ticks
@@ -230,7 +263,10 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
                 cachedTimestamps.value,
                 loadedSet,
                 activeSet,
-                dateTimeService.getWallTime()
+                dateTimeService.getWallTime(),
+                camera.lat,
+                camera.lon,
+                sunEnabled
               );
             },
             onupdate: (vnode: m.VnodeDOM) => {
@@ -242,7 +278,10 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
                 cachedTimestamps.value,
                 loadedSet,
                 activeSet,
-                dateTimeService.getWallTime()
+                dateTimeService.getWallTime(),
+                camera.lat,
+                camera.lon,
+                sunEnabled
               );
             },
           }),
