@@ -29,6 +29,9 @@ interface LayerDetail {
   }>;
 }
 
+/** Weather layer IDs (must match defaults.layers where category='weather') */
+const WEATHER_LAYERS = ['temp', 'rain'];
+
 /**
  * Register the Service Worker
  */
@@ -37,12 +40,32 @@ export async function registerServiceWorker(): Promise<void> {
     await navigator.serviceWorker.register('/sw.js');
     await navigator.serviceWorker.ready;
 
+    // Log available cached timesteps
+    await logCachedTimesteps();
+
     // Setup cache utils for debugging (localhost only)
     if (location.hostname === 'localhost') {
       setupCacheUtils();
     }
   } catch (error) {
     console.error('[SW] Registration failed:', error);
+  }
+}
+
+/**
+ * Log cached timesteps per weather layer
+ */
+async function logCachedTimesteps(): Promise<void> {
+  try {
+    const stats = await sendMessage<CacheStats>({ type: 'GET_CACHE_STATS' });
+    const parts = WEATHER_LAYERS
+      .map(layer => {
+        const layerStats = stats.layers[layer];
+        return layerStats ? `${layer}: ${layerStats.entries}` : `${layer}: 0`;
+      });
+    console.log(`[SW] Registered! Cached: ${parts.join(', ')}`);
+  } catch {
+    console.log('[SW] Registered (no cache stats yet)');
   }
 }
 
