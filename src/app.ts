@@ -28,6 +28,7 @@ import { TimeCirclePanel } from './components/timecircle-panel';
 import { TimeBarPanel } from './components/timebar-panel';
 import { LogoPanel } from './components/logo-panel';
 import { GearIcon } from './components/GearIcon';
+import { FullscreenPanel } from './components/fullscreen-panel';
 
 interface AppComponent extends m.Component {
   configService?: ConfigService;
@@ -203,6 +204,7 @@ export const App: AppComponent = {
           dateTimeService: this.dateTimeService!,
           budgetService: this.budgetService,
         }),
+        m(FullscreenPanel),
         // Options gear button
         m('div.options.panel', [
           m('button.control.circle', {

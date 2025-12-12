@@ -7,6 +7,7 @@
  */
 
 import type { StateService } from './state-service';
+import { toggleFullscreen } from '../components/fullscreen-panel';
 
 export class KeyboardService {
   constructor(private stateService: StateService) {
@@ -14,10 +15,17 @@ export class KeyboardService {
   }
 
   private handleKeydown = (e: KeyboardEvent): void => {
-    if (e.code !== 'ArrowLeft' && e.code !== 'ArrowRight') return;
-
     // Don't interfere with input fields
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+    // F key: toggle fullscreen
+    if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      toggleFullscreen();
+      return;
+    }
+
+    if (e.code !== 'ArrowLeft' && e.code !== 'ArrowRight') return;
 
     e.preventDefault();
     const direction = e.code === 'ArrowLeft' ? -1 : 1;
