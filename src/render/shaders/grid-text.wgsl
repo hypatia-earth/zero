@@ -172,9 +172,9 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
 
   if (isEast) {
     // East: left-aligned, text starts at margin right of line
-    // Shift right and up by half glyph width
+    // Shift right by half glyph width, and up/down based on hemisphere
     let startX = glyphUV.x - marginX - 0.5;
-    let baseYEast = baseY + 0.5;
+    let baseYEast = baseY + select(-1.0, 0.5, isNorth);  // S: full width up, N: half width up
 
     // Row 1: Latitude
     let latY = baseYEast;
@@ -210,8 +210,8 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
     // West: right-aligned, text ends at margin left of line
     // Each row starts at its own X based on its character count
     let endX = glyphUV.x + marginX;
-    // Shift down by half glyph height
-    let baseYWest = baseY + 0.5;
+    // Shift up/down based on hemisphere: N: half width up, S: full width up
+    let baseYWest = baseY + select(-1.0, 0.5, isNorth);
 
     // Row 1: Latitude - start position based on lat char count
     let latY = baseYWest;
