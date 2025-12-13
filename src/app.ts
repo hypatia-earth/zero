@@ -72,6 +72,7 @@ export const App: AppComponent = {
 
     try {
       // Step 1: Capabilities
+      // TODO: can happen in GPU_INIT, link to https://caniuse.com/webgpu
       BootstrapService.setStep('CAPABILITIES');
       if (!navigator.gpu) {
         throw new Error('WebGPU not supported');
@@ -141,6 +142,7 @@ export const App: AppComponent = {
       this.renderService.start();
       this.stateService.enableSync();
       this.keyboardService = new KeyboardService(this.stateService);
+      // TODO: can this happen in renderService.start()
       setupCameraControls(this.canvas, renderer.camera, this.stateService, this.configService);
 
       BootstrapService.complete();
@@ -205,6 +207,7 @@ export const App: AppComponent = {
           budgetService: this.budgetService,
         }),
         m(FullscreenPanel),
+        // TODO: should become OptionsPanel
         // Options gear button
         m('div.options.panel', [
           m('button.control.circle', {
