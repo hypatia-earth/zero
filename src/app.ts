@@ -15,6 +15,7 @@ import { FetchService } from './services/fetch-service';
 import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
 import { KeyboardService } from './services/keyboard-service';
+import { DiscoveryService } from './services/discovery-service';
 import { DataService } from './services/data-service';
 import { DataLoader } from './services/data-loader';
 import { RenderService } from './services/render-service';
@@ -37,6 +38,7 @@ interface AppComponent extends m.Component {
   trackerService?: TrackerService;
   fetchService?: FetchService;
   dateTimeService?: DateTimeService;
+  discoveryService?: DiscoveryService;
   dataService?: DataService;
   dataLoader?: DataLoader;
   renderService?: RenderService;
@@ -82,7 +84,12 @@ export const App: AppComponent = {
       BootstrapService.setStep('CONFIG');
       await this.optionsService.load();
 
-      // Step 3: GPU Init (no data loading)
+      // Step 3: Discovery
+      BootstrapService.setStep('DISCOVERY');
+      this.discoveryService = new DiscoveryService(this.configService);
+      await this.discoveryService.explore();
+
+      // Step 4: GPU Init (no data loading)
       BootstrapService.setStep('GPU_INIT');
       this.renderService = new RenderService(
         this.canvas,
@@ -93,31 +100,31 @@ export const App: AppComponent = {
       );
       await this.renderService.initialize();
 
-      // Step 4: DATA - Load all assets sequentially
+      // Step 5: DATA - Load all assets sequentially
       BootstrapService.setStep('DATA');
       const renderer = this.renderService.getRenderer();
 
-      // 4a. WASM decoder
+      // 5a. WASM decoder
       const wasmBinary = await this.dataLoader.loadWasm();
       await initOmWasm(wasmBinary);
 
-      // 4b. Atmosphere LUTs
+      // 5b. Atmosphere LUTs
       const useFloat16 = renderer.getUseFloat16Luts();
       const lutData = await this.dataLoader.loadAtmosphereLUTs(useFloat16);
       renderer.createAtmosphereTextures(lutData, useFloat16);
 
-      // 4c. Basemap
+      // 5c. Basemap
       const faces = await this.dataLoader.loadBasemap();
       await renderer.loadBasemap(faces);
 
-      // 4c2. Font atlas for grid labels
+      // 5d. Font atlas for grid labels
       const fontAtlas = await this.dataLoader.loadFontAtlas();
       await renderer.loadFontAtlas(fontAtlas);
 
       // Finalize renderer (create bind group now that textures are loaded)
       renderer.finalize();
 
-      // 4d. Initialize DataService (find latest run from S3)
+      // 5e. Initialize DataService (find latest run from S3)
       await BootstrapService.updateProgress('Finding latest data...', 70);
       await this.dataService.initialize();
 
@@ -129,15 +136,15 @@ export const App: AppComponent = {
         this.renderService
       );
 
-      // 4e. Temperature timesteps - use DataLoader for progress tracking
+      // 5f. Temperature timesteps - use DataLoader for progress tracking
       await this.dataLoader.loadTemperatureTimesteps(
         this.budgetService.loadSingleInitialTimestep.bind(this.budgetService)
       );
 
-      // 4f. Precipitation (placeholder)
+      // 5g. Precipitation (placeholder)
       await this.dataLoader.loadPrecipitationTimesteps();
 
-      // Step 5: Activate
+      // Step 6: Activate
       BootstrapService.setStep('ACTIVATE');
       this.renderService.start();
       this.stateService.enableSync();
@@ -158,6 +165,7 @@ export const App: AppComponent = {
           trackerService: this.trackerService,
           fetchService: this.fetchService,
           dateTimeService: this.dateTimeService,
+          discoveryService: this.discoveryService,
           dataService: this.dataService,
           renderService: this.renderService,
           budgetService: this.budgetService,

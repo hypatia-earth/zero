@@ -6,7 +6,7 @@
  */
 
 import { defaultConfig, EARTH_RADIUS } from '../config/defaults';
-import type { ZeroConfig, LayerId, LayerConfig, AppConfig } from '../config/types';
+import type { ZeroConfig, LayerId, LayerConfig, AppConfig, DiscoveryConfig } from '../config/types';
 
 export class ConfigService {
   private config: ZeroConfig = defaultConfig;
@@ -90,6 +90,10 @@ export class ConfigService {
 
   getDefaultLayers(): LayerId[] {
     return this.config.defaultLayers;
+  }
+
+  getDiscovery(): DiscoveryConfig {
+    return this.config.discovery;
   }
 
   getEarthRadius(): number {

@@ -8,6 +8,7 @@ import { sleep } from '../utils/sleep';
 export type BootstrapStep =
   | 'CAPABILITIES'
   | 'CONFIG'
+  | 'DISCOVERY'
   | 'GPU_INIT'
   | 'DATA'
   | 'ACTIVATE';
@@ -23,8 +24,9 @@ export interface BootstrapState {
 const STEP_PROGRESS: Record<BootstrapStep, { start: number; end: number; label: string }> = {
   CAPABILITIES: { start: 0, end: 5, label: 'Checking capabilities...' },
   CONFIG: { start: 5, end: 10, label: 'Loading configuration...' },
-  GPU_INIT: { start: 10, end: 20, label: 'Initializing GPU...' },
-  DATA: { start: 20, end: 95, label: 'Loading data...' },
+  DISCOVERY: { start: 10, end: 15, label: 'Discovering data...' },
+  GPU_INIT: { start: 15, end: 25, label: 'Initializing GPU...' },
+  DATA: { start: 25, end: 95, label: 'Loading data...' },
   ACTIVATE: { start: 95, end: 100, label: 'Starting...' },
 };
 

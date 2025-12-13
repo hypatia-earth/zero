@@ -15,6 +15,12 @@ export const defaultConfig: ZeroConfig = {
     environment: 'development',
   },
 
+  discovery: {
+    root: 'https://openmeteo.s3.amazonaws.com/data_spatial/',
+    models: ['ecmwf_ifs'],
+    default: 'ecmwf_ifs',
+  },
+
   dataBaseUrl: 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs',
   dataWindowDays: 5,
   prefetchCount: 24,

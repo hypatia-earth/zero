@@ -4,11 +4,60 @@
 
 export type LayerId = 'earth' | 'sun' | 'grid' | 'temp' | 'rain';
 
+export type TModel = 'ecmwf_ifs' | 'ecmwf_ifs025';
+
+/** Branded timestep string, format: "YYYY-MM-DDTHHMM" (e.g., "2025-12-13T0600") */
+export type TTimestep = string & { readonly __brand: 'timestep' };
+
+/** Timestep with metadata from discovery */
+export interface Timestep {
+  index: number;
+  timestep: TTimestep;
+  run: string;
+  url: string;
+}
+
+/** DiscoveryService public API */
+export interface IDiscoveryService {
+  // Lifecycle
+  explore(): Promise<void>;
+
+  // Conversion
+  toDate(ts: TTimestep): Date;
+  toTimestep(date: Date): TTimestep;
+  toKey(ts: TTimestep): string;
+
+  // Navigation (from discovered list)
+  next(ts: TTimestep, model?: TModel): TTimestep | null;
+  prev(ts: TTimestep, model?: TModel): TTimestep | null;
+  adjacent(time: Date, model?: TModel): [TTimestep, TTimestep];
+
+  // Data access
+  url(ts: TTimestep, model?: TModel): string;
+  first(model?: TModel): TTimestep;
+  last(model?: TModel): TTimestep;
+  index(ts: TTimestep, model?: TModel): number;
+  contains(ts: TTimestep, model?: TModel): boolean;
+
+  // Collections
+  variables(model?: TModel): string[];
+  timesteps(model?: TModel): Timestep[];
+}
+
 export interface LayerConfig {
   id: LayerId;
   label: string;
   category: 'base' | 'weather' | 'overlay';
   defaultEnabled: boolean;
+}
+
+export interface DiscoveryConfig {
+  /** S3 bucket root URL for data_spatial */
+  root: string;
+  /** Models to discover */
+  models: TModel[];
+  /** Default model to use */
+  default: TModel;
 }
 
 export interface SunConfig {
@@ -39,7 +88,10 @@ export interface ZeroConfig {
   /** App metadata (injected at build) */
   app: AppConfig;
 
-  /** Open-Meteo S3 base URL */
+  /** Discovery configuration */
+  discovery: DiscoveryConfig;
+
+  /** Open-Meteo S3 base URL - DEPRECATED: use discovery.root */
   dataBaseUrl: string;
 
   /** Data window in days (±days from today) */
