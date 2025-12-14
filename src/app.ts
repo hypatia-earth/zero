@@ -213,6 +213,10 @@ export const App: AppComponent = {
       }
 
     } catch (err) {
+      // Ignore abort errors (page reload during bootstrap)
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return;
+      }
       const message = err instanceof Error
         ? `${err.message}${err.stack ? '\n' + err.stack.split('\n').slice(1, 4).join('\n') : ''}`
         : String(err);
