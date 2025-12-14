@@ -31,6 +31,7 @@ interface ModelConfig {
 export interface ParamState {
   cache: Set<TTimestep>;
   gpu: Set<TTimestep>;
+  sizes: Map<TTimestep, number>;  // Known compressed sizes (bytes), NaN = unknown
 }
 
 /** TimestepService state exposed via signal */
@@ -41,7 +42,7 @@ export interface TimestepState {
 
 /** SW cache layer detail response */
 interface LayerDetail {
-  items: Array<{ url: string }>;
+  items: Array<{ url: string; sizeMB: string }>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -70,7 +71,7 @@ export class TimestepService implements IDiscoveryService {
   /** Reactive state for UI */
   readonly state = signal<TimestepState>({
     ecmwf: new Set(),
-    params: new Map(PARAMS.map(p => [p, { cache: new Set(), gpu: new Set() }])),
+    params: new Map(PARAMS.map(p => [p, { cache: new Set(), gpu: new Set(), sizes: new Map() }])),
   });
 
   constructor(private configService: ConfigService) {
@@ -110,11 +111,11 @@ export class TimestepService implements IDiscoveryService {
       ecmwf.add(ts.timestep);
     }
 
-    // Query SW cache for each param
+    // Query SW cache for each param (includes sizes)
     const params = new Map<TParam, ParamState>();
     for (const param of PARAMS) {
-      const cache = await this.querySWCache(param);
-      params.set(param, { cache, gpu: new Set() });
+      const { cache, sizes } = await this.querySWCache(param);
+      params.set(param, { cache, gpu: new Set(), sizes });
     }
 
     this.state.value = { ecmwf, params };
@@ -272,8 +273,9 @@ export class TimestepService implements IDiscoveryService {
   // SW Cache Query
   // ─────────────────────────────────────────────────────────────────────────────
 
-  private async querySWCache(param: TParam): Promise<Set<TTimestep>> {
-    const cached = new Set<TTimestep>();
+  private async querySWCache(param: TParam): Promise<{ cache: Set<TTimestep>; sizes: Map<TTimestep, number> }> {
+    const cache = new Set<TTimestep>();
+    const sizes = new Map<TTimestep, number>();
 
     try {
       const detail = await this.sendSWMessage<LayerDetail>({
@@ -284,14 +286,20 @@ export class TimestepService implements IDiscoveryService {
       for (const item of detail.items) {
         const match = /(\d{4}-\d{2}-\d{2}T\d{4})\.om/.exec(item.url);
         if (match) {
-          cached.add(match[1] as TTimestep);
+          const ts = match[1] as TTimestep;
+          cache.add(ts);
+          // Parse sizeMB to bytes
+          const sizeBytes = parseFloat(item.sizeMB) * 1024 * 1024;
+          if (!isNaN(sizeBytes)) {
+            sizes.set(ts, sizeBytes);
+          }
         }
       }
     } catch {
       // SW not available or error - return empty
     }
 
-    return cached;
+    return { cache, sizes };
   }
 
   private async sendSWMessage<T>(message: object): Promise<T> {
@@ -331,12 +339,18 @@ export class TimestepService implements IDiscoveryService {
 
   /** Refresh cache state for a param from SW */
   async refreshCacheState(param: TParam): Promise<void> {
-    const cache = await this.querySWCache(param);
+    const { cache, sizes } = await this.querySWCache(param);
     const current = this.state.value;
     const paramState = current.params.get(param);
     if (!paramState) return;
 
     paramState.cache = cache;
+    // Merge new sizes (don't overwrite existing)
+    for (const [ts, size] of sizes) {
+      if (!paramState.sizes.has(ts)) {
+        paramState.sizes.set(ts, size);
+      }
+    }
     this.state.value = { ...current };
   }
 
@@ -347,6 +361,22 @@ export class TimestepService implements IDiscoveryService {
 
     paramState.gpu.delete(timestep);
     this.state.value = { ...current };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Size Management
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /** Get known size for a timestep (NaN if unknown) */
+  getSize(param: TParam, timestep: TTimestep): number {
+    return this.state.value.params.get(param)?.sizes.get(timestep) ?? NaN;
+  }
+
+  /** Set size for a timestep (learned from fetch) */
+  setSize(param: TParam, timestep: TTimestep, bytes: number): void {
+    const paramState = this.state.value.params.get(param);
+    if (!paramState) return;
+    paramState.sizes.set(timestep, bytes);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────

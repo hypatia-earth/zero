@@ -79,6 +79,7 @@ export interface TimestepOrder {
   url: string;
   param: TParam;
   timestep: TTimestep;
+  sizeEstimate: number;  // Estimated bytes (NaN = use default)
 }
 
 /** OmService preflight result */

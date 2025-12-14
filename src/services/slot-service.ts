@@ -110,11 +110,12 @@ export class SlotService {
 
     if (orderedToLoad.length === 0) return;
 
-    // Build orders without pre-allocating slots
+    // Build orders with size estimates from cache
     const orders: TimestepOrder[] = orderedToLoad.map(timestep => ({
       url: this.timestepService.url(timestep),
       param,
-      timestep
+      timestep,
+      sizeEstimate: this.timestepService.getSize(param, timestep),
     }));
 
     // Replace loading keys with new orders (queue replacement handles overlap)
@@ -215,6 +216,10 @@ export class SlotService {
           // Clear loading key when this specific order completes
           this.loadingKeys.delete(this.makeKey(param, order.timestep));
         }
+      },
+      (order, actualBytes) => {
+        // Store actual size for future estimates
+        this.timestepService.setSize(param, order.timestep, actualBytes);
       }
     ).catch(err => {
       console.warn(`[Slot] Failed to load batch:`, err);
@@ -321,18 +326,24 @@ export class SlotService {
 
     // Load both timesteps as batch - slots allocated just-in-time
     const orders: TimestepOrder[] = [
-      { url: this.timestepService.url(t0), param, timestep: t0 },
-      { url: this.timestepService.url(t1), param, timestep: t1 },
+      { url: this.timestepService.url(t0), param, timestep: t0, sizeEstimate: this.timestepService.getSize(param, t0) },
+      { url: this.timestepService.url(t1), param, timestep: t1, sizeEstimate: this.timestepService.getSize(param, t1) },
     ];
 
-    await this.queueService.submitTimestepOrders(orders, (order, slice) => {
-      if (slice.done) {
-        const slotIndex = this.allocateSlot(param, order.timestep, time);
-        if (slotIndex !== null) {
-          this.uploadToSlot(param, order.timestep, slotIndex, slice.data);
+    await this.queueService.submitTimestepOrders(
+      orders,
+      (order, slice) => {
+        if (slice.done) {
+          const slotIndex = this.allocateSlot(param, order.timestep, time);
+          if (slotIndex !== null) {
+            this.uploadToSlot(param, order.timestep, slotIndex, slice.data);
+          }
         }
+      },
+      (order, actualBytes) => {
+        this.timestepService.setSize(param, order.timestep, actualBytes);
       }
-    });
+    );
 
     // Clear loading keys
     this.loadingKeys.delete(key0);
