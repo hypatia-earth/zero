@@ -17,6 +17,7 @@ import type { QueueService } from './queue-service';
 
 const BYTES_PER_TIMESTEP = 6_599_680 * 4; // ~26.4 MB per param
 
+// TODO: Should sync with options.dataCache.cacheStrategy
 export type LoadingStrategy = 'alternate' | 'future-first' | 'past-first';
 
 export interface Slot {
