@@ -8,7 +8,7 @@
  */
 
 import { effect, signal } from '@preact/signals-core';
-import type { TParam, TTimestep } from '../config/types';
+import type { TParam, TTimestep, TimestepOrder } from '../config/types';
 import type { ConfigService } from './config-service';
 import type { StateService } from './state-service';
 import type { TimestepService } from './timestep-service';
@@ -139,11 +139,20 @@ export class SlotService {
     key: string
   ): Promise<void> {
     try {
-      // TODO: Use QueueService.submitTimestepOrders when implemented
-      // For now, just log - actual loading will go through QueueService
-      // which calls OmService.fetch with preflight + slice callbacks
-      console.log(`[Slot] TODO: Load ${param}:${timestep} → slot ${slotIndex}`);
-      void key; // Used in finally block
+      const url = this.timestepService.url(timestep);
+      const order: TimestepOrder = { url, param, timestep };
+
+      console.log(`[Slot] Loading ${param}:${timestep} → slot ${slotIndex}`);
+
+      await this._queueService.submitTimestepOrders(
+        [order],
+        (_order, slice) => {
+          if (slice.done) {
+            // Final slice - upload to GPU
+            this.onDataReceived(param, timestep, slice.data);
+          }
+        }
+      );
 
     } catch (err) {
       console.warn(`[Slot] Failed to load ${param}:${timestep}:`, err);
@@ -209,12 +218,37 @@ export class SlotService {
   async initialize(): Promise<void> {
     const time = this.stateService.getTime();
     const [t0, t1] = this.timestepService.adjacent(time);
+    const param: TParam = 'temp';
 
     console.log(`[Slot] Initializing with ${t0}, ${t1}`);
 
-    // TODO: Load via QueueService
-    // For now, mark as initialized
+    // Allocate slots for initial pair
+    const slot0 = this.freeSlotIndices.pop()!;
+    const slot1 = this.freeSlotIndices.pop()!;
+    const key0 = this.makeKey(param, t0);
+    const key1 = this.makeKey(param, t1);
+
+    this.slots.set(key0, { timestep: t0, param, slotIndex: slot0, loaded: false, loadedPoints: 0 });
+    this.slots.set(key1, { timestep: t1, param, slotIndex: slot1, loaded: false, loadedPoints: 0 });
+    this.loadingKeys.add(key0);
+    this.loadingKeys.add(key1);
+
+    // Load both timesteps
+    await Promise.all([
+      this.loadTimestep(param, t0, slot0, key0),
+      this.loadTimestep(param, t1, slot1, key1),
+    ]);
+
+    // Set active pair and shader slots
+    this.activePair.set(param, { t0, t1 });
+    const s0 = this.slots.get(key0)!;
+    const s1 = this.slots.get(key1)!;
+    this.renderService.setTempSlots(s0.slotIndex, s1.slotIndex);
+    this.renderService.setTempLoadedPoints(Math.min(s0.loadedPoints, s1.loadedPoints));
+
     this.initialized = true;
+    this.slotsVersion.value++;
+    console.log('[Slot] Initialized');
   }
 
   /** Get loaded timesteps for timebar */

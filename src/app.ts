@@ -192,7 +192,7 @@ export const App: AppComponent = {
         this.renderService
       );
 
-      // SlotService (for migration - not yet used)
+      // SlotService - manages timestep data loading
       this.slotService = new SlotService(
         this.configService,
         this.stateService,
@@ -201,11 +201,15 @@ export const App: AppComponent = {
         this.queueService
       );
 
-      // 5f. Temperature timesteps
-      await BootstrapService.updateProgress('Loading temperature 1/2...', 50);
-      await this.budgetService.loadSingleInitialTimestep(0, 2);
-      await BootstrapService.updateProgress('Loading temperature 2/2...', 70);
-      await this.budgetService.loadSingleInitialTimestep(1, 2);
+      // 5f. Temperature timesteps (via SlotService)
+      await BootstrapService.updateProgress('Loading temperature...', 50);
+      await this.slotService.initialize();
+
+      // Old BudgetService path (keep for now, will remove)
+      // await BootstrapService.updateProgress('Loading temperature 1/2...', 50);
+      // await this.budgetService.loadSingleInitialTimestep(0, 2);
+      // await BootstrapService.updateProgress('Loading temperature 2/2...', 70);
+      // await this.budgetService.loadSingleInitialTimestep(1, 2);
 
       // 5g. Precipitation (placeholder)
       await BootstrapService.updateProgress('Loading precipitation 1/2...', 85);
