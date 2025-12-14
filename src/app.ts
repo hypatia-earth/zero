@@ -16,16 +16,11 @@ import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
 import { CapabilitiesService } from './services/capabilities-service';
 import { KeyboardService } from './services/keyboard-service';
-// DiscoveryService replaced by TimestepService
 import { QueueService } from './services/queue-service';
-import { DataService } from './services/data-service';
-// New services (alongside old for migration)
 import { OmService } from './services/om-service';
 import { TimestepService } from './services/timestep-service';
 import { SlotService } from './services/slot-service';
-// DataLoader removed - all static assets now via QueueService
 import { RenderService } from './services/render-service';
-import { BudgetService } from './services/budget-service';
 import { setupCameraControls } from './services/camera-controls';
 import { initOmWasm } from './adapters/om-file-adapter';
 import { BootstrapModal } from './components/bootstrap-modal';
@@ -47,12 +42,9 @@ interface AppComponent extends m.Component {
   dateTimeService?: DateTimeService;
   capabilitiesService?: CapabilitiesService;
   queueService?: QueueService;
-  dataService?: DataService;
   renderService?: RenderService;
-  budgetService?: BudgetService;
   keyboardService?: KeyboardService;
   canvas?: HTMLCanvasElement;
-  // New services
   timestepService?: TimestepService;
   omService?: OmService;
   slotService?: SlotService;
@@ -78,7 +70,6 @@ export const App: AppComponent = {
     this.trackerService = new TrackerService();
     this.fetchService = new FetchService(this.trackerService);
     this.dateTimeService = new DateTimeService(this.configService.getDataWindowDays());
-    this.dataService = new DataService(this.fetchService);
 
     m.redraw();
 
@@ -154,7 +145,6 @@ export const App: AppComponent = {
         this.canvas,
         this.optionsService,
         this.stateService,
-        this.dataService,
         this.configService
       );
       await this.renderService.initialize();
@@ -180,18 +170,6 @@ export const App: AppComponent = {
       // Finalize renderer (create bind group now that textures are loaded)
       renderer.finalize();
 
-      // 5e. Initialize DataService (find latest run from S3)
-      await BootstrapService.updateProgress('Finding latest data...', 70);
-      await this.dataService.initialize();
-
-      // Create BudgetService (manages slots)
-      this.budgetService = new BudgetService(
-        this.configService,
-        this.stateService,
-        this.dataService,
-        this.renderService
-      );
-
       // SlotService - manages timestep data loading
       this.slotService = new SlotService(
         this.configService,
@@ -204,12 +182,6 @@ export const App: AppComponent = {
       // 5f. Temperature timesteps (via SlotService)
       await BootstrapService.updateProgress('Loading temperature...', 50);
       await this.slotService.initialize();
-
-      // Old BudgetService path (keep for now, will remove)
-      // await BootstrapService.updateProgress('Loading temperature 1/2...', 50);
-      // await this.budgetService.loadSingleInitialTimestep(0, 2);
-      // await BootstrapService.updateProgress('Loading temperature 2/2...', 70);
-      // await this.budgetService.loadSingleInitialTimestep(1, 2);
 
       // 5g. Precipitation (placeholder)
       await BootstrapService.updateProgress('Loading precipitation 1/2...', 85);
@@ -239,9 +211,8 @@ export const App: AppComponent = {
           capabilitiesService: this.capabilitiesService,
           timestepService: this.timestepService,
           queueService: this.queueService,
-          dataService: this.dataService,
           renderService: this.renderService,
-          budgetService: this.budgetService,
+          slotService: this.slotService,
         };
       }
 
@@ -286,7 +257,8 @@ export const App: AppComponent = {
         m(TimeBarPanel, {
           stateService: this.stateService!,
           dateTimeService: this.dateTimeService!,
-          budgetService: this.budgetService!,
+          slotService: this.slotService!,
+          timestepService: this.timestepService!,
         }),
         m(FullscreenPanel),
         // TODO: should become OptionsPanel

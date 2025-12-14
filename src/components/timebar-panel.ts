@@ -11,7 +11,8 @@ import m from 'mithril';
 import { effect, signal } from '@preact/signals-core';
 import type { StateService } from '../services/state-service';
 import type { DateTimeService } from '../services/datetime-service';
-import type { BudgetService } from '../services/budget-service';
+import type { SlotService } from '../services/slot-service';
+import type { TimestepService } from '../services/timestep-service';
 import { getSunDirection } from '../utils/sun-position';
 
 const DEBUG = false;
@@ -51,7 +52,8 @@ function getSunBrightness(lat: number, lon: number, time: Date): number {
 interface TimeBarPanelAttrs {
   stateService: StateService;
   dateTimeService: DateTimeService;
-  budgetService: BudgetService;
+  slotService: SlotService;
+  timestepService: TimestepService;
 }
 
 /** Cached timestamps per layer from SW */
@@ -190,7 +192,7 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
   oncreate({ attrs }) {
     unsubscribe = effect(() => {
       attrs.stateService.state.value;
-      attrs.budgetService.slotsVersion.value;
+      attrs.slotService.slotsVersion.value;
       cachedTimestamps.value;  // Watch cache updates
       m.redraw();
     });
@@ -209,7 +211,7 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
     canvasRef = null;
   },
   view({ attrs }) {
-    const { stateService, dateTimeService, budgetService } = attrs;
+    const { stateService, dateTimeService, slotService, timestepService } = attrs;
     const currentTime = stateService.getTime();
     const window = dateTimeService.getDataWindow();
 
@@ -229,16 +231,16 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
     };
 
     // Get slot data for temp layer
-    const loadedTimestamps = budgetService.getLoadedTimestamps();
-    const loadedSet = new Set(loadedTimestamps.map(ts => ts.toISOString()));
-    const activePair = budgetService.getActivePair();
+    const loadedTimesteps = slotService.getLoadedTimestamps('temp');
+    const loadedSet = new Set(loadedTimesteps.map(ts => timestepService.toDate(ts).toISOString()));
+    const activePair = slotService.getActivePair('temp');
     const activeSet = new Set<string>();
     if (activePair) {
-      activeSet.add(activePair.t0.toISOString());
-      activeSet.add(activePair.t1.toISOString());
+      activeSet.add(timestepService.toDate(activePair.t0).toISOString());
+      activeSet.add(timestepService.toDate(activePair.t1).toISOString());
     }
 
-    DEBUG && console.log(`[Timebar] Loaded: ${loadedTimestamps.length}, active: ${activePair ? 'yes' : 'no'}`);
+    DEBUG && console.log(`[Timebar] Loaded: ${loadedTimesteps.length}, active: ${activePair ? 'yes' : 'no'}`);
 
     // Filter to only active weather layers
     const activeLayers = stateService.getLayers();

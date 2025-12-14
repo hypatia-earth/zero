@@ -6,7 +6,6 @@ import { GlobeRenderer } from '../render/globe-renderer';
 import { generateGaussianLUTs } from '../render/gaussian-grid';
 import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
-import type { DataService } from './data-service';
 import type { ConfigService } from './config-service';
 import { getSunDirection } from '../utils/sun-position';
 
@@ -23,7 +22,6 @@ export class RenderService {
     private canvas: HTMLCanvasElement,
     private optionsService: OptionsService,
     private stateService: StateService,
-    private dataService: DataService,
     private configService: ConfigService
   ) {}
 
@@ -80,11 +78,9 @@ export class RenderService {
       const tempEnabled = layers.includes('temp');
       const rainEnabled = layers.includes('rain');
 
-      // Calculate temp interpolation (from BudgetService if available, else DataService)
+      // Calculate temp interpolation (from SlotService)
       // Returns -1 if current time is outside loaded data range
-      const rawLerp = this.tempLerpFn
-        ? this.tempLerpFn(state.time)
-        : this.dataService.getTempInterpolation(state.time);
+      const rawLerp = this.tempLerpFn ? this.tempLerpFn(state.time) : -1;
 
       const tempLerp = rawLerp < 0 ? 0 : rawLerp;
       const tempDataValid = rawLerp >= 0 && this.tempLoadedPoints > 0;
