@@ -302,9 +302,16 @@ export class TimestepService implements IDiscoveryService {
       throw new Error('No active Service Worker');
     }
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const channel = new MessageChannel();
-      channel.port1.onmessage = (event) => resolve(event.data as T);
+      const timeout = setTimeout(() => {
+        console.warn('[Timestep] SW message timeout');
+        reject(new Error('SW message timeout'));
+      }, 5000);
+      channel.port1.onmessage = (event) => {
+        clearTimeout(timeout);
+        resolve(event.data as T);
+      };
       target.postMessage(message, [channel.port2]);
     });
   }
