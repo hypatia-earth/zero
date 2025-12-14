@@ -16,7 +16,7 @@ import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
 import { CapabilitiesService } from './services/capabilities-service';
 import { KeyboardService } from './services/keyboard-service';
-import { DiscoveryService } from './services/discovery-service';
+// DiscoveryService replaced by TimestepService
 import { QueueService } from './services/queue-service';
 import { DataService } from './services/data-service';
 // New services (alongside old for migration)
@@ -46,16 +46,15 @@ interface AppComponent extends m.Component {
   fetchService?: FetchService;
   dateTimeService?: DateTimeService;
   capabilitiesService?: CapabilitiesService;
-  discoveryService?: DiscoveryService;
   queueService?: QueueService;
   dataService?: DataService;
   renderService?: RenderService;
   budgetService?: BudgetService;
   keyboardService?: KeyboardService;
   canvas?: HTMLCanvasElement;
-  // New services (for migration)
-  omService?: OmService;
+  // New services
   timestepService?: TimestepService;
+  omService?: OmService;
   slotService?: SlotService;
 
   oninit(): Promise<void>;
@@ -93,20 +92,19 @@ export const App: AppComponent = {
       BootstrapService.setStep('CONFIG');
       await this.optionsService.load();
 
-      // Step 3: Discovery
+      // Step 3: Discovery (via TimestepService)
       BootstrapService.setStep('DISCOVERY');
-      this.discoveryService = new DiscoveryService(this.configService);
-      await this.discoveryService.explore();
+      this.timestepService = new TimestepService(this.configService);
+      await this.timestepService.initialize();
 
       // Step 4: Assets via QueueService
       // Total 11 items: 3 LUTs + 6 basemap + 1 WASM + 1 font, progress 15-20%
       BootstrapService.setStep('ASSETS');
       this.queueService = new QueueService(this.fetchService);
 
-      // New services (for migration - not yet used)
+      // Wire up OmService to QueueService
       this.omService = new OmService(this.fetchService);
       this.queueService.setOmService(this.omService);
-      this.timestepService = new TimestepService(this.configService);
       const f16 = !this.capabilitiesService.float32_filterable;
       const suffix = f16 ? '-16' : '';
 
@@ -235,7 +233,7 @@ export const App: AppComponent = {
           fetchService: this.fetchService,
           dateTimeService: this.dateTimeService,
           capabilitiesService: this.capabilitiesService,
-          discoveryService: this.discoveryService,
+          timestepService: this.timestepService,
           queueService: this.queueService,
           dataService: this.dataService,
           renderService: this.renderService,
