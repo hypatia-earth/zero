@@ -1,7 +1,8 @@
 /**
- * TimestepService - Unified timestep state management
+ * TimestepService - Unified timestep discovery and state management
  *
- * Tracks timestep availability across three levels:
+ * Discovers available timesteps from Open-Meteo S3 bucket and tracks
+ * availability across three levels:
  * - ECMWF: global (same for all params)
  * - Cache: per param (from Service Worker)
  * - GPU: per param (set by SlotService when textures uploaded)
@@ -10,7 +11,20 @@
 import { signal } from '@preact/signals-core';
 import type { TParam, TTimestep, TModel, Timestep, IDiscoveryService } from '../config/types';
 import type { ConfigService } from './config-service';
-import { DiscoveryService } from './discovery-service';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ModelRun {
+  prefix: string;
+  datetime: Date;
+  run: string;
+}
+
+interface ModelConfig {
+  gapFillHours: number[];
+}
 
 /** Timestep state per param */
 export interface ParamState {
@@ -29,10 +43,62 @@ interface LayerDetail {
   items: Array<{ url: string }>;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MODEL_CONFIGS: Record<TModel, ModelConfig> = {
+  ecmwf_ifs: { gapFillHours: [0, 1, 2, 3, 4, 5] },
+  ecmwf_ifs025: { gapFillHours: [0, 3] },
+};
+
 const PARAMS: TParam[] = ['temp', 'rain', 'wind', 'pressure'];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Timestep format utilities (could move to utils/)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Convert TTimestep string to Date */
+function parseTimestep(ts: TTimestep): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})(\d{2})$/.exec(ts);
+  if (!match) throw new Error(`Invalid timestep: ${ts}`);
+  return new Date(Date.UTC(
+    parseInt(match[1]!),
+    parseInt(match[2]!) - 1,
+    parseInt(match[3]!),
+    parseInt(match[4]!),
+    parseInt(match[5]!)
+  ));
+}
+
+/** Convert Date to TTimestep string */
+function formatTimestep(date: Date): TTimestep {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  const h = String(date.getUTCHours()).padStart(2, '0');
+  const min = String(date.getUTCMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d}T${h}${min}` as TTimestep;
+}
+
+/** Parse timestep from .om filename */
+function parseFilenameTimestep(filename: string): Date {
+  const match = /(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})\.om$/.exec(filename);
+  if (!match) throw new Error(`Invalid timestep filename: ${filename}`);
+  return new Date(`${match[1]}T${match[2]}:${match[3]}:00Z`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TimestepService
+// ─────────────────────────────────────────────────────────────────────────────
+
 export class TimestepService implements IDiscoveryService {
-  private discovery: DiscoveryService;
+  // Discovery data
+  private timestepsData!: Record<TModel, Timestep[]>;
+  private timestepIndex!: Record<TModel, Map<TTimestep, number>>;
+  private variablesData!: Record<TModel, string[]>;
+  private readonly bucketRoot: string;
+  private defaultModel: TModel;
 
   /** Reactive state for UI */
   readonly state = signal<TimestepState>({
@@ -40,18 +106,40 @@ export class TimestepService implements IDiscoveryService {
     params: new Map(PARAMS.map(p => [p, { cache: new Set(), gpu: new Set() }])),
   });
 
-  constructor(configService: ConfigService) {
-    this.discovery = new DiscoveryService(configService);
+  constructor(private configService: ConfigService) {
+    const config = this.configService.getDiscovery();
+    this.bucketRoot = config.root.replace(/\/data_spatial\/?$/, '');
+    this.defaultModel = config.default;
   }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Initialization
+  // ─────────────────────────────────────────────────────────────────────────────
 
   /** Initialize: explore ECMWF and query SW cache */
   async initialize(): Promise<void> {
-    // Explore ECMWF
-    await this.discovery.explore();
+    const config = this.configService.getDiscovery();
+
+    // Initialize records
+    this.timestepsData = {} as Record<TModel, Timestep[]>;
+    this.timestepIndex = {} as Record<TModel, Map<TTimestep, number>>;
+    this.variablesData = {} as Record<TModel, string[]>;
+
+    // Discover timesteps for each model
+    for (const model of config.models) {
+      await this.exploreModel(model);
+
+      // Build index for fast lookup
+      const index = new Map<TTimestep, number>();
+      for (const ts of this.timestepsData[model]) {
+        index.set(ts.timestep, ts.index);
+      }
+      this.timestepIndex[model] = index;
+    }
 
     // Build ECMWF set from discovered timesteps
     const ecmwf = new Set<TTimestep>();
-    for (const ts of this.discovery.timesteps()) {
+    for (const ts of this.timestepsData[config.default]) {
       ecmwf.add(ts.timestep);
     }
 
@@ -63,9 +151,160 @@ export class TimestepService implements IDiscoveryService {
     }
 
     this.state.value = { ecmwf, params };
+
+    // Log summary
+    const ts = this.timestepsData[config.default];
+    const vars = this.variablesData[config.default];
+    const fmt = (t: TTimestep) => t.slice(5, 13); // "MM-DDTHH"
+    console.log(`[Discovery] ${config.default}: ${vars.length} vars, ${ts.length} steps, ${fmt(ts[0]!.timestep)} - ${fmt(ts[ts.length - 1]!.timestep)}`);
   }
 
-  /** Query Service Worker for cached timesteps */
+  // ─────────────────────────────────────────────────────────────────────────────
+  // S3 Discovery
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  private async exploreModel(model: TModel): Promise<void> {
+    const config = this.configService.getDiscovery();
+
+    // Discover runs
+    const runs = await this.discoverRuns(`data_spatial/${model}/`);
+    if (runs.length === 0) {
+      throw new Error(`[Discovery] No runs found for ${model}`);
+    }
+
+    // Fetch variables from latest.json
+    const response = await fetch(`${config.root}${model}/latest.json`);
+    if (!response.ok) {
+      throw new Error(`[Discovery] Failed to fetch latest.json for ${model}`);
+    }
+    const data = await response.json();
+    this.variablesData[model] = data.variables;
+
+    // Generate timesteps
+    const timesteps = await this.generateTimesteps(runs, model);
+    this.timestepsData[model] = timesteps;
+  }
+
+  private async discoverRuns(basePrefix: string): Promise<ModelRun[]> {
+    const runs: ModelRun[] = [];
+
+    for (const yearPrefix of await this.listS3Prefixes(basePrefix)) {
+      const yearMatch = /\/(\d{4})\/$/.exec(yearPrefix);
+      if (!yearMatch) continue;
+      const year = yearMatch[1] ?? '';
+
+      for (const monthPrefix of await this.listS3Prefixes(yearPrefix)) {
+        const monthMatch = /\/(\d{2})\/$/.exec(monthPrefix);
+        if (!monthMatch) continue;
+        const month = monthMatch[1] ?? '';
+
+        for (const dayPrefix of await this.listS3Prefixes(monthPrefix)) {
+          const dayMatch = /\/(\d{2})\/$/.exec(dayPrefix);
+          if (!dayMatch) continue;
+          const day = dayMatch[1] ?? '';
+
+          for (const runPrefix of await this.listS3Prefixes(dayPrefix)) {
+            const runMatch = /\/(\d{4}Z)\/$/.exec(runPrefix);
+            if (!runMatch) continue;
+            const runTime = runMatch[1] ?? '';
+
+            runs.push({
+              prefix: runPrefix,
+              datetime: new Date(`${year}-${month}-${day}T${runTime.slice(0, 2)}:00:00Z`),
+              run: runTime,
+            });
+          }
+        }
+      }
+    }
+
+    return runs.sort((a, b) => a.datetime.getTime() - b.datetime.getTime());
+  }
+
+  private async listS3Prefixes(prefix: string): Promise<string[]> {
+    const url = `${this.bucketRoot}?list-type=2&prefix=${prefix}&delimiter=/`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} listing ${url}`);
+    }
+
+    const text = await response.text();
+    const doc = new DOMParser().parseFromString(text, 'text/xml');
+    const prefixes: string[] = [];
+
+    doc.querySelectorAll('CommonPrefixes Prefix').forEach(el => {
+      if (el.textContent) prefixes.push(el.textContent);
+    });
+
+    return prefixes.sort();
+  }
+
+  private async listRunFiles(runPrefix: string): Promise<string[]> {
+    const url = `${this.bucketRoot}?list-type=2&prefix=${runPrefix}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} listing ${url}`);
+    }
+
+    const text = await response.text();
+    const doc = new DOMParser().parseFromString(text, 'text/xml');
+    const files: string[] = [];
+
+    doc.querySelectorAll('Contents Key').forEach(el => {
+      if (el.textContent && el.textContent.endsWith('.om')) {
+        files.push(el.textContent);
+      }
+    });
+
+    return files.sort();
+  }
+
+  private async generateTimesteps(runs: ModelRun[], model: TModel): Promise<Timestep[]> {
+    const modelConfig = MODEL_CONFIGS[model];
+    const timesteps: Timestep[] = [];
+    const seen = new Set<TTimestep>();
+
+    // Reverse to process from last to first
+    const reversedRuns = [...runs].reverse();
+    let isFirst = true;
+
+    for (const run of reversedRuns) {
+      if (isFirst) {
+        // Last run: fetch all available files
+        for (const file of await this.listRunFiles(run.prefix)) {
+          const ts = formatTimestep(parseFilenameTimestep(file));
+          if (!seen.has(ts)) {
+            timesteps.push({ index: 0, timestep: ts, run: run.run, url: `${this.bucketRoot}/${file}` });
+            seen.add(ts);
+          }
+        }
+        isFirst = false;
+      } else {
+        // Previous runs: add first N timesteps
+        for (const hours of modelConfig.gapFillHours) {
+          const tsDate = new Date(run.datetime.getTime() + hours * 60 * 60 * 1000);
+          const ts = formatTimestep(tsDate);
+          if (!seen.has(ts)) {
+            timesteps.push({ index: 0, timestep: ts, run: run.run, url: `${this.bucketRoot}/${run.prefix}${ts}.om` });
+            seen.add(ts);
+          }
+        }
+      }
+    }
+
+    timesteps.sort((a, b) => a.timestep.localeCompare(b.timestep));
+    for (let i = 0; i < timesteps.length; i++) {
+      const entry = timesteps[i];
+      if (entry) entry.index = i;
+    }
+
+    return timesteps;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // SW Cache Query
+  // ─────────────────────────────────────────────────────────────────────────────
+
   private async querySWCache(param: TParam): Promise<Set<TTimestep>> {
     const cached = new Set<TTimestep>();
 
@@ -77,8 +316,6 @@ export class TimestepService implements IDiscoveryService {
         layer: param,
       });
 
-      // Parse timesteps from cached URLs
-      // URL format: .../2025-12-14T0600.om
       for (const item of detail.items) {
         const match = /(\d{4}-\d{2}-\d{2}T\d{4})\.om/.exec(item.url);
         if (match) {
@@ -92,7 +329,6 @@ export class TimestepService implements IDiscoveryService {
     return cached;
   }
 
-  /** Send message to SW */
   private sendSWMessage<T>(message: object): Promise<T> {
     return new Promise((resolve, reject) => {
       if (!navigator.serviceWorker.controller) {
@@ -105,47 +341,46 @@ export class TimestepService implements IDiscoveryService {
     });
   }
 
-  /** Mark timestep as loaded in GPU (called by SlotService) */
+  // ─────────────────────────────────────────────────────────────────────────────
+  // GPU State Management
+  // ─────────────────────────────────────────────────────────────────────────────
+
   setGpuLoaded(param: TParam, timestep: TTimestep): void {
     const current = this.state.value;
     const paramState = current.params.get(param);
     if (!paramState) return;
 
     paramState.gpu.add(timestep);
-
-    // Trigger signal update
     this.state.value = { ...current };
   }
 
-  /** Mark timestep as unloaded from GPU (called by SlotService) */
   setGpuUnloaded(param: TParam, timestep: TTimestep): void {
     const current = this.state.value;
     const paramState = current.params.get(param);
     if (!paramState) return;
 
     paramState.gpu.delete(timestep);
-
-    // Trigger signal update
     this.state.value = { ...current };
   }
 
-  /** Check if timestep is available at ECMWF */
+  // ─────────────────────────────────────────────────────────────────────────────
+  // State Queries
+  // ─────────────────────────────────────────────────────────────────────────────
+
   isAvailable(timestep: TTimestep): boolean {
     return this.state.value.ecmwf.has(timestep);
   }
 
-  /** Check if timestep is cached in SW */
   isCached(param: TParam, timestep: TTimestep): boolean {
     return this.state.value.params.get(param)?.cache.has(timestep) ?? false;
   }
 
-  /** Check if timestep is loaded in GPU */
   isGpuLoaded(param: TParam, timestep: TTimestep): boolean {
     return this.state.value.params.get(param)?.gpu.has(timestep) ?? false;
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // IDiscoveryService delegation
+  // IDiscoveryService Implementation
   // ─────────────────────────────────────────────────────────────────────────────
 
   explore(): Promise<void> {
@@ -153,54 +388,98 @@ export class TimestepService implements IDiscoveryService {
   }
 
   toDate(ts: TTimestep): Date {
-    return this.discovery.toDate(ts);
+    return parseTimestep(ts);
   }
 
   toTimestep(date: Date): TTimestep {
-    return this.discovery.toTimestep(date);
+    return formatTimestep(date);
   }
 
   toKey(ts: TTimestep): string {
-    return this.discovery.toKey(ts);
+    return parseTimestep(ts).toISOString();
   }
 
   next(ts: TTimestep, model?: TModel): TTimestep | null {
-    return this.discovery.next(ts, model);
+    const m = model ?? this.defaultModel;
+    const idx = this.timestepIndex[m].get(ts);
+    if (idx === undefined) return null;
+    const nextEntry = this.timestepsData[m][idx + 1];
+    return nextEntry?.timestep ?? null;
   }
 
   prev(ts: TTimestep, model?: TModel): TTimestep | null {
-    return this.discovery.prev(ts, model);
+    const m = model ?? this.defaultModel;
+    const idx = this.timestepIndex[m].get(ts);
+    if (idx === undefined || idx === 0) return null;
+    const prevEntry = this.timestepsData[m][idx - 1];
+    return prevEntry?.timestep ?? null;
   }
 
   adjacent(time: Date, model?: TModel): [TTimestep, TTimestep] {
-    return this.discovery.adjacent(time, model);
+    const m = model ?? this.defaultModel;
+    const data = this.timestepsData[m];
+    const targetMs = time.getTime();
+
+    // Binary search for the right bracket
+    let lo = 0;
+    let hi = data.length - 1;
+
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const midMs = parseTimestep(data[mid]!.timestep).getTime();
+      if (midMs < targetMs) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+
+    // lo is now the first timestep >= time
+    const t1Idx = lo;
+    const t0Idx = Math.max(0, t1Idx - 1);
+
+    // Clamp to valid range
+    const t0 = data[t0Idx]!.timestep;
+    const t1 = data[Math.min(t1Idx, data.length - 1)]!.timestep;
+
+    return [t0, t1];
   }
 
   url(ts: TTimestep, model?: TModel): string {
-    return this.discovery.url(ts, model);
+    const m = model ?? this.defaultModel;
+    const idx = this.timestepIndex[m].get(ts);
+    if (idx === undefined) throw new Error(`Unknown timestep: ${ts}`);
+    return this.timestepsData[m][idx]!.url;
   }
 
   first(model?: TModel): TTimestep {
-    return this.discovery.first(model);
+    const m = model ?? this.defaultModel;
+    return this.timestepsData[m][0]!.timestep;
   }
 
   last(model?: TModel): TTimestep {
-    return this.discovery.last(model);
+    const m = model ?? this.defaultModel;
+    const data = this.timestepsData[m];
+    return data[data.length - 1]!.timestep;
   }
 
   index(ts: TTimestep, model?: TModel): number {
-    return this.discovery.index(ts, model);
+    const m = model ?? this.defaultModel;
+    const idx = this.timestepIndex[m].get(ts);
+    if (idx === undefined) throw new Error(`Unknown timestep: ${ts}`);
+    return idx;
   }
 
   contains(ts: TTimestep, model?: TModel): boolean {
-    return this.discovery.contains(ts, model);
+    const m = model ?? this.defaultModel;
+    return this.timestepIndex[m].has(ts);
   }
 
   variables(model?: TModel): string[] {
-    return this.discovery.variables(model);
+    return this.variablesData[model ?? this.defaultModel];
   }
 
   timesteps(model?: TModel): Timestep[] {
-    return this.discovery.timesteps(model);
+    return this.timestepsData[model ?? this.defaultModel];
   }
 }
