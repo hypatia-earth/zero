@@ -38,9 +38,24 @@ const TICK_WIDTH = 2;
 const TICK_HEIGHT_RATIO = 0.9;  // 90% of row height
 const NOW_MARKER_WIDTH = 3;
 
+/** Knob dimensions */
+const KNOB_COLOR = 'rgba(255,255,255,0.9)';
+const KNOB_LINE_WIDTH = 1.5;
+const KNOB_TICK_LENGTH = 6;  // Length of center tick marks
+
 /** Disk perspective warp - compresses edges, expands center */
 function diskWarp(t: number): number {
   return (1 - Math.cos(t * Math.PI)) / 2;
+}
+
+/** Inverse of diskWarp - converts screen position to linear time */
+function diskUnwarp(x: number): number {
+  // Solve: x = (1 - cos(t * π)) / 2
+  // 2x = 1 - cos(t * π)
+  // cos(t * π) = 1 - 2x
+  // t = acos(1 - 2x) / π
+  const clamped = Math.max(0, Math.min(1, x));
+  return Math.acos(1 - 2 * clamped) / Math.PI;
 }
 
 /** Disk height factor - taller in center, shorter at edges */
@@ -75,8 +90,8 @@ interface TimeBarPanelAttrs {
 }
 
 
-/** Draw ticks on canvas */
-function drawTicks(
+/** Draw ticks and knob on canvas */
+function drawTimebar(
   canvas: HTMLCanvasElement,
   window: { start: Date; end: Date },
   activeLayers: WeatherLayer[],
@@ -85,6 +100,7 @@ function drawTicks(
   gpuMap: Map<WeatherLayer, Set<string>>,
   activeMap: Map<WeatherLayer, Set<string>>,
   nowTime: Date,
+  currentProgress: number,  // 0-1 linear progress
   cameraLat: number,
   cameraLon: number,
   sunEnabled: boolean
@@ -170,10 +186,35 @@ function drawTicks(
     ctx.fillStyle = COLOR_NOW;
     ctx.fillRect(nowX - NOW_MARKER_WIDTH / 2, 0, NOW_MARKER_WIDTH, height);
   }
+
+  // Draw knob - square outline with center tick marks
+  const knobX = diskWarp(currentProgress) * width;
+  const knobSize = height;  // Square: height × height
+  const knobLeft = knobX - knobSize / 2;
+  const knobTop = 0;
+
+  ctx.strokeStyle = KNOB_COLOR;
+  ctx.lineWidth = KNOB_LINE_WIDTH;
+
+  // Square outline
+  ctx.strokeRect(knobLeft, knobTop, knobSize, knobSize);
+
+  // Top center tick (pointing down)
+  ctx.beginPath();
+  ctx.moveTo(knobX, knobTop);
+  ctx.lineTo(knobX, knobTop + KNOB_TICK_LENGTH);
+  ctx.stroke();
+
+  // Bottom center tick (pointing up)
+  ctx.beginPath();
+  ctx.moveTo(knobX, knobTop + knobSize);
+  ctx.lineTo(knobX, knobTop + knobSize - KNOB_TICK_LENGTH);
+  ctx.stroke();
 }
 
 let unsubscribe: (() => void) | null = null;
 let canvasRef: HTMLCanvasElement | null = null;
+let isDragging = false;
 
 export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
   oncreate({ attrs }) {
@@ -196,13 +237,32 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
 
     const windowMs = window.end.getTime() - window.start.getTime();
     const currentMs = currentTime.getTime() - window.start.getTime();
-    const progress = Math.max(0, Math.min(100, (currentMs / windowMs) * 100));
+    const progress = Math.max(0, Math.min(1, currentMs / windowMs));
 
-    const handleInput = (e: Event) => {
-      const target = e.target as HTMLInputElement;
-      const value = parseFloat(target.value);
-      const newTime = new Date(window.start.getTime() + (value / 100) * windowMs);
-      stateService.setTime(newTime);
+    /** Convert mouse x position to time using disk unwarp */
+    const mouseToTime = (e: MouseEvent): Date => {
+      const rect = canvasRef!.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;  // 0-1 screen position
+      const t = diskUnwarp(x);  // 0-1 linear time
+      return new Date(window.start.getTime() + t * windowMs);
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      isDragging = true;
+      stateService.setTime(mouseToTime(e));
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      stateService.setTime(mouseToTime(e));
+    };
+
+    const handleMouseUp = () => {
+      isDragging = false;
+    };
+
+    const handleMouseLeave = () => {
+      isDragging = false;
     };
 
     const formatDate = (date: Date) => {
@@ -263,13 +323,17 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
 
     return m('.panel.timebar', [
       m('.control.timeslider', { style: 'width: 100%; height: 42px; position: relative;' }, [
-        // Canvas for ticks
+        // Canvas for ticks and knob - acts as custom slider
         m('.time-ticks', [
           m('canvas.time-ticks-canvas', {
-            style: 'width: 100%; height: 100%;',
+            style: 'width: 100%; height: 100%; cursor: pointer;',
+            onmousedown: handleMouseDown,
+            onmousemove: handleMouseMove,
+            onmouseup: handleMouseUp,
+            onmouseleave: handleMouseLeave,
             oncreate: (vnode: m.VnodeDOM) => {
               canvasRef = vnode.dom as HTMLCanvasElement;
-              drawTicks(
+              drawTimebar(
                 canvasRef,
                 window,
                 activeWeatherLayers,
@@ -278,6 +342,7 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
                 gpuMap,
                 activeMap,
                 dateTimeService.getWallTime(),
+                progress,
                 camera.lat,
                 camera.lon,
                 sunEnabled
@@ -285,7 +350,7 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
             },
             onupdate: (vnode: m.VnodeDOM) => {
               canvasRef = vnode.dom as HTMLCanvasElement;
-              drawTicks(
+              drawTimebar(
                 canvasRef,
                 window,
                 activeWeatherLayers,
@@ -294,6 +359,7 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
                 gpuMap,
                 activeMap,
                 dateTimeService.getWallTime(),
+                progress,
                 camera.lat,
                 camera.lon,
                 sunEnabled
@@ -301,14 +367,6 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
             },
           }),
         ]),
-        // Slider input
-        m('input[type=range].timeslider', {
-          min: 0,
-          max: 100,
-          step: 0.1,
-          value: progress,
-          oninput: handleInput,
-        }),
       ]),
       m('.timesteps', { style: 'display: flex; justify-content: space-between; width: 100%; padding: 0 24px; font-size: 12px; opacity: 0.6;' }, [
         m('span', formatDate(window.start)),

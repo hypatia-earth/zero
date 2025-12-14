@@ -7,11 +7,18 @@
  */
 
 import { signal } from '@preact/signals-core';
-import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice } from '../config/types';
+import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, OmPreflight } from '../config/types';
 import type { FetchService } from './fetch-service';
 import type { OmService } from './om-service';
 
 const DEBUG = true;
+
+/** Queued order with preflight info and callback */
+interface QueuedTimestepOrder {
+  order: TimestepOrder;
+  info: OmPreflight;
+  onSlice: (order: TimestepOrder, slice: OmSlice) => void;
+}
 
 export class QueueService implements IQueueService {
   readonly stats = signal<QueueStats>({
@@ -34,6 +41,12 @@ export class QueueService implements IQueueService {
   private activeExpectedBytes = 0;
   private activeActualBytes = 0;
   private totalBytesCompleted = 0;
+
+  // Timestep queue (replaceable)
+  private timestepQueue: QueuedTimestepOrder[] = [];
+  private currentlyFetching: TimestepOrder | null = null;
+  private processingPromise: Promise<void> | null = null;
+  private submissionVersion = 0;  // Tracks latest submission to ignore stale preflights
 
   private omService: OmService | null = null;
 
@@ -69,9 +82,8 @@ export class QueueService implements IQueueService {
 
   /**
    * Submit timestep orders for processing via OmService
-   * Preflights all orders first for accurate total ETA, then fetches sequentially
-   * @param orders Timestep orders to fetch
-   * @param onSlice Callback for each decoded slice (GPU-ready data)
+   * Replaces any pending orders with new ones (current fetch continues)
+   * Orders are processed in array order (caller should sort by priority)
    */
   async submitTimestepOrders(
     orders: TimestepOrder[],
@@ -83,42 +95,73 @@ export class QueueService implements IQueueService {
 
     if (orders.length === 0) return;
 
-    // Phase 1: Preflight all orders (parallel) for accurate total size
+    // Increment version to track this submission
+    const myVersion = ++this.submissionVersion;
+
+    // Filter out the currently fetching order (if in new orders)
+    const newOrders = this.currentlyFetching
+      ? orders.filter(o => o.timestep !== this.currentlyFetching!.timestep)
+      : orders;
+
+    // Preflight new orders (parallel) for accurate total size
     const preflightResults = await Promise.all(
-      orders.map(async (order) => {
+      newOrders.map(async (order) => {
         const omParam = order.param === 'temp' ? 'temperature_2m' : order.param;
         const info = await this.omService!.preflight(order.url, omParam);
-        return { order, info };
+        return { order, info, onSlice };
       })
     );
 
-    // Sum total bytes and update stats
-    let totalBytes = 0;
-    for (const { info } of preflightResults) {
-      totalBytes += info.totalBytes;
+    // Check if a newer submission happened while we were preflighting
+    if (myVersion !== this.submissionVersion) {
+      DEBUG && console.log(`[Queue] Ignoring stale submission v${myVersion} (current v${this.submissionVersion})`);
+      return;
     }
-    this.pendingExpectedBytes += totalBytes;
+
+    // Replace pending queue with new orders
+    this.timestepQueue = preflightResults;
+
+    // Recalculate pending bytes from new queue
+    this.pendingExpectedBytes = this.timestepQueue.reduce((sum, q) => sum + q.info.totalBytes, 0);
     this.updateStats();
-    DEBUG && console.log(`[Queue] Preflight complete: ${orders.length} orders, ${(totalBytes / 1024 / 1024).toFixed(1)} MB`);
 
-    // Phase 2: Fetch data sequentially with byte tracking
-    for (const { order } of preflightResults) {
-      const omParam = order.param === 'temp' ? 'temperature_2m' : order.param;
+    const dropped = orders.length - newOrders.length;
+    DEBUG && console.log(`[Queue] New queue: ${newOrders.length} orders, ${(this.pendingExpectedBytes / 1024 / 1024).toFixed(1)} MB` +
+      (dropped ? ` (${dropped} already fetching)` : ''));
 
-      await this.omService.fetch(
-        order.url,
+    // Start processing if not already running
+    if (!this.processingPromise) {
+      this.processingPromise = this.processTimestepQueue();
+    }
+
+    // Wait for queue to complete
+    await this.processingPromise;
+  }
+
+  /** Process timestep queue sequentially */
+  private async processTimestepQueue(): Promise<void> {
+    while (this.timestepQueue.length > 0) {
+      const next = this.timestepQueue.shift()!;
+      this.currentlyFetching = next.order;
+
+      const omParam = next.order.param === 'temp' ? 'temperature_2m' : next.order.param;
+
+      await this.omService!.fetch(
+        next.order.url,
         omParam,
-        () => {}, // Preflight already done, ignore callback
-        (slice) => {
-          onSlice(order, slice);
-        },
+        () => {}, // Preflight already done
+        (slice) => next.onSlice(next.order, slice),
         (bytes) => {
-          // Decrement pending and track for bandwidth calculation
           this.pendingExpectedBytes -= bytes;
           this.onChunk(bytes);
         }
       );
+
+      this.currentlyFetching = null;
     }
+
+    this.processingPromise = null;
+    this.updateStats();
   }
 
   private async fetchWithProgress(order: FileOrder): Promise<ArrayBuffer> {

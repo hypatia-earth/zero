@@ -95,15 +95,16 @@ export class SlotService {
       this.renderService.setTempLoadedPoints(Math.min(slot0.loadedPoints, slot1.loadedPoints));
     }
 
-    // Skip if already loading
-    if (this.loadingKeys.size > 0) return;
-
     // Calculate ideal window
     const idealWindow = this.calculateLoadWindow(time, param);
 
-    // Find what needs loading (prioritize current pair)
-    const toLoad = idealWindow.filter(ts => !this.slots.has(this.makeKey(param, ts)));
-    const priorityTimesteps = [t0, t1].filter(ts => !this.slots.has(this.makeKey(param, ts)));
+    // Find what needs loading (not in GPU and not already being fetched)
+    const needsLoad = (ts: TTimestep) =>
+      !this.slots.has(this.makeKey(param, ts)) &&
+      !this.loadingKeys.has(this.makeKey(param, ts));
+
+    const toLoad = idealWindow.filter(needsLoad);
+    const priorityTimesteps = [t0, t1].filter(needsLoad);
     const otherTimesteps = toLoad.filter(ts => ts !== t0 && ts !== t1);
     const orderedToLoad = [...priorityTimesteps, ...otherTimesteps];
 
@@ -116,13 +117,14 @@ export class SlotService {
       timestep
     }));
 
-    // Mark as loading (prevents re-entry)
+    // Replace loading keys with new orders (queue replacement handles overlap)
+    this.loadingKeys.clear();
     for (const timestep of orderedToLoad) {
       this.loadingKeys.add(this.makeKey(param, timestep));
     }
 
-    // Submit all orders as batch - slots allocated just-in-time in callback
-    console.log(`[Slot] Bulk loading ${orders.length} timesteps`);
+    // Submit all orders as batch - QueueService replaces pending queue
+    console.log(`[Slot] Submitting ${orders.length} timesteps`);
     this.loadTimestepsBatch(param, orders, time);
   }
 
@@ -199,30 +201,24 @@ export class SlotService {
   }
 
   /** Load multiple timesteps as batch via QueueService */
-  private async loadTimestepsBatch(param: TParam, orders: TimestepOrder[], referenceTime: Date): Promise<void> {
-    try {
-      await this.queueService.submitTimestepOrders(
-        orders,
-        (order, slice) => {
-          if (slice.done) {
-            // Allocate slot just-in-time (evict if needed)
-            const slotIndex = this.allocateSlot(param, order.timestep, referenceTime);
-            if (slotIndex !== null) {
-              this.uploadToSlot(param, order.timestep, slotIndex, slice.data);
-            }
+  private loadTimestepsBatch(param: TParam, orders: TimestepOrder[], referenceTime: Date): void {
+    // Fire and forget - QueueService handles queue replacement
+    this.queueService.submitTimestepOrders(
+      orders,
+      (order, slice) => {
+        if (slice.done) {
+          // Allocate slot just-in-time (evict if needed)
+          const slotIndex = this.allocateSlot(param, order.timestep, referenceTime);
+          if (slotIndex !== null) {
+            this.uploadToSlot(param, order.timestep, slotIndex, slice.data);
           }
+          // Clear loading key when this specific order completes
+          this.loadingKeys.delete(this.makeKey(param, order.timestep));
         }
-      );
-    } catch (err) {
-      console.warn(`[Slot] Failed to load batch:`, err);
-    } finally {
-      // Clear all loading keys
-      for (const order of orders) {
-        this.loadingKeys.delete(this.makeKey(param, order.timestep));
       }
-      // Trigger re-evaluation for any remaining loads
-      this.onTimeChange(this.stateService.getTime());
-    }
+    ).catch(err => {
+      console.warn(`[Slot] Failed to load batch:`, err);
+    });
   }
 
   /** Allocate a slot for a timestep, evicting if necessary */
