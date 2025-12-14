@@ -7,18 +7,31 @@
 
 import type { IOmService, OmPreflight, OmSlice } from '../config/types';
 import type { FetchService } from './fetch-service';
-import { streamOmVariable } from '../adapters/om-file-adapter';
+import { streamOmVariable, preflightOmVariable } from '../adapters/om-file-adapter';
 
 const DEFAULT_SLICES = 10;
 
 export class OmService implements IOmService {
   constructor(private fetchService: FetchService) {}
 
+  /**
+   * Preflight-only: get size info without fetching data
+   * Used for bulk queue size calculation
+   */
+  async preflight(url: string, param: string): Promise<OmPreflight> {
+    const result = await preflightOmVariable(url, param, this.fetchService);
+    return { totalBytes: result.totalBytes, chunks: result.chunks };
+  }
+
+  /**
+   * Fetch data with byte progress tracking
+   */
   async fetch(
     url: string,
     param: string,
     onPreflight: (info: OmPreflight) => void,
-    onSlice: (slice: OmSlice) => void
+    onSlice: (slice: OmSlice) => void,
+    onBytes?: (bytes: number) => void
   ): Promise<Float32Array> {
     const result = await streamOmVariable(
       url,
@@ -33,7 +46,9 @@ export class OmService implements IOmService {
         });
       },
       this.fetchService,
-      onPreflight
+      onPreflight,
+      false,
+      onBytes
     );
     return result.data;
   }

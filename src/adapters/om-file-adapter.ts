@@ -72,6 +72,7 @@ export function isOmWasmInitialized(): boolean {
 export interface OmReadResult {
   data: Float32Array;
   dims: number[];
+  totalBytes?: number;  // Set in preflight-only mode
 }
 
 export interface OmChunkData {
@@ -105,10 +106,33 @@ function paramToLayer(param: string): CacheLayer {
   return 'meta';
 }
 
+export interface OmPreflightResult {
+  totalBytes: number;
+  chunks: number;
+  dims: number[];
+}
+
+/**
+ * Preflight-only: fetch metadata and return size info without data
+ */
+export async function preflightOmVariable(
+  url: string,
+  param: string,
+  fetchService: FetchService
+): Promise<OmPreflightResult> {
+  const result = await streamOmVariable(url, param, 1, () => {}, fetchService, undefined, true);
+  return { totalBytes: result.totalBytes ?? 0, chunks: 0, dims: result.dims };
+}
+
+/** Byte progress callback - called after each slice fetch */
+export type OmBytesCallback = (bytes: number) => void;
+
 /**
  * Stream-read a variable from an .om file
  * Calls onChunk after each slice is fetched and its chunks decoded
  * Optional onPreflight called after metadata phases with exact byte size
+ * Optional onBytes called after each data fetch with bytes received
+ * Set preflightOnly=true to return after metadata without fetching data
  */
 export async function streamOmVariable(
   url: string,
@@ -116,7 +140,9 @@ export async function streamOmVariable(
   slices: number,
   onChunk: OmChunkCallback,
   fetchService: FetchService,
-  onPreflight?: OmPreflightCallback
+  onPreflight?: OmPreflightCallback,
+  preflightOnly = false,
+  onBytes?: OmBytesCallback
 ): Promise<OmReadResult> {
   const cacheLayer = paramToLayer(param);
   if (!wasmInstance) {
@@ -311,6 +337,19 @@ export async function streamOmVariable(
   // Report preflight info (exact bytes known before data fetch)
   onPreflight?.({ totalBytes: totalCompressed, chunks: numChunks });
 
+  // Early return for preflight-only mode
+  if (preflightOnly) {
+    wasm._free(decoderPtr);
+    wasm._free(indexReadPtr);
+    wasm._free(errorPtr);
+    wasm._free(readOffsetPtr);
+    wasm._free(readCountPtr);
+    wasm._free(cubeOffsetPtr);
+    wasm._free(cubeDimPtr);
+    wasm._free(targetPtr);
+    return { data: new Float32Array(0), dims: targetDims, totalBytes: totalCompressed };
+  }
+
   // Calculate chunk-aligned slices: first slice gets remainder, rest get equal chunks
   const chunksPerSlice = Math.floor(numChunks / slices);
   const firstSliceChunks = numChunks - chunksPerSlice * (slices - 1);
@@ -344,6 +383,7 @@ export async function streamOmVariable(
     // Fetch this slice (use layer for caching)
     const sliceData = await fetchService.fetchRange(url, firstChunk.dataOffset, sliceSize, cacheLayer);
     allDataBuffer.set(sliceData, sliceByteStart);
+    onBytes?.(sliceData.length);
 
     // Decode all chunks in this slice (guaranteed complete since chunk-aligned)
     while (nextChunkIdx < sliceEndChunk) {

@@ -69,6 +69,7 @@ export class QueueService implements IQueueService {
 
   /**
    * Submit timestep orders for processing via OmService
+   * Preflights all orders first for accurate total ETA, then fetches sequentially
    * @param orders Timestep orders to fetch
    * @param onSlice Callback for each decoded slice (GPU-ready data)
    */
@@ -80,28 +81,43 @@ export class QueueService implements IQueueService {
       throw new Error('OmService not set - call setOmService first');
     }
 
-    // Process sequentially
-    for (const order of orders) {
+    if (orders.length === 0) return;
+
+    // Phase 1: Preflight all orders (parallel) for accurate total size
+    const preflightResults = await Promise.all(
+      orders.map(async (order) => {
+        const omParam = order.param === 'temp' ? 'temperature_2m' : order.param;
+        const info = await this.omService!.preflight(order.url, omParam);
+        return { order, info };
+      })
+    );
+
+    // Sum total bytes and update stats
+    let totalBytes = 0;
+    for (const { info } of preflightResults) {
+      totalBytes += info.totalBytes;
+    }
+    this.pendingExpectedBytes += totalBytes;
+    this.updateStats();
+    DEBUG && console.log(`[Queue] Preflight complete: ${orders.length} orders, ${(totalBytes / 1024 / 1024).toFixed(1)} MB`);
+
+    // Phase 2: Fetch data sequentially with byte tracking
+    for (const { order } of preflightResults) {
       const omParam = order.param === 'temp' ? 'temperature_2m' : order.param;
 
       await this.omService.fetch(
         order.url,
         omParam,
-        // Preflight: update stats with exact size
-        (info) => {
-          this.pendingExpectedBytes += info.totalBytes;
-          this.updateStats();
-        },
-        // Slice: report progress and forward to caller
+        () => {}, // Preflight already done, ignore callback
         (slice) => {
-          // Track bytes (approximate from slice progress)
-          // TODO: More accurate tracking from actual fetch bytes
           onSlice(order, slice);
+        },
+        (bytes) => {
+          // Decrement pending and track for bandwidth calculation
+          this.pendingExpectedBytes -= bytes;
+          this.onChunk(bytes);
         }
       );
-
-      // Order complete
-      this.updateStats();
     }
   }
 

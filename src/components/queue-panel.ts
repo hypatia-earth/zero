@@ -23,7 +23,7 @@ export const QueuePanel: m.Component<QueuePanelAttrs> = {
     const update = debounce((queuedBytes: number, etaSeconds: number | undefined) => {
       el.textContent = formatStats(queuedBytes, etaSeconds);
       DEBUG && console.log('[QueuePanel]', el.textContent);
-    }, 1000);
+    }, 333);
 
     effect(() => {
       const stats = vnode.attrs.queueService.stats.value;

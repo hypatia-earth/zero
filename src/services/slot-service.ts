@@ -95,6 +95,9 @@ export class SlotService {
       this.renderService.setTempLoadedPoints(Math.min(slot0.loadedPoints, slot1.loadedPoints));
     }
 
+    // Skip if already loading
+    if (this.loadingKeys.size > 0) return;
+
     // Calculate ideal window
     const idealWindow = this.calculateLoadWindow(time, param);
     const idealKeys = new Set(idealWindow.map(ts => this.makeKey(param, ts)));
@@ -105,6 +108,8 @@ export class SlotService {
     const otherTimesteps = toLoad.filter(ts => ts !== t0 && ts !== t1);
     const orderedToLoad = [...priorityTimesteps, ...otherTimesteps];
 
+    if (orderedToLoad.length === 0) return;
+
     // Find eviction candidates (outside ideal window, sorted by distance)
     const evictionCandidates = [...this.slots.entries()]
       .filter(([key, slot]) => slot.param === param && !idealKeys.has(key))
@@ -114,14 +119,10 @@ export class SlotService {
         return distB - distA; // Furthest first
       });
 
-    // Load new timesteps (one at a time to avoid WASM OOM)
+    // Allocate slots for all needed timesteps
+    const orders: TimestepOrder[] = [];
     for (const timestep of orderedToLoad) {
       const key = this.makeKey(param, timestep);
-      if (this.loadingKeys.has(key)) continue;
-      if (this.slots.has(key)) continue;
-
-      // Only one concurrent load
-      if (this.loadingKeys.size > 0) break;
 
       // Get slot index - evict if needed
       let slotIndex: number;
@@ -139,7 +140,13 @@ export class SlotService {
 
       this.loadingKeys.add(key);
       this.slots.set(key, { timestep, param, slotIndex, loaded: false, loadedPoints: 0 });
-      this.loadTimestep(param, timestep, slotIndex, key);
+      orders.push({ url: this.timestepService.url(timestep), param, timestep });
+    }
+
+    // Submit all orders as batch
+    if (orders.length > 0) {
+      console.log(`[Slot] Bulk loading ${orders.length} timesteps`);
+      this.loadTimestepsBatch(param, orders);
     }
   }
 
@@ -215,33 +222,25 @@ export class SlotService {
     return timestep >= this.dataWindowStart && timestep <= this.dataWindowEnd;
   }
 
-  /** Load a timestep via QueueService */
-  private async loadTimestep(
-    param: TParam,
-    timestep: TTimestep,
-    slotIndex: number,
-    key: string
-  ): Promise<void> {
+  /** Load multiple timesteps as batch via QueueService */
+  private async loadTimestepsBatch(param: TParam, orders: TimestepOrder[]): Promise<void> {
     try {
-      const url = this.timestepService.url(timestep);
-      const order: TimestepOrder = { url, param, timestep };
-
-      console.log(`[Slot] Loading ${param}:${timestep} → slot ${slotIndex}`);
-
       await this.queueService.submitTimestepOrders(
-        [order],
-        (_order, slice) => {
+        orders,
+        (order, slice) => {
           if (slice.done) {
-            this.onDataReceived(param, timestep, slice.data);
+            this.onDataReceived(param, order.timestep, slice.data);
           }
         }
       );
-
     } catch (err) {
-      console.warn(`[Slot] Failed to load ${param}:${timestep}:`, err);
+      console.warn(`[Slot] Failed to load batch:`, err);
     } finally {
-      this.loadingKeys.delete(key);
-      // Trigger re-evaluation to load next
+      // Clear all loading keys
+      for (const order of orders) {
+        this.loadingKeys.delete(this.makeKey(param, order.timestep));
+      }
+      // Trigger re-evaluation for any remaining loads
       this.onTimeChange(this.stateService.getTime());
     }
   }
@@ -319,11 +318,21 @@ export class SlotService {
     this.loadingKeys.add(key0);
     this.loadingKeys.add(key1);
 
-    // Load both timesteps
-    await Promise.all([
-      this.loadTimestep(param, t0, slot0, key0),
-      this.loadTimestep(param, t1, slot1, key1),
-    ]);
+    // Load both timesteps as batch
+    const orders: TimestepOrder[] = [
+      { url: this.timestepService.url(t0), param, timestep: t0 },
+      { url: this.timestepService.url(t1), param, timestep: t1 },
+    ];
+
+    await this.queueService.submitTimestepOrders(orders, (order, slice) => {
+      if (slice.done) {
+        this.onDataReceived(param, order.timestep, slice.data);
+      }
+    });
+
+    // Clear loading keys
+    this.loadingKeys.delete(key0);
+    this.loadingKeys.delete(key1);
 
     // Set active pair and shader slots
     this.activePair.set(param, { t0, t1 });
