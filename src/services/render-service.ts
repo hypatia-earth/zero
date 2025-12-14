@@ -7,6 +7,8 @@ import { generateGaussianLUTs } from '../render/gaussian-grid';
 import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
+import type { LayerId } from '../config/types';
+import type { ZeroOptions } from '../schemas/options.schema';
 import { getSunDirection } from '../utils/sun-position';
 
 export class RenderService {
@@ -69,58 +71,77 @@ export class RenderService {
 
       const options = this.optionsService.options.value;
       const state = this.stateService.get();
-      const layers = state.layers;
-
-      // Layer enabled from URL state, opacity from options
-      const earthEnabled = layers.includes('earth');
-      const sunEnabled = layers.includes('sun');
-      const gridEnabled = layers.includes('grid');
-      const tempEnabled = layers.includes('temp');
-      const rainEnabled = layers.includes('rain');
-
-      // Calculate temp interpolation (from SlotService)
-      // Returns -1 if current time is outside loaded data range
       const rawLerp = this.tempLerpFn ? this.tempLerpFn(state.time) : -1;
 
-      const tempLerp = rawLerp < 0 ? 0 : rawLerp;
-      const tempDataValid = rawLerp >= 0 && this.tempLoadedPoints > 0;
-
-      const sunConfig = this.configService.getConfig().sun;
-
-      // Calculate degrees per pixel at earth surface for screen-space grid lines
-      // Formula: (2 * tan(fov/2) * distance) / screenHeight gives world units per pixel
-      const eyePos = renderer.camera.getEyePosition();
-      const tanFov = renderer.camera.getTanFov();
       renderer.updateUniforms({
-        viewProjInverse: renderer.camera.getViewProjInverse(),
-        eyePosition: eyePos,
-        resolution: new Float32Array([this.canvas.width, this.canvas.height]),
-        time: performance.now() / 1000,
-        tanFov,
-        sunEnabled,
-        sunDirection: getSunDirection(state.time),
-        sunCoreRadius: sunConfig.coreRadius,
-        sunGlowRadius: sunConfig.glowRadius,
-        sunCoreColor: new Float32Array(sunConfig.coreColor),
-        sunGlowColor: new Float32Array(sunConfig.glowColor),
-        gridEnabled,
-        gridOpacity: options.grid.opacity,
-        gridFontSize: options.grid.fontSize,
-        earthOpacity: earthEnabled ? options.earth.opacity : 0,
-        tempOpacity: tempEnabled ? options.temp.opacity : 0,
-        rainOpacity: rainEnabled ? options.rain.opacity : 0,
-        tempDataReady: tempDataValid,
-        rainDataReady: false,
-        tempLerp,
-        tempLoadedPoints: this.tempLoadedPoints,
-        tempSlot0: this.tempSlot0,
-        tempSlot1: this.tempSlot1,
+        ...this.getCameraUniforms(renderer),
+        ...this.getSunUniforms(state.layers, state.time),
+        ...this.getGridUniforms(state.layers, options),
+        ...this.getLayerUniforms(state.layers, options),
+        ...this.getTempUniforms(state.layers, options, rawLerp),
+        ...this.getRainUniforms(state.layers, options),
       });
 
       renderer.render();
     };
 
     render();
+  }
+
+  private getCameraUniforms(renderer: GlobeRenderer) {
+    return {
+      viewProjInverse: renderer.camera.getViewProjInverse(),
+      eyePosition: renderer.camera.getEyePosition(),
+      resolution: new Float32Array([this.canvas.width, this.canvas.height]),
+      tanFov: renderer.camera.getTanFov(),
+      time: performance.now() / 1000,
+    };
+  }
+
+  private getSunUniforms(layers: LayerId[], time: Date) {
+    const cfg = this.configService.getConfig().sun;
+    return {
+      sunEnabled: layers.includes('sun'),
+      sunDirection: getSunDirection(time),
+      sunCoreRadius: cfg.coreRadius,
+      sunGlowRadius: cfg.glowRadius,
+      sunCoreColor: new Float32Array(cfg.coreColor),
+      sunGlowColor: new Float32Array(cfg.glowColor),
+    };
+  }
+
+  private getGridUniforms(layers: LayerId[], options: ZeroOptions) {
+    return {
+      gridEnabled: layers.includes('grid'),
+      gridOpacity: options.grid.opacity,
+      gridFontSize: options.grid.fontSize,
+    };
+  }
+
+  private getLayerUniforms(layers: LayerId[], options: ZeroOptions) {
+    return {
+      earthOpacity: layers.includes('earth') ? options.earth.opacity : 0,
+    };
+  }
+
+  private getTempUniforms(layers: LayerId[], options: ZeroOptions, rawLerp: number) {
+    const tempEnabled = layers.includes('temp');
+    const tempDataValid = rawLerp >= 0 && this.tempLoadedPoints > 0;
+    return {
+      tempOpacity: tempEnabled ? options.temp.opacity : 0,
+      tempDataReady: tempDataValid,
+      tempLerp: rawLerp < 0 ? 0 : rawLerp,
+      tempLoadedPoints: this.tempLoadedPoints,
+      tempSlot0: this.tempSlot0,
+      tempSlot1: this.tempSlot1,
+    };
+  }
+
+  private getRainUniforms(layers: LayerId[], options: ZeroOptions) {
+    return {
+      rainOpacity: layers.includes('rain') ? options.rain.opacity : 0,
+      rainDataReady: false,
+    };
   }
 
   stop(): void {
