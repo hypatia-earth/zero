@@ -276,8 +276,6 @@ export class TimestepService implements IDiscoveryService {
     const cached = new Set<TTimestep>();
 
     try {
-      if (!navigator.serviceWorker.controller) return cached;
-
       const detail = await this.sendSWMessage<LayerDetail>({
         type: 'GET_LAYER_STATS',
         layer: param,
@@ -296,15 +294,18 @@ export class TimestepService implements IDiscoveryService {
     return cached;
   }
 
-  private sendSWMessage<T>(message: object): Promise<T> {
-    return new Promise((resolve, reject) => {
-      if (!navigator.serviceWorker.controller) {
-        reject(new Error('No active Service Worker'));
-        return;
-      }
+  private async sendSWMessage<T>(message: object): Promise<T> {
+    const target = navigator.serviceWorker.controller
+      || (await navigator.serviceWorker.ready).active;
+
+    if (!target) {
+      throw new Error('No active Service Worker');
+    }
+
+    return new Promise((resolve) => {
       const channel = new MessageChannel();
       channel.port1.onmessage = (event) => resolve(event.data as T);
-      navigator.serviceWorker.controller.postMessage(message, [channel.port2]);
+      target.postMessage(message, [channel.port2]);
     });
   }
 
@@ -318,6 +319,17 @@ export class TimestepService implements IDiscoveryService {
     if (!paramState) return;
 
     paramState.gpu.add(timestep);
+    this.state.value = { ...current };
+  }
+
+  /** Refresh cache state for a param from SW */
+  async refreshCacheState(param: TParam): Promise<void> {
+    const cache = await this.querySWCache(param);
+    const current = this.state.value;
+    const paramState = current.params.get(param);
+    if (!paramState) return;
+
+    paramState.cache = cache;
     this.state.value = { ...current };
   }
 

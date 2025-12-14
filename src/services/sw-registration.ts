@@ -71,17 +71,20 @@ async function logCachedTimesteps(): Promise<void> {
 
 /**
  * Send message to SW and wait for response
+ * Uses controller if available, falls back to active registration
  */
-function sendMessage<T>(message: object): Promise<T> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.serviceWorker.controller) {
-      reject(new Error('No active Service Worker'));
-      return;
-    }
+async function sendMessage<T>(message: object): Promise<T> {
+  const target = navigator.serviceWorker.controller
+    || (await navigator.serviceWorker.ready).active;
 
+  if (!target) {
+    throw new Error('No active Service Worker');
+  }
+
+  return new Promise((resolve) => {
     const channel = new MessageChannel();
     channel.port1.onmessage = (event) => resolve(event.data as T);
-    navigator.serviceWorker.controller.postMessage(message, [channel.port2]);
+    target.postMessage(message, [channel.port2]);
   });
 }
 

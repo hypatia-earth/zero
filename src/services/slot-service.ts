@@ -258,6 +258,7 @@ export class SlotService {
     slot.loadedPoints = data.length;
 
     this.timestepService.setGpuLoaded(param, timestep);
+    this.timestepService.refreshCacheState(param);  // Update cache state from SW
     this.slotsVersion.value++;
     console.log(`[Slot] Loaded ${key} → slot ${slot.slotIndex}`);
 
