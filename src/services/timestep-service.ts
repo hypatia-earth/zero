@@ -129,7 +129,7 @@ export class TimestepService implements IDiscoveryService {
   private async exploreModel(model: TModel): Promise<void> {
     const config = this.configService.getDiscovery();
 
-    // Discover runs
+    // Discover runs via S3 listing
     const runs = await this.discoverRuns(`data_spatial/${model}/`);
     if (runs.length === 0) {
       throw new Error(`[Discovery] No runs found for ${model}`);
