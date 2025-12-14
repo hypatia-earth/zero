@@ -85,6 +85,9 @@ export interface OmChunkData {
 
 export type OmChunkCallback = (chunk: OmChunkData) => void | Promise<void>;
 
+/** Preflight info callback - called after metadata phases, before data fetch */
+export type OmPreflightCallback = (info: { totalBytes: number; chunks: number }) => void;
+
 interface ChunkInfo {
   dataOffset: number;
   dataCount: number;
@@ -105,13 +108,15 @@ function paramToLayer(param: string): CacheLayer {
 /**
  * Stream-read a variable from an .om file
  * Calls onChunk after each slice is fetched and its chunks decoded
+ * Optional onPreflight called after metadata phases with exact byte size
  */
 export async function streamOmVariable(
   url: string,
   param: string,
   slices: number,
   onChunk: OmChunkCallback,
-  fetchService: FetchService
+  fetchService: FetchService,
+  onPreflight?: OmPreflightCallback
 ): Promise<OmReadResult> {
   const cacheLayer = paramToLayer(param);
   if (!wasmInstance) {
@@ -305,6 +310,9 @@ export async function streamOmVariable(
   const totalCompressed = maxDataEnd - minDataOffset;
   const numChunks = allChunks.length;
   const outputElements = targetDims.reduce((a, b) => a * b, 1);
+
+  // Report preflight info (exact bytes known before data fetch)
+  onPreflight?.({ totalBytes: totalCompressed, chunks: numChunks });
 
   // Calculate chunk-aligned slices: first slice gets remainder, rest get equal chunks
   const chunksPerSlice = Math.floor(numChunks / slices);

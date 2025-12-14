@@ -19,6 +19,10 @@ import { KeyboardService } from './services/keyboard-service';
 import { DiscoveryService } from './services/discovery-service';
 import { QueueService } from './services/queue-service';
 import { DataService } from './services/data-service';
+// New services (alongside old for migration)
+import { OmService } from './services/om-service';
+import { TimestepService } from './services/timestep-service';
+import { SlotService } from './services/slot-service';
 // DataLoader removed - all static assets now via QueueService
 import { RenderService } from './services/render-service';
 import { BudgetService } from './services/budget-service';
@@ -49,6 +53,10 @@ interface AppComponent extends m.Component {
   budgetService?: BudgetService;
   keyboardService?: KeyboardService;
   canvas?: HTMLCanvasElement;
+  // New services (for migration)
+  omService?: OmService;
+  timestepService?: TimestepService;
+  slotService?: SlotService;
 
   oninit(): Promise<void>;
   view(): m.Children;
@@ -94,6 +102,11 @@ export const App: AppComponent = {
       // Total 11 items: 3 LUTs + 6 basemap + 1 WASM + 1 font, progress 15-20%
       BootstrapService.setStep('ASSETS');
       this.queueService = new QueueService(this.fetchService);
+
+      // New services (for migration - not yet used)
+      this.omService = new OmService(this.fetchService);
+      this.queueService.setOmService(this.omService);
+      this.timestepService = new TimestepService(this.configService);
       const f16 = !this.capabilitiesService.float32_filterable;
       const suffix = f16 ? '-16' : '';
 
@@ -128,6 +141,7 @@ export const App: AppComponent = {
         [{ url: '/om-decoder.wasm', size: 2107564 }],
         () => BootstrapService.updateProgress('Loading WASM...', 15 + (9 / 11) * 5)
       );
+      await initOmWasm(wasmBuffer!);
 
       // 4d. Font atlas
       const [fontBuffer] = await this.queueService.submitFileOrders(
@@ -151,10 +165,7 @@ export const App: AppComponent = {
       BootstrapService.setStep('DATA');
       const renderer = this.renderService.getRenderer();
 
-      // 5a. WASM decoder (from Step 4c)
-      await initOmWasm(wasmBuffer!);
-
-      // 5b. Atmosphere LUTs (from Step 4a)
+      // 5a. Atmosphere LUTs (from Step 4a)
       renderer.createAtmosphereTextures({
         transmittance: lutBuffers[0]!,
         scattering: lutBuffers[1]!,
@@ -181,6 +192,15 @@ export const App: AppComponent = {
         this.stateService,
         this.dataService,
         this.renderService
+      );
+
+      // SlotService (for migration - not yet used)
+      this.slotService = new SlotService(
+        this.configService,
+        this.stateService,
+        this.timestepService!,
+        this.renderService,
+        this.queueService
       );
 
       // 5f. Temperature timesteps

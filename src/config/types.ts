@@ -8,6 +8,9 @@ export type LayerId = 'earth' | 'sun' | 'grid' | 'temp' | 'rain';
 
 export type TModel = 'ecmwf_ifs' | 'ecmwf_ifs025';
 
+/** Weather parameter identifier */
+export type TParam = 'temp' | 'rain' | 'wind' | 'pressure';
+
 /** Branded timestep string, format: "YYYY-MM-DDTHHMM" (e.g., "2025-12-13T0600") */
 export type TTimestep = string & { readonly __brand: 'timestep' };
 
@@ -69,6 +72,38 @@ export interface IQueueService {
     onProgress?: (index: number, total: number) => void | Promise<void>
   ): Promise<ArrayBuffer[]>;
   dispose(): void;
+}
+
+/** Timestep download order for QueueService */
+export interface TimestepOrder {
+  url: string;
+  param: TParam;
+  timestep: TTimestep;
+}
+
+/** OmService preflight result */
+export interface OmPreflight {
+  totalBytes: number;
+  chunks: number;
+}
+
+/** OmService slice callback data */
+export interface OmSlice {
+  data: Float32Array;
+  sliceIndex: number;
+  totalSlices: number;
+  done: boolean;
+}
+
+/** OmService public API */
+export interface IOmService {
+  /** Stream fetch with preflight callback for exact size, then slice callbacks */
+  fetch(
+    url: string,
+    param: string,
+    onPreflight: (info: OmPreflight) => void,
+    onSlice: (slice: OmSlice) => void
+  ): Promise<Float32Array>;
 }
 
 export interface LayerConfig {

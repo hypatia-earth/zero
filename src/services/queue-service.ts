@@ -7,8 +7,9 @@
  */
 
 import { signal } from '@preact/signals-core';
-import type { FileOrder, QueueStats, IQueueService } from '../config/types';
+import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice } from '../config/types';
 import type { FetchService } from './fetch-service';
+import type { OmService } from './om-service';
 
 const DEBUG = true;
 
@@ -34,7 +35,14 @@ export class QueueService implements IQueueService {
   private activeActualBytes = 0;
   private totalBytesCompleted = 0;
 
+  private omService: OmService | null = null;
+
   constructor(private fetchService: FetchService) {}
+
+  /** Set OmService (injected later to avoid circular deps) */
+  setOmService(omService: OmService): void {
+    this.omService = omService;
+  }
 
   async submitFileOrders(
     orders: FileOrder[],
@@ -57,6 +65,44 @@ export class QueueService implements IQueueService {
 
     this.updateStats();
     return results;
+  }
+
+  /**
+   * Submit timestep orders for processing via OmService
+   * @param orders Timestep orders to fetch
+   * @param onSlice Callback for each decoded slice (GPU-ready data)
+   */
+  async submitTimestepOrders(
+    orders: TimestepOrder[],
+    onSlice: (order: TimestepOrder, slice: OmSlice) => void
+  ): Promise<void> {
+    if (!this.omService) {
+      throw new Error('OmService not set - call setOmService first');
+    }
+
+    // Process sequentially
+    for (const order of orders) {
+      const omParam = order.param === 'temp' ? 'temperature_2m' : order.param;
+
+      await this.omService.fetch(
+        order.url,
+        omParam,
+        // Preflight: update stats with exact size
+        (info) => {
+          this.pendingExpectedBytes += info.totalBytes;
+          this.updateStats();
+        },
+        // Slice: report progress and forward to caller
+        (slice) => {
+          // Track bytes (approximate from slice progress)
+          // TODO: More accurate tracking from actual fetch bytes
+          onSlice(order, slice);
+        }
+      );
+
+      // Order complete
+      this.updateStats();
+    }
   }
 
   private async fetchWithProgress(order: FileOrder): Promise<ArrayBuffer> {
