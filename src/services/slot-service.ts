@@ -100,7 +100,6 @@ export class SlotService {
 
     // Calculate ideal window
     const idealWindow = this.calculateLoadWindow(time, param);
-    const idealKeys = new Set(idealWindow.map(ts => this.makeKey(param, ts)));
 
     // Find what needs loading (prioritize current pair)
     const toLoad = idealWindow.filter(ts => !this.slots.has(this.makeKey(param, ts)));
@@ -110,44 +109,21 @@ export class SlotService {
 
     if (orderedToLoad.length === 0) return;
 
-    // Find eviction candidates (outside ideal window, sorted by distance)
-    const evictionCandidates = [...this.slots.entries()]
-      .filter(([key, slot]) => slot.param === param && !idealKeys.has(key))
-      .sort((a, b) => {
-        const distA = Math.abs(this.timestepService.toDate(a[1].timestep).getTime() - time.getTime());
-        const distB = Math.abs(this.timestepService.toDate(b[1].timestep).getTime() - time.getTime());
-        return distB - distA; // Furthest first
-      });
+    // Build orders without pre-allocating slots
+    const orders: TimestepOrder[] = orderedToLoad.map(timestep => ({
+      url: this.timestepService.url(timestep),
+      param,
+      timestep
+    }));
 
-    // Allocate slots for all needed timesteps
-    const orders: TimestepOrder[] = [];
+    // Mark as loading (prevents re-entry)
     for (const timestep of orderedToLoad) {
-      const key = this.makeKey(param, timestep);
-
-      // Get slot index - evict if needed
-      let slotIndex: number;
-      if (this.freeSlotIndices.length > 0) {
-        slotIndex = this.freeSlotIndices.pop()!;
-      } else if (evictionCandidates.length > 0) {
-        const [evictKey, evictSlot] = evictionCandidates.shift()!;
-        console.log(`[Slot] Evicting ${evictKey} for ${key}`);
-        this.slots.delete(evictKey);
-        this.timestepService.setGpuUnloaded(param, evictSlot.timestep);
-        slotIndex = evictSlot.slotIndex;
-      } else {
-        break; // No slots available
-      }
-
-      this.loadingKeys.add(key);
-      this.slots.set(key, { timestep, param, slotIndex, loaded: false, loadedPoints: 0 });
-      orders.push({ url: this.timestepService.url(timestep), param, timestep });
+      this.loadingKeys.add(this.makeKey(param, timestep));
     }
 
-    // Submit all orders as batch
-    if (orders.length > 0) {
-      console.log(`[Slot] Bulk loading ${orders.length} timesteps`);
-      this.loadTimestepsBatch(param, orders);
-    }
+    // Submit all orders as batch - slots allocated just-in-time in callback
+    console.log(`[Slot] Bulk loading ${orders.length} timesteps`);
+    this.loadTimestepsBatch(param, orders, time);
   }
 
   /** Calculate ideal load window around time */
@@ -223,13 +199,17 @@ export class SlotService {
   }
 
   /** Load multiple timesteps as batch via QueueService */
-  private async loadTimestepsBatch(param: TParam, orders: TimestepOrder[]): Promise<void> {
+  private async loadTimestepsBatch(param: TParam, orders: TimestepOrder[], referenceTime: Date): Promise<void> {
     try {
       await this.queueService.submitTimestepOrders(
         orders,
         (order, slice) => {
           if (slice.done) {
-            this.onDataReceived(param, order.timestep, slice.data);
+            // Allocate slot just-in-time (evict if needed)
+            const slotIndex = this.allocateSlot(param, order.timestep, referenceTime);
+            if (slotIndex !== null) {
+              this.uploadToSlot(param, order.timestep, slotIndex, slice.data);
+            }
           }
         }
       );
@@ -245,22 +225,52 @@ export class SlotService {
     }
   }
 
-  /** Called when data arrives - upload to GPU */
-  private onDataReceived(param: TParam, timestep: TTimestep, data: Float32Array): void {
+  /** Allocate a slot for a timestep, evicting if necessary */
+  private allocateSlot(param: TParam, timestep: TTimestep, referenceTime: Date): number | null {
     const key = this.makeKey(param, timestep);
-    const slot = this.slots.get(key);
-    if (!slot) return;
+
+    // Already has slot?
+    const existing = this.slots.get(key);
+    if (existing) return existing.slotIndex;
+
+    // Free slot available?
+    if (this.freeSlotIndices.length > 0) {
+      return this.freeSlotIndices.pop()!;
+    }
+
+    // Need to evict - find furthest from reference time
+    const candidates = [...this.slots.entries()]
+      .filter(([, slot]) => slot.param === param && slot.loaded)
+      .sort((a, b) => {
+        const distA = Math.abs(this.timestepService.toDate(a[1].timestep).getTime() - referenceTime.getTime());
+        const distB = Math.abs(this.timestepService.toDate(b[1].timestep).getTime() - referenceTime.getTime());
+        return distB - distA; // Furthest first
+      });
+
+    if (candidates.length === 0) {
+      console.warn(`[Slot] No slots available for ${key}`);
+      return null;
+    }
+
+    const [evictKey, evictSlot] = candidates[0]!;
+    console.log(`[Slot] Evicting ${evictKey} for ${key}`);
+    this.slots.delete(evictKey);
+    this.timestepService.setGpuUnloaded(param, evictSlot.timestep);
+    return evictSlot.slotIndex;
+  }
+
+  /** Upload data to allocated slot */
+  private uploadToSlot(param: TParam, timestep: TTimestep, slotIndex: number, data: Float32Array): void {
+    const key = this.makeKey(param, timestep);
 
     const renderer = this.renderService.getRenderer();
-    renderer.uploadTempDataToSlot(data, slot.slotIndex);
+    renderer.uploadTempDataToSlot(data, slotIndex);
 
-    slot.loaded = true;
-    slot.loadedPoints = data.length;
-
+    this.slots.set(key, { timestep, param, slotIndex, loaded: true, loadedPoints: data.length });
     this.timestepService.setGpuLoaded(param, timestep);
-    this.timestepService.refreshCacheState(param);  // Update cache state from SW
+    this.timestepService.refreshCacheState(param);
     this.slotsVersion.value++;
-    console.log(`[Slot] Loaded ${key} → slot ${slot.slotIndex}`);
+    console.log(`[Slot] Loaded ${key} → slot ${slotIndex}`);
 
     this.updateShaderIfReady(param);
   }
@@ -308,18 +318,12 @@ export class SlotService {
 
     console.log(`[Slot] Initializing with ${t0}, ${t1}`);
 
-    // Allocate slots for initial pair
-    const slot0 = this.freeSlotIndices.pop()!;
-    const slot1 = this.freeSlotIndices.pop()!;
     const key0 = this.makeKey(param, t0);
     const key1 = this.makeKey(param, t1);
-
-    this.slots.set(key0, { timestep: t0, param, slotIndex: slot0, loaded: false, loadedPoints: 0 });
-    this.slots.set(key1, { timestep: t1, param, slotIndex: slot1, loaded: false, loadedPoints: 0 });
     this.loadingKeys.add(key0);
     this.loadingKeys.add(key1);
 
-    // Load both timesteps as batch
+    // Load both timesteps as batch - slots allocated just-in-time
     const orders: TimestepOrder[] = [
       { url: this.timestepService.url(t0), param, timestep: t0 },
       { url: this.timestepService.url(t1), param, timestep: t1 },
@@ -327,7 +331,10 @@ export class SlotService {
 
     await this.queueService.submitTimestepOrders(orders, (order, slice) => {
       if (slice.done) {
-        this.onDataReceived(param, order.timestep, slice.data);
+        const slotIndex = this.allocateSlot(param, order.timestep, time);
+        if (slotIndex !== null) {
+          this.uploadToSlot(param, order.timestep, slotIndex, slice.data);
+        }
       }
     });
 
@@ -335,13 +342,7 @@ export class SlotService {
     this.loadingKeys.delete(key0);
     this.loadingKeys.delete(key1);
 
-    // Set active pair and shader slots
-    this.activePair.set(param, { t0, t1 });
-    const s0 = this.slots.get(key0)!;
-    const s1 = this.slots.get(key1)!;
-    this.renderService.setTempSlots(s0.slotIndex, s1.slotIndex);
-    this.renderService.setTempLoadedPoints(Math.min(s0.loadedPoints, s1.loadedPoints));
-
+    // Shader setup happens in uploadToSlot → updateShaderIfReady
     this.initialized = true;
     this.slotsVersion.value++;
     console.log('[Slot] Initialized');
