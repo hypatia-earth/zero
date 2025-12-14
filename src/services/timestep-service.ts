@@ -23,10 +23,6 @@ interface ModelRun {
   run: string;
 }
 
-interface ModelConfig {
-  gapFillHours: number[];
-}
-
 /** Timestep state per param */
 export interface ParamState {
   cache: Set<TTimestep>;
@@ -48,11 +44,6 @@ interface LayerDetail {
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
-
-const MODEL_CONFIGS: Record<TModel, ModelConfig> = {
-  ecmwf_ifs: { gapFillHours: [0, 1, 2, 3, 4, 5] },
-  ecmwf_ifs025: { gapFillHours: [0, 3] },
-};
 
 const PARAMS: TParam[] = ['temp', 'rain', 'wind', 'pressure'];
 
@@ -153,7 +144,7 @@ export class TimestepService implements IDiscoveryService {
     this.variablesData[model] = data.variables;
 
     // Generate timesteps
-    const timesteps = await this.generateTimesteps(runs, model);
+    const timesteps = await this.generateTimesteps(runs);
     this.timestepsData[model] = timesteps;
   }
 
@@ -231,35 +222,20 @@ export class TimestepService implements IDiscoveryService {
     return files.sort();
   }
 
-  private async generateTimesteps(runs: ModelRun[], model: TModel): Promise<Timestep[]> {
-    const modelConfig = MODEL_CONFIGS[model];
+  private async generateTimesteps(runs: ModelRun[]): Promise<Timestep[]> {
     const timesteps: Timestep[] = [];
     const seen = new Set<TTimestep>();
 
-    // Reverse to process from last to first
+    // Process from latest to oldest - latest takes priority
     const reversedRuns = [...runs].reverse();
-    let isFirst = true;
 
     for (const run of reversedRuns) {
-      if (isFirst) {
-        // Last run: fetch all available files
-        for (const file of await this.listRunFiles(run.prefix)) {
-          const ts = formatTimestep(parseFilenameTimestep(file));
-          if (!seen.has(ts)) {
-            timesteps.push({ index: 0, timestep: ts, run: run.run, url: `${this.bucketRoot}/${file}` });
-            seen.add(ts);
-          }
-        }
-        isFirst = false;
-      } else {
-        // Previous runs: add first N timesteps
-        for (const hours of modelConfig.gapFillHours) {
-          const tsDate = new Date(run.datetime.getTime() + hours * 60 * 60 * 1000);
-          const ts = formatTimestep(tsDate);
-          if (!seen.has(ts)) {
-            timesteps.push({ index: 0, timestep: ts, run: run.run, url: `${this.bucketRoot}/${run.prefix}${ts}.om` });
-            seen.add(ts);
-          }
+      // List all files from each run, add if not already covered by newer run
+      for (const file of await this.listRunFiles(run.prefix)) {
+        const ts = formatTimestep(parseFilenameTimestep(file));
+        if (!seen.has(ts)) {
+          timesteps.push({ index: 0, timestep: ts, run: run.run, url: `${this.bucketRoot}/${file}` });
+          seen.add(ts);
         }
       }
     }
