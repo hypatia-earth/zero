@@ -116,6 +116,10 @@ export class TimestepService implements IDiscoveryService {
     for (const param of PARAMS) {
       const { cache, sizes } = await this.querySWCache(param);
       params.set(param, { cache, gpu: new Set(), sizes });
+      if (sizes.size > 0) {
+        const avgKB = [...sizes.values()].reduce((a, b) => a + b, 0) / sizes.size / 1024;
+        console.log(`[Timestep] ${param}: ${sizes.size} cached sizes, avg ${avgKB.toFixed(0)}KB`);
+      }
     }
 
     this.state.value = { ecmwf, params };
