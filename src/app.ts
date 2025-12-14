@@ -19,7 +19,7 @@ import { KeyboardService } from './services/keyboard-service';
 import { DiscoveryService } from './services/discovery-service';
 import { QueueService } from './services/queue-service';
 import { DataService } from './services/data-service';
-import { DataLoader } from './services/data-loader';
+// DataLoader removed - all static assets now via QueueService
 import { RenderService } from './services/render-service';
 import { BudgetService } from './services/budget-service';
 import { setupCameraControls } from './services/camera-controls';
@@ -45,7 +45,6 @@ interface AppComponent extends m.Component {
   discoveryService?: DiscoveryService;
   queueService?: QueueService;
   dataService?: DataService;
-  dataLoader?: DataLoader;
   renderService?: RenderService;
   budgetService?: BudgetService;
   keyboardService?: KeyboardService;
@@ -73,7 +72,6 @@ export const App: AppComponent = {
     this.fetchService = new FetchService(this.trackerService);
     this.dateTimeService = new DateTimeService(this.configService.getDataWindowDays());
     this.dataService = new DataService(this.fetchService);
-    this.dataLoader = new DataLoader(this.fetchService);
 
     m.redraw();
 
@@ -92,20 +90,51 @@ export const App: AppComponent = {
       this.discoveryService = new DiscoveryService(this.configService);
       await this.discoveryService.explore();
 
-      // Step 4: Assets (load LUTs via QueueService)
+      // Step 4: Assets via QueueService
+      // Total 11 items: 3 LUTs + 6 basemap + 1 WASM + 1 font, progress 15-20%
       BootstrapService.setStep('ASSETS');
       this.queueService = new QueueService(this.fetchService);
       const f16 = !this.capabilitiesService.float32_filterable;
       const suffix = f16 ? '-16' : '';
+
+      // 4a. LUTs
       const lutBuffers = await this.queueService.submitFileOrders(
         [
           { url: `/atmosphere/transmittance${suffix}.dat`, size: f16 ? 131072 : 262144 },
           { url: `/atmosphere/scattering${suffix}.dat`, size: f16 ? 8388608 : 16777216 },
           { url: `/atmosphere/irradiance${suffix}.dat`, size: f16 ? 8192 : 16384 },
         ],
-        (i, total) => BootstrapService.updateProgress(`Loading LUTs ${i + 1}/${total}...`, 15 + (i / total) * 5)
+        (i) => BootstrapService.updateProgress(`Loading LUTs ${i + 1}/3...`, 15 + (i / 11) * 5)
       );
-      console.log(`[Queue] loaded ${lutBuffers.length} LUTs`);
+
+      // 4b. Basemap faces
+      const basemapBuffers = await this.queueService.submitFileOrders(
+        [
+          { url: '/images/basemaps/rtopo2/px.png', size: 111244 },
+          { url: '/images/basemaps/rtopo2/nx.png', size: 78946 },
+          { url: '/images/basemaps/rtopo2/py.png', size: 215476 },
+          { url: '/images/basemaps/rtopo2/ny.png', size: 292274 },
+          { url: '/images/basemaps/rtopo2/pz.png', size: 85084 },
+          { url: '/images/basemaps/rtopo2/nz.png', size: 59133 },
+        ],
+        (i) => BootstrapService.updateProgress(`Loading basemap ${i + 1}/6...`, 15 + ((3 + i) / 11) * 5)
+      );
+      const basemapFaces = await Promise.all(
+        basemapBuffers.map(buf => createImageBitmap(new Blob([buf], { type: 'image/png' })))
+      );
+
+      // 4c. WASM decoder
+      const [wasmBuffer] = await this.queueService.submitFileOrders(
+        [{ url: '/om-decoder.wasm', size: 2107564 }],
+        () => BootstrapService.updateProgress('Loading WASM...', 15 + (9 / 11) * 5)
+      );
+
+      // 4d. Font atlas
+      const [fontBuffer] = await this.queueService.submitFileOrders(
+        [{ url: '/fonts/plex-mono.png', size: 15926 }],
+        () => BootstrapService.updateProgress('Loading font...', 15 + (10 / 11) * 5)
+      );
+      const fontAtlas = await createImageBitmap(new Blob([fontBuffer!], { type: 'image/png' }));
 
       // Step 5: GPU Init (no data loading)
       BootstrapService.setStep('GPU_INIT');
@@ -118,30 +147,25 @@ export const App: AppComponent = {
       );
       await this.renderService.initialize();
 
-      // Step 5: DATA - Load all assets sequentially
+      // Step 5: DATA - Initialize with assets from Step 4
       BootstrapService.setStep('DATA');
       const renderer = this.renderService.getRenderer();
 
-      // 5a. WASM decoder
-      const wasmBinary = await this.dataLoader.loadWasm();
-      await initOmWasm(wasmBinary);
+      // 5a. WASM decoder (from Step 4c)
+      await initOmWasm(wasmBuffer!);
 
-      // 5b. Atmosphere LUTs (from Step 4 QueueService)
-      // const useFloat16 = renderer.getUseFloat16Luts();
-      // const lutData = await this.dataLoader.loadAtmosphereLUTs(useFloat16);
-      // renderer.createAtmosphereTextures(lutData, useFloat16);
+      // 5b. Atmosphere LUTs (from Step 4a)
       renderer.createAtmosphereTextures({
         transmittance: lutBuffers[0]!,
         scattering: lutBuffers[1]!,
         irradiance: lutBuffers[2]!,
       });
 
-      // 5c. Basemap
-      const faces = await this.dataLoader.loadBasemap();
-      await renderer.loadBasemap(faces);
+      // 5c. Basemap (from Step 4b)
+      await renderer.loadBasemap(basemapFaces);
 
-      // 5d. Font atlas for grid labels
-      const fontAtlas = await this.dataLoader.loadFontAtlas();
+      // 5d. Font atlas (from Step 4d)
+      // const fontAtlas = await this.dataLoader.loadFontAtlas();
       await renderer.loadFontAtlas(fontAtlas);
 
       // Finalize renderer (create bind group now that textures are loaded)
@@ -159,13 +183,15 @@ export const App: AppComponent = {
         this.renderService
       );
 
-      // 5f. Temperature timesteps - use DataLoader for progress tracking
-      await this.dataLoader.loadTemperatureTimesteps(
-        this.budgetService.loadSingleInitialTimestep.bind(this.budgetService)
-      );
+      // 5f. Temperature timesteps
+      await BootstrapService.updateProgress('Loading temperature 1/2...', 50);
+      await this.budgetService.loadSingleInitialTimestep(0, 2);
+      await BootstrapService.updateProgress('Loading temperature 2/2...', 70);
+      await this.budgetService.loadSingleInitialTimestep(1, 2);
 
       // 5g. Precipitation (placeholder)
-      await this.dataLoader.loadPrecipitationTimesteps();
+      await BootstrapService.updateProgress('Loading precipitation 1/2...', 85);
+      await BootstrapService.updateProgress('Loading precipitation 2/2...', 95);
 
       // Step 6: Activate
       BootstrapService.setStep('ACTIVATE');
