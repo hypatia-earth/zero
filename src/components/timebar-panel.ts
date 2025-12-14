@@ -35,7 +35,19 @@ const COLOR_NOW = 'rgba(255,255,255,0.7)';  // Now marker
 
 /** Tick dimensions */
 const TICK_WIDTH = 2;
+const TICK_HEIGHT_RATIO = 0.9;  // 90% of row height
 const NOW_MARKER_WIDTH = 3;
+
+/** Disk perspective warp - compresses edges, expands center */
+function diskWarp(t: number): number {
+  return (1 - Math.cos(t * Math.PI)) / 2;
+}
+
+/** Disk height factor - taller in center, shorter at edges */
+const DISK_MIN_HEIGHT = 0.5;  // Minimum height at edges (50%)
+function diskHeight(t: number): number {
+  return DISK_MIN_HEIGHT + (1 - DISK_MIN_HEIGHT) * Math.sin(t * Math.PI);
+}
 
 /** Calculate sun brightness for a point on globe at given time
  *  Returns 0.5 (night) to 1.0 (day) */
@@ -94,15 +106,21 @@ function drawTicks(
   // Clear
   ctx.clearRect(0, 0, width, height);
 
-  // Calculate position for a timestamp
-  const getX = (ts: string): number => {
+  // Calculate linear position 0-1 for a timestamp
+  const getT = (ts: string): number => {
     const time = new Date(ts).getTime();
-    return ((time - window.start.getTime()) / windowMs) * width;
+    return (time - window.start.getTime()) / windowMs;
   };
+
+  // Calculate x position with disk warp
+  const getX = (t: number): number => diskWarp(t) * width;
 
   // Height per layer row
   const layerCount = activeLayers.length || 1;
   const layerHeight = height / layerCount;
+
+  // Base tick height
+  const baseTickHeight = layerHeight * TICK_HEIGHT_RATIO;
 
   // Draw ticks for each layer
   activeLayers.forEach((layer, rowIndex) => {
@@ -110,12 +128,16 @@ function drawTicks(
     const gpu = gpuMap.get(layer) || new Set();
     const active = activeMap.get(layer) || new Set();
     const colors = LAYER_COLORS[layer];
-    const topY = rowIndex * layerHeight;
+    const rowTopY = rowIndex * layerHeight;
 
     // Draw each ECMWF timestep
     ecmwfSet.forEach(tsKey => {
-      const x = getX(tsKey);
-      if (x < 0 || x > width) return;
+      const t = getT(tsKey);
+      if (t < 0 || t > 1) return;
+
+      const x = getX(t);
+      const tickHeight = baseTickHeight * diskHeight(t);
+      const topY = rowTopY + (layerHeight - tickHeight) / 2;  // Center vertically
 
       // Determine color: green (active) > layer (gpu) > layer dark (cached) > grey (ecmwf)
       let color = COLOR_ECMWF;
@@ -136,14 +158,15 @@ function drawTicks(
       }
 
       ctx.fillStyle = color;
-      ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, layerHeight);
+      ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickHeight);
       ctx.globalAlpha = 1.0;
     });
   });
 
   // Draw now marker (full height)
-  const nowX = getX(nowTime.toISOString());
-  if (nowX >= 0 && nowX <= width) {
+  const nowT = getT(nowTime.toISOString());
+  const nowX = getX(nowT);
+  if (nowT >= 0 && nowT <= 1) {
     ctx.fillStyle = COLOR_NOW;
     ctx.fillRect(nowX - NOW_MARKER_WIDTH / 2, 0, NOW_MARKER_WIDTH, height);
   }
