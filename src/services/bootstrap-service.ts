@@ -4,11 +4,13 @@
 
 import { signal } from '@preact/signals-core';
 import { sleep } from '../utils/sleep';
+import { defaultConfig } from '../config/defaults';
 
 export type BootstrapStep =
   | 'CAPABILITIES'
   | 'CONFIG'
   | 'DISCOVERY'
+  | 'ASSETS'
   | 'GPU_INIT'
   | 'DATA'
   | 'ACTIVATE';
@@ -25,12 +27,15 @@ const STEP_PROGRESS: Record<BootstrapStep, { start: number; end: number; label: 
   CAPABILITIES: { start: 0, end: 5, label: 'Checking capabilities...' },
   CONFIG: { start: 5, end: 10, label: 'Loading configuration...' },
   DISCOVERY: { start: 10, end: 15, label: 'Discovering data...' },
-  GPU_INIT: { start: 15, end: 25, label: 'Initializing GPU...' },
-  DATA: { start: 25, end: 95, label: 'Loading data...' },
+  ASSETS: { start: 15, end: 20, label: 'Loading assets...' },
+  GPU_INIT: { start: 20, end: 30, label: 'Initializing GPU...' },
+  DATA: { start: 30, end: 95, label: 'Loading data...' },
   ACTIVATE: { start: 95, end: 100, label: 'Starting...' },
 };
 
 export class BootstrapService {
+  static progressSleep = defaultConfig.bootstrap.progressSleep;
+
   static readonly state = signal<BootstrapState>({
     step: 'CAPABILITIES',
     progress: 0,
@@ -61,7 +66,7 @@ export class BootstrapService {
       label,
       progress: Math.min(100, Math.max(0, progress)),
     };
-    await sleep(10);
+    await sleep(this.progressSleep);
   }
 
   static setError(error: string): void {

@@ -44,6 +44,31 @@ export interface IDiscoveryService {
   timesteps(model?: TModel): Timestep[];
 }
 
+/** File download order for QueueService */
+export interface FileOrder {
+  url: string;
+  size: number;
+}
+
+/** Queue statistics for UI */
+export interface QueueStats {
+  bytesQueued: number;
+  bytesCompleted: number;
+  bytesPerSec: number | undefined;
+  etaSeconds: number | undefined;
+  status: 'idle' | 'downloading';
+}
+
+/** QueueService public API */
+export interface IQueueService {
+  readonly stats: QueueStats;
+  submitFileOrders(
+    orders: FileOrder[],
+    onProgress?: (index: number, total: number) => void
+  ): Promise<ArrayBuffer[]>;
+  dispose(): void;
+}
+
 export interface LayerConfig {
   id: LayerId;
   label: string;
@@ -84,9 +109,17 @@ export interface AppConfig {
   environment: string;
 }
 
+export interface BootstrapConfig {
+  /** Delay in ms after progress update to allow UI redraw */
+  progressSleep: number;
+}
+
 export interface ZeroConfig {
   /** App metadata (injected at build) */
   app: AppConfig;
+
+  /** Bootstrap progress settings */
+  bootstrap: BootstrapConfig;
 
   /** Discovery configuration */
   discovery: DiscoveryConfig;

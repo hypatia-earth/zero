@@ -50,14 +50,14 @@
 }
 
 .panel.fullscreen {
-  top: calc(20px + var(--layout-timecircle-size) + 10px);
+  top: calc(20px + var(--layout-timecircle-size) + 55px);
   right: 20px;
   width: 44px;
   height: 44px;
 }
 
 .panel.options {
-  top: calc(20px + var(--layout-timecircle-size) + 10px + 44px + 10px);
+  top: calc(20px + var(--layout-timecircle-size) + 55px + 44px + 10px);
   right: 20px;
 }
 

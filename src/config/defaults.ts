@@ -15,6 +15,10 @@ export const defaultConfig: ZeroConfig = {
     environment: 'development',
   },
 
+  bootstrap: {
+    progressSleep: 100,
+  },
+
   discovery: {
     root: 'https://openmeteo.s3.amazonaws.com/data_spatial/',
     models: ['ecmwf_ifs'],

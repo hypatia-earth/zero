@@ -14,8 +14,10 @@ import { TrackerService } from './services/tracker-service';
 import { FetchService } from './services/fetch-service';
 import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
+import { CapabilitiesService } from './services/capabilities-service';
 import { KeyboardService } from './services/keyboard-service';
 import { DiscoveryService } from './services/discovery-service';
+import { QueueService } from './services/queue-service';
 import { DataService } from './services/data-service';
 import { DataLoader } from './services/data-loader';
 import { RenderService } from './services/render-service';
@@ -26,6 +28,7 @@ import { BootstrapModal } from './components/bootstrap-modal';
 import { OptionsDialog } from './components/options-dialog';
 import { LayersPanel } from './components/layers-panel';
 import { TimeCirclePanel } from './components/timecircle-panel';
+import { QueuePanel } from './components/queue-panel';
 import { TimeBarPanel } from './components/timebar-panel';
 import { LogoPanel } from './components/logo-panel';
 import { GearIcon } from './components/GearIcon';
@@ -38,7 +41,9 @@ interface AppComponent extends m.Component {
   trackerService?: TrackerService;
   fetchService?: FetchService;
   dateTimeService?: DateTimeService;
+  capabilitiesService?: CapabilitiesService;
   discoveryService?: DiscoveryService;
+  queueService?: QueueService;
   dataService?: DataService;
   dataLoader?: DataLoader;
   renderService?: RenderService;
@@ -74,11 +79,9 @@ export const App: AppComponent = {
 
     try {
       // Step 1: Capabilities
-      // TODO: can happen in GPU_INIT, link to https://caniuse.com/webgpu
       BootstrapService.setStep('CAPABILITIES');
-      if (!navigator.gpu) {
-        throw new Error('WebGPU not supported');
-      }
+      this.capabilitiesService = new CapabilitiesService();
+      await this.capabilitiesService.init();
 
       // Step 2: Config
       BootstrapService.setStep('CONFIG');
@@ -89,7 +92,22 @@ export const App: AppComponent = {
       this.discoveryService = new DiscoveryService(this.configService);
       await this.discoveryService.explore();
 
-      // Step 4: GPU Init (no data loading)
+      // Step 4: Assets (load LUTs via QueueService)
+      BootstrapService.setStep('ASSETS');
+      this.queueService = new QueueService();
+      const f16 = !this.capabilitiesService.float32_filterable;
+      const suffix = f16 ? '-16' : '';
+      const lutBuffers = await this.queueService.submitFileOrders(
+        [
+          { url: `/atmosphere/transmittance${suffix}.dat`, size: f16 ? 131072 : 262144 },
+          { url: `/atmosphere/scattering${suffix}.dat`, size: f16 ? 8388608 : 16777216 },
+          { url: `/atmosphere/irradiance${suffix}.dat`, size: f16 ? 8192 : 16384 },
+        ],
+        (i, total) => BootstrapService.updateProgress(`Loading LUTs ${i + 1}/${total}...`, 15 + (i / total) * 5)
+      );
+      console.log(`[Queue] loaded ${lutBuffers.length} LUTs`);
+
+      // Step 5: GPU Init (no data loading)
       BootstrapService.setStep('GPU_INIT');
       this.renderService = new RenderService(
         this.canvas,
@@ -165,7 +183,9 @@ export const App: AppComponent = {
           trackerService: this.trackerService,
           fetchService: this.fetchService,
           dateTimeService: this.dateTimeService,
+          capabilitiesService: this.capabilitiesService,
           discoveryService: this.discoveryService,
+          queueService: this.queueService,
           dataService: this.dataService,
           renderService: this.renderService,
           budgetService: this.budgetService,
@@ -209,6 +229,7 @@ export const App: AppComponent = {
           optionsService: this.optionsService!,
         }),
         m(TimeCirclePanel, { stateService: this.stateService! }),
+        m(QueuePanel),
         this.budgetService && m(TimeBarPanel, {
           stateService: this.stateService!,
           dateTimeService: this.dateTimeService!,
