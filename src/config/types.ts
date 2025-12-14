@@ -2,6 +2,8 @@
  * Configuration types for Hypatia Zero
  */
 
+import type { Signal } from '@preact/signals-core';
+
 export type LayerId = 'earth' | 'sun' | 'grid' | 'temp' | 'rain';
 
 export type TModel = 'ecmwf_ifs' | 'ecmwf_ifs025';
@@ -61,7 +63,7 @@ export interface QueueStats {
 
 /** QueueService public API */
 export interface IQueueService {
-  readonly stats: QueueStats;
+  readonly stats: Signal<QueueStats>;
   submitFileOrders(
     orders: FileOrder[],
     onProgress?: (index: number, total: number) => void

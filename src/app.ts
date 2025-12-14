@@ -94,7 +94,7 @@ export const App: AppComponent = {
 
       // Step 4: Assets (load LUTs via QueueService)
       BootstrapService.setStep('ASSETS');
-      this.queueService = new QueueService();
+      this.queueService = new QueueService(this.fetchService);
       const f16 = !this.capabilitiesService.float32_filterable;
       const suffix = f16 ? '-16' : '';
       const lutBuffers = await this.queueService.submitFileOrders(
@@ -229,11 +229,11 @@ export const App: AppComponent = {
           optionsService: this.optionsService!,
         }),
         m(TimeCirclePanel, { stateService: this.stateService! }),
-        m(QueuePanel),
-        this.budgetService && m(TimeBarPanel, {
+        m(QueuePanel, { queueService: this.queueService! }),
+        m(TimeBarPanel, {
           stateService: this.stateService!,
           dateTimeService: this.dateTimeService!,
-          budgetService: this.budgetService,
+          budgetService: this.budgetService!,
         }),
         m(FullscreenPanel),
         // TODO: should become OptionsPanel

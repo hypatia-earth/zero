@@ -2,20 +2,33 @@
  * Queue Panel Component
  *
  * Displays download queue statistics below time circle
- * Direct DOM updates from render loop for performance
+ * Subscribes to QueueService.stats signal, debounced to 1s updates
  */
 
 import m from 'mithril';
+import { effect } from '@preact/signals-core';
+import { debounce } from '../utils/debounce';
+import type { IQueueService } from '../config/types';
 
-// Module-level reference for direct DOM updates
-let contentElement: HTMLElement | null = null;
+export interface QueuePanelAttrs {
+  queueService: IQueueService;
+}
 
-export const QueuePanel: m.Component = {
+const DEBUG = false;
+
+export const QueuePanel: m.Component<QueuePanelAttrs> = {
   oncreate(vnode) {
-    contentElement = vnode.dom.querySelector('.queue-text');
-  },
-  onremove() {
-    contentElement = null;
+    const el = vnode.dom.querySelector('.queue-text') as HTMLElement;
+
+    const update = debounce((queuedBytes: number, etaSeconds: number | undefined) => {
+      el.textContent = formatStats(queuedBytes, etaSeconds);
+      DEBUG && console.log('[QueuePanel]', el.textContent);
+    }, 1000);
+
+    effect(() => {
+      const stats = vnode.attrs.queueService.stats.value;
+      update(stats.bytesQueued, stats.etaSeconds);
+    });
   },
   view() {
     return m('div.queue.panel', [
@@ -28,26 +41,18 @@ export const QueuePanel: m.Component = {
   }
 };
 
-/**
- * Update queue panel directly (called from render loop, bypasses Mithril)
- */
-export function updateQueuePanel(queuedBytes: number, etaSeconds: number | undefined): void {
-  if (!contentElement) return;
-
+function formatStats(queuedBytes: number, etaSeconds: number | undefined): string {
   const mb = Math.round(queuedBytes / 1024 / 1024);
+  if (mb === 0) return '↓ 0 MB · idle';
 
-  if (mb === 0) {
-    contentElement.textContent = '↓ 0 MB · idle';
-    return;
+  let eta: string;
+  if (etaSeconds === undefined) {
+    eta = '?s';
+  } else if (etaSeconds < 60) {
+    eta = `${Math.round(etaSeconds)}s`;
+  } else {
+    eta = `~${Math.ceil(etaSeconds / 60)}m`;
   }
 
-  const timeStr = formatEta(etaSeconds);
-  contentElement.textContent = `↓ ${mb} MB · ${timeStr}`;
-}
-
-function formatEta(seconds: number | undefined): string {
-  if (seconds === undefined) return '?s';
-  const rounded = Math.round(seconds);
-  if (rounded < 60) return `${rounded}s`;
-  return `~${Math.ceil(seconds / 60)}m`;
+  return `↓ ${mb} MB · ${eta}`;
 }

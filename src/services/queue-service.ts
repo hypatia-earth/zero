@@ -2,70 +2,97 @@
  * QueueService - Download queue with progress tracking
  *
  * Fetches files sequentially with streaming chunks for accurate ETA.
+ * Learns compression ratio from completed files for better estimates.
  * Single source of truth for all pending downloads.
  */
 
+import { signal } from '@preact/signals-core';
 import type { FileOrder, QueueStats, IQueueService } from '../config/types';
+import type { FetchService } from './fetch-service';
+
+const DEBUG = true;
 
 export class QueueService implements IQueueService {
-  stats: QueueStats = {
+  readonly stats = signal<QueueStats>({
     bytesQueued: 0,
     bytesCompleted: 0,
     bytesPerSec: undefined,
     etaSeconds: undefined,
     status: 'idle',
-  };
+  });
 
+  // Bandwidth measurement
   private samples: Array<{ timestamp: number; bytes: number }> = [];
+
+  // Compression ratio learning (rolling average)
+  private compressionRatio = 1.0;
+  private compressionSamples = 0;
+
+  // Active download tracking
+  private pendingExpectedBytes = 0;
+  private activeExpectedBytes = 0;
+  private activeActualBytes = 0;
+  private totalBytesCompleted = 0;
+
+  constructor(private fetchService: FetchService) {}
 
   async submitFileOrders(
     orders: FileOrder[],
     onProgress?: (index: number, total: number) => void
   ): Promise<ArrayBuffer[]> {
-    // Add to queued bytes
+    // Sum expected bytes for all orders
     for (const order of orders) {
-      this.stats.bytesQueued += order.size;
+      this.pendingExpectedBytes += order.size;
     }
-    this.stats.status = 'downloading';
+    this.updateStats();
 
     // Fetch sequentially
     const results: ArrayBuffer[] = [];
     let i = 0;
     for (const order of orders) {
       onProgress?.(i++, orders.length);
-      const buffer = await this.fetchWithProgress(order.url);
+      const buffer = await this.fetchWithProgress(order);
       results.push(buffer);
     }
 
-    this.stats.status = 'idle';
+    this.updateStats();
     return results;
   }
 
-  private async fetchWithProgress(url: string): Promise<ArrayBuffer> {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} fetching ${url}`);
-    }
+  private async fetchWithProgress(order: FileOrder): Promise<ArrayBuffer> {
+    // Start tracking this file
+    this.pendingExpectedBytes -= order.size;
+    this.activeExpectedBytes = order.size;
+    this.activeActualBytes = 0;
 
-    const reader = response.body!.getReader();
-    const chunks: Uint8Array[] = [];
+    const buffer = await this.fetchService.fetch2(
+      order.url,
+      {},
+      (bytes) => this.onChunk(bytes)
+    );
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    // File complete - learn compression ratio
+    this.learnCompressionRatio(this.activeExpectedBytes, this.activeActualBytes);
+    this.activeExpectedBytes = 0;
+    this.activeActualBytes = 0;
 
-      chunks.push(value);
-      this.onChunk(value.length);
-    }
-
-    return this.combineChunks(chunks);
+    return buffer;
   }
 
   private onChunk(bytes: number): void {
-    this.stats.bytesCompleted += bytes;
+    this.activeActualBytes += bytes;
+    this.totalBytesCompleted += bytes;
     this.samples.push({ timestamp: performance.now(), bytes });
     this.pruneOldSamples();
-    this.updateBandwidth();
+    this.updateStats();
+  }
+
+  private learnCompressionRatio(expectedBytes: number, actualBytes: number): void {
+    if (expectedBytes === 0) return;
+    const ratio = actualBytes / expectedBytes;
+    // Rolling average
+    this.compressionSamples++;
+    this.compressionRatio += (ratio - this.compressionRatio) / this.compressionSamples;
   }
 
   private pruneOldSamples(): void {
@@ -73,36 +100,48 @@ export class QueueService implements IQueueService {
     this.samples = this.samples.filter(s => s.timestamp >= cutoff);
   }
 
-  private updateBandwidth(): void {
-    if (this.samples.length < 2) {
-      this.stats.bytesPerSec = undefined;
-      this.stats.etaSeconds = undefined;
-      return;
+  private updateStats(): void {
+    // Bandwidth calculation
+    let bytesPerSec: number | undefined;
+    if (this.samples.length >= 2) {
+      const first = this.samples[0]!;
+      const duration = (performance.now() - first.timestamp) / 1000;
+      if (duration >= 0.5) {
+        const totalBytes = this.samples.reduce((sum, s) => sum + s.bytes, 0);
+        bytesPerSec = totalBytes / duration;
+      }
     }
 
-    const first = this.samples[0]!;
-    const duration = (performance.now() - first.timestamp) / 1000;
-    if (duration < 0.5) return; // Need at least 0.5s of data
+    // Estimate remaining bytes (apply compression ratio)
+    const pendingWireBytes = this.pendingExpectedBytes * this.compressionRatio;
+    const activeRemainingBytes = (this.activeExpectedBytes * this.compressionRatio) - this.activeActualBytes;
+    const bytesQueued = Math.max(0, pendingWireBytes + activeRemainingBytes);
 
-    const totalBytes = this.samples.reduce((sum, s) => sum + s.bytes, 0);
-    this.stats.bytesPerSec = totalBytes / duration;
-
-    const remaining = this.stats.bytesQueued - this.stats.bytesCompleted;
-    this.stats.etaSeconds = remaining / this.stats.bytesPerSec;
-  }
-
-  private combineChunks(chunks: Uint8Array[]): ArrayBuffer {
-    const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
-    const result = new Uint8Array(totalLength);
-    let offset = 0;
-    for (const chunk of chunks) {
-      result.set(chunk, offset);
-      offset += chunk.length;
-    }
-    return result.buffer;
+    // Update stats signal
+    this.stats.value = {
+      bytesQueued,
+      bytesCompleted: this.totalBytesCompleted,
+      bytesPerSec,
+      etaSeconds: bytesPerSec ? bytesQueued / bytesPerSec : undefined,
+      status: bytesQueued > 0 ? 'downloading' : 'idle',
+    };
+    DEBUG && console.log('[Queue]', formatStats(this.stats.value));
   }
 
   dispose(): void {
     this.samples = [];
+    this.compressionRatio = 1.0;
+    this.compressionSamples = 0;
+    this.pendingExpectedBytes = 0;
+    this.activeExpectedBytes = 0;
+    this.activeActualBytes = 0;
+    this.totalBytesCompleted = 0;
   }
+}
+
+function formatStats(s: QueueStats): string {
+  const kb = (b: number) => (b / 1024).toFixed(0);
+  const bps = s.bytesPerSec ? `${kb(s.bytesPerSec)}KB/s` : '?';
+  const eta = s.etaSeconds !== undefined ? `${s.etaSeconds.toFixed(1)}s` : '?';
+  return `Q:${kb(s.bytesQueued)}KB D:${kb(s.bytesCompleted)}KB ${bps} ${eta}`;
 }

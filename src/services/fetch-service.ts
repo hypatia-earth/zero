@@ -31,6 +31,42 @@ export class FetchService {
   }
 
   /**
+   * Streaming GET fetch with chunk progress reporting
+   * Used by QueueService for bandwidth tracking during bootstrap
+   */
+  async fetch2(
+    url: string,
+    headers: HeadersInit,
+    onChunk: (bytes: number) => void
+  ): Promise<ArrayBuffer> {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} fetching ${url}`);
+    }
+
+    const reader = response.body!.getReader();
+    const chunks: Uint8Array[] = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      onChunk(value.length);
+      this.tracker.onBytesReceived(value.length);
+    }
+
+    // Combine chunks into single ArrayBuffer
+    const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return result.buffer;
+  }
+
+  /**
    * Range GET fetch, returns Uint8Array
    * Used for: .om file partial reads
    * @param layer - Layer identifier for SW cache segregation
