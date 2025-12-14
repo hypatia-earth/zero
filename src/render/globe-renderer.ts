@@ -194,8 +194,8 @@ export class GlobeRenderer {
    * Create atmosphere LUT textures from pre-loaded data
    * Called by DataLoader after fetching LUT files
    */
-  createAtmosphereTextures(data: AtmosphereLUTData, useFloat16: boolean): void {
-    this.atmosphereLUTs = createAtmosphereLUTs(this.device, data, useFloat16);
+  createAtmosphereTextures(data: AtmosphereLUTData): void {
+    this.atmosphereLUTs = createAtmosphereLUTs(this.device, data, this.useFloat16Luts);
   }
 
   /**

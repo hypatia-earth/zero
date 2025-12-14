@@ -126,10 +126,15 @@ export const App: AppComponent = {
       const wasmBinary = await this.dataLoader.loadWasm();
       await initOmWasm(wasmBinary);
 
-      // 5b. Atmosphere LUTs
-      const useFloat16 = renderer.getUseFloat16Luts();
-      const lutData = await this.dataLoader.loadAtmosphereLUTs(useFloat16);
-      renderer.createAtmosphereTextures(lutData, useFloat16);
+      // 5b. Atmosphere LUTs (from Step 4 QueueService)
+      // const useFloat16 = renderer.getUseFloat16Luts();
+      // const lutData = await this.dataLoader.loadAtmosphereLUTs(useFloat16);
+      // renderer.createAtmosphereTextures(lutData, useFloat16);
+      renderer.createAtmosphereTextures({
+        transmittance: lutBuffers[0]!,
+        scattering: lutBuffers[1]!,
+        irradiance: lutBuffers[2]!,
+      });
 
       // 5c. Basemap
       const faces = await this.dataLoader.loadBasemap();

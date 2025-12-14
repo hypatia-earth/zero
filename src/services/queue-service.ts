@@ -38,7 +38,7 @@ export class QueueService implements IQueueService {
 
   async submitFileOrders(
     orders: FileOrder[],
-    onProgress?: (index: number, total: number) => void
+    onProgress?: (index: number, total: number) => void | Promise<void>
   ): Promise<ArrayBuffer[]> {
     // Sum expected bytes for all orders
     for (const order of orders) {
@@ -50,7 +50,7 @@ export class QueueService implements IQueueService {
     const results: ArrayBuffer[] = [];
     let i = 0;
     for (const order of orders) {
-      onProgress?.(i++, orders.length);
+      await onProgress?.(i++, orders.length);
       const buffer = await this.fetchWithProgress(order);
       results.push(buffer);
     }
