@@ -128,35 +128,68 @@ export class TimestepService implements IDiscoveryService {
 
   private async exploreModel(model: TModel): Promise<void> {
     const config = this.configService.getDiscovery();
+    const basePrefix = `data_spatial/${model}/`;
 
-    // Fetch latest.json for variables and valid_times
+    // 1. Fetch latest.json → completed run info
     const response = await fetch(`${config.root}${model}/latest.json`);
     if (!response.ok) {
       throw new Error(`[Discovery] Failed to fetch latest.json for ${model}`);
     }
     const data = await response.json();
     this.variablesData[model] = data.variables;
-    const latestValidTimes: string[] = data.valid_times ?? [];
+    const completedRunTime = new Date(data.reference_time);
+    const completedValidTimes: string[] = data.valid_times ?? [];
 
-    // Discover runs via S3 listing (4 requests max)
-    const runs = await this.discoverRuns(`data_spatial/${model}/`);
-    if (runs.length === 0) {
+    // 2. Find first and newest runs via S3
+    const { firstRun, newestRun, newestRunPrefix } = await this.discoverRunBounds(basePrefix);
+    if (!firstRun) {
       throw new Error(`[Discovery] No runs found for ${model}`);
     }
 
-    // Generate timesteps (math only, no requests)
-    const timesteps = this.generateTimesteps(runs, latestValidTimes);
+    // 3. Check if there's an incomplete run newer than completed
+    let incompleteRunTimesteps: string[] | null = null;
+    let incompleteRunPrefix: string | null = null;
+
+    if (newestRun && newestRun > completedRunTime) {
+      // Incomplete run exists - list its files to see what's available
+      const files = await this.listS3Files(newestRunPrefix!);
+      incompleteRunTimesteps = files
+        .filter(f => f.endsWith('.om'))
+        .map(f => {
+          const match = /(\d{4}-\d{2}-\d{2}T\d{4})\.om$/.exec(f);
+          return match ? match[1]! : null;
+        })
+        .filter((ts): ts is string => ts !== null);
+      incompleteRunPrefix = newestRunPrefix;
+    }
+
+    // 4. Generate runs from first to completed (or newest if no incomplete)
+    const lastCompleteRun = incompleteRunTimesteps ? completedRunTime : (newestRun ?? completedRunTime);
+    const runs = this.generateRuns(basePrefix, firstRun, lastCompleteRun);
+
+    // 5. Generate timesteps
+    const timesteps = this.generateTimesteps(
+      runs,
+      completedRunTime,
+      completedValidTimes,
+      incompleteRunPrefix,
+      incompleteRunTimesteps
+    );
     this.timestepsData[model] = timesteps;
   }
 
-  private async discoverRuns(basePrefix: string): Promise<ModelRun[]> {
+  private async discoverRunBounds(basePrefix: string): Promise<{
+    firstRun: Date | null;
+    newestRun: Date | null;
+    newestRunPrefix: string | null;
+  }> {
     const pad = (n: number) => n.toString().padStart(2, '0');
 
-    // Find available days (1-2 requests for month listings)
+    // List months (1-2 requests)
     const now = new Date();
-    const oldest = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthsToCheck = new Set<string>();
-    monthsToCheck.add(`${oldest.getUTCFullYear()}/${pad(oldest.getUTCMonth() + 1)}`);
+    monthsToCheck.add(`${weekAgo.getUTCFullYear()}/${pad(weekAgo.getUTCMonth() + 1)}`);
     monthsToCheck.add(`${now.getUTCFullYear()}/${pad(now.getUTCMonth() + 1)}`);
 
     const dayPrefixes: string[] = [];
@@ -166,24 +199,30 @@ export class TimestepService implements IDiscoveryService {
     }
     dayPrefixes.sort();
 
-    if (dayPrefixes.length === 0) return [];
+    if (dayPrefixes.length === 0) {
+      return { firstRun: null, newestRun: null, newestRunPrefix: null };
+    }
 
-    // Find first run (list runs on oldest day)
-    const oldestDayPrefix = dayPrefixes[0]!;
-    const oldestDayRuns = await this.listS3Prefixes(oldestDayPrefix);
+    // List oldest day runs
+    const oldestDayRuns = await this.listS3Prefixes(dayPrefixes[0]!);
     const firstRunMatch = /\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{4}Z)\/$/.exec(oldestDayRuns[0] ?? '');
-    if (!firstRunMatch) return [];
 
-    // Find last run (list runs on newest day)
-    const newestDayPrefix = dayPrefixes[dayPrefixes.length - 1]!;
-    const newestDayRuns = await this.listS3Prefixes(newestDayPrefix);
-    const lastRunMatch = /\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{4}Z)\/$/.exec(newestDayRuns[newestDayRuns.length - 1] ?? '');
-    if (!lastRunMatch) return [];
+    // List newest day runs
+    const newestDayRuns = await this.listS3Prefixes(dayPrefixes[dayPrefixes.length - 1]!);
+    const newestRunMatch = /\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{4}Z)\/$/.exec(newestDayRuns[newestDayRuns.length - 1] ?? '');
 
-    const firstRun = new Date(`${firstRunMatch[1]}-${firstRunMatch[2]}-${firstRunMatch[3]}T${firstRunMatch[4]!.slice(0, 2)}:00:00Z`);
-    const lastRun = new Date(`${lastRunMatch[1]}-${lastRunMatch[2]}-${lastRunMatch[3]}T${lastRunMatch[4]!.slice(0, 2)}:00:00Z`);
+    const parseRun = (match: RegExpExecArray | null) =>
+      match ? new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]!.slice(0, 2)}:00:00Z`) : null;
 
-    // Generate all runs between first and last (math, no requests)
+    return {
+      firstRun: parseRun(firstRunMatch),
+      newestRun: parseRun(newestRunMatch),
+      newestRunPrefix: newestRunMatch ? newestDayRuns[newestDayRuns.length - 1]! : null,
+    };
+  }
+
+  private generateRuns(basePrefix: string, firstRun: Date, lastRun: Date): ModelRun[] {
+    const pad = (n: number) => n.toString().padStart(2, '0');
     const runs: ModelRun[] = [];
     const cursor = new Date(firstRun);
 
@@ -200,7 +239,6 @@ export class TimestepService implements IDiscoveryService {
         run: runTime,
       });
 
-      // Advance to next run (6 hours)
       cursor.setUTCHours(cursor.getUTCHours() + 6);
     }
 
@@ -225,19 +263,63 @@ export class TimestepService implements IDiscoveryService {
     return prefixes.sort();
   }
 
-  private generateTimesteps(runs: ModelRun[], latestValidTimes: string[]): Timestep[] {
+  private async listS3Files(prefix: string): Promise<string[]> {
+    const url = `${this.bucketRoot}?list-type=2&prefix=${prefix}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} listing ${url}`);
+    }
+
+    const text = await response.text();
+    const doc = new DOMParser().parseFromString(text, 'text/xml');
+    const files: string[] = [];
+
+    doc.querySelectorAll('Contents Key').forEach(el => {
+      if (el.textContent) files.push(el.textContent);
+    });
+
+    return files.sort();
+  }
+
+  private generateTimesteps(
+    runs: ModelRun[],
+    completedRunTime: Date,
+    completedValidTimes: string[],
+    incompleteRunPrefix: string | null,
+    incompleteRunTimesteps: string[] | null
+  ): Timestep[] {
     const timesteps: Timestep[] = [];
     const seen = new Set<TTimestep>();
     const GAP_FILL_HOURS = [0, 1, 2, 3, 4, 5]; // First 6 hours from older runs
 
-    // Process from latest to oldest - latest takes priority
+    // 1. Add incomplete run timesteps first (highest priority)
+    if (incompleteRunPrefix && incompleteRunTimesteps) {
+      const runMatch = /\/(\d{4}Z)\/$/.exec(incompleteRunPrefix);
+      const runTime = runMatch?.[1] ?? 'unknown';
+
+      for (const tsStr of incompleteRunTimesteps) {
+        const ts = tsStr as TTimestep;
+        if (!seen.has(ts)) {
+          timesteps.push({
+            index: 0,
+            timestep: ts,
+            run: runTime,
+            url: `${this.bucketRoot}/${incompleteRunPrefix}${ts}.om`,
+          });
+          seen.add(ts);
+        }
+      }
+    }
+
+    // 2. Process runs from latest to oldest
     const reversedRuns = [...runs].reverse();
-    const latestRun = reversedRuns[0];
 
     for (const run of reversedRuns) {
-      if (run === latestRun) {
-        // Latest run: use valid_times from latest.json
-        for (const isoTime of latestValidTimes) {
+      const isCompletedRun = run.datetime.getTime() === completedRunTime.getTime();
+
+      if (isCompletedRun) {
+        // Completed run: use valid_times from latest.json
+        for (const isoTime of completedValidTimes) {
           const ts = formatTimestep(new Date(isoTime));
           if (!seen.has(ts)) {
             timesteps.push({
