@@ -11,7 +11,7 @@
 import { signal } from '@preact/signals-core';
 import type { TParam, TTimestep, TModel, Timestep, IDiscoveryService } from '../config/types';
 import type { ConfigService } from './config-service';
-import { parseTimestep, formatTimestep, parseFilenameTimestep } from '../utils/timestep';
+import { parseTimestep, formatTimestep } from '../utils/timestep';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -129,73 +129,82 @@ export class TimestepService implements IDiscoveryService {
   private async exploreModel(model: TModel): Promise<void> {
     const config = this.configService.getDiscovery();
 
-    // Discover runs via S3 listing
-    const runs = await this.discoverRuns(`data_spatial/${model}/`);
-    if (runs.length === 0) {
-      throw new Error(`[Discovery] No runs found for ${model}`);
-    }
-
-    // Fetch variables from latest.json
+    // Fetch latest.json for variables and valid_times
     const response = await fetch(`${config.root}${model}/latest.json`);
     if (!response.ok) {
       throw new Error(`[Discovery] Failed to fetch latest.json for ${model}`);
     }
     const data = await response.json();
     this.variablesData[model] = data.variables;
+    const latestValidTimes: string[] = data.valid_times ?? [];
 
-    // Generate timesteps
-    const timesteps = await this.generateTimesteps(runs);
+    // Discover runs via S3 listing (4 requests max)
+    const runs = await this.discoverRuns(`data_spatial/${model}/`);
+    if (runs.length === 0) {
+      throw new Error(`[Discovery] No runs found for ${model}`);
+    }
+
+    // Generate timesteps (math only, no requests)
+    const timesteps = this.generateTimesteps(runs, latestValidTimes);
     this.timestepsData[model] = timesteps;
   }
 
   private async discoverRuns(basePrefix: string): Promise<ModelRun[]> {
-    const runs: ModelRun[] = [];
+    const pad = (n: number) => n.toString().padStart(2, '0');
 
-    // Compute which year/month combinations to check (last 7 days)
+    // Find available days (1-2 requests for month listings)
     const now = new Date();
     const oldest = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthsToCheck = new Set<string>();
-
-    // Add months for oldest and current date
-    const pad = (n: number) => n.toString().padStart(2, '0');
     monthsToCheck.add(`${oldest.getUTCFullYear()}/${pad(oldest.getUTCMonth() + 1)}`);
     monthsToCheck.add(`${now.getUTCFullYear()}/${pad(now.getUTCMonth() + 1)}`);
 
-    // List days for each month (1-2 requests)
     const dayPrefixes: string[] = [];
     for (const yearMonth of monthsToCheck) {
-      const monthPrefix = `${basePrefix}${yearMonth}/`;
-      const days = await this.listS3Prefixes(monthPrefix);
+      const days = await this.listS3Prefixes(`${basePrefix}${yearMonth}/`);
       dayPrefixes.push(...days);
     }
+    dayPrefixes.sort();
 
-    // List runs for each day (parallel)
-    const runResults = await Promise.all(
-      dayPrefixes.map(async (dayPrefix) => {
-        const dayMatch = /\/(\d{4})\/(\d{2})\/(\d{2})\/$/.exec(dayPrefix);
-        if (!dayMatch) return [];
-        const [, year, month, day] = dayMatch;
+    if (dayPrefixes.length === 0) return [];
 
-        const runPrefixes = await this.listS3Prefixes(dayPrefix);
-        return runPrefixes.map(runPrefix => {
-          const runMatch = /\/(\d{4}Z)\/$/.exec(runPrefix);
-          if (!runMatch) return null;
-          const runTime = runMatch[1] ?? '';
+    // Find first run (list runs on oldest day)
+    const oldestDayPrefix = dayPrefixes[0]!;
+    const oldestDayRuns = await this.listS3Prefixes(oldestDayPrefix);
+    const firstRunMatch = /\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{4}Z)\/$/.exec(oldestDayRuns[0] ?? '');
+    if (!firstRunMatch) return [];
 
-          return {
-            prefix: runPrefix,
-            datetime: new Date(`${year}-${month}-${day}T${runTime.slice(0, 2)}:00:00Z`),
-            run: runTime,
-          };
-        }).filter((r): r is ModelRun => r !== null);
-      })
-    );
+    // Find last run (list runs on newest day)
+    const newestDayPrefix = dayPrefixes[dayPrefixes.length - 1]!;
+    const newestDayRuns = await this.listS3Prefixes(newestDayPrefix);
+    const lastRunMatch = /\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{4}Z)\/$/.exec(newestDayRuns[newestDayRuns.length - 1] ?? '');
+    if (!lastRunMatch) return [];
 
-    for (const dayRuns of runResults) {
-      runs.push(...dayRuns);
+    const firstRun = new Date(`${firstRunMatch[1]}-${firstRunMatch[2]}-${firstRunMatch[3]}T${firstRunMatch[4]!.slice(0, 2)}:00:00Z`);
+    const lastRun = new Date(`${lastRunMatch[1]}-${lastRunMatch[2]}-${lastRunMatch[3]}T${lastRunMatch[4]!.slice(0, 2)}:00:00Z`);
+
+    // Generate all runs between first and last (math, no requests)
+    const runs: ModelRun[] = [];
+    const cursor = new Date(firstRun);
+
+    while (cursor <= lastRun) {
+      const year = cursor.getUTCFullYear();
+      const month = pad(cursor.getUTCMonth() + 1);
+      const day = pad(cursor.getUTCDate());
+      const hour = pad(cursor.getUTCHours());
+      const runTime = `${hour}00Z`;
+
+      runs.push({
+        prefix: `${basePrefix}${year}/${month}/${day}/${runTime}/`,
+        datetime: new Date(cursor),
+        run: runTime,
+      });
+
+      // Advance to next run (6 hours)
+      cursor.setUTCHours(cursor.getUTCHours() + 6);
     }
 
-    return runs.sort((a, b) => a.datetime.getTime() - b.datetime.getTime());
+    return runs;
   }
 
   private async listS3Prefixes(prefix: string): Promise<string[]> {
@@ -216,40 +225,44 @@ export class TimestepService implements IDiscoveryService {
     return prefixes.sort();
   }
 
-  private async listRunFiles(runPrefix: string): Promise<string[]> {
-    const url = `${this.bucketRoot}?list-type=2&prefix=${runPrefix}`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} listing ${url}`);
-    }
-
-    const text = await response.text();
-    const doc = new DOMParser().parseFromString(text, 'text/xml');
-    const files: string[] = [];
-
-    doc.querySelectorAll('Contents Key').forEach(el => {
-      if (el.textContent && el.textContent.endsWith('.om')) {
-        files.push(el.textContent);
-      }
-    });
-
-    return files.sort();
-  }
-
-  private async generateTimesteps(runs: ModelRun[]): Promise<Timestep[]> {
+  private generateTimesteps(runs: ModelRun[], latestValidTimes: string[]): Timestep[] {
     const timesteps: Timestep[] = [];
     const seen = new Set<TTimestep>();
+    const GAP_FILL_HOURS = [0, 1, 2, 3, 4, 5]; // First 6 hours from older runs
 
     // Process from latest to oldest - latest takes priority
     const reversedRuns = [...runs].reverse();
+    const latestRun = reversedRuns[0];
 
     for (const run of reversedRuns) {
-      // List all files from each run, add if not already covered by newer run
-      for (const file of await this.listRunFiles(run.prefix)) {
-        const ts = formatTimestep(parseFilenameTimestep(file));
-        if (!seen.has(ts)) {
-          timesteps.push({ index: 0, timestep: ts, run: run.run, url: `${this.bucketRoot}/${file}` });
-          seen.add(ts);
+      if (run === latestRun) {
+        // Latest run: use valid_times from latest.json
+        for (const isoTime of latestValidTimes) {
+          const ts = formatTimestep(new Date(isoTime));
+          if (!seen.has(ts)) {
+            timesteps.push({
+              index: 0,
+              timestep: ts,
+              run: run.run,
+              url: `${this.bucketRoot}/${run.prefix}${ts}.om`,
+            });
+            seen.add(ts);
+          }
+        }
+      } else {
+        // Older runs: compute gap-fill timesteps (first 6 hours)
+        for (const hours of GAP_FILL_HOURS) {
+          const tsDate = new Date(run.datetime.getTime() + hours * 60 * 60 * 1000);
+          const ts = formatTimestep(tsDate);
+          if (!seen.has(ts)) {
+            timesteps.push({
+              index: 0,
+              timestep: ts,
+              run: run.run,
+              url: `${this.bucketRoot}/${run.prefix}${ts}.om`,
+            });
+            seen.add(ts);
+          }
         }
       }
     }
