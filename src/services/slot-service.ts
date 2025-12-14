@@ -1,10 +1,10 @@
 /**
  * SlotService - GPU slot management for timestep data
  *
- * Manages GPU texture slots, creates TimestepOrders for QueueService,
- * and notifies TimestepService of GPU state changes.
+ * Manages GPU texture slots, loads data via QueueService → OmService,
+ * and handles load window calculation with eviction.
  *
- * Replaces BudgetService's data loading with QueueService integration.
+ * Replaces BudgetService.
  */
 
 import { effect, signal } from '@preact/signals-core';
@@ -32,9 +32,13 @@ export class SlotService {
   private maxSlots: number;
   private freeSlotIndices: number[] = [];
   private disposeEffect: (() => void) | null = null;
-  private _strategy: LoadingStrategy = 'alternate';
+  private strategy: LoadingStrategy = 'alternate';
   private loadingKeys: Set<string> = new Set();
   private initialized = false;
+
+  // Data window boundaries
+  private dataWindowStart!: TTimestep;
+  private dataWindowEnd!: TTimestep;
 
   // Active interpolation pair per param
   private activePair: Map<TParam, { t0: TTimestep; t1: TTimestep }> = new Map();
@@ -47,7 +51,7 @@ export class SlotService {
     private stateService: StateService,
     private timestepService: TimestepService,
     private renderService: RenderService,
-    private _queueService: QueueService
+    private queueService: QueueService
   ) {
     this.maxSlots = this.renderService.getRenderer().getMaxTempSlots();
     this.freeSlotIndices = Array.from({ length: this.maxSlots }, (_, i) => i);
@@ -72,18 +76,16 @@ export class SlotService {
     return `${param}:${timestep}`;
   }
 
-  /** Handle time change - determine what to load/evict */
+  /** Handle time change - load/evict as needed */
   private onTimeChange(time: Date): void {
     if (!this.initialized) return;
 
-    // Get adjacent timesteps
-    const [t0, t1] = this.timestepService.adjacent(time);
-
-    // Check for temp param (primary for now)
     const param: TParam = 'temp';
+    const [t0, t1] = this.timestepService.adjacent(time);
     const key0 = this.makeKey(param, t0);
     const key1 = this.makeKey(param, t1);
 
+    // Update shader if both loaded
     const slot0 = this.slots.get(key0);
     const slot1 = this.slots.get(key1);
 
@@ -93,42 +95,124 @@ export class SlotService {
       this.renderService.setTempLoadedPoints(Math.min(slot0.loadedPoints, slot1.loadedPoints));
     }
 
-    // TODO: Calculate load window, create orders, submit to QueueService
-    // For now, just ensure current pair is loaded
-    this.ensureLoaded(param, t0);
-    this.ensureLoaded(param, t1);
-  }
+    // Calculate ideal window
+    const idealWindow = this.calculateLoadWindow(time, param);
+    const idealKeys = new Set(idealWindow.map(ts => this.makeKey(param, ts)));
 
-  /** Ensure a timestep is loaded or loading */
-  private ensureLoaded(param: TParam, timestep: TTimestep): void {
-    const key = this.makeKey(param, timestep);
-    if (this.slots.has(key) || this.loadingKeys.has(key)) return;
+    // Find what needs loading (prioritize current pair)
+    const toLoad = idealWindow.filter(ts => !this.slots.has(this.makeKey(param, ts)));
+    const priorityTimesteps = [t0, t1].filter(ts => !this.slots.has(this.makeKey(param, ts)));
+    const otherTimesteps = toLoad.filter(ts => ts !== t0 && ts !== t1);
+    const orderedToLoad = [...priorityTimesteps, ...otherTimesteps];
 
-    // Get free slot or evict
-    const slotIndex = this.allocateSlot(param, timestep);
-    if (slotIndex === null) return;
+    // Find eviction candidates (outside ideal window, sorted by distance)
+    const evictionCandidates = [...this.slots.entries()]
+      .filter(([key, slot]) => slot.param === param && !idealKeys.has(key))
+      .sort((a, b) => {
+        const distA = Math.abs(this.timestepService.toDate(a[1].timestep).getTime() - time.getTime());
+        const distB = Math.abs(this.timestepService.toDate(b[1].timestep).getTime() - time.getTime());
+        return distB - distA; // Furthest first
+      });
 
-    this.loadingKeys.add(key);
-    this.slots.set(key, {
-      timestep,
-      param,
-      slotIndex,
-      loaded: false,
-      loadedPoints: 0,
-    });
+    // Load new timesteps (one at a time to avoid WASM OOM)
+    for (const timestep of orderedToLoad) {
+      const key = this.makeKey(param, timestep);
+      if (this.loadingKeys.has(key)) continue;
+      if (this.slots.has(key)) continue;
 
-    // Create order and load via QueueService
-    this.loadTimestep(param, timestep, slotIndex, key);
-  }
+      // Only one concurrent load
+      if (this.loadingKeys.size > 0) break;
 
-  /** Allocate a slot index, evicting if necessary */
-  private allocateSlot(_param: TParam, _timestep: TTimestep): number | null {
-    if (this.freeSlotIndices.length > 0) {
-      return this.freeSlotIndices.pop()!;
+      // Get slot index - evict if needed
+      let slotIndex: number;
+      if (this.freeSlotIndices.length > 0) {
+        slotIndex = this.freeSlotIndices.pop()!;
+      } else if (evictionCandidates.length > 0) {
+        const [evictKey, evictSlot] = evictionCandidates.shift()!;
+        console.log(`[Slot] Evicting ${evictKey} for ${key}`);
+        this.slots.delete(evictKey);
+        this.timestepService.setGpuUnloaded(param, evictSlot.timestep);
+        slotIndex = evictSlot.slotIndex;
+      } else {
+        break; // No slots available
+      }
+
+      this.loadingKeys.add(key);
+      this.slots.set(key, { timestep, param, slotIndex, loaded: false, loadedPoints: 0 });
+      this.loadTimestep(param, timestep, slotIndex, key);
     }
-    // TODO: Implement eviction based on distance from current time
-    console.warn('[Slot] No free slots available');
-    return null;
+  }
+
+  /** Calculate ideal load window around time */
+  private calculateLoadWindow(time: Date, param: TParam): TTimestep[] {
+    const [t0, t1] = this.timestepService.adjacent(time);
+    const window: TTimestep[] = [t0, t1];
+
+    let pastCursor = this.timestepService.prev(t0);
+    let futureCursor = this.timestepService.next(t1);
+
+    while (window.length < this.maxSlots) {
+      const added = this.addNextSlot(window, pastCursor, futureCursor, param);
+      if (!added) break;
+
+      // Update cursors
+      if (futureCursor && window.includes(futureCursor)) {
+        futureCursor = this.timestepService.next(futureCursor);
+      }
+      if (pastCursor && window.includes(pastCursor)) {
+        pastCursor = this.timestepService.prev(pastCursor);
+      }
+    }
+
+    return window;
+  }
+
+  /** Add next slot based on strategy */
+  private addNextSlot(
+    window: TTimestep[],
+    pastCursor: TTimestep | null,
+    futureCursor: TTimestep | null,
+    _param: TParam
+  ): boolean {
+    const canAddFuture = futureCursor && this.isInDataWindow(futureCursor);
+    const canAddPast = pastCursor && this.isInDataWindow(pastCursor);
+
+    switch (this.strategy) {
+      case 'future-first':
+        if (canAddFuture) { window.push(futureCursor!); return true; }
+        if (canAddPast) { window.push(pastCursor!); return true; }
+        return false;
+
+      case 'past-first':
+        if (canAddPast) { window.push(pastCursor!); return true; }
+        if (canAddFuture) { window.push(futureCursor!); return true; }
+        return false;
+
+      case 'alternate':
+      default:
+        const t0 = window[0]!;
+        const futureCount = window.filter(ts => ts > t0).length;
+        const pastCount = window.filter(ts => ts < t0).length;
+
+        if (futureCount <= pastCount && canAddFuture) {
+          window.push(futureCursor!);
+          return true;
+        }
+        if (canAddPast) {
+          window.push(pastCursor!);
+          return true;
+        }
+        if (canAddFuture) {
+          window.push(futureCursor!);
+          return true;
+        }
+        return false;
+    }
+  }
+
+  /** Check if timestep is within data window */
+  private isInDataWindow(timestep: TTimestep): boolean {
+    return timestep >= this.dataWindowStart && timestep <= this.dataWindowEnd;
   }
 
   /** Load a timestep via QueueService */
@@ -144,11 +228,10 @@ export class SlotService {
 
       console.log(`[Slot] Loading ${param}:${timestep} → slot ${slotIndex}`);
 
-      await this._queueService.submitTimestepOrders(
+      await this.queueService.submitTimestepOrders(
         [order],
         (_order, slice) => {
           if (slice.done) {
-            // Final slice - upload to GPU
             this.onDataReceived(param, timestep, slice.data);
           }
         }
@@ -158,33 +241,31 @@ export class SlotService {
       console.warn(`[Slot] Failed to load ${param}:${timestep}:`, err);
     } finally {
       this.loadingKeys.delete(key);
+      // Trigger re-evaluation to load next
+      this.onTimeChange(this.stateService.getTime());
     }
   }
 
-  /** Called when data arrives from QueueService */
-  onDataReceived(param: TParam, timestep: TTimestep, data: Float32Array): void {
+  /** Called when data arrives - upload to GPU */
+  private onDataReceived(param: TParam, timestep: TTimestep, data: Float32Array): void {
     const key = this.makeKey(param, timestep);
     const slot = this.slots.get(key);
     if (!slot) return;
 
-    // Upload to GPU
     const renderer = this.renderService.getRenderer();
     renderer.uploadTempDataToSlot(data, slot.slotIndex);
 
     slot.loaded = true;
     slot.loadedPoints = data.length;
 
-    // Notify TimestepService
     this.timestepService.setGpuLoaded(param, timestep);
-
     this.slotsVersion.value++;
     console.log(`[Slot] Loaded ${key} → slot ${slot.slotIndex}`);
 
-    // Update shader if this completes the active pair
     this.updateShaderIfReady(param);
   }
 
-  /** Update shader slots if both timesteps of active pair are loaded */
+  /** Update shader slots if both timesteps ready */
   private updateShaderIfReady(param: TParam): void {
     const time = this.stateService.getTime();
     const [t0, t1] = this.timestepService.adjacent(time);
@@ -216,6 +297,11 @@ export class SlotService {
 
   /** Initialize with first timestep pair */
   async initialize(): Promise<void> {
+    // Set data window from discovered timesteps
+    this.dataWindowStart = this.timestepService.first();
+    this.dataWindowEnd = this.timestepService.last();
+    console.log(`[Slot] Data window: ${this.dataWindowStart} - ${this.dataWindowEnd}`);
+
     const time = this.stateService.getTime();
     const [t0, t1] = this.timestepService.adjacent(time);
     const param: TParam = 'temp';
@@ -267,20 +353,30 @@ export class SlotService {
     return this.activePair.get(param) ?? null;
   }
 
-  /** Set loading strategy */
-  setStrategy(strategy: LoadingStrategy): void {
-    this._strategy = strategy;
-    console.log(`[Slot] Strategy: ${strategy}`);
+  /** Get data window */
+  getDataWindow(): { start: TTimestep; end: TTimestep } {
+    return { start: this.dataWindowStart, end: this.dataWindowEnd };
   }
 
-  /** Get QueueService (for future use) */
-  getQueueService(): QueueService {
-    return this._queueService;
+  /** Set loading strategy */
+  setStrategy(strategy: LoadingStrategy): void {
+    this.strategy = strategy;
+    console.log(`[Slot] Strategy: ${strategy}`);
   }
 
   /** Get current strategy */
   getStrategy(): LoadingStrategy {
-    return this._strategy;
+    return this.strategy;
+  }
+
+  /** Get max slots */
+  getMaxSlots(): number {
+    return this.maxSlots;
+  }
+
+  /** Get current slot count */
+  getSlotCount(): number {
+    return this.slots.size;
   }
 
   dispose(): void {
