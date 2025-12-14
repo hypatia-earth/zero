@@ -135,7 +135,8 @@ export class QueueService implements IQueueService {
       this.processingPromise = this.processTimestepQueue();
     }
 
-    // Don't wait - fire and forget, queue replacement handles priority
+    // Return promise for callers that need to wait (e.g., initialize)
+    return this.processingPromise;
   }
 
   /** Process timestep queue sequentially */
