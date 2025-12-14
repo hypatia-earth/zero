@@ -91,4 +91,22 @@ export class FetchService {
     }
     return parseInt(contentLength, 10);
   }
+
+  /**
+   * Suffix range GET fetch, returns last N bytes
+   * Uses HTTP suffix range (bytes=-N) to get last N bytes without knowing file size
+   * Used for: .om trailer fetch (saves HEAD roundtrip)
+   */
+  async fetchSuffix(url: string, suffixBytes: number, layer: CacheLayer = 'meta'): Promise<Uint8Array> {
+    const headers: HeadersInit = {
+      Range: `bytes=-${suffixBytes}`,
+      'X-Layer': layer,
+    };
+    const response = await fetch(url, { headers });
+    if (!response.ok && response.status !== 206) {
+      throw new Error(`HTTP ${response.status} fetching suffix ${url}`);
+    }
+    const buffer = await response.arrayBuffer();
+    return new Uint8Array(buffer);
+  }
 }

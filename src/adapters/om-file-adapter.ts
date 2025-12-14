@@ -124,12 +124,9 @@ export async function streamOmVariable(
   }
   const wasm = wasmInstance;
 
-  // Phase 1: HEAD
-  const fileSize = await fetchService.fetchHead(url);
-
-  // Phase 2: Trailer (metadata, not layer-specific)
+  // Phase 1: Trailer via suffix range (bytes=-N gets last N bytes)
   const trailerSize = wasm._om_trailer_size();
-  const trailerData = await fetchService.fetchRange(url, fileSize - trailerSize, trailerSize, 'meta');
+  const trailerData = await fetchService.fetchSuffix(url, trailerSize, 'meta');
 
   const trailerPtr = wasm._malloc(trailerSize);
   const offsetPtr = wasm._malloc(8);
@@ -146,7 +143,7 @@ export async function streamOmVariable(
   wasm._free(offsetPtr);
   wasm._free(sizePtr);
 
-  DEBUG && console.log(`[OM] File: ${fileSize} bytes, trailer: offset=${rootOffset}, size=${rootSize}`);
+  DEBUG && console.log(`[OM] Trailer: offset=${rootOffset}, size=${rootSize}`);
 
   // Phase 3: Root + children metadata
   const rootData = await fetchService.fetchRange(url, rootOffset, rootSize, 'meta');
