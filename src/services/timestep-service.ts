@@ -12,6 +12,7 @@ import { signal } from '@preact/signals-core';
 import type { TParam, TTimestep, TModel, Timestep, IDiscoveryService } from '../config/types';
 import type { ConfigService } from './config-service';
 import { parseTimestep, formatTimestep } from '../utils/timestep';
+import { sendSWMessage } from '../utils/sw-message';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -367,7 +368,7 @@ export class TimestepService implements IDiscoveryService {
     const sizes = new Map<TTimestep, number>();
 
     try {
-      const detail = await this.sendSWMessage<LayerDetail>({
+      const detail = await sendSWMessage<LayerDetail>({
         type: 'GET_LAYER_STATS',
         layer: param,
       });
@@ -389,28 +390,6 @@ export class TimestepService implements IDiscoveryService {
     }
 
     return { cache, sizes };
-  }
-
-  private async sendSWMessage<T>(message: object): Promise<T> {
-    const target = navigator.serviceWorker.controller
-      || (await navigator.serviceWorker.ready).active;
-
-    if (!target) {
-      throw new Error('No active Service Worker');
-    }
-
-    return new Promise((resolve, reject) => {
-      const channel = new MessageChannel();
-      const timeout = setTimeout(() => {
-        console.warn('[Timestep] SW message timeout');
-        reject(new Error('SW message timeout'));
-      }, 5000);
-      channel.port1.onmessage = (event) => {
-        clearTimeout(timeout);
-        resolve(event.data as T);
-      };
-      target.postMessage(message, [channel.port2]);
-    });
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
