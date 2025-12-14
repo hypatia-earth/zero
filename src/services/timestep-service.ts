@@ -151,34 +151,48 @@ export class TimestepService implements IDiscoveryService {
   private async discoverRuns(basePrefix: string): Promise<ModelRun[]> {
     const runs: ModelRun[] = [];
 
-    for (const yearPrefix of await this.listS3Prefixes(basePrefix)) {
-      const yearMatch = /\/(\d{4})\/$/.exec(yearPrefix);
-      if (!yearMatch) continue;
-      const year = yearMatch[1] ?? '';
+    // Compute which year/month combinations to check (last 7 days)
+    const now = new Date();
+    const oldest = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthsToCheck = new Set<string>();
 
-      for (const monthPrefix of await this.listS3Prefixes(yearPrefix)) {
-        const monthMatch = /\/(\d{2})\/$/.exec(monthPrefix);
-        if (!monthMatch) continue;
-        const month = monthMatch[1] ?? '';
+    // Add months for oldest and current date
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    monthsToCheck.add(`${oldest.getUTCFullYear()}/${pad(oldest.getUTCMonth() + 1)}`);
+    monthsToCheck.add(`${now.getUTCFullYear()}/${pad(now.getUTCMonth() + 1)}`);
 
-        for (const dayPrefix of await this.listS3Prefixes(monthPrefix)) {
-          const dayMatch = /\/(\d{2})\/$/.exec(dayPrefix);
-          if (!dayMatch) continue;
-          const day = dayMatch[1] ?? '';
+    // List days for each month (1-2 requests)
+    const dayPrefixes: string[] = [];
+    for (const yearMonth of monthsToCheck) {
+      const monthPrefix = `${basePrefix}${yearMonth}/`;
+      const days = await this.listS3Prefixes(monthPrefix);
+      dayPrefixes.push(...days);
+    }
 
-          for (const runPrefix of await this.listS3Prefixes(dayPrefix)) {
-            const runMatch = /\/(\d{4}Z)\/$/.exec(runPrefix);
-            if (!runMatch) continue;
-            const runTime = runMatch[1] ?? '';
+    // List runs for each day (parallel)
+    const runResults = await Promise.all(
+      dayPrefixes.map(async (dayPrefix) => {
+        const dayMatch = /\/(\d{4})\/(\d{2})\/(\d{2})\/$/.exec(dayPrefix);
+        if (!dayMatch) return [];
+        const [, year, month, day] = dayMatch;
 
-            runs.push({
-              prefix: runPrefix,
-              datetime: new Date(`${year}-${month}-${day}T${runTime.slice(0, 2)}:00:00Z`),
-              run: runTime,
-            });
-          }
-        }
-      }
+        const runPrefixes = await this.listS3Prefixes(dayPrefix);
+        return runPrefixes.map(runPrefix => {
+          const runMatch = /\/(\d{4}Z)\/$/.exec(runPrefix);
+          if (!runMatch) return null;
+          const runTime = runMatch[1] ?? '';
+
+          return {
+            prefix: runPrefix,
+            datetime: new Date(`${year}-${month}-${day}T${runTime.slice(0, 2)}:00:00Z`),
+            run: runTime,
+          };
+        }).filter((r): r is ModelRun => r !== null);
+      })
+    );
+
+    for (const dayRuns of runResults) {
+      runs.push(...dayRuns);
     }
 
     return runs.sort((a, b) => a.datetime.getTime() - b.datetime.getTime());
