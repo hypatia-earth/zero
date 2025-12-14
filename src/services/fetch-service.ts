@@ -1,21 +1,16 @@
 /**
- * FetchService - Centralized HTTP fetching with bandwidth tracking
+ * FetchService - Centralized HTTP fetching
  *
  * All network requests go through this service to enable:
- * - Bandwidth monitoring via TrackerService
  * - Sequential fetch queue (one request at a time during bootstrap)
  * - Consistent error handling
  * - Layer-based SW caching via X-Layer header
  */
 
-import type { TrackerService } from './tracker-service';
-
 /** Layer identifier for SW caching */
 export type CacheLayer = 'temp' | 'wind' | 'rain' | 'pressure' | 'meta';
 
 export class FetchService {
-  constructor(private tracker: TrackerService) {}
-
   /**
    * Simple GET fetch, returns ArrayBuffer
    * Used for: WASM, LUTs, basemap PNGs
@@ -25,9 +20,7 @@ export class FetchService {
     if (!response.ok) {
       throw new Error(`HTTP ${response.status} fetching ${url}`);
     }
-    const buffer = await response.arrayBuffer();
-    this.tracker.onBytesReceived(buffer.byteLength);
-    return buffer;
+    return response.arrayBuffer();
   }
 
   /**
@@ -52,7 +45,6 @@ export class FetchService {
       if (done) break;
       chunks.push(value);
       onChunk(value.length);
-      this.tracker.onBytesReceived(value.length);
     }
 
     // Combine chunks into single ArrayBuffer
@@ -81,7 +73,6 @@ export class FetchService {
       throw new Error(`HTTP ${response.status} fetching range ${url}`);
     }
     const buffer = await response.arrayBuffer();
-    this.tracker.onBytesReceived(buffer.byteLength);
     return new Uint8Array(buffer);
   }
 

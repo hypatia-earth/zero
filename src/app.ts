@@ -10,7 +10,6 @@ import m from 'mithril';
 import { ConfigService } from './services/config-service';
 import { OptionsService } from './services/options-service';
 import { StateService } from './services/state-service';
-import { TrackerService } from './services/tracker-service';
 import { FetchService } from './services/fetch-service';
 import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
@@ -37,7 +36,6 @@ interface AppComponent extends m.Component {
   configService?: ConfigService;
   optionsService?: OptionsService;
   stateService?: StateService;
-  trackerService?: TrackerService;
   fetchService?: FetchService;
   dateTimeService?: DateTimeService;
   capabilitiesService?: CapabilitiesService;
@@ -67,8 +65,7 @@ export const App: AppComponent = {
     await this.configService.init();  // Load runtime config overrides
     this.optionsService = new OptionsService();
     this.stateService = new StateService(this.configService.getDefaultLayers());
-    this.trackerService = new TrackerService();
-    this.fetchService = new FetchService(this.trackerService);
+    this.fetchService = new FetchService();
     this.dateTimeService = new DateTimeService(this.configService.getDataWindowDays());
 
     m.redraw();
@@ -205,7 +202,6 @@ export const App: AppComponent = {
           configService: this.configService,
           optionsService: this.optionsService,
           stateService: this.stateService,
-          trackerService: this.trackerService,
           fetchService: this.fetchService,
           dateTimeService: this.dateTimeService,
           capabilitiesService: this.capabilitiesService,
