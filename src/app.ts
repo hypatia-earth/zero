@@ -40,6 +40,7 @@ export const App: m.ClosureComponent = () => {
   let fetchService: FetchService;
   let dateTimeService: DateTimeService;
   let capabilitiesService: CapabilitiesService;
+  let omService: OmService;
   let queueService: QueueService;
   let renderService: RenderService;
   let timestepService: TimestepService;
@@ -60,6 +61,7 @@ export const App: m.ClosureComponent = () => {
       stateService = new StateService(configService.getDefaultLayers());
       fetchService = new FetchService();
       dateTimeService = new DateTimeService(configService.getDataWindowDays());
+      omService = new OmService(fetchService);
 
       m.redraw();
 
@@ -81,9 +83,6 @@ export const App: m.ClosureComponent = () => {
         // Step 4: Assets via QueueService
         BootstrapService.setStep('ASSETS');
         queueService = new QueueService(fetchService);
-
-        // Wire up OmService to QueueService
-        const omService = new OmService(fetchService);
         queueService.setOmService(omService);
         const f16 = !capabilitiesService.float32_filterable;
         const suffix = f16 ? '-16' : '';
@@ -190,6 +189,7 @@ export const App: m.ClosureComponent = () => {
             fetchService,
             dateTimeService,
             capabilitiesService,
+            omService,
             timestepService,
             queueService,
             renderService,
