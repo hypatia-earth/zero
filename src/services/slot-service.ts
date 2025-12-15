@@ -18,6 +18,7 @@ import type { RenderService } from './render-service';
 import type { QueueService } from './queue-service';
 import type { OptionsService } from './options-service';
 import { BootstrapService } from './bootstrap-service';
+import { debounce } from '../utils/debounce';
 
 export type LoadingStrategy = 'alternate' | 'future-first';
 
@@ -78,13 +79,18 @@ export class SlotService {
 
       const wanted = this.computeWanted(time);
       this.tryActivateShader('temp', wanted);
-      this.wanted.value = wanted;
+
+      // Only update if priority changed (avoid triggering subscribe for same wanted)
+      const prev = this.wanted.value;
+      if (!prev || prev.priority.join() !== wanted.priority.join()) {
+        this.wanted.value = wanted;
+      }
     });
 
-    // Subscribe: side effects (fetching) deferred to break signal cycle
+    // Subscribe: side effects (fetching) debounced for rapid time changes
+    const debouncedFetch = debounce((w: WantedState) => this.fetchMissing('temp', w), 200);
     this.disposeSubscribe = this.wanted.subscribe(wanted => {
-      if (!wanted) return;
-      queueMicrotask(() => this.fetchMissing('temp', wanted));
+      if (wanted) debouncedFetch(wanted);
     });
   }
 
@@ -117,7 +123,7 @@ export class SlotService {
     }
   }
 
-  /** Activate shader if required slots are loaded (no signal writes) */
+  /** Activate shader if required slots are loaded, clear if not ready */
   private tryActivateShader(param: TParam, wanted: WantedState): void {
     if (wanted.mode === 'single') {
       const ts = wanted.priority[0]!;  // Single mode always has 1 priority
@@ -127,6 +133,8 @@ export class SlotService {
         this.renderService.setTempSlots(slot.slotIndex, slot.slotIndex);
         this.renderService.setTempLoadedPoints(slot.loadedPoints);
         console.log(`[Slot] Single: ${ts}`);
+      } else {
+        this.activePair.delete(param);  // Clear stale pair
       }
     } else {
       const t0 = wanted.priority[0]!;  // Pair mode always has 2 priorities
@@ -138,6 +146,8 @@ export class SlotService {
         this.renderService.setTempSlots(slot0.slotIndex, slot1.slotIndex);
         this.renderService.setTempLoadedPoints(Math.min(slot0.loadedPoints, slot1.loadedPoints));
         console.log(`[Slot] Pair: ${t0} ↔ ${t1}`);
+      } else {
+        this.activePair.delete(param);  // Clear stale pair
       }
     }
   }
@@ -242,14 +252,19 @@ export class SlotService {
   }
 
   /** Load multiple timesteps as batch via QueueService */
-  private loadTimestepsBatch(param: TParam, orders: TimestepOrder[], referenceTime: Date): void {
+  private loadTimestepsBatch(param: TParam, orders: TimestepOrder[], _referenceTime: Date): void {
     // Fire and forget - QueueService handles queue replacement
     this.queueService.submitTimestepOrders(
       orders,
       (order, slice) => {
         if (slice.done) {
-          // Allocate slot just-in-time (evict if needed)
-          const slotIndex = this.allocateSlot(param, order.timestep, referenceTime);
+          // Skip if timestep no longer in wanted window (user moved away)
+          if (!this.wanted.value?.window.includes(order.timestep)) {
+            this.loadingKeys.delete(this.makeKey(param, order.timestep));
+            return;
+          }
+          // Allocate slot just-in-time - use CURRENT time for eviction (user may have moved)
+          const slotIndex = this.allocateSlot(param, order.timestep, this.stateService.getTime());
           if (slotIndex !== null) {
             this.uploadToSlot(param, order.timestep, slotIndex, slice.data);
           }

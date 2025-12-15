@@ -7,7 +7,7 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import { debounce } from '../utils/debounce';
+import { throttle } from '../utils/debounce';
 import type { IQueueService } from '../config/types';
 
 export interface QueuePanelAttrs {
@@ -17,7 +17,7 @@ export interface QueuePanelAttrs {
 const DEBUG = false;
 
 export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = (initialVnode) => {
-  const update = debounce((el: HTMLElement, queuedBytes: number, etaSeconds: number | undefined) => {
+  const update = throttle((el: HTMLElement, queuedBytes: number, etaSeconds: number | undefined) => {
     el.textContent = formatStats(queuedBytes, etaSeconds);
     DEBUG && console.log('[QueuePanel]', el.textContent);
   }, 333);
