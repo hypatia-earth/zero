@@ -1,3 +1,5 @@
+console.clear();
+
 /**
  * Hypatia Zero - Entry point
  *

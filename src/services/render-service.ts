@@ -125,7 +125,7 @@ export class RenderService {
 
   private getTempUniforms(layers: LayerId[], options: ZeroOptions, rawLerp: number) {
     const tempEnabled = layers.includes('temp');
-    const tempDataValid = rawLerp >= 0 && this.tempLoadedPoints > 0;
+    const tempDataValid = rawLerp >= -2 && rawLerp !== -1 && this.tempLoadedPoints > 0;
     return {
       tempOpacity: tempEnabled ? options.temp.opacity : 0,
       tempDataReady: tempDataValid,

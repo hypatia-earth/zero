@@ -559,6 +559,12 @@ export class TimestepService implements IDiscoveryService {
     return this.timestepIndex[m].has(ts);
   }
 
+  /** Get timestep if time exactly matches one, null otherwise */
+  getExactTimestep(time: Date, model?: TModel): TTimestep | null {
+    const ts = this.toTimestep(time);
+    return this.contains(ts, model) ? ts : null;
+  }
+
   variables(model?: TModel): string[] {
     return this.variablesData[model ?? this.defaultModel];
   }

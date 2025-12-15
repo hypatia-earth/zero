@@ -225,14 +225,19 @@ export class QueueService implements IQueueService {
     const activeRemainingBytes = (this.activeExpectedBytes * this.compressionRatio) - this.activeActualBytes;
     const bytesQueued = Math.max(0, pendingWireBytes + activeRemainingBytes);
 
-    // Update stats signal
+    // Update stats signal (no cycle risk: SlotService uses queueMicrotask for fetching)
+    const wasDownloading = this.stats.value.status === 'downloading';
+    const newStatus = bytesQueued > 0 ? 'downloading' : 'idle';
     this.stats.value = {
       bytesQueued,
       bytesCompleted: this.totalBytesCompleted,
       bytesPerSec,
       etaSeconds: bytesPerSec ? bytesQueued / bytesPerSec : undefined,
-      status: bytesQueued > 0 ? 'downloading' : 'idle',
+      status: newStatus,
     };
+    if (wasDownloading && newStatus === 'idle') {
+      console.log('[Queue] Done');
+    }
     DEBUG && console.log('[Queue]', formatStats(this.stats.value));
   }
 

@@ -303,12 +303,14 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       }
       gpuMap.set(layer, gpuSet);
 
-      // Active pair
+      // Active pair (t1 = null means single slot mode)
       const activeSet = new Set<string>();
       const activePair = slotService.getActivePair(layer);
       if (activePair) {
         activeSet.add(timestepService.toDate(activePair.t0).toISOString());
-        activeSet.add(timestepService.toDate(activePair.t1).toISOString());
+        if (activePair.t1) {
+          activeSet.add(timestepService.toDate(activePair.t1).toISOString());
+        }
       }
       activeMap.set(layer, activeSet);
     }
