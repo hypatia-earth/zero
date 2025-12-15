@@ -23,13 +23,15 @@ export class OmService implements IOmService {
 
   /**
    * Fetch data with byte progress tracking
+   * @param signal - Optional AbortSignal for cancellation
    */
   async fetch(
     url: string,
     param: string,
     onPreflight: (info: OmPreflight) => void,
     onSlice: (slice: OmSlice) => void,
-    onBytes?: (bytes: number) => void
+    onBytes?: (bytes: number) => void,
+    signal?: AbortSignal
   ): Promise<Float32Array> {
     const result = await streamOmVariable(
       url,
@@ -45,7 +47,8 @@ export class OmService implements IOmService {
       },
       onPreflight,
       false,
-      onBytes
+      onBytes,
+      signal
     );
     return result.data;
   }

@@ -132,6 +132,7 @@ export type OmBytesCallback = (bytes: number) => void;
  * Optional onPreflight called after metadata phases with exact byte size
  * Optional onBytes called after each data fetch with bytes received
  * Set preflightOnly=true to return after metadata without fetching data
+ * Optional signal for abort cancellation
  */
 export async function streamOmVariable(
   url: string,
@@ -140,7 +141,8 @@ export async function streamOmVariable(
   onChunk: OmChunkCallback,
   onPreflight?: OmPreflightCallback,
   preflightOnly = false,
-  onBytes?: OmBytesCallback
+  onBytes?: OmBytesCallback,
+  signal?: AbortSignal
 ): Promise<OmReadResult> {
   const cacheLayer = paramToLayer(param);
   if (!wasmInstance) {
@@ -150,7 +152,7 @@ export async function streamOmVariable(
 
   // Phase 1: Trailer via suffix range (bytes=-N gets last N bytes)
   const trailerSize = wasm._om_trailer_size();
-  const trailerData = await fetchSuffix(url, trailerSize, 'meta');
+  const trailerData = await fetchSuffix(url, trailerSize, 'meta', signal);
 
   const trailerPtr = wasm._malloc(trailerSize);
   const offsetPtr = wasm._malloc(8);
@@ -170,7 +172,7 @@ export async function streamOmVariable(
   DEBUG && console.log(`[OM] Trailer: offset=${rootOffset}, size=${rootSize}`);
 
   // Phase 3: Root + children metadata
-  const rootData = await fetchRange(url, rootOffset, rootSize, 'meta');
+  const rootData = await fetchRange(url, rootOffset, rootSize, 'meta', signal);
 
   const rootPtr = wasm._malloc(rootData.length);
   wasm.HEAPU8.set(rootData, rootPtr);
@@ -195,7 +197,7 @@ export async function streamOmVariable(
   wasm._free(o1Ptr);
   wasm._free(s1Ptr);
 
-  const allChildrenData = await fetchRange(url, childrenStart, childrenEnd - childrenStart, 'meta');
+  const allChildrenData = await fetchRange(url, childrenStart, childrenEnd - childrenStart, 'meta', signal);
 
   // Phase 4: Find param
   let targetVarOffset = 0, targetVarSize = 0, targetDims: number[] = [];
@@ -299,7 +301,7 @@ export async function streamOmVariable(
     const indexOffset = Number(wasm.getValue(indexReadPtr, 'i64'));
     const indexCount = Number(wasm.getValue(indexReadPtr + 8, 'i64'));
 
-    const indexData = await fetchRange(url, indexOffset, indexCount, cacheLayer);
+    const indexData = await fetchRange(url, indexOffset, indexCount, cacheLayer, signal);
     const blockIdx = indexBlocks.length;
     indexBlocks.push({ offset: indexOffset, count: indexCount, data: indexData });
 
@@ -379,7 +381,7 @@ export async function streamOmVariable(
     const sliceSize = sliceByteEnd - sliceByteStart;
 
     // Fetch this slice (use layer for caching)
-    const sliceData = await fetchRange(url, firstChunk.dataOffset, sliceSize, cacheLayer);
+    const sliceData = await fetchRange(url, firstChunk.dataOffset, sliceSize, cacheLayer, signal);
     allDataBuffer.set(sliceData, sliceByteStart);
     onBytes?.(sliceData.length);
 

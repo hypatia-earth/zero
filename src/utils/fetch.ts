@@ -60,18 +60,20 @@ export async function fetchStreaming(
  * Range GET fetch, returns Uint8Array
  * Used for: .om file partial reads
  * @param layer - Layer identifier for SW cache segregation
+ * @param signal - Optional AbortSignal for cancellation
  */
 export async function fetchRange(
   url: string,
   offset: number,
   size: number,
-  layer: CacheLayer = 'meta'
+  layer: CacheLayer = 'meta',
+  signal?: AbortSignal
 ): Promise<Uint8Array> {
   const headers: HeadersInit = {
     Range: `bytes=${offset}-${offset + size - 1}`,
     'X-Layer': layer,
   };
-  const response = await fetch(url, { headers });
+  const response = await fetch(url, { headers, signal: signal ?? null });
   if (!response.ok && response.status !== 206) {
     throw new Error(`HTTP ${response.status} fetching range ${url}`);
   }
@@ -99,17 +101,19 @@ export async function fetchHead(url: string): Promise<number> {
  * Suffix range GET fetch, returns last N bytes
  * Uses HTTP suffix range (bytes=-N) to get last N bytes without knowing file size
  * Used for: .om trailer fetch (saves HEAD roundtrip)
+ * @param signal - Optional AbortSignal for cancellation
  */
 export async function fetchSuffix(
   url: string,
   suffixBytes: number,
-  layer: CacheLayer = 'meta'
+  layer: CacheLayer = 'meta',
+  signal?: AbortSignal
 ): Promise<Uint8Array> {
   const headers: HeadersInit = {
     Range: `bytes=-${suffixBytes}`,
     'X-Layer': layer,
   };
-  const response = await fetch(url, { headers });
+  const response = await fetch(url, { headers, signal: signal ?? null });
   if (!response.ok && response.status !== 206) {
     throw new Error(`HTTP ${response.status} fetching suffix ${url}`);
   }

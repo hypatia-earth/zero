@@ -49,6 +49,7 @@ export class QueueService implements IQueueService {
   // Timestep queue (replaceable)
   private timestepQueue: QueuedTimestepOrder[] = [];
   private currentlyFetching: TimestepOrder | null = null;
+  private currentAbortController: AbortController | null = null;
   private processingPromise: Promise<void> | null = null;
 
   private omService: OmService | null = null;
@@ -100,6 +101,15 @@ export class QueueService implements IQueueService {
 
     if (orders.length === 0) return;
 
+    // Check if current fetch should be aborted (not in new orders)
+    if (this.currentlyFetching && this.currentAbortController) {
+      const keepCurrent = orders.some(o => o.timestep === this.currentlyFetching!.timestep);
+      if (!keepCurrent) {
+        console.log(`[Queue] Aborting: ${this.currentlyFetching.timestep.slice(5, 13)}`);
+        this.currentAbortController.abort();
+      }
+    }
+
     // Filter out the currently fetching order (if in new orders)
     const newOrders = this.currentlyFetching
       ? orders.filter(o => o.timestep !== this.currentlyFetching!.timestep)
@@ -144,26 +154,38 @@ export class QueueService implements IQueueService {
     while (this.timestepQueue.length > 0) {
       const next = this.timestepQueue.shift()!;
       this.currentlyFetching = next.order;
+      this.currentAbortController = new AbortController();
 
       const omParam = next.order.param === 'temp' ? 'temperature_2m' : next.order.param;
 
-      await this.omService!.fetch(
-        next.order.url,
-        omParam,
-        (info) => {
-          // Preflight done - report actual size for ETA correction
-          next.onPreflight(info.totalBytes);
-        },
-        (slice) => next.onSlice(next.order, slice),
-        (bytes) => {
-          this.onChunk(bytes);
+      try {
+        await this.omService!.fetch(
+          next.order.url,
+          omParam,
+          (info) => {
+            // Preflight done - report actual size for ETA correction
+            next.onPreflight(info.totalBytes);
+          },
+          (slice) => next.onSlice(next.order, slice),
+          (bytes) => {
+            this.onChunk(bytes);
+          },
+          this.currentAbortController.signal
+        );
+      } catch (err) {
+        // Ignore abort errors, rethrow others
+        if (err instanceof Error && err.name === 'AbortError') {
+          console.log(`[Queue] Aborted: ${next.order.timestep.slice(5, 13)}`);
+        } else {
+          throw err;
         }
-      );
+      }
 
       // Reset active tracking
       this.activeExpectedBytes = 0;
       this.activeActualBytes = 0;
       this.currentlyFetching = null;
+      this.currentAbortController = null;
     }
 
     this.processingPromise = null;
