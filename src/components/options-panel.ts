@@ -4,7 +4,7 @@
 
 import m from 'mithril';
 import type { OptionsService } from '../services/options-service';
-import { GearIcon } from './GearIcon';
+import { GearIcon } from './gear-icon';
 
 interface OptionsPanelAttrs {
   optionsService: OptionsService;

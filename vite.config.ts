@@ -3,6 +3,10 @@ import fs from 'fs';
 import { execSync } from 'child_process';
 import path from 'path';
 
+// Get version and git hash for build
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
+const gitHash = execSync('git rev-parse --short HEAD').toString().trim();
+
 /**
  * Vite plugin to add cache headers for static assets
  */
@@ -71,6 +75,10 @@ function wgslProcess(): Plugin {
 
 export default defineConfig({
   plugins: [cacheHeaders(), wgslProcess()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_HASH__: JSON.stringify(gitHash),
+  },
   server: {
     host: true,  // Expose to network
     port: 5173,

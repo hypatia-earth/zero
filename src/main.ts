@@ -24,7 +24,7 @@ import './styles/widgets.css';
 import { App } from './app';
 import { registerServiceWorker } from './services/sw-registration';
 
-console.log('%c[ZERO] loading ...', 'color: darkgreen; font-weight: bold');
+console.log(`%c[ZERO] v${__APP_VERSION__} (${__APP_HASH__})`, 'color: darkgreen; font-weight: bold');
 
 async function main() {
   // Register Service Worker first - we need cache stats

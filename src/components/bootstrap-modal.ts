@@ -62,6 +62,9 @@ export const BootstrapModal: m.ClosureComponent = () => {
             m('p', `Failed at: ${state.step}`),
             m('.detail', state.error),
           ]),
+          m('.footer', [
+            m('span.version', `v${__APP_VERSION__} (${__APP_HASH__})`)
+          ]),
         ]),
       ]);
     },

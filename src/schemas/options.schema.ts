@@ -17,7 +17,7 @@ type ControlType = 'toggle' | 'slider' | 'select' | 'radio';
 type OptionImpact = 'uniform' | 'recreate';
 
 /** Filter determines which dialog entry points show this option */
-type OptionFilter = 'global' | 'earth' | 'temp' | 'rain' | 'wind' | 'clouds' | 'humidity' | 'pressure' | 'dataCache' | 'gpu';
+type OptionFilter = 'global' | 'earth' | 'sun' | 'grid' | 'temp' | 'rain' | 'wind' | 'clouds' | 'humidity' | 'pressure' | 'dataCache' | 'gpu';
 
 interface UIMetadata {
   label: string;

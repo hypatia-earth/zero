@@ -345,8 +345,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     return m('.panel.timebar', [
       m('.control.timeslider', { style: 'width: 100%; height: 42px; position: relative;' }, [
         // Canvas for ticks and knob - acts as custom slider
-        m('.time-ticks', [
-          m('canvas.time-ticks-canvas', {
+        m('canvas.time-ticks', {
             style: 'width: 100%; height: 100%; cursor: pointer;',
             onmousedown: handleMouseDown,
             onmousemove: handleMouseMove,
@@ -387,7 +386,6 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
               );
             },
           }),
-        ]),
       ]),
       m('.timesteps', { style: 'display: flex; justify-content: space-between; width: 100%; padding: 0 24px; font-size: 12px; opacity: 0.6;' }, [
         m('span', formatDate(window.start)),

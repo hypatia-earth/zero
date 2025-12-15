@@ -31,6 +31,32 @@
   flex: 1;
 }
 
+/* Layer options button */
+.layer.widget .options {
+  background: transparent;
+  border: none;
+  padding: 8px 12px 8px 0;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.layer.widget .options svg {
+  width: 14px;
+  height: 14px;
+  fill: rgba(255, 255, 255, 0.5);
+  vertical-align: middle;
+}
+
+@media (hover: hover) {
+  .layer.widget .options:hover svg {
+    fill: white;
+  }
+}
+
+.layer.widget .options:active svg {
+  fill: white;
+}
+
 /* Active state - indicator colors */
 .layer.widget.active { border-left-color: rgba(255, 255, 255, 0.6); }
 .layer.widget.active.temp { border-left-color: var(--color-layer-temp); }

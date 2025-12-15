@@ -74,7 +74,7 @@ async function logCachedTimesteps(): Promise<void> {
 /**
  * Clear the entire cache (all layers)
  */
-async function clearCache(): Promise<boolean> {
+export async function clearCache(): Promise<boolean> {
   const result = await sendSWMessage<{ success: boolean }>({ type: 'CLEAR_CACHE' });
   console.log(result.success ? '[SW] All caches cleared' : '[SW] No caches found');
   return result.success;

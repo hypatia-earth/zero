@@ -156,7 +156,7 @@ input[type=range].timeslider::-moz-range-thumb:hover {
 }
 
 /* Time tick marks (canvas) */
-.time-ticks {
+canvas.time-ticks {
   position: absolute;
   top: 50%;
   left: 21px;
@@ -164,8 +164,5 @@ input[type=range].timeslider::-moz-range-thumb:hover {
   transform: translateY(-50%);
   height: 100%;
   z-index: 1;
-}
-
-.time-ticks-canvas {
   display: block;
 }

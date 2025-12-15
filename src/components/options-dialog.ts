@@ -17,6 +17,7 @@ import {
   type FlatOption,
 } from '../schemas/options.schema';
 import type { OptionsService } from '../services/options-service';
+import { clearCache } from '../services/sw-registration';
 
 // ============================================================
 // Type guards for control types
@@ -419,6 +420,22 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
             return renderGroup(groupId, groupOpts, options, optionsService, showAdvanced, !!filter && filter !== 'global');
           }).filter(Boolean),
 
+          // Danger zone (only in global view, above advanced toggle)
+          !filter || filter === 'global' ? m('div.danger-zone', { key: '_danger_zone' }, [
+            m('h3', 'Danger Zone'),
+            m('div.actions', [
+              m('button.btn-danger', {
+                onclick: () => optionsService.reset()
+              }, 'Reset All'),
+              m('button.btn-danger', {
+                onclick: async () => {
+                  await clearCache();
+                  location.reload();
+                }
+              }, 'Clear Cache'),
+            ])
+          ]) : null,
+
           // Advanced toggle (only in full dialog)
           hasAdvanced ? m('div.advanced-toggle', {
             key: '_advanced_toggle',
@@ -443,9 +460,9 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
         ].filter(Boolean)),
         m('div.footer', [
           m('div.actions', [
-            m('button.btn-reset', {
-              onclick: () => optionsService.reset(filter && filter !== 'global' ? filter : undefined)
-            }, filter && filter !== 'global' ? 'Reset Layer' : 'Reset All'),
+            filter && filter !== 'global' ? m('button.btn-reset', {
+              onclick: () => optionsService.reset(filter)
+            }, 'Reset Layer') : null,
             m('button.btn-close', {
               onclick: () => {
                 resetDragState();
