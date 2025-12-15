@@ -110,7 +110,7 @@ export class TimestepService implements IDiscoveryService {
       params.set(param, { cache, gpu: new Set(), sizes });
       if (sizes.size > 0) {
         const avgKB = [...sizes.values()].reduce((a, b) => a + b, 0) / sizes.size / 1024;
-        console.log(`[Timestep] ${param}: ${sizes.size} cached timesteps, avg ${avgKB.toFixed(0)}KB`);
+        console.log(`[Timestep] ${param}: ${sizes.size} cached timesteps, avg ${(avgKB / 1024).toFixed(1)}MB`);
       }
     }
 
@@ -381,7 +381,7 @@ export class TimestepService implements IDiscoveryService {
           // Parse sizeMB to bytes
           const sizeBytes = parseFloat(item.sizeMB) * 1024 * 1024;
           if (!isNaN(sizeBytes)) {
-            sizes.set(ts, sizeBytes);
+            sizes.set(ts, (sizes.get(ts) ?? 0) + sizeBytes);
           }
         }
       }

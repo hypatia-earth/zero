@@ -42,7 +42,7 @@ export async function registerServiceWorker(): Promise<void> {
     await navigator.serviceWorker.register('/sw.js');
     await navigator.serviceWorker.ready;
 
-    // Log available cached timesteps
+    // Log available cached slices
     await logCachedTimesteps();
 
     // Setup cache utils for debugging (localhost only)
