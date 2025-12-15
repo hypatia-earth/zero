@@ -38,10 +38,9 @@ export class RenderService {
     const cameraConfig = this.configService.getCameraConfig();
     this.renderer = new GlobeRenderer(this.canvas, cameraConfig);
 
-    // Calculate max slots from GPU budget (same formula as budget-service)
-    const BYTES_PER_TIMESTEP = 6_599_680 * 4; // ~26.4 MB
-    const budgetBytes = this.configService.getGpuBudgetMB() * 1024 * 1024;
-    const maxSlots = Math.floor(budgetBytes / BYTES_PER_TIMESTEP);
+    // Get slots per layer from user options
+    const slotsPerLayer = parseInt(this.optionsService.options.value.gpu.slotsPerLayer, 10);
+    const maxSlots = slotsPerLayer;
 
     await this.renderer.initialize(maxSlots);
 

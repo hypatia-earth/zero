@@ -64,16 +64,8 @@ export class ConfigService {
     return this.config.dataBaseUrl;
   }
 
-  getDataWindowDays(): number {
-    return this.config.dataWindowDays;
-  }
-
-  getPrefetchCount(): number {
-    return this.config.prefetchCount;
-  }
-
-  getGpuBudgetMB(): number {
-    return this.config.gpuBudgetMB;
+  getGpuConfig(): ZeroConfig['gpu'] {
+    return this.config.gpu;
   }
 
   getCameraConfig(): ZeroConfig['camera'] {

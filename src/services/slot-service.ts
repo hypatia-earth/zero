@@ -9,13 +9,10 @@
 
 import { effect, signal } from '@preact/signals-core';
 import type { TParam, TTimestep, TimestepOrder } from '../config/types';
-import type { ConfigService } from './config-service';
 import type { StateService } from './state-service';
 import type { TimestepService } from './timestep-service';
 import type { RenderService } from './render-service';
 import type { QueueService } from './queue-service';
-
-const BYTES_PER_TIMESTEP = 6_599_680 * 4; // ~26.4 MB per param
 
 // TODO: Should sync with options.dataCache.cacheStrategy
 export type LoadingStrategy = 'alternate' | 'future-first' | 'past-first';
@@ -48,7 +45,6 @@ export class SlotService {
   readonly slotsVersion = signal(0);
 
   constructor(
-    private configService: ConfigService,
     private stateService: StateService,
     private timestepService: TimestepService,
     private renderService: RenderService,
@@ -56,11 +52,6 @@ export class SlotService {
   ) {
     this.maxSlots = this.renderService.getRenderer().getMaxTempSlots();
     this.freeSlotIndices = Array.from({ length: this.maxSlots }, (_, i) => i);
-
-    const requestedSlots = Math.floor(
-      this.configService.getGpuBudgetMB() * 1024 * 1024 / BYTES_PER_TIMESTEP
-    );
-    console.log(`[Slot] Max slots: ${this.maxSlots} (requested ${requestedSlots})`);
 
     // Wire up lerp calculation
     this.renderService.setTempLerpFn((time) => this.getTempLerp(time));
@@ -312,7 +303,6 @@ export class SlotService {
     // Set data window from discovered timesteps
     this.dataWindowStart = this.timestepService.first();
     this.dataWindowEnd = this.timestepService.last();
-    console.log(`[Slot] Data window: ${this.dataWindowStart} - ${this.dataWindowEnd}`);
 
     const time = this.stateService.getTime();
     const [t0, t1] = this.timestepService.adjacent(time);

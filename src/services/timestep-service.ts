@@ -110,7 +110,7 @@ export class TimestepService implements IDiscoveryService {
       params.set(param, { cache, gpu: new Set(), sizes });
       if (sizes.size > 0) {
         const avgKB = [...sizes.values()].reduce((a, b) => a + b, 0) / sizes.size / 1024;
-        console.log(`[Timestep] ${param}: ${sizes.size} cached sizes, avg ${avgKB.toFixed(0)}KB`);
+        console.log(`[Timestep] ${param}: ${sizes.size} cached timesteps, avg ${avgKB.toFixed(0)}KB`);
       }
     }
 
@@ -120,7 +120,7 @@ export class TimestepService implements IDiscoveryService {
     const ts = this.timestepsData[config.default];
     const vars = this.variablesData[config.default];
     const fmt = (t: TTimestep) => t.slice(5, 13); // "MM-DDTHH"
-    console.log(`[Discovery] ${config.default}: ${vars.length} vars, ${ts.length} steps, ${fmt(ts[0]!.timestep)} - ${fmt(ts[ts.length - 1]!.timestep)}`);
+    console.log(`[Timestep] ${config.default}: ${vars.length} V, ${ts.length} TS, ${fmt(ts[0]!.timestep)} - ${fmt(ts[ts.length - 1]!.timestep)}`);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ export class TimestepService implements IDiscoveryService {
     // 1. Fetch latest.json → completed run info
     const response = await fetch(`${config.root}${model}/latest.json`);
     if (!response.ok) {
-      throw new Error(`[Discovery] Failed to fetch latest.json for ${model}`);
+      throw new Error(`[Timestep] Failed to fetch latest.json for ${model}`);
     }
     const data = await response.json();
     this.variablesData[model] = data.variables;
@@ -144,7 +144,7 @@ export class TimestepService implements IDiscoveryService {
     // 2. Find first and newest runs via S3
     const { firstRun, newestRun, newestRunPrefix } = await this.discoverRunBounds(basePrefix);
     if (!firstRun) {
-      throw new Error(`[Discovery] No runs found for ${model}`);
+      throw new Error(`[Timestep] No runs found for ${model}`);
     }
 
     // 3. Check if there's an incomplete run newer than completed

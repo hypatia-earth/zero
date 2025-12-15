@@ -5,10 +5,15 @@
  * Adapter is discarded after check - RenderService requests its own.
  */
 
-const DEBUG = true;
+import type { ConfigService } from './config-service';
+
+const DEBUG = false;
 
 export class CapabilitiesService {
   float32_filterable = false;
+  maxBufferSizeMB = 0;
+
+  constructor(private configService: ConfigService) {}
 
   async init(): Promise<void> {
     if (!navigator.gpu) {
@@ -27,6 +32,25 @@ export class CapabilitiesService {
         'Try updating graphics drivers or using a different browser.'
       );
     }
+
+    // Check buffer limits
+    const gpuConfig = this.configService.getGpuConfig();
+    const minBufferMB = gpuConfig.slotSizeMB * gpuConfig.minSlotsPerLayer;
+    const minBufferBytes = minBufferMB * 1024 * 1024;
+    const storageLimit = adapter.limits.maxStorageBufferBindingSize;
+    const bufferLimit = adapter.limits.maxBufferSize;
+    const effectiveLimit = Math.min(storageLimit, bufferLimit);
+
+    if (effectiveLimit < minBufferBytes) {
+      throw new Error(
+        `GPU buffer too small.\n\n` +
+        `Required: ${minBufferMB} MB, Available: ${(effectiveLimit / 1024 / 1024).toFixed(0)} MB\n` +
+        `Your GPU cannot run weather visualization.`
+      );
+    }
+
+    // Store for options UI to filter budget presets
+    this.maxBufferSizeMB = Math.floor(effectiveLimit / 1024 / 1024);
 
     this.float32_filterable = adapter.features.has('float32-filterable');
 

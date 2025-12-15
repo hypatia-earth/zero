@@ -165,14 +165,11 @@ export interface ZeroConfig {
   /** Open-Meteo S3 base URL - DEPRECATED: use discovery.root */
   dataBaseUrl: string;
 
-  /** Data window in days (±days from today) */
-  dataWindowDays: number;
-
-  /** Number of timesteps to prefetch */
-  prefetchCount: number;
-
-  /** GPU memory budget for timestep data (MB) */
-  gpuBudgetMB: number;
+  /** GPU configuration */
+  gpu: {
+    slotSizeMB: number;       // Size per timestep slot (~27 MB)
+    minSlotsPerLayer: number; // Minimum slots per layer (4)
+  };
 
   /** Camera settings */
   camera: {

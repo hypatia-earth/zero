@@ -11,7 +11,6 @@
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
 import type { StateService } from '../services/state-service';
-import type { DateTimeService } from '../services/datetime-service';
 import type { SlotService } from '../services/slot-service';
 import type { TimestepService } from '../services/timestep-service';
 import { getSunDirection } from '../utils/sun-position';
@@ -84,7 +83,6 @@ function getSunBrightness(lat: number, lon: number, time: Date): number {
 
 interface TimeBarPanelAttrs {
   stateService: StateService;
-  dateTimeService: DateTimeService;
   slotService: SlotService;
   timestepService: TimestepService;
 }
@@ -232,9 +230,12 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     },
 
     view({ attrs }) {
-    const { stateService, dateTimeService, slotService, timestepService } = attrs;
+    const { stateService, slotService, timestepService } = attrs;
     const currentTime = stateService.getTime();
-    const window = dateTimeService.getDataWindow();
+    const window = {
+      start: timestepService.toDate(timestepService.first()),
+      end: timestepService.toDate(timestepService.last()),
+    };
 
     const windowMs = window.end.getTime() - window.start.getTime();
     const currentMs = currentTime.getTime() - window.start.getTime();
@@ -342,7 +343,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
                 cachedMap,
                 gpuMap,
                 activeMap,
-                dateTimeService.getWallTime(),
+                new Date(),
                 progress,
                 camera.lat,
                 camera.lon,
@@ -359,7 +360,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
                 cachedMap,
                 gpuMap,
                 activeMap,
-                dateTimeService.getWallTime(),
+                new Date(),
                 progress,
                 camera.lat,
                 camera.lon,

@@ -10,7 +10,6 @@ import m from 'mithril';
 import { ConfigService } from './services/config-service';
 import { OptionsService } from './services/options-service';
 import { StateService } from './services/state-service';
-import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
 import { CapabilitiesService } from './services/capabilities-service';
 import { KeyboardService } from './services/keyboard-service';
@@ -36,7 +35,6 @@ export const App: m.ClosureComponent = () => {
   let configService: ConfigService;
   let optionsService: OptionsService;
   let stateService: StateService;
-  let dateTimeService: DateTimeService;
   let capabilitiesService: CapabilitiesService;
   let omService: OmService;
   let queueService: QueueService;
@@ -57,7 +55,6 @@ export const App: m.ClosureComponent = () => {
       await configService.init();
       optionsService = new OptionsService();
       stateService = new StateService(configService.getDefaultLayers());
-      dateTimeService = new DateTimeService(configService.getDataWindowDays());
       omService = new OmService();
 
       m.redraw();
@@ -65,7 +62,7 @@ export const App: m.ClosureComponent = () => {
       try {
         // Step 1: Capabilities
         BootstrapService.setStep('CAPABILITIES');
-        capabilitiesService = new CapabilitiesService();
+        capabilitiesService = new CapabilitiesService(configService);
         await capabilitiesService.init();
 
         // Step 2: Config
@@ -151,7 +148,6 @@ export const App: m.ClosureComponent = () => {
 
         // SlotService - manages timestep data loading
         slotService = new SlotService(
-          configService,
           stateService,
           timestepService,
           renderService,
@@ -183,7 +179,6 @@ export const App: m.ClosureComponent = () => {
             configService,
             optionsService,
             stateService,
-            dateTimeService,
             capabilitiesService,
             omService,
             timestepService,
@@ -223,7 +218,7 @@ export const App: m.ClosureComponent = () => {
           m(LayersPanel, { configService, stateService, optionsService }),
           m(TimeCirclePanel, { stateService }),
           m(QueuePanel, { queueService }),
-          m(TimeBarPanel, { stateService, dateTimeService, slotService, timestepService }),
+          m(TimeBarPanel, { stateService, slotService, timestepService }),
           m(FullscreenPanel),
           m('div.options.panel', [
             m('button.control.circle', {

@@ -11,7 +11,7 @@ import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice } fro
 import { fetchStreaming } from '../utils/fetch';
 import type { OmService } from './om-service';
 
-const DEBUG = true;
+const DEBUG = false;
 
 /** Default estimated size for unknown timesteps (~1.5MB compressed typical) */
 const DEFAULT_SIZE_ESTIMATE = 1.5 * 1024 * 1024;
@@ -62,6 +62,8 @@ export class QueueService implements IQueueService {
     orders: FileOrder[],
     onProgress?: (index: number, total: number) => void | Promise<void>
   ): Promise<ArrayBuffer[]> {
+    DEBUG && console.log(`[Queue] ${orders.length} fileorders`);
+
     // Sum expected bytes for all orders
     for (const order of orders) {
       this.pendingExpectedBytes += order.size;
@@ -124,9 +126,8 @@ export class QueueService implements IQueueService {
     this.pendingExpectedBytes = this.timestepQueue.reduce((sum, q) => sum + q.estimatedBytes, 0);
     this.updateStats();
 
-    const dropped = orders.length - newOrders.length;
-    DEBUG && console.log(`[Queue] New queue: ${newOrders.length} orders, ${(this.pendingExpectedBytes / 1024 / 1024).toFixed(1)} MB (est)` +
-      (dropped ? ` (${dropped} already fetching)` : ''));
+    const fmt = (ts: string) => ts.slice(5, 13); // "MM-DDTHH"
+    console.log(`[Queue] ${orders.length} TS orders, first: ${fmt(orders[0]!.timestep)}, last: ${fmt(orders[orders.length - 1]!.timestep)}`);
 
     // Start processing if not already running
     if (!this.processingPromise) {
