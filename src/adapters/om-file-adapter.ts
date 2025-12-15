@@ -55,7 +55,7 @@ let wasmInstance: OmWasm | null = null;
 export async function initOmWasm(wasmBinary: ArrayBuffer): Promise<OmWasm> {
   if (wasmInstance) return wasmInstance;
 
-  const { default: createModule } = await import('@openmeteo/file-format-wasm');
+  const { default: createModule } = await import('./om-wasm-glue.js');
   const instance = await createModule({ wasmBinary }) as OmWasm;
   wasmInstance = instance;
 
