@@ -306,9 +306,10 @@ export interface OptionsDialogAttrs {
   optionsService: OptionsService;
 }
 
-export const OptionsDialog: m.Component<OptionsDialogAttrs> = {
-  view(vnode) {
-    const { optionsService } = vnode.attrs;
+export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
+  return {
+    view({ attrs }) {
+      const { optionsService } = attrs;
 
     if (!optionsService.dialogOpen) return null;
 
@@ -455,5 +456,6 @@ export const OptionsDialog: m.Component<OptionsDialogAttrs> = {
         ])
       ])
     ]);
-  }
+    }
+  };
 };

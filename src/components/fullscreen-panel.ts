@@ -30,24 +30,26 @@ export function toggleFullscreen(): void {
   }
 }
 
-export const FullscreenPanel: m.Component = {
-  view() {
-    if (isStandaloneMode()) {
-      return null;
+export const FullscreenPanel: m.ClosureComponent = () => {
+  return {
+    view() {
+      if (isStandaloneMode()) {
+        return null;
+      }
+
+      const isFullscreen = !!document.fullscreenElement;
+
+      return m('div.fullscreen.panel', [
+        m('button.control.circle', {
+          onclick: toggleFullscreen,
+          title: isFullscreen ? 'Exit Fullscreen (F)' : 'Enter Fullscreen (F)'
+        }, [
+          m('img.fullscreen-icon', {
+            src: isFullscreen ? '/icon-fullscreen-on.svg' : '/icon-fullscreen-off.svg',
+            alt: isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'
+          })
+        ])
+      ]);
     }
-
-    const isFullscreen = !!document.fullscreenElement;
-
-    return m('div.fullscreen.panel', [
-      m('button.control.circle', {
-        onclick: toggleFullscreen,
-        title: isFullscreen ? 'Exit Fullscreen (F)' : 'Enter Fullscreen (F)'
-      }, [
-        m('img.fullscreen-icon', {
-          src: isFullscreen ? '/icon-fullscreen-on.svg' : '/icon-fullscreen-off.svg',
-          alt: isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'
-        })
-      ])
-    ]);
-  }
+  };
 };

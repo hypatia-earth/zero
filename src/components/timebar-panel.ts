@@ -212,25 +212,26 @@ function drawTimebar(
   ctx.stroke();
 }
 
-let unsubscribe: (() => void) | null = null;
-let canvasRef: HTMLCanvasElement | null = null;
-let isDragging = false;
+export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode) => {
+  let unsubscribe: (() => void) | null = null;
+  let canvasRef: HTMLCanvasElement | null = null;
+  let isDragging = false;
 
-export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
-  oncreate({ attrs }) {
-    unsubscribe = effect(() => {
-      attrs.stateService.state.value;
-      attrs.slotService.slotsVersion.value;
-      attrs.timestepService.state.value;  // Watch ECMWF/cache/GPU state
-      m.redraw();
-    });
-  },
-  onremove() {
-    unsubscribe?.();
-    unsubscribe = null;
-    canvasRef = null;
-  },
-  view({ attrs }) {
+  return {
+    oncreate() {
+      unsubscribe = effect(() => {
+        initialVnode.attrs.stateService.state.value;
+        initialVnode.attrs.slotService.slotsVersion.value;
+        initialVnode.attrs.timestepService.state.value;
+        m.redraw();
+      });
+    },
+
+    onremove() {
+      unsubscribe?.();
+    },
+
+    view({ attrs }) {
     const { stateService, dateTimeService, slotService, timestepService } = attrs;
     const currentTime = stateService.getTime();
     const window = dateTimeService.getDataWindow();
@@ -374,5 +375,6 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
         m('span', formatDate(window.end)),
       ]),
     ]);
-  },
+    },
+  };
 };
