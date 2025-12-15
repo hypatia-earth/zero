@@ -2,8 +2,11 @@ node_modules/
 dist/
 .DS_Store
 *.log
-test/data/
-scripts/data/
+
+# Development folders (not part of app)
+docs/
+scripts/
+test/
 
 # Generated shader (built by wgsl-plus from master.wgsl)
 src/render/shaders/zero.wgsl
