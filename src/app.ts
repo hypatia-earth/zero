@@ -152,7 +152,8 @@ export const App: m.ClosureComponent = () => {
           stateService,
           timestepService,
           renderService,
-          queueService
+          queueService,
+          optionsService
         );
 
         // 5f. Temperature timesteps

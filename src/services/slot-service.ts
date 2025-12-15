@@ -13,9 +13,9 @@ import type { StateService } from './state-service';
 import type { TimestepService } from './timestep-service';
 import type { RenderService } from './render-service';
 import type { QueueService } from './queue-service';
+import type { OptionsService } from './options-service';
 
-// TODO: Should sync with options.dataCache.cacheStrategy
-export type LoadingStrategy = 'alternate' | 'future-first' | 'past-first';
+export type LoadingStrategy = 'alternate' | 'future-first';
 
 export interface Slot {
   timestep: TTimestep;
@@ -30,7 +30,6 @@ export class SlotService {
   private maxSlots: number;
   private freeSlotIndices: number[] = [];
   private disposeEffect: (() => void) | null = null;
-  private strategy: LoadingStrategy = 'alternate';
   private loadingKeys: Set<string> = new Set();
   private initialized = false;
 
@@ -48,7 +47,8 @@ export class SlotService {
     private stateService: StateService,
     private timestepService: TimestepService,
     private renderService: RenderService,
-    private queueService: QueueService
+    private queueService: QueueService,
+    private optionsService: OptionsService
   ) {
     this.maxSlots = this.renderService.getRenderer().getMaxTempSlots();
     this.freeSlotIndices = Array.from({ length: this.maxSlots }, (_, i) => i);
@@ -87,8 +87,9 @@ export class SlotService {
       this.renderService.setTempLoadedPoints(Math.min(slot0.loadedPoints, slot1.loadedPoints));
     }
 
-    // Calculate ideal window
-    const idealWindow = this.calculateLoadWindow(time, param);
+    // Calculate centered window, then sort by loading strategy
+    const centeredWindow = this.calculateLoadWindow(time);
+    const idealWindow = this.sortByStrategy(centeredWindow);
 
     // Find what needs loading (not in GPU and not already being fetched)
     const needsLoad = (ts: TTimestep) =>
@@ -121,70 +122,64 @@ export class SlotService {
     this.loadTimestepsBatch(param, orders, time);
   }
 
-  /** Calculate ideal load window around time */
-  private calculateLoadWindow(time: Date, param: TParam): TTimestep[] {
+  /** Calculate ideal load window around time (always centered ~50/50) */
+  private calculateLoadWindow(time: Date): TTimestep[] {
     const [t0, t1] = this.timestepService.adjacent(time);
     const window: TTimestep[] = [t0, t1];
 
     let pastCursor = this.timestepService.prev(t0);
     let futureCursor = this.timestepService.next(t1);
 
+    // Build centered window: alternate future/past to keep balanced
     while (window.length < this.maxSlots) {
-      const added = this.addNextSlot(window, pastCursor, futureCursor, param);
-      if (!added) break;
+      const canAddFuture = futureCursor && this.isInDataWindow(futureCursor);
+      const canAddPast = pastCursor && this.isInDataWindow(pastCursor);
 
-      // Update cursors
-      if (futureCursor && window.includes(futureCursor)) {
-        futureCursor = this.timestepService.next(futureCursor);
-      }
-      if (pastCursor && window.includes(pastCursor)) {
-        pastCursor = this.timestepService.prev(pastCursor);
+      if (!canAddFuture && !canAddPast) break;
+
+      const futureCount = window.filter(ts => ts > t0).length;
+      const pastCount = window.filter(ts => ts < t0).length;
+
+      // Prefer whichever side has fewer, or future if equal
+      if (futureCount <= pastCount && canAddFuture) {
+        window.push(futureCursor!);
+        futureCursor = this.timestepService.next(futureCursor!);
+      } else if (canAddPast) {
+        window.push(pastCursor!);
+        pastCursor = this.timestepService.prev(pastCursor!);
+      } else if (canAddFuture) {
+        window.push(futureCursor!);
+        futureCursor = this.timestepService.next(futureCursor!);
       }
     }
 
     return window;
   }
 
-  /** Add next slot based on strategy */
-  private addNextSlot(
-    window: TTimestep[],
-    pastCursor: TTimestep | null,
-    futureCursor: TTimestep | null,
-    _param: TParam
-  ): boolean {
-    const canAddFuture = futureCursor && this.isInDataWindow(futureCursor);
-    const canAddPast = pastCursor && this.isInDataWindow(pastCursor);
+  /** Sort window by loading strategy (t0, t1 always first) */
+  private sortByStrategy(window: TTimestep[]): TTimestep[] {
+    if (window.length <= 2) return window;
+
+    const [t0, t1] = window;
+    const rest = window.slice(2);
+    const past = rest.filter(ts => ts < t0!).sort().reverse(); // newest past first
+    const future = rest.filter(ts => ts > t1!).sort(); // oldest future first
 
     switch (this.strategy) {
       case 'future-first':
-        if (canAddFuture) { window.push(futureCursor!); return true; }
-        if (canAddPast) { window.push(pastCursor!); return true; }
-        return false;
-
-      case 'past-first':
-        if (canAddPast) { window.push(pastCursor!); return true; }
-        if (canAddFuture) { window.push(futureCursor!); return true; }
-        return false;
+        return [t0!, t1!, ...future, ...past];
 
       case 'alternate':
-      default:
-        const t0 = window[0]!;
-        const futureCount = window.filter(ts => ts > t0).length;
-        const pastCount = window.filter(ts => ts < t0).length;
-
-        if (futureCount <= pastCount && canAddFuture) {
-          window.push(futureCursor!);
-          return true;
+      default: {
+        // Interleave: f1, p1, f2, p2, ...
+        const interleaved: TTimestep[] = [];
+        const maxLen = Math.max(future.length, past.length);
+        for (let i = 0; i < maxLen; i++) {
+          if (i < future.length) interleaved.push(future[i]!);
+          if (i < past.length) interleaved.push(past[i]!);
         }
-        if (canAddPast) {
-          window.push(pastCursor!);
-          return true;
-        }
-        if (canAddFuture) {
-          window.push(futureCursor!);
-          return true;
-        }
-        return false;
+        return [t0!, t1!, ...interleaved];
+      }
     }
   }
 
@@ -367,15 +362,9 @@ export class SlotService {
     return { start: this.dataWindowStart, end: this.dataWindowEnd };
   }
 
-  /** Set loading strategy */
-  setStrategy(strategy: LoadingStrategy): void {
-    this.strategy = strategy;
-    console.log(`[Slot] Strategy: ${strategy}`);
-  }
-
-  /** Get current strategy */
-  getStrategy(): LoadingStrategy {
-    return this.strategy;
+  /** Get current strategy from options */
+  private get strategy(): LoadingStrategy {
+    return this.optionsService.options.value.dataCache.cacheStrategy as LoadingStrategy;
   }
 
   /** Get max slots */
