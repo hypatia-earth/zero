@@ -113,9 +113,10 @@ export class QueueService implements IQueueService {
         estimatedBytes,
         onSlice,
         onPreflight: (actualBytes: number) => {
-          // Adjust pending bytes when actual size known
-          const delta = actualBytes - estimatedBytes;
-          this.pendingExpectedBytes += delta;
+          // Transfer from pending to active tracking
+          this.pendingExpectedBytes -= estimatedBytes;
+          this.activeExpectedBytes = actualBytes;
+          this.activeActualBytes = 0;
           this.updateStats();
           onPreflight?.(order, actualBytes);
         },
@@ -155,11 +156,13 @@ export class QueueService implements IQueueService {
         },
         (slice) => next.onSlice(next.order, slice),
         (bytes) => {
-          this.pendingExpectedBytes -= bytes;
           this.onChunk(bytes);
         }
       );
 
+      // Reset active tracking
+      this.activeExpectedBytes = 0;
+      this.activeActualBytes = 0;
       this.currentlyFetching = null;
     }
 
