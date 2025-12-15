@@ -31,14 +31,21 @@
   flex: 1;
 }
 
-/* Layer options button */
+/* Layer options button - square so border forms circle */
 .layer.widget .options {
+  position: relative;
   background: transparent;
   border: none;
-  padding: 8px 12px 8px 0;
+  padding: 9px;
   cursor: pointer;
-  line-height: 1;
+  height: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
 }
+
 
 .layer.widget .options svg {
   width: 14px;
