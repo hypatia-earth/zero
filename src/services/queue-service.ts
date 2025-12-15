@@ -13,8 +13,8 @@ import type { OmService } from './om-service';
 
 const DEBUG = false;
 
-/** Default estimated size for unknown timesteps (~4MB for 10 slices) */
-const DEFAULT_SIZE_ESTIMATE = 4.0 * 1024 * 1024;
+/** Default estimated size for unknown timesteps (~8MB for 10 slices) */
+const DEFAULT_SIZE_ESTIMATE = 8.0 * 1024 * 1024;
 
 /** Queued order with callback */
 interface QueuedTimestepOrder {
