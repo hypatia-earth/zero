@@ -136,46 +136,66 @@ function drawTimebar(
   // Base tick height
   const baseTickHeight = layerHeight * TICK_HEIGHT_RATIO;
 
-  // Draw ticks for each layer
-  activeLayers.forEach((layer, rowIndex) => {
-    const cached = cachedMap.get(layer) || new Set();
-    const gpu = gpuMap.get(layer) || new Set();
-    const active = activeMap.get(layer) || new Set();
-    const colors = LAYER_COLORS[layer];
-    const rowTopY = rowIndex * layerHeight;
-
-    // Draw each ECMWF timestep
+  // Draw ticks for each layer (or grey ECMWF ticks if no layer active)
+  if (activeLayers.length === 0) {
+    // No weather layers active: show grey ECMWF ticks
     ecmwfSet.forEach(tsKey => {
       const t = getT(tsKey);
       if (t < 0 || t > 1) return;
 
       const x = getX(t);
       const tickHeight = baseTickHeight * diskHeight(t);
-      const topY = rowTopY + (layerHeight - tickHeight) / 2;  // Center vertically
+      const topY = (layerHeight - tickHeight) / 2;
 
-      // Determine color: green (active) > layer (gpu) > layer dark (cached) > grey (ecmwf)
-      let color = COLOR_ECMWF;
-      if (cached.has(tsKey)) {
-        color = colors.cached;
-      }
-      if (gpu.has(tsKey)) {
-        color = colors.gpu;
-      }
-      if (active.has(tsKey)) {
-        color = COLOR_ACTIVE;
-      }
-
-      // Apply sun brightness if enabled
       if (sunEnabled) {
         const brightness = getSunBrightness(cameraLat, cameraLon, new Date(tsKey));
         ctx.globalAlpha = brightness;
       }
 
-      ctx.fillStyle = color;
+      ctx.fillStyle = COLOR_ECMWF;
       ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickHeight);
       ctx.globalAlpha = 1.0;
     });
-  });
+  } else {
+    // Weather layers active: show layer-colored ticks
+    activeLayers.forEach((layer, rowIndex) => {
+      const cached = cachedMap.get(layer) || new Set();
+      const gpu = gpuMap.get(layer) || new Set();
+      const active = activeMap.get(layer) || new Set();
+      const colors = LAYER_COLORS[layer];
+      const rowTopY = rowIndex * layerHeight;
+
+      ecmwfSet.forEach(tsKey => {
+        const t = getT(tsKey);
+        if (t < 0 || t > 1) return;
+
+        const x = getX(t);
+        const tickHeight = baseTickHeight * diskHeight(t);
+        const topY = rowTopY + (layerHeight - tickHeight) / 2;
+
+        // Determine color: green (active) > layer (gpu) > layer dark (cached) > grey (ecmwf)
+        let color = COLOR_ECMWF;
+        if (cached.has(tsKey)) {
+          color = colors.cached;
+        }
+        if (gpu.has(tsKey)) {
+          color = colors.gpu;
+        }
+        if (active.has(tsKey)) {
+          color = COLOR_ACTIVE;
+        }
+
+        if (sunEnabled) {
+          const brightness = getSunBrightness(cameraLat, cameraLon, new Date(tsKey));
+          ctx.globalAlpha = brightness;
+        }
+
+        ctx.fillStyle = color;
+        ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickHeight);
+        ctx.globalAlpha = 1.0;
+      });
+    });
+  }
 
   // Draw now marker (full height)
   const nowT = getT(nowTime.toISOString());
