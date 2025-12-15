@@ -152,7 +152,7 @@ export async function streamOmVariable(
 
   // Phase 1: Trailer via suffix range (bytes=-N gets last N bytes)
   const trailerSize = wasm._om_trailer_size();
-  const trailerData = await fetchSuffix(url, trailerSize, 'meta', signal);
+  const trailerData = await fetchSuffix(url, trailerSize, 'meta');
 
   const trailerPtr = wasm._malloc(trailerSize);
   const offsetPtr = wasm._malloc(8);
@@ -172,7 +172,7 @@ export async function streamOmVariable(
   DEBUG && console.log(`[OM] Trailer: offset=${rootOffset}, size=${rootSize}`);
 
   // Phase 3: Root + children metadata
-  const rootData = await fetchRange(url, rootOffset, rootSize, 'meta', signal);
+  const rootData = await fetchRange(url, rootOffset, rootSize, 'meta');
 
   const rootPtr = wasm._malloc(rootData.length);
   wasm.HEAPU8.set(rootData, rootPtr);
@@ -197,7 +197,7 @@ export async function streamOmVariable(
   wasm._free(o1Ptr);
   wasm._free(s1Ptr);
 
-  const allChildrenData = await fetchRange(url, childrenStart, childrenEnd - childrenStart, 'meta', signal);
+  const allChildrenData = await fetchRange(url, childrenStart, childrenEnd - childrenStart, 'meta');
 
   // Phase 4: Find param
   let targetVarOffset = 0, targetVarSize = 0, targetDims: number[] = [];
@@ -301,7 +301,7 @@ export async function streamOmVariable(
     const indexOffset = Number(wasm.getValue(indexReadPtr, 'i64'));
     const indexCount = Number(wasm.getValue(indexReadPtr + 8, 'i64'));
 
-    const indexData = await fetchRange(url, indexOffset, indexCount, cacheLayer, signal);
+    const indexData = await fetchRange(url, indexOffset, indexCount, cacheLayer);
     const blockIdx = indexBlocks.length;
     indexBlocks.push({ offset: indexOffset, count: indexCount, data: indexData });
 
@@ -380,8 +380,23 @@ export async function streamOmVariable(
     const sliceByteEnd = (lastChunk.dataOffset - minDataOffset) + lastChunk.dataCount;
     const sliceSize = sliceByteEnd - sliceByteStart;
 
+    // Check abort at slice boundary (before fetch, after previous slice cleanup)
+    if (signal?.aborted) {
+      wasm._free(outputPtr);
+      wasm._free(chunkBufferPtr);
+      wasm._free(decoderPtr);
+      wasm._free(indexReadPtr);
+      wasm._free(errorPtr);
+      wasm._free(readOffsetPtr);
+      wasm._free(readCountPtr);
+      wasm._free(cubeOffsetPtr);
+      wasm._free(cubeDimPtr);
+      wasm._free(targetPtr);
+      throw new DOMException('Aborted', 'AbortError');
+    }
+
     // Fetch this slice (use layer for caching)
-    const sliceData = await fetchRange(url, firstChunk.dataOffset, sliceSize, cacheLayer, signal);
+    const sliceData = await fetchRange(url, firstChunk.dataOffset, sliceSize, cacheLayer);
     allDataBuffer.set(sliceData, sliceByteStart);
     onBytes?.(sliceData.length);
 
