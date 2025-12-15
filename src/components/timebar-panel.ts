@@ -11,7 +11,6 @@
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
 import type { StateService } from '../services/state-service';
-import type { DateTimeService } from '../services/datetime-service';
 import type { SlotService } from '../services/slot-service';
 import type { TimestepService } from '../services/timestep-service';
 import { getSunDirection } from '../utils/sun-position';
@@ -84,7 +83,6 @@ function getSunBrightness(lat: number, lon: number, time: Date): number {
 
 interface TimeBarPanelAttrs {
   stateService: StateService;
-  dateTimeService: DateTimeService;
   slotService: SlotService;
   timestepService: TimestepService;
 }
@@ -138,46 +136,66 @@ function drawTimebar(
   // Base tick height
   const baseTickHeight = layerHeight * TICK_HEIGHT_RATIO;
 
-  // Draw ticks for each layer
-  activeLayers.forEach((layer, rowIndex) => {
-    const cached = cachedMap.get(layer) || new Set();
-    const gpu = gpuMap.get(layer) || new Set();
-    const active = activeMap.get(layer) || new Set();
-    const colors = LAYER_COLORS[layer];
-    const rowTopY = rowIndex * layerHeight;
-
-    // Draw each ECMWF timestep
+  // Draw ticks for each layer (or grey ECMWF ticks if no layer active)
+  if (activeLayers.length === 0) {
+    // No weather layers active: show grey ECMWF ticks
     ecmwfSet.forEach(tsKey => {
       const t = getT(tsKey);
       if (t < 0 || t > 1) return;
 
       const x = getX(t);
       const tickHeight = baseTickHeight * diskHeight(t);
-      const topY = rowTopY + (layerHeight - tickHeight) / 2;  // Center vertically
+      const topY = (layerHeight - tickHeight) / 2;
 
-      // Determine color: green (active) > layer (gpu) > layer dark (cached) > grey (ecmwf)
-      let color = COLOR_ECMWF;
-      if (cached.has(tsKey)) {
-        color = colors.cached;
-      }
-      if (gpu.has(tsKey)) {
-        color = colors.gpu;
-      }
-      if (active.has(tsKey)) {
-        color = COLOR_ACTIVE;
-      }
-
-      // Apply sun brightness if enabled
       if (sunEnabled) {
         const brightness = getSunBrightness(cameraLat, cameraLon, new Date(tsKey));
         ctx.globalAlpha = brightness;
       }
 
-      ctx.fillStyle = color;
+      ctx.fillStyle = COLOR_ECMWF;
       ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickHeight);
       ctx.globalAlpha = 1.0;
     });
-  });
+  } else {
+    // Weather layers active: show layer-colored ticks
+    activeLayers.forEach((layer, rowIndex) => {
+      const cached = cachedMap.get(layer) || new Set();
+      const gpu = gpuMap.get(layer) || new Set();
+      const active = activeMap.get(layer) || new Set();
+      const colors = LAYER_COLORS[layer];
+      const rowTopY = rowIndex * layerHeight;
+
+      ecmwfSet.forEach(tsKey => {
+        const t = getT(tsKey);
+        if (t < 0 || t > 1) return;
+
+        const x = getX(t);
+        const tickHeight = baseTickHeight * diskHeight(t);
+        const topY = rowTopY + (layerHeight - tickHeight) / 2;
+
+        // Determine color: green (active) > layer (gpu) > layer dark (cached) > grey (ecmwf)
+        let color = COLOR_ECMWF;
+        if (cached.has(tsKey)) {
+          color = colors.cached;
+        }
+        if (gpu.has(tsKey)) {
+          color = colors.gpu;
+        }
+        if (active.has(tsKey)) {
+          color = COLOR_ACTIVE;
+        }
+
+        if (sunEnabled) {
+          const brightness = getSunBrightness(cameraLat, cameraLon, new Date(tsKey));
+          ctx.globalAlpha = brightness;
+        }
+
+        ctx.fillStyle = color;
+        ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickHeight);
+        ctx.globalAlpha = 1.0;
+      });
+    });
+  }
 
   // Draw now marker (full height)
   const nowT = getT(nowTime.toISOString());
@@ -212,28 +230,32 @@ function drawTimebar(
   ctx.stroke();
 }
 
-let unsubscribe: (() => void) | null = null;
-let canvasRef: HTMLCanvasElement | null = null;
-let isDragging = false;
+export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode) => {
+  let unsubscribe: (() => void) | null = null;
+  let canvasRef: HTMLCanvasElement | null = null;
+  let isDragging = false;
 
-export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
-  oncreate({ attrs }) {
-    unsubscribe = effect(() => {
-      attrs.stateService.state.value;
-      attrs.slotService.slotsVersion.value;
-      attrs.timestepService.state.value;  // Watch ECMWF/cache/GPU state
-      m.redraw();
-    });
-  },
-  onremove() {
-    unsubscribe?.();
-    unsubscribe = null;
-    canvasRef = null;
-  },
-  view({ attrs }) {
-    const { stateService, dateTimeService, slotService, timestepService } = attrs;
+  return {
+    oncreate() {
+      unsubscribe = effect(() => {
+        initialVnode.attrs.stateService.state.value;
+        initialVnode.attrs.slotService.slotsVersion.value;
+        initialVnode.attrs.timestepService.state.value;
+        m.redraw();
+      });
+    },
+
+    onremove() {
+      unsubscribe?.();
+    },
+
+    view({ attrs }) {
+    const { stateService, slotService, timestepService } = attrs;
     const currentTime = stateService.getTime();
-    const window = dateTimeService.getDataWindow();
+    const window = {
+      start: timestepService.toDate(timestepService.first()),
+      end: timestepService.toDate(timestepService.last()),
+    };
 
     const windowMs = window.end.getTime() - window.start.getTime();
     const currentMs = currentTime.getTime() - window.start.getTime();
@@ -301,12 +323,14 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
       }
       gpuMap.set(layer, gpuSet);
 
-      // Active pair
+      // Active pair (t1 = null means single slot mode)
       const activeSet = new Set<string>();
       const activePair = slotService.getActivePair(layer);
       if (activePair) {
         activeSet.add(timestepService.toDate(activePair.t0).toISOString());
-        activeSet.add(timestepService.toDate(activePair.t1).toISOString());
+        if (activePair.t1) {
+          activeSet.add(timestepService.toDate(activePair.t1).toISOString());
+        }
       }
       activeMap.set(layer, activeSet);
     }
@@ -341,7 +365,7 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
                 cachedMap,
                 gpuMap,
                 activeMap,
-                dateTimeService.getWallTime(),
+                new Date(),
                 progress,
                 camera.lat,
                 camera.lon,
@@ -358,7 +382,7 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
                 cachedMap,
                 gpuMap,
                 activeMap,
-                dateTimeService.getWallTime(),
+                new Date(),
                 progress,
                 camera.lat,
                 camera.lon,
@@ -374,5 +398,6 @@ export const TimeBarPanel: m.Component<TimeBarPanelAttrs> = {
         m('span', formatDate(window.end)),
       ]),
     ]);
-  },
+    },
+  };
 };

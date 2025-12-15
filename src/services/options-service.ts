@@ -28,36 +28,26 @@ const OPTIONS_KEY = 'user-options';
 // IndexedDB helpers
 // ============================================================
 
-async function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+async function openDB(): Promise<{ db: IDBDatabase; isNewDB: boolean }> {
+  let isNewDB = false;
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
     request.onupgradeneeded = (event) => {
+      isNewDB = true;
       const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME);
       }
     };
   });
+  return { db, isNewDB };
 }
 
 async function loadFromDB(): Promise<{ options: Partial<ZeroOptions> | null; isNewDB: boolean }> {
   try {
-    let isNewDB = false;
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result);
-      request.onupgradeneeded = (event) => {
-        isNewDB = true;
-        const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME);
-        }
-      };
-    });
-
+    const { db, isNewDB } = await openDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
@@ -77,7 +67,7 @@ async function loadFromDB(): Promise<{ options: Partial<ZeroOptions> | null; isN
 
 async function saveToDB(options: Partial<ZeroOptions>): Promise<void> {
   try {
-    const db = await openDB();
+    const { db } = await openDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
@@ -227,23 +217,21 @@ export class OptionsService {
     const oldOverrides = this.userOverrides.value;
     const updated = produce(this.options.value, fn);
     const newOverrides = this.extractOverrides(updated);
+    this.logChange(oldOverrides, newOverrides);
+    this.userOverrides.value = newOverrides;
+  }
 
-    // Log what changed
+  private logChange(oldOverrides: Partial<ZeroOptions>, newOverrides: Partial<ZeroOptions>): void {
     const oldKeys = this.flattenKeys(oldOverrides);
     const newKeys = this.flattenKeys(newOverrides);
     const changedKey = newKeys.find(k => !oldKeys.includes(k) || getByPath(oldOverrides, k) !== getByPath(newOverrides, k))
       || oldKeys.find(k => !newKeys.includes(k));
+    if (!changedKey) return;
 
-    if (changedKey) {
-      const newValue = getByPath(newOverrides, changedKey);
-      if (newValue !== undefined) {
-        console.log(`[Options] ${changedKey} = ${JSON.stringify(newValue)}`);
-      } else {
-        console.log(`[Options] ${changedKey} reset to default`);
-      }
-    }
-
-    this.userOverrides.value = newOverrides;
+    const newValue = getByPath(newOverrides, changedKey);
+    console.log(newValue !== undefined
+      ? `[Options] ${changedKey} = ${JSON.stringify(newValue)}`
+      : `[Options] ${changedKey} reset to default`);
   }
 
   /**

@@ -35,3 +35,10 @@
     --layout-margin-left: max(24px, env(safe-area-inset-left, 0px));
   }
 }
+
+/* === UI Container === */
+.ui-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}

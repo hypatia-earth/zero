@@ -86,12 +86,11 @@ export class GlobeRenderer {
       },
     });
 
-    const storageLimit = this.device.limits.maxStorageBufferBindingSize;
-    const bufferLimit = this.device.limits.maxBufferSize;
-    const effectiveLimit = Math.min(storageLimit, bufferLimit);
-    console.log(`[GlobeRenderer] Buffer limits: storage=${(storageLimit / 1024 / 1024).toFixed(0)} MB, buffer=${(bufferLimit / 1024 / 1024).toFixed(0)} MB`);
-
     // Cap slots to what GPU can handle
+    const effectiveLimit = Math.min(
+      this.device.limits.maxStorageBufferBindingSize,
+      this.device.limits.maxBufferSize
+    );
     const maxSlotsFromGpu = Math.floor(effectiveLimit / BYTES_PER_TIMESTEP);
     this.maxTempSlots = Math.min(requestedSlots, maxSlotsFromGpu);
 
@@ -132,6 +131,7 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
+    // TODO: Should respect activated layers and varying size
     // Weather data: single large buffer with N slots (default 7 slots = ~185 MB)
     const tempBufferSize = BYTES_PER_TIMESTEP * this.maxTempSlots;
     this.tempDataBuffer = this.device.createBuffer({

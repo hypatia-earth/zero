@@ -12,6 +12,7 @@ import { signal } from '@preact/signals-core';
 import type { TParam, TTimestep, TModel, Timestep, IDiscoveryService } from '../config/types';
 import type { ConfigService } from './config-service';
 import { parseTimestep, formatTimestep } from '../utils/timestep';
+import { sendSWMessage } from '../utils/sw-message';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -109,7 +110,7 @@ export class TimestepService implements IDiscoveryService {
       params.set(param, { cache, gpu: new Set(), sizes });
       if (sizes.size > 0) {
         const avgKB = [...sizes.values()].reduce((a, b) => a + b, 0) / sizes.size / 1024;
-        console.log(`[Timestep] ${param}: ${sizes.size} cached sizes, avg ${avgKB.toFixed(0)}KB`);
+        console.log(`[Timestep] ${param}: ${sizes.size} cached timesteps, avg ${avgKB.toFixed(0)}KB`);
       }
     }
 
@@ -119,7 +120,7 @@ export class TimestepService implements IDiscoveryService {
     const ts = this.timestepsData[config.default];
     const vars = this.variablesData[config.default];
     const fmt = (t: TTimestep) => t.slice(5, 13); // "MM-DDTHH"
-    console.log(`[Discovery] ${config.default}: ${vars.length} vars, ${ts.length} steps, ${fmt(ts[0]!.timestep)} - ${fmt(ts[ts.length - 1]!.timestep)}`);
+    console.log(`[Timestep] ${config.default}: ${vars.length} V, ${ts.length} TS, ${fmt(ts[0]!.timestep)} - ${fmt(ts[ts.length - 1]!.timestep)}`);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -133,7 +134,7 @@ export class TimestepService implements IDiscoveryService {
     // 1. Fetch latest.json → completed run info
     const response = await fetch(`${config.root}${model}/latest.json`);
     if (!response.ok) {
-      throw new Error(`[Discovery] Failed to fetch latest.json for ${model}`);
+      throw new Error(`[Timestep] Failed to fetch latest.json for ${model}`);
     }
     const data = await response.json();
     this.variablesData[model] = data.variables;
@@ -143,7 +144,7 @@ export class TimestepService implements IDiscoveryService {
     // 2. Find first and newest runs via S3
     const { firstRun, newestRun, newestRunPrefix } = await this.discoverRunBounds(basePrefix);
     if (!firstRun) {
-      throw new Error(`[Discovery] No runs found for ${model}`);
+      throw new Error(`[Timestep] No runs found for ${model}`);
     }
 
     // 3. Check if there's an incomplete run newer than completed
@@ -367,7 +368,7 @@ export class TimestepService implements IDiscoveryService {
     const sizes = new Map<TTimestep, number>();
 
     try {
-      const detail = await this.sendSWMessage<LayerDetail>({
+      const detail = await sendSWMessage<LayerDetail>({
         type: 'GET_LAYER_STATS',
         layer: param,
       });
@@ -389,28 +390,6 @@ export class TimestepService implements IDiscoveryService {
     }
 
     return { cache, sizes };
-  }
-
-  private async sendSWMessage<T>(message: object): Promise<T> {
-    const target = navigator.serviceWorker.controller
-      || (await navigator.serviceWorker.ready).active;
-
-    if (!target) {
-      throw new Error('No active Service Worker');
-    }
-
-    return new Promise((resolve, reject) => {
-      const channel = new MessageChannel();
-      const timeout = setTimeout(() => {
-        console.warn('[Timestep] SW message timeout');
-        reject(new Error('SW message timeout'));
-      }, 5000);
-      channel.port1.onmessage = (event) => {
-        clearTimeout(timeout);
-        resolve(event.data as T);
-      };
-      target.postMessage(message, [channel.port2]);
-    });
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -578,6 +557,12 @@ export class TimestepService implements IDiscoveryService {
   contains(ts: TTimestep, model?: TModel): boolean {
     const m = model ?? this.defaultModel;
     return this.timestepIndex[m].has(ts);
+  }
+
+  /** Get timestep if time exactly matches one, null otherwise */
+  getExactTimestep(time: Date, model?: TModel): TTimestep | null {
+    const ts = this.toTimestep(time);
+    return this.contains(ts, model) ? ts : null;
   }
 
   variables(model?: TModel): string[] {

@@ -113,10 +113,15 @@ fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
   // Progressive loading: skip cells not yet loaded
   if (cell >= u.tempLoadedPoints) { return color; }
 
-  // Read from slots and interpolate
+  // Read from slots and interpolate (lerp < -1.5 means single slot mode)
   let temp0 = getTempFromSlot(cell, u.tempSlot0);
-  let temp1 = getTempFromSlot(cell, u.tempSlot1);
-  let tempC = mix(temp0, temp1, u.tempLerp);  // Data is already in Celsius
+  var tempC: f32;
+  if (u.tempLerp < -1.5) {
+    tempC = temp0;  // Single slot mode: no interpolation
+  } else {
+    let temp1 = getTempFromSlot(cell, u.tempSlot1);
+    tempC = mix(temp0, temp1, u.tempLerp);  // Data is already in Celsius
+  }
 
   // Skip invalid data
   if (tempC < -100.0 || tempC > 100.0) { return color; }

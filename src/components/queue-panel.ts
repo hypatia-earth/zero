@@ -7,7 +7,7 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import { debounce } from '../utils/debounce';
+import { throttle } from '../utils/debounce';
 import type { IQueueService } from '../config/types';
 
 export interface QueuePanelAttrs {
@@ -16,29 +16,32 @@ export interface QueuePanelAttrs {
 
 const DEBUG = false;
 
-export const QueuePanel: m.Component<QueuePanelAttrs> = {
-  oncreate(vnode) {
-    const el = vnode.dom.querySelector('.queue-text') as HTMLElement;
+export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = (initialVnode) => {
+  const update = throttle((el: HTMLElement, queuedBytes: number, etaSeconds: number | undefined) => {
+    el.textContent = formatStats(queuedBytes, etaSeconds);
+    DEBUG && console.log('[QueuePanel]', el.textContent);
+  }, 333);
 
-    const update = debounce((queuedBytes: number, etaSeconds: number | undefined) => {
-      el.textContent = formatStats(queuedBytes, etaSeconds);
-      DEBUG && console.log('[QueuePanel]', el.textContent);
-    }, 333);
+  return {
+    oncreate({ dom }) {
+      const el = dom.querySelector('.queue-text') as HTMLElement;
 
-    effect(() => {
-      const stats = vnode.attrs.queueService.stats.value;
-      update(stats.bytesQueued, stats.etaSeconds);
-    });
-  },
-  view() {
-    return m('div.queue.panel', [
-      m('button.control.pill', {
-        title: 'Download queue'
-      }, [
-        m('span.queue-text', '↓ 0 MB · idle')
-      ])
-    ]);
-  }
+      effect(() => {
+        const stats = initialVnode.attrs.queueService.stats.value;
+        update(el, stats.bytesQueued, stats.etaSeconds);
+      });
+    },
+
+    view() {
+      return m('div.queue.panel', [
+        m('button.control.pill', {
+          title: 'Download queue'
+        }, [
+          m('span.queue-text', '↓ 0 MB · idle')
+        ])
+      ]);
+    }
+  };
 };
 
 function formatStats(queuedBytes: number, etaSeconds: number | undefined): string {

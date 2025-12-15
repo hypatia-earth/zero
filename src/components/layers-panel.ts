@@ -14,34 +14,36 @@ interface LayersPanelAttrs {
   optionsService: OptionsService;
 }
 
-export const LayersPanel: m.Component<LayersPanelAttrs> = {
-  view({ attrs }) {
-    const { configService, stateService } = attrs;
-    const layers = configService.getLayers();
-    const activeLayers = stateService.getLayers();
+export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
+  return {
+    view({ attrs }) {
+      const { configService, stateService } = attrs;
+      const layers = configService.getLayers();
+      const activeLayers = stateService.getLayers();
 
-    const categories = ['base', 'weather', 'overlay'] as const;
-    const categoryLabels = { base: 'Base', weather: 'Weather', overlay: 'Overlays' };
+      const categories = ['base', 'weather', 'overlay'] as const;
+      const categoryLabels = { base: 'Base', weather: 'Weather', overlay: 'Overlays' };
 
-    return m('.panel.layers', [
-      categories.map(category => {
-        const categoryLayers = layers.filter(l => l.category === category);
-        if (categoryLayers.length === 0) return null;
+      return m('.panel.layers', [
+        categories.map(category => {
+          const categoryLayers = layers.filter(l => l.category === category);
+          if (categoryLayers.length === 0) return null;
 
-        return m('.group', { key: category }, [
-          m('h4', categoryLabels[category]),
-          categoryLayers.map(layer =>
-            m(LayerWidget, {
-              key: layer.id,
-              layer,
-              active: activeLayers.includes(layer.id),
-              onToggle: () => stateService.toggleLayer(layer.id),
-            })
-          ),
-        ]);
-      }),
-    ]);
-  },
+          return m('.group', { key: category }, [
+            m('h4', categoryLabels[category]),
+            categoryLayers.map(layer =>
+              m(LayerWidget, {
+                key: layer.id,
+                layer,
+                active: activeLayers.includes(layer.id),
+                onToggle: () => stateService.toggleLayer(layer.id),
+              })
+            ),
+          ]);
+        }),
+      ]);
+    },
+  };
 };
 
 interface LayerWidgetAttrs {
@@ -50,14 +52,16 @@ interface LayerWidgetAttrs {
   onToggle: () => void;
 }
 
-const LayerWidget: m.Component<LayerWidgetAttrs> = {
-  view({ attrs }) {
-    const { layer, active, onToggle } = attrs;
-    const classes = ['layer', 'widget', 'bar'];
-    if (active) classes.push('active', layer.id);
+const LayerWidget: m.ClosureComponent<LayerWidgetAttrs> = () => {
+  return {
+    view({ attrs }) {
+      const { layer, active, onToggle } = attrs;
+      const classes = ['layer', 'widget', 'bar'];
+      if (active) classes.push('active', layer.id);
 
-    return m('div', { class: classes.join(' ') }, [
-      m('button.toggle', { onclick: onToggle }, layer.label),
-    ]);
-  },
+      return m('div', { class: classes.join(' ') }, [
+        m('button.toggle', { onclick: onToggle }, layer.label),
+      ]);
+    },
+  };
 };

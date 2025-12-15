@@ -6,6 +6,7 @@
 
 import { signal, effect } from '@preact/signals-core';
 import type { LayerId } from '../config/types';
+import type { ConfigService } from './config-service';
 
 export interface UrlState {
   time: Date;
@@ -95,7 +96,7 @@ export class StateService {
   private syncEnabled = false;
   private syncTimer: number | null = null;
 
-  constructor(defaultLayers: LayerId[]) {
+  constructor(private configService: ConfigService) {
     const parsed = parseUrl();
 
     this.state.value = {
@@ -103,7 +104,7 @@ export class StateService {
       lat: parsed.lat ?? 0,
       lon: parsed.lon ?? 0,
       altitude: parsed.altitude ?? 20_000_000,
-      layers: parsed.layers ?? defaultLayers,
+      layers: parsed.layers ?? this.configService.getDefaultLayers(),
     };
 
     // Write initial state to URL

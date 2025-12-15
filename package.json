@@ -8,8 +8,7 @@
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "convert-luts": "node scripts/convert-luts-float16.js",
-    "deploy:zero": "cd ../server/scripts && ./build-zero.sh && ./deploy-zero.sh",
-    "postinstall": "npm link ../typescript-omfiles/packages/file-format-wasm"
+    "deploy:zero": "cd ../server/scripts && ./build-zero.sh && ./deploy-zero.sh"
   },
   "dependencies": {
     "@preact/signals-core": "^1.5.0",

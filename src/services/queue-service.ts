@@ -8,10 +8,10 @@
 
 import { signal } from '@preact/signals-core';
 import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice } from '../config/types';
-import type { FetchService } from './fetch-service';
+import { fetchStreaming } from '../utils/fetch';
 import type { OmService } from './om-service';
 
-const DEBUG = true;
+const DEBUG = false;
 
 /** Default estimated size for unknown timesteps (~1.5MB compressed typical) */
 const DEFAULT_SIZE_ESTIMATE = 1.5 * 1024 * 1024;
@@ -53,8 +53,6 @@ export class QueueService implements IQueueService {
 
   private omService: OmService | null = null;
 
-  constructor(private fetchService: FetchService) {}
-
   /** Set OmService (injected later to avoid circular deps) */
   setOmService(omService: OmService): void {
     this.omService = omService;
@@ -64,6 +62,8 @@ export class QueueService implements IQueueService {
     orders: FileOrder[],
     onProgress?: (index: number, total: number) => void | Promise<void>
   ): Promise<ArrayBuffer[]> {
+    DEBUG && console.log(`[Queue] ${orders.length} fileorders`);
+
     // Sum expected bytes for all orders
     for (const order of orders) {
       this.pendingExpectedBytes += order.size;
@@ -113,9 +113,10 @@ export class QueueService implements IQueueService {
         estimatedBytes,
         onSlice,
         onPreflight: (actualBytes: number) => {
-          // Adjust pending bytes when actual size known
-          const delta = actualBytes - estimatedBytes;
-          this.pendingExpectedBytes += delta;
+          // Transfer from pending to active tracking
+          this.pendingExpectedBytes -= estimatedBytes;
+          this.activeExpectedBytes = actualBytes;
+          this.activeActualBytes = 0;
           this.updateStats();
           onPreflight?.(order, actualBytes);
         },
@@ -126,9 +127,8 @@ export class QueueService implements IQueueService {
     this.pendingExpectedBytes = this.timestepQueue.reduce((sum, q) => sum + q.estimatedBytes, 0);
     this.updateStats();
 
-    const dropped = orders.length - newOrders.length;
-    DEBUG && console.log(`[Queue] New queue: ${newOrders.length} orders, ${(this.pendingExpectedBytes / 1024 / 1024).toFixed(1)} MB (est)` +
-      (dropped ? ` (${dropped} already fetching)` : ''));
+    const fmt = (ts: string) => ts.slice(5, 13); // "MM-DDTHH"
+    console.log(`[Queue] ${orders.length} TS orders, first: ${fmt(orders[0]!.timestep)}, last: ${fmt(orders[orders.length - 1]!.timestep)}`);
 
     // Start processing if not already running
     if (!this.processingPromise) {
@@ -156,11 +156,13 @@ export class QueueService implements IQueueService {
         },
         (slice) => next.onSlice(next.order, slice),
         (bytes) => {
-          this.pendingExpectedBytes -= bytes;
           this.onChunk(bytes);
         }
       );
 
+      // Reset active tracking
+      this.activeExpectedBytes = 0;
+      this.activeActualBytes = 0;
       this.currentlyFetching = null;
     }
 
@@ -174,7 +176,7 @@ export class QueueService implements IQueueService {
     this.activeExpectedBytes = order.size;
     this.activeActualBytes = 0;
 
-    const buffer = await this.fetchService.fetch2(
+    const buffer = await fetchStreaming(
       order.url,
       {},
       (bytes) => this.onChunk(bytes)
@@ -226,14 +228,19 @@ export class QueueService implements IQueueService {
     const activeRemainingBytes = (this.activeExpectedBytes * this.compressionRatio) - this.activeActualBytes;
     const bytesQueued = Math.max(0, pendingWireBytes + activeRemainingBytes);
 
-    // Update stats signal
+    // Update stats signal (no cycle risk: SlotService uses queueMicrotask for fetching)
+    const wasDownloading = this.stats.value.status === 'downloading';
+    const newStatus = bytesQueued > 0 ? 'downloading' : 'idle';
     this.stats.value = {
       bytesQueued,
       bytesCompleted: this.totalBytesCompleted,
       bytesPerSec,
       etaSeconds: bytesPerSec ? bytesQueued / bytesPerSec : undefined,
-      status: bytesQueued > 0 ? 'downloading' : 'idle',
+      status: newStatus,
     };
+    if (wasDownloading && newStatus === 'idle') {
+      console.log('[Queue] Done');
+    }
     DEBUG && console.log('[Queue]', formatStats(this.stats.value));
   }
 

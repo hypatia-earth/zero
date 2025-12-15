@@ -26,9 +26,11 @@ export const defaultConfig: ZeroConfig = {
   },
 
   dataBaseUrl: 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs',
-  dataWindowDays: 5,
-  prefetchCount: 24,
-  gpuBudgetMB: 200,
+
+  gpu: {
+    slotSizeMB: 27,        // ~26.4 MB per slot
+    minSlotsPerLayer: 4,   // 2 interpolation + 2 prefetch
+  },
 
   camera: {
     fov: 75,              // Field of view in degrees

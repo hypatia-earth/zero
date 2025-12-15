@@ -4,6 +4,8 @@
  * Registers the SW for Range request caching and exposes console utilities.
  */
 
+import { sendSWMessage } from '../utils/sw-message';
+
 /** Layer stats from SW */
 interface LayerStats {
   entries: number;
@@ -57,7 +59,7 @@ export async function registerServiceWorker(): Promise<void> {
  */
 async function logCachedTimesteps(): Promise<void> {
   try {
-    const stats = await sendMessage<CacheStats>({ type: 'GET_CACHE_STATS' });
+    const stats = await sendSWMessage<CacheStats>({ type: 'GET_CACHE_STATS' });
     const parts = WEATHER_LAYERS
       .map(layer => {
         const layerStats = stats.layers[layer];
@@ -70,36 +72,10 @@ async function logCachedTimesteps(): Promise<void> {
 }
 
 /**
- * Send message to SW and wait for response
- * Uses controller if available, falls back to active registration
- */
-async function sendMessage<T>(message: object): Promise<T> {
-  const target = navigator.serviceWorker.controller
-    || (await navigator.serviceWorker.ready).active;
-
-  if (!target) {
-    throw new Error('No active Service Worker');
-  }
-
-  return new Promise((resolve, reject) => {
-    const channel = new MessageChannel();
-    const timeout = setTimeout(() => {
-      console.warn('[SW] Message timeout');
-      reject(new Error('SW message timeout'));
-    }, 5000);
-    channel.port1.onmessage = (event) => {
-      clearTimeout(timeout);
-      resolve(event.data as T);
-    };
-    target.postMessage(message, [channel.port2]);
-  });
-}
-
-/**
  * Clear the entire cache (all layers)
  */
 async function clearCache(): Promise<boolean> {
-  const result = await sendMessage<{ success: boolean }>({ type: 'CLEAR_CACHE' });
+  const result = await sendSWMessage<{ success: boolean }>({ type: 'CLEAR_CACHE' });
   console.log(result.success ? '[SW] All caches cleared' : '[SW] No caches found');
   return result.success;
 }
@@ -108,7 +84,7 @@ async function clearCache(): Promise<boolean> {
  * Clear cache for a specific layer
  */
 async function clearLayerCache(layer: string): Promise<boolean> {
-  const result = await sendMessage<{ success: boolean; layer: string }>({ type: 'CLEAR_LAYER_CACHE', layer });
+  const result = await sendSWMessage<{ success: boolean; layer: string }>({ type: 'CLEAR_LAYER_CACHE', layer });
   console.log(result.success ? `[SW] Cache cleared for layer: ${layer}` : `[SW] No cache found for layer: ${layer}`);
   return result.success;
 }
@@ -117,7 +93,7 @@ async function clearLayerCache(layer: string): Promise<boolean> {
  * Get cache statistics (per layer and total)
  */
 async function getCacheStats(): Promise<CacheStats> {
-  const result = await sendMessage<CacheStats>({ type: 'GET_CACHE_STATS' });
+  const result = await sendSWMessage<CacheStats>({ type: 'GET_CACHE_STATS' });
   console.log(`[SW] Cache total: ${result.totalEntries} entries, ${result.totalSizeMB} MB`);
   console.table(result.layers);
   return result;
@@ -127,7 +103,7 @@ async function getCacheStats(): Promise<CacheStats> {
  * Get detailed stats for a specific layer
  */
 async function getLayerStats(layer: string): Promise<LayerDetail> {
-  const result = await sendMessage<LayerDetail>({ type: 'GET_LAYER_STATS', layer });
+  const result = await sendSWMessage<LayerDetail>({ type: 'GET_LAYER_STATS', layer });
   console.log(`[SW] Layer '${layer}': ${result.entries} entries, ${result.totalSizeMB} MB`);
   if (result.items.length > 0) {
     console.table(result.items.slice(0, 20)); // Show first 20
@@ -142,7 +118,7 @@ async function getLayerStats(layer: string): Promise<LayerDetail> {
  * Clear entries older than N days
  */
 async function clearOlderThan(days: number): Promise<number> {
-  const result = await sendMessage<{ deleted: number }>({ type: 'CLEAR_OLDER_THAN', days });
+  const result = await sendSWMessage<{ deleted: number }>({ type: 'CLEAR_OLDER_THAN', days });
   console.log(`[SW] Deleted ${result.deleted} entries older than ${days} days`);
   return result.deleted;
 }

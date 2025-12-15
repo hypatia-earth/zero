@@ -8,6 +8,8 @@
  * Note: Data loading moved to DataLoader for centralized fetch tracking
  */
 
+const DEBUG = false;
+
 export interface AtmosphereLUTs {
   transmittance: GPUTexture;
   scattering: GPUTexture;
@@ -95,7 +97,7 @@ export function createAtmosphereLUTs(
     addressModeW: 'clamp-to-edge',
   });
 
-  console.log(`[Atmosphere] LUTs created (${useFloat16 ? 'float16' : 'float32'})`);
+  DEBUG && console.log(`[Atmosphere] LUTs created (${useFloat16 ? 'float16' : 'float32'})`);
 
   return { transmittance, scattering, irradiance, sampler };
 }

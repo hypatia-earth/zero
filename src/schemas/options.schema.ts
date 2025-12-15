@@ -114,21 +114,21 @@ export const optionsSchema = z.object({
   // GPU Settings
   // ----------------------------------------------------------
   gpu: z.object({
-    budgetMB: opt(
-      z.enum(['128', '192', '256', '384', '512']).default('256'),
+    slotsPerLayer: opt(
+      z.enum(['4', '8', '16', '32', '64']).default('8'),
       {
-        label: 'GPU memory budget',
-        description: 'Maximum GPU memory for data textures',
+        label: 'Slots per layer',
+        description: 'More slots = smoother time scrubbing, more GPU memory',
         group: 'gpu',
         filter: ['global', 'gpu'],
         order: 0,
-        control: 'radio',
+        control: 'select',
         options: [
-          { value: '128', label: '128 MB' },
-          { value: '192', label: '192 MB' },
-          { value: '256', label: '256 MB' },
-          { value: '384', label: '384 MB' },
-          { value: '512', label: '512 MB' },
+          { value: '4', label: '4 (108 MB) - Minimum' },
+          { value: '8', label: '8 (216 MB) - Good' },
+          { value: '16', label: '16 (432 MB) - Smooth' },
+          { value: '32', label: '32 (864 MB) - Maximum' },
+          { value: '64', label: '64 (1.7 GB) - Debug' },
         ],
         impact: 'recreate',
       }
@@ -663,7 +663,7 @@ export const optionsSchema = z.object({
   // ----------------------------------------------------------
   dataCache: z.object({
     cacheStrategy: opt(
-      z.enum(['future-first', 'spiral-out']).default('future-first'),
+      z.enum(['future-first', 'alternate']).default('alternate'),
       {
         label: 'Strategy',
         description: 'How to prioritize and order loading timesteps',
@@ -672,8 +672,8 @@ export const optionsSchema = z.object({
         order: 0,
         control: 'radio',
         options: [
-          { value: 'future-first', label: 'Future' },
-          { value: 'spiral-out', label: 'Spiral' },
+          { value: 'alternate', label: 'Balanced' },
+          { value: 'future-first', label: 'Future first' },
         ],
       }
     ),
@@ -720,7 +720,7 @@ export type ZeroOptions = z.infer<typeof optionsSchema>;
 
 export const defaultOptions: ZeroOptions = {
   _version: 1,
-  gpu: { budgetMB: '256' },
+  gpu: { slotsPerLayer: '8' },
   viewport: {
     physicsModel: 'inertia',
     mass: 10,
@@ -743,7 +743,7 @@ export const defaultOptions: ZeroOptions = {
   humidity: { opacity: 0.6, resolution: '0p25' },
   wind: { seedCount: '8192', opacity: 0.6, speed: 20, resolution: '0p25' },
   pressure: { opacity: 0.85, smoothing: '1' },
-  dataCache: { cacheStrategy: 'future-first', downloadMode: 'on-demand' },
+  dataCache: { cacheStrategy: 'alternate', downloadMode: 'on-demand' },
   debug: { showDevLog: false },
 };
 
