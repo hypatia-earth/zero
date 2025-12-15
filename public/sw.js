@@ -8,6 +8,7 @@
  * - Cache key: path + range bytes
  */
 
+const DEBUG = false;
 const CACHE_PREFIX = 'om-';
 const CACHE_VERSION = 'v2';
 const S3_HOST = 'openmeteo.s3.amazonaws.com';
@@ -127,17 +128,17 @@ async function handleRangeRequest(request, url, rangeHeader, layer) {
   const cachedResponse = await cache.match(cacheKey);
   if (cachedResponse) {
     if (isEntryValid(cachedResponse, validTime)) {
-      swLog(`[SW] HIT (${layer}):`, cacheKey.slice(-50));
+      DEBUG && swLog(`[SW] HIT (${layer}):`, cacheKey.slice(-50));
       return cachedResponse;
     } else {
       const cachedAt = cachedResponse.headers.get('x-cached-at');
       const age = cachedAt ? Math.round((Date.now() - parseInt(cachedAt)) / 60000) : '?';
-      swLog(`[SW] EXPIRED (${layer}): age=${age}min`, cacheKey.slice(-50));
+      DEBUG && swLog(`[SW] EXPIRED (${layer}): age=${age}min`, cacheKey.slice(-50));
     }
   }
 
   // Fetch from network
-  swLog(`[SW] MISS (${layer}):`, cacheKey.slice(-50));
+  DEBUG && swLog(`[SW] MISS (${layer}):`, cacheKey.slice(-50));
   const networkResponse = await fetch(request);
 
   if (networkResponse.ok || networkResponse.status === 206) {

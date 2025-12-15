@@ -26,14 +26,17 @@ import { registerServiceWorker } from './services/sw-registration';
 
 console.log('%c[ZERO] loading ...', 'color: darkgreen; font-weight: bold');
 
+async function main() {
+  // Register Service Worker first - we need cache stats
+  await registerServiceWorker();
 
-// Register Service Worker (non-blocking, sets up cache utils on localhost)
-registerServiceWorker();
-
-// Mount App immediately - it handles its own loading states
-const appContainer = document.getElementById('app');
-if (appContainer) {
-  m.mount(appContainer, App);
-} else {
-  console.error('[Zero] App container #app not found');
+  // Mount App - it handles its own loading states
+  const appContainer = document.getElementById('app');
+  if (appContainer) {
+    m.mount(appContainer, App);
+  } else {
+    console.error('[Zero] App container #app not found');
+  }
 }
+
+main();

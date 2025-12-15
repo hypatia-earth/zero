@@ -103,8 +103,11 @@ function drawTimebar(
   cameraLon: number,
   sunEnabled: boolean
 ): void {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+  if (ecmwfSet.size === 0) {
+    throw new Error('[Timebar] ecmwfSet is empty - timestepService.state.ecmwf has no data');
+  }
+
+  const ctx = canvas.getContext('2d')!;
 
   // Handle device pixel ratio for crisp rendering
   const dpr = globalThis.devicePixelRatio || 1;
@@ -141,8 +144,6 @@ function drawTimebar(
     // No weather layers active: show grey ECMWF ticks
     ecmwfSet.forEach(tsKey => {
       const t = getT(tsKey);
-      if (t < 0 || t > 1) return;
-
       const x = getX(t);
       const tickHeight = baseTickHeight * diskHeight(t);
       const topY = (layerHeight - tickHeight) / 2;
@@ -159,16 +160,14 @@ function drawTimebar(
   } else {
     // Weather layers active: show layer-colored ticks
     activeLayers.forEach((layer, rowIndex) => {
-      const cached = cachedMap.get(layer) || new Set();
-      const gpu = gpuMap.get(layer) || new Set();
-      const active = activeMap.get(layer) || new Set();
+      const cached = cachedMap.get(layer)!;
+      const gpu = gpuMap.get(layer)!;
+      const active = activeMap.get(layer)!;
       const colors = LAYER_COLORS[layer];
       const rowTopY = rowIndex * layerHeight;
 
       ecmwfSet.forEach(tsKey => {
         const t = getT(tsKey);
-        if (t < 0 || t > 1) return;
-
         const x = getX(t);
         const tickHeight = baseTickHeight * diskHeight(t);
         const topY = rowTopY + (layerHeight - tickHeight) / 2;
@@ -308,10 +307,8 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
 
       // Cached in SW
       const cachedSet = new Set<string>();
-      if (paramState) {
-        for (const ts of paramState.cache) {
-          cachedSet.add(timestepService.toDate(ts).toISOString());
-        }
+      for (const ts of paramState!.cache) {
+        cachedSet.add(timestepService.toDate(ts).toISOString());
       }
       cachedMap.set(layer, cachedSet);
 
