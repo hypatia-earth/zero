@@ -42,6 +42,13 @@ export async function registerServiceWorker(): Promise<void> {
     await navigator.serviceWorker.register('/sw.js');
     await navigator.serviceWorker.ready;
 
+    // Wait for SW to claim this client (skipWaiting + clients.claim)
+    if (!navigator.serviceWorker.controller) {
+      await new Promise<void>(resolve => {
+        navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
+      });
+    }
+
     // Log available cached slices
     await logCachedTimesteps();
 
