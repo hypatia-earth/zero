@@ -27,7 +27,7 @@ import { TimeCirclePanel } from './components/timecircle-panel';
 import { QueuePanel } from './components/queue-panel';
 import { TimeBarPanel } from './components/timebar-panel';
 import { LogoPanel } from './components/logo-panel';
-import { GearIcon } from './components/GearIcon';
+import { OptionsPanel } from './components/options-panel';
 import { FullscreenPanel } from './components/fullscreen-panel';
 
 export const App: m.ClosureComponent = () => {
@@ -41,6 +41,7 @@ export const App: m.ClosureComponent = () => {
   let renderService: RenderService;
   let timestepService: TimestepService;
   let slotService: SlotService;
+  let keyboardService: KeyboardService;
 
   return {
     async oninit() {
@@ -54,7 +55,7 @@ export const App: m.ClosureComponent = () => {
       configService = new ConfigService();
       await configService.init();
       optionsService = new OptionsService();
-      stateService = new StateService(configService.getDefaultLayers());
+      stateService = new StateService(configService);
       omService = new OmService();
 
       m.redraw();
@@ -166,7 +167,7 @@ export const App: m.ClosureComponent = () => {
         BootstrapService.setStep('ACTIVATE');
         renderService.start();
         stateService.enableSync();
-        new KeyboardService(stateService);
+        keyboardService = new KeyboardService(stateService);
         setupCameraControls(canvas, renderer.camera, stateService, configService);
 
         BootstrapService.complete();
@@ -185,6 +186,7 @@ export const App: m.ClosureComponent = () => {
             queueService,
             renderService,
             slotService,
+            keyboardService,
           };
         }
 
@@ -211,21 +213,14 @@ export const App: m.ClosureComponent = () => {
       return [
         m(BootstrapModal),
         m(OptionsDialog, { optionsService }),
-        m('div.ui-container', {
-          style: 'position: absolute; inset: 0; pointer-events: none;'
-        }, [
+        m('.ui-container', [
           m(LogoPanel),
           m(LayersPanel, { configService, stateService, optionsService }),
           m(TimeCirclePanel, { stateService }),
           m(QueuePanel, { queueService }),
           m(TimeBarPanel, { stateService, slotService, timestepService }),
           m(FullscreenPanel),
-          m('div.options.panel', [
-            m('button.control.circle', {
-              onclick: () => optionsService.openDialog(),
-              title: 'Options'
-            }, m(GearIcon))
-          ]),
+          m(OptionsPanel, { optionsService }),
         ]),
       ];
     },
