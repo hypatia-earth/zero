@@ -75,10 +75,11 @@ export default defineConfig({
     host: true,  // Expose to network
     port: 5173,
     strictPort: true,
-    https: {
+    // Allows build without certs
+    https: fs.existsSync('../certs/hypatia-key.pem') ? {
       key: fs.readFileSync('../certs/hypatia-key.pem'),
       cert: fs.readFileSync('../certs/hypatia.pem'),
-    },
+    } : undefined,
     fs: {
       allow: ['..'],  // Allow serving files from parent (for npm linked packages)
     },
