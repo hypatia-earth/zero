@@ -7,6 +7,7 @@ dist/
 docs/
 scripts/
 test/
+DEBUG.md
 
 # Generated shader (built by wgsl-plus from master.wgsl)
 src/render/shaders/zero.wgsl
