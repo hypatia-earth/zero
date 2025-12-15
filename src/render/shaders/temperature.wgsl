@@ -108,6 +108,7 @@ fn getTempFromSlot(cell: u32, slot: u32) -> f32 {
 
 fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
   if (u.tempDataReady == 0u || u.tempOpacity <= 0.0) { return color; }
+
   let cell = tempLatLonToCell(lat, lon);
 
   // Progressive loading: skip cells not yet loaded

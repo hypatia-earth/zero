@@ -3,7 +3,6 @@
  */
 
 import { GlobeRenderer } from '../render/globe-renderer';
-import { generateGaussianLUTs } from '../render/gaussian-grid';
 import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
@@ -34,7 +33,7 @@ export class RenderService {
     this.resizeObserver.observe(this.canvas);
   }
 
-  async initialize(): Promise<void> {
+  async initialize(gaussianLats: Float32Array, ringOffsets: Uint32Array): Promise<void> {
     const cameraConfig = this.configService.getCameraConfig();
     this.renderer = new GlobeRenderer(this.canvas, cameraConfig);
 
@@ -44,9 +43,8 @@ export class RenderService {
 
     await this.renderer.initialize(maxSlots);
 
-    // Upload Gaussian LUTs
-    const luts = generateGaussianLUTs();
-    this.renderer.uploadGaussianLUTs(luts.lats, luts.offsets);
+    // Upload pre-computed Gaussian LUTs (O1280 grid)
+    this.renderer.uploadGaussianLUTs(gaussianLats, ringOffsets);
   }
 
   getRenderer(): GlobeRenderer {

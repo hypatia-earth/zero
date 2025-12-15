@@ -118,14 +118,25 @@ export const App: m.ClosureComponent = () => {
         // 4d. Font atlas
         const [fontBuffer] = await queueService.submitFileOrders(
           [{ url: '/fonts/plex-mono.png', size: 15926 }],
-          () => BootstrapService.updateProgress('Loading font...', 15 + (10 / 11) * 5)
+          () => BootstrapService.updateProgress('Loading font...', 15 + (10 / 12) * 5)
         );
         const fontAtlas = await createImageBitmap(new Blob([fontBuffer!], { type: 'image/png' }));
+
+        // 4e. Gaussian grid LUTs (O1280)
+        const [gaussianLatsBuffer, ringOffsetsBuffer] = await queueService.submitFileOrders(
+          [
+            { url: '/om1280/gaussian-lats.bin', size: 10240 },
+            { url: '/om1280/ring-offsets.bin', size: 10240 },
+          ],
+          () => BootstrapService.updateProgress('Loading grid LUTs...', 15 + (11 / 12) * 5)
+        );
+        const gaussianLats = new Float32Array(gaussianLatsBuffer!);
+        const ringOffsets = new Uint32Array(ringOffsetsBuffer!);
 
         // Step 5: GPU Init
         BootstrapService.setStep('GPU_INIT');
         renderService = new RenderService(canvas, optionsService, stateService, configService);
-        await renderService.initialize();
+        await renderService.initialize(gaussianLats, ringOffsets);
 
         // Step 5: DATA - Initialize with assets from Step 4
         BootstrapService.setStep('DATA');
