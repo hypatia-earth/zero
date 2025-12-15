@@ -8,7 +8,7 @@
 
 import { signal } from '@preact/signals-core';
 import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice } from '../config/types';
-import type { FetchService } from './fetch-service';
+import { fetchStreaming } from '../utils/fetch';
 import type { OmService } from './om-service';
 
 const DEBUG = true;
@@ -52,8 +52,6 @@ export class QueueService implements IQueueService {
   private processingPromise: Promise<void> | null = null;
 
   private omService: OmService | null = null;
-
-  constructor(private fetchService: FetchService) {}
 
   /** Set OmService (injected later to avoid circular deps) */
   setOmService(omService: OmService): void {
@@ -174,7 +172,7 @@ export class QueueService implements IQueueService {
     this.activeExpectedBytes = order.size;
     this.activeActualBytes = 0;
 
-    const buffer = await this.fetchService.fetch2(
+    const buffer = await fetchStreaming(
       order.url,
       {},
       (bytes) => this.onChunk(bytes)

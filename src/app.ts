@@ -10,7 +10,6 @@ import m from 'mithril';
 import { ConfigService } from './services/config-service';
 import { OptionsService } from './services/options-service';
 import { StateService } from './services/state-service';
-import { FetchService } from './services/fetch-service';
 import { DateTimeService } from './services/datetime-service';
 import { BootstrapService } from './services/bootstrap-service';
 import { CapabilitiesService } from './services/capabilities-service';
@@ -37,7 +36,6 @@ export const App: m.ClosureComponent = () => {
   let configService: ConfigService;
   let optionsService: OptionsService;
   let stateService: StateService;
-  let fetchService: FetchService;
   let dateTimeService: DateTimeService;
   let capabilitiesService: CapabilitiesService;
   let omService: OmService;
@@ -59,9 +57,8 @@ export const App: m.ClosureComponent = () => {
       await configService.init();
       optionsService = new OptionsService();
       stateService = new StateService(configService.getDefaultLayers());
-      fetchService = new FetchService();
       dateTimeService = new DateTimeService(configService.getDataWindowDays());
-      omService = new OmService(fetchService);
+      omService = new OmService();
 
       m.redraw();
 
@@ -82,7 +79,7 @@ export const App: m.ClosureComponent = () => {
 
         // Step 4: Assets via QueueService
         BootstrapService.setStep('ASSETS');
-        queueService = new QueueService(fetchService);
+        queueService = new QueueService();
         queueService.setOmService(omService);
         const f16 = !capabilitiesService.float32_filterable;
         const suffix = f16 ? '-16' : '';
@@ -186,7 +183,6 @@ export const App: m.ClosureComponent = () => {
             configService,
             optionsService,
             stateService,
-            fetchService,
             dateTimeService,
             capabilitiesService,
             omService,
