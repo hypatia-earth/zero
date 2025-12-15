@@ -1,6 +1,6 @@
 {
   "name": "hypatia-zero",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "type": "module",
   "scripts": {
     "dev": "vite",
