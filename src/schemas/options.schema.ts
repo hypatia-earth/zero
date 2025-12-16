@@ -477,18 +477,17 @@ export const optionsSchema = z.object({
       }
     ),
     resolution: opt(
-      z.enum(['0p25', '0p5', '1p0']).default('0p25'),
+      z.enum(['full', 'half']).default('full'),
       {
-        label: 'Grid resolution',
-        description: 'Higher resolution = more detail but larger downloads',
+        label: 'Resolution',
+        description: 'Higher resolution = more detail, but less timesteps are GPU cached',
         group: 'layers',
         filter: ['global', 'temp'],
         order: 10.5,
         control: 'radio',
         options: [
-          { value: '0p25', label: 'High' },
-          { value: '0p5', label: 'Med' },
-          { value: '1p0', label: 'Low' },
+          { value: 'full', label: 'Full' },
+          { value: 'half', label: 'Half' },
         ],
         impact: 'recreate',
       }
@@ -526,18 +525,17 @@ export const optionsSchema = z.object({
       }
     ),
     resolution: opt(
-      z.enum(['0p25', '0p5', '1p0']).default('0p25'),
+      z.enum(['full', 'half']).default('full'),
       {
-        label: 'Grid resolution',
-        description: 'High has 3-hour updates, others 6-hour',
+        label: 'Resolution',
+        description: 'Higher resolution = more detail, but less timesteps are GPU cached',
         group: 'layers',
         filter: ['global', 'rain'],
         order: 11.5,
         control: 'radio',
         options: [
-          { value: '0p25', label: 'High' },
-          { value: '0p5', label: 'Med' },
-          { value: '1p0', label: 'Low' },
+          { value: 'full', label: 'Full' },
+          { value: 'half', label: 'Half' },
         ],
         impact: 'recreate',
       }
@@ -575,18 +573,17 @@ export const optionsSchema = z.object({
       }
     ),
     resolution: opt(
-      z.enum(['0p25', '0p5', '1p0']).default('0p25'),
+      z.enum(['full', 'half']).default('full'),
       {
-        label: 'Grid resolution',
-        description: 'High has 3-hour updates, others 6-hour',
+        label: 'Resolution',
+        description: 'Higher resolution = more detail, but less timesteps are GPU cached',
         group: 'layers',
         filter: ['global', 'clouds'],
         order: 12.5,
         control: 'radio',
         options: [
-          { value: '0p25', label: 'High' },
-          { value: '0p5', label: 'Med' },
-          { value: '1p0', label: 'Low' },
+          { value: 'full', label: 'Full' },
+          { value: 'half', label: 'Half' },
         ],
         impact: 'recreate',
       }
@@ -624,18 +621,17 @@ export const optionsSchema = z.object({
       }
     ),
     resolution: opt(
-      z.enum(['0p25', '0p5', '1p0']).default('0p25'),
+      z.enum(['full', 'half']).default('full'),
       {
-        label: 'Grid resolution',
-        description: 'High has 3-hour updates, others 6-hour',
+        label: 'Resolution',
+        description: 'Higher resolution = more detail, but less timesteps are GPU cached',
         group: 'layers',
         filter: ['global', 'humidity'],
         order: 13.5,
         control: 'radio',
         options: [
-          { value: '0p25', label: 'High' },
-          { value: '0p5', label: 'Med' },
-          { value: '1p0', label: 'Low' },
+          { value: 'full', label: 'Full' },
+          { value: 'half', label: 'Half' },
         ],
         impact: 'recreate',
       }
@@ -703,18 +699,17 @@ export const optionsSchema = z.object({
       }
     ),
     resolution: opt(
-      z.enum(['0p25', '0p5', '1p0']).default('0p25'),
+      z.enum(['full', 'half']).default('full'),
       {
-        label: 'Grid resolution',
-        description: 'Higher resolution = more detail but larger downloads',
+        label: 'Resolution',
+        description: 'Higher resolution = more detail, but less timesteps are GPU cached',
         group: 'layers',
         filter: ['global', 'wind'],
         order: 16.5,
         control: 'radio',
         options: [
-          { value: '0p25', label: 'High' },
-          { value: '0p5', label: 'Med' },
-          { value: '1p0', label: 'Low' },
+          { value: 'full', label: 'Full' },
+          { value: 'half', label: 'Half' },
         ],
         impact: 'recreate',
       }
@@ -855,11 +850,11 @@ export const defaultOptions: ZeroOptions = {
   earth: { enabled: true, opacity: 1, blend: 0 },
   sun: { enabled: true },
   grid: { enabled: true, opacity: 0.3, fontSize: 8 },
-  temp: { enabled: true, opacity: 0.6, palette: 'ESRI Temperature', resolution: '0p25' },
-  rain: { enabled: false, opacity: 1.0, resolution: '0p25' },
-  clouds: { enabled: false, opacity: 0.5, resolution: '0p25' },
-  humidity: { enabled: false, opacity: 0.6, resolution: '0p25' },
-  wind: { enabled: false, seedCount: '8192', opacity: 0.6, speed: 20, resolution: '0p25' },
+  temp: { enabled: true, opacity: 0.6, palette: 'ESRI Temperature', resolution: 'full' },
+  rain: { enabled: false, opacity: 1.0, resolution: 'full' },
+  clouds: { enabled: false, opacity: 0.5, resolution: 'full' },
+  humidity: { enabled: false, opacity: 0.6, resolution: 'full' },
+  wind: { enabled: false, seedCount: '8192', opacity: 0.6, speed: 20, resolution: 'full' },
   pressure: { enabled: false, opacity: 0.85, smoothing: '1' },
   dataCache: { cacheStrategy: 'alternate', downloadMode: 'on-demand' },
   debug: { showDevLog: false },
