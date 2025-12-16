@@ -39,9 +39,9 @@ export const defaultConfig: ZeroConfig = {
     fov: 75,              // Field of view in degrees
     near: 0.1,            // Near clipping plane
     far: 100,             // Far clipping plane
-    minDistance: 1.05,    // Just above surface (Earth radii)
-    maxDistance: 5.0,     // Far view
-    defaultDistance: 3.0,
+    minDistance: 1.047,   // ~300 km from surface (Earth radii)
+    maxDistance: 6.65,    // ~36,000 km from surface (geostationary)
+    defaultDistance: 3.2, // ~14,000 km from surface
   },
 
   layers: [

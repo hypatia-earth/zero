@@ -233,22 +233,41 @@ export class OptionsService {
     const urlOverrides = this.readUrlOptions();
     if (Object.keys(urlOverrides).length > 0) {
       merged = deepMerge(merged, urlOverrides);
-      const layerKeys = Object.keys(urlOverrides).filter(k => k !== '_version' && k !== '_lastModified');
-      console.log(`[Options] Applied URL overrides: ${layerKeys.join(', ')}`);
     }
 
     this.userOverrides.value = this.extractOverrides(merged);
     this.initialized = true;
 
-    // Log what viewState defaults were applied
+    // Log what viewState was changed (defaulted or clamped)
     const vs = merged.viewState;
-    const urlVs = (urlOverrides.viewState ?? {}) as Record<string, unknown>;
-    const applied: string[] = [];
-    if (!('time' in urlVs)) applied.push(`time=${vs.time.toISOString().slice(0, 16)}`);
-    if (!('lat' in urlVs)) applied.push(`lat=${vs.lat}`);
-    if (!('lon' in urlVs)) applied.push(`lon=${vs.lon}`);
-    if (!('altitude' in urlVs)) applied.push(`alt=${vs.altitude}`);
-    if (applied.length) console.log(`[Sanitized] ${applied.join(', ')}`);
+    const params = new URLSearchParams(window.location.search);
+    const changes: string[] = [];
+
+    // Time: defaulted if not in URL
+    if (!params.get('dt')) {
+      changes.push(`time=${vs.time.toISOString().slice(0, 16)}`);
+    }
+
+    // Lat/lon: defaulted or clamped
+    const llParam = params.get('ll');
+    if (!llParam) {
+      changes.push(`lat=${vs.lat}`, `lon=${vs.lon}`);
+    } else {
+      const [rawLat, rawLon] = llParam.split(',').map(parseFloat);
+      if (rawLat !== vs.lat) changes.push(`lat=${rawLat}→${vs.lat}`);
+      if (rawLon !== vs.lon) changes.push(`lon=${rawLon}→${vs.lon}`);
+    }
+
+    // Altitude: defaulted or clamped
+    const altParam = params.get('alt');
+    if (!altParam) {
+      changes.push(`alt=${vs.altitude}`);
+    } else {
+      const rawAlt = parseFloat(altParam);
+      if (rawAlt !== vs.altitude) changes.push(`alt=${rawAlt}→${vs.altitude}`);
+    }
+
+    if (changes.length) console.log(`[Sanitized] ${changes.join(', ')}`);
   }
 
   /**
@@ -371,8 +390,8 @@ export class OptionsService {
     const alt = params.get('alt');
     if (alt) {
       const altitude = parseFloat(alt);
-      if (!isNaN(altitude) && altitude > 0) {
-        viewState.altitude = altitude;
+      if (!isNaN(altitude)) {
+        viewState.altitude = Math.max(300, Math.min(36_000, altitude));
       }
     }
 

@@ -5,6 +5,9 @@
 import type { Camera } from '../render/camera';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
+import { EARTH_RADIUS } from '../config/defaults';
+
+const EARTH_RADIUS_KM = EARTH_RADIUS / 1000;  // 6371 km
 
 interface DragState {
   active: boolean;
@@ -36,7 +39,7 @@ export function setupCameraControls(
 
   // Sync camera from options state
   const viewState = optionsService.options.value.viewState;
-  camera.setPosition(viewState.lat, viewState.lon, viewState.altitude / 10_000_000);
+  camera.setPosition(viewState.lat, viewState.lon, (viewState.altitude + EARTH_RADIUS_KM) / EARTH_RADIUS_KM);
 
   // Mouse events
   canvas.addEventListener('mousedown', (e) => {
@@ -159,7 +162,7 @@ export function setupCameraControls(
     optionsService.update(draft => {
       draft.viewState.lat = camera.lat;
       draft.viewState.lon = camera.lon;
-      draft.viewState.altitude = camera.distance * 10_000_000;
+      draft.viewState.altitude = (camera.distance - 1) * EARTH_RADIUS_KM;
     });
   }
 }

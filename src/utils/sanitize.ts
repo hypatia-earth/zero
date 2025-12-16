@@ -67,10 +67,10 @@ export function sanitize(raw: Partial<ZeroOptions>, context: SanitizeContext): Z
     merged.viewState.time = context.now;
   }
 
-  // viewState.altitude: calculate from screen size if not provided
+  // viewState.altitude: calculate from screen size if not provided (km from surface)
   if (!rawViewState?.altitude) {
     const baseSize = Math.max(context.screenWidth, context.screenHeight);
-    merged.viewState.altitude = baseSize * 15000;
+    merged.viewState.altitude = Math.max(300, Math.min(36_000, baseSize * 7));
   }
 
   // viewState.lat: clamp to valid range

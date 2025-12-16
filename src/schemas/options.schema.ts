@@ -831,7 +831,7 @@ export const defaultOptions: ZeroOptions = {
     time: new Date(),
     lat: 0,
     lon: 0,
-    altitude: 20_000_000,
+    altitude: 14_000,  // km from surface
   },
   gpu: { slotsPerLayer: '8' },
   viewport: {
