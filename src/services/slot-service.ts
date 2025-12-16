@@ -19,6 +19,9 @@ import type { OptionsService } from './options-service';
 import { BootstrapService } from './bootstrap-service';
 import { debounce } from '../utils/debounce';
 
+/** Short timestep format for logs: "MM-DDTHH" */
+const fmt = (ts: TTimestep) => ts.slice(5, 13);
+
 export type LoadingStrategy = 'alternate' | 'future-first';
 
 /** What timesteps the current time needs */
@@ -130,7 +133,7 @@ export class SlotService {
         this.activePair.set(param, { t0: ts, t1: null });
         this.renderService.setTempSlots(slot.slotIndex, slot.slotIndex);
         this.renderService.setTempLoadedPoints(slot.loadedPoints);
-        console.log(`[Slot] Single: ${ts}`);
+        console.log(`[Slot] Single: ${fmt(ts)}`);
       } else {
         this.activePair.delete(param);  // Clear stale pair
       }
@@ -323,7 +326,7 @@ export class SlotService {
     this.timestepService.setGpuLoaded(param, timestep);
     this.timestepService.refreshCacheState(param);
     this.slotsVersion.value++;
-    console.log(`[Slot] Loaded ${key} → slot ${slotIndex} (${this.slots.size}/${this.maxSlots})`);
+    console.log(`[Slot] Loaded ${param}:${fmt(timestep)} → slot ${slotIndex} (${this.slots.size}/${this.maxSlots})`);
 
     this.updateShaderIfReady(param);
   }
@@ -361,7 +364,7 @@ export class SlotService {
     const param: TParam = 'temp';
     const wanted = this.computeWanted(time);
 
-    console.log(`[Slot] Initializing ${wanted.mode}: ${wanted.priority.join(', ')}`);
+    console.log(`[Slot] Initializing ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
 
     // Track loading keys
     for (const ts of wanted.priority) {

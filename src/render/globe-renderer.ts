@@ -99,9 +99,9 @@ export class GlobeRenderer {
 
     // Handle device loss
     this.device.lost.then((info) => {
-      console.error('[GlobeRenderer] WebGPU device lost:', info.message, info.reason);
+      console.error('[Globe] WebGPU device lost:', info.message, info.reason);
     });
-    console.log('[GlobeRenderer] Device ready, waiting for queue...');
+    console.log('[Globe] Device ready, waiting for queue...');
 
     // Wait for device to be fully ready
     await this.device.queue.onSubmittedWorkDone();
@@ -141,7 +141,7 @@ export class GlobeRenderer {
       size: tempBufferSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    console.log(`[GlobeRenderer] Temp buffer: ${this.maxTempSlots} slots, ${(tempBufferSize / 1024 / 1024).toFixed(1)} MB`);
+    console.log(`[Globe] Temp buffer: ${this.maxTempSlots} slots, ${(tempBufferSize / 1024 / 1024).toFixed(1)} MB`);
 
     // Rain data (single timestep for now)
     this.rainDataBuffer = this.device.createBuffer({
