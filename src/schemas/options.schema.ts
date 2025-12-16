@@ -115,7 +115,7 @@ export const optionsSchema = z.object({
   // ----------------------------------------------------------
   gpu: z.object({
     slotsPerLayer: opt(
-      z.enum(['4', '8', '16', '32', '64']).default('8'),
+      z.enum(['4', '8', '16', '32', '64', '128', '256', '512']).default('8'),
       {
         label: 'Slots per layer',
         description: 'More slots = smoother time scrubbing, more GPU memory',
@@ -127,8 +127,11 @@ export const optionsSchema = z.object({
           { value: '4', label: '4 (108 MB) - Minimum' },
           { value: '8', label: '8 (216 MB) - Good' },
           { value: '16', label: '16 (432 MB) - Smooth' },
-          { value: '32', label: '32 (864 MB) - Maximum' },
-          { value: '64', label: '64 (1.7 GB) - Debug' },
+          { value: '32', label: '32 (864 MB) - Standard' },
+          { value: '64', label: '64 (1.7 GB) - Extended' },
+          { value: '128', label: '128 (3.4 GB) - Pro' },
+          { value: '256', label: '256 (6.9 GB) - Ultra' },
+          { value: '512', label: '512 (13.8 GB) - Max' },
         ],
         impact: 'recreate',
       }
