@@ -18,6 +18,7 @@ import {
 } from '../schemas/options.schema';
 import type { OptionsService } from '../services/options-service';
 import type { PaletteService } from '../services/palette-service';
+import type { DialogService } from '../services/dialog-service';
 import { clearCache } from '../services/sw-registration';
 import { RadioPaletteControl } from './radio-palette-control';
 
@@ -335,14 +336,18 @@ function renderGroup(
 export interface OptionsDialogAttrs {
   optionsService: OptionsService;
   paletteService: PaletteService;
+  dialogService: DialogService;
 }
 
 export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
   return {
     view({ attrs }) {
-      const { optionsService, paletteService } = attrs;
+      const { optionsService, paletteService, dialogService } = attrs;
 
     if (!optionsService.dialogOpen) return null;
+
+    const isFloating = dialogService.isFloating('options');
+    const zIndex = dialogService.getZIndex('options');
 
     const filter = optionsService.dialogFilter;
     const options = optionsService.options.value;
@@ -419,23 +424,37 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
       document.removeEventListener('mouseup', onMouseUp);
     };
 
-    const dialogStyle = (dragState.offsetX !== 0 || dragState.offsetY !== 0)
-      ? { transform: `translate(${dragState.offsetX}px, ${dragState.offsetY}px)` }
-      : {};
+    const windowStyle: Record<string, string> = {};
+    if (dragState.offsetX !== 0 || dragState.offsetY !== 0) {
+      windowStyle.transform = `translate(${dragState.offsetX}px, ${dragState.offsetY}px)`;
+    }
+    if (isFloating) {
+      windowStyle.zIndex = String(zIndex);
+    }
 
-    return m('div.dialog.options', [
+    return m('div.dialog.options', { class: isFloating ? 'floating' : '' }, [
       m('div.backdrop', {
         onclick: () => {
-          resetDragState();
-          optionsService.closeDialog();
+          if (dialogService.shouldCloseOnBackdrop('options')) {
+            resetDragState();
+            optionsService.closeDialog();
+          }
         }
       }),
       m('div.window', {
         class: dragState.isDragging ? 'dragging' : '',
-        style: dialogStyle
+        style: windowStyle,
+        onmousedown: () => dialogService.bringToFront('options')
       }, [
         m('div.header', { onmousedown: onMouseDown }, [
           m('h2', dialogTitle),
+          dialogService.isDesktop ? m('button.float-toggle', {
+            onclick: (e: Event) => {
+              e.stopPropagation();
+              dialogService.toggleFloating('options');
+            },
+            title: isFloating ? 'Disable floating' : 'Keep floating'
+          }, isFloating ? '📌' : '📍') : null,
           m('button.close', {
             onclick: () => {
               resetDragState();

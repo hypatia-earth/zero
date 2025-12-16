@@ -10,6 +10,9 @@
 
 /* === Mobile (default) === */
 :root {
+  /* Breakpoints (unitless for JS access) */
+  --breakpoint-desktop: 640;
+
   --layout-font-size: 16px;
   --layout-margin-top: max(16px, env(safe-area-inset-top, 0px));
   --layout-margin-right: max(16px, env(safe-area-inset-right, 0px));

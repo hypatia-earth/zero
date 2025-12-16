@@ -23,6 +23,7 @@ import { setupCameraControls } from './services/camera-controls';
 import { initOmWasm } from './adapters/om-file-adapter';
 import { BootstrapModal } from './components/bootstrap-modal';
 import { OptionsDialog } from './components/options-dialog';
+import { DialogService } from './services/dialog-service';
 import { InfoService } from './services/info-service';
 import { InfoPanel } from './components/info-panel';
 import { InfoDialog } from './components/info-dialog';
@@ -46,6 +47,7 @@ export const App: m.ClosureComponent = () => {
   let slotService: SlotService;
   let keyboardService: KeyboardService;
   let paletteService: PaletteService;
+  let dialogService: DialogService;
   let infoService: InfoService;
 
   return {
@@ -62,6 +64,7 @@ export const App: m.ClosureComponent = () => {
       optionsService = new OptionsService();
       omService = new OmService();
       paletteService = new PaletteService();
+      dialogService = new DialogService();
       infoService = new InfoService();
 
       m.redraw();
@@ -248,8 +251,8 @@ export const App: m.ClosureComponent = () => {
 
       return [
         m(BootstrapModal),
-        m(OptionsDialog, { optionsService, paletteService }),
-        m(InfoDialog, { infoService }),
+        m(OptionsDialog, { optionsService, paletteService, dialogService }),
+        m(InfoDialog, { infoService, dialogService }),
         m('.ui-container', [
           m(LogoPanel),
           m(LayersPanel, { configService, optionsService }),
@@ -257,8 +260,8 @@ export const App: m.ClosureComponent = () => {
           m(QueuePanel, { queueService }),
           m(TimeBarPanel, { optionsService, slotService, timestepService }),
           m(FullscreenPanel),
-          m(OptionsPanel, { optionsService }),
-          m(InfoPanel, { infoService }),
+          m(OptionsPanel, { optionsService, dialogService }),
+          m(InfoPanel, { infoService, dialogService }),
         ]),
       ];
     },

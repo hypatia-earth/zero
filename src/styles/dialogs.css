@@ -178,6 +178,7 @@
 }
 
 /* Draggable header on desktop */
+/* Should align with --breakpoint-desktop in layout.css */
 @media (min-width: 640px) {
   .dialog.options .header {
     cursor: move;
@@ -189,6 +190,7 @@
 }
 
 /* Mobile: slide up from bottom */
+/* Should align with --breakpoint-desktop in layout.css */
 @media (max-width: 639px) {
   .dialog.options {
     align-items: flex-end;
@@ -715,6 +717,7 @@
 }
 
 /* Draggable header on desktop */
+/* Should align with --breakpoint-desktop in layout.css */
 @media (min-width: 640px) {
   .dialog.info .header {
     cursor: move;
@@ -726,6 +729,7 @@
 }
 
 /* Mobile: slide up from bottom */
+/* Should align with --breakpoint-desktop in layout.css */
 @media (max-width: 639px) {
   .dialog.info {
     align-items: flex-end;
@@ -957,4 +961,38 @@
   .dialog.info .btn-close:hover {
     background: var(--color-primary-bg-hover);
   }
+}
+
+/* =============================================================================
+   Floating Dialog Mode (desktop only)
+   ============================================================================= */
+
+.dialog.floating .backdrop {
+  pointer-events: none;
+  background: transparent;
+}
+
+.dialog.floating .window {
+  box-shadow: 0 8px 32px var(--color-shadow-strong);
+}
+
+/* Float toggle button */
+.dialog .float-toggle {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  opacity: 0.6;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.dialog .float-toggle:hover {
+  opacity: 1;
+  background: var(--color-surface);
+}
+
+.dialog.floating .float-toggle {
+  opacity: 1;
 }

@@ -8,6 +8,7 @@
 
 import m from 'mithril';
 import type { InfoService } from '../services/info-service';
+import type { DialogService } from '../services/dialog-service';
 
 // Drag state (persists across redraws)
 let dragState = {
@@ -24,16 +25,19 @@ function resetDragState(): void {
 
 export interface InfoDialogAttrs {
   infoService: InfoService;
+  dialogService: DialogService;
 }
 
 export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
   return {
     view({ attrs }) {
-      const { infoService } = attrs;
+      const { infoService, dialogService } = attrs;
 
       if (!infoService.dialogOpen) return null;
 
-      const isDesktop = window.innerWidth > 600;
+      const isFloating = dialogService.isFloating('info');
+      const zIndex = dialogService.getZIndex('info');
+      const isDesktop = dialogService.isDesktop;
 
       // Drag handlers (desktop only)
       const onMouseDown = (e: MouseEvent) => {
@@ -59,23 +63,37 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
         document.addEventListener('mouseup', onMouseUp);
       };
 
-      const dialogStyle = (dragState.offsetX !== 0 || dragState.offsetY !== 0)
-        ? { transform: `translate(${dragState.offsetX}px, ${dragState.offsetY}px)` }
-        : {};
+      const windowStyle: Record<string, string> = {};
+      if (dragState.offsetX !== 0 || dragState.offsetY !== 0) {
+        windowStyle.transform = `translate(${dragState.offsetX}px, ${dragState.offsetY}px)`;
+      }
+      if (isFloating) {
+        windowStyle.zIndex = String(zIndex);
+      }
 
-      return m('div.dialog.info', [
+      return m('div.dialog.info', { class: isFloating ? 'floating' : '' }, [
         m('div.backdrop', {
           onclick: () => {
-            resetDragState();
-            infoService.closeDialog();
+            if (dialogService.shouldCloseOnBackdrop('info')) {
+              resetDragState();
+              infoService.closeDialog();
+            }
           }
         }),
         m('div.window', {
           class: dragState.isDragging ? 'dragging' : '',
-          style: dialogStyle
+          style: windowStyle,
+          onmousedown: () => dialogService.bringToFront('info')
         }, [
           m('div.header', { onmousedown: onMouseDown }, [
             m('h2', 'Information'),
+            isDesktop ? m('button.float-toggle', {
+              onclick: (e: Event) => {
+                e.stopPropagation();
+                dialogService.toggleFloating('info');
+              },
+              title: isFloating ? 'Disable floating' : 'Keep floating'
+            }, isFloating ? '📌' : '📍') : null,
             m('button.close', {
               onclick: () => {
                 resetDragState();
