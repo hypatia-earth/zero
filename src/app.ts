@@ -213,7 +213,7 @@ export const App: m.ClosureComponent = () => {
         });
 
         BootstrapService.complete();
-        console.log('%c[ZERO] Bootstrap complete', 'color: darkgreen; font-weight: bold');
+        console.log(`%c[ZERO] Bootstrap complete (${(performance.now() / 1000).toFixed(2)}s)`, 'color: darkgreen; font-weight: bold');
         m.redraw();
 
         // Expose services for debugging (localhost only)
