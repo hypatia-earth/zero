@@ -94,7 +94,10 @@ function deepMerge<T extends object>(target: T, source: Partial<T>): T {
   for (const key of Object.keys(source) as (keyof T)[]) {
     const sourceValue = source[key];
     const targetValue = target[key];
-    if (
+    // Handle Date specially - don't recurse into it
+    if (sourceValue instanceof Date) {
+      result[key] = sourceValue as T[keyof T];
+    } else if (
       sourceValue !== undefined &&
       typeof sourceValue === 'object' &&
       sourceValue !== null &&
@@ -317,9 +320,11 @@ export class OptionsService {
 
   /**
    * Enable URL synchronization (call after initial load)
+   * Immediately syncs current state to URL
    */
   enableUrlSync(): void {
     this.urlSyncEnabled = true;
+    this.syncToUrl(this.options.value);  // Write sanitized state to URL
   }
 
   /**
@@ -459,7 +464,12 @@ export class OptionsService {
         const defVal = (defaults as Record<string, unknown>)[key];
         const curVal = (current as Record<string, unknown>)[key];
 
-        if (typeof curVal === 'object' && curVal !== null && !Array.isArray(curVal)) {
+        // Handle Date specially (typeof Date === 'object' but has no enumerable keys)
+        if (curVal instanceof Date) {
+          if (!(defVal instanceof Date) || curVal.getTime() !== defVal.getTime()) {
+            target[key] = curVal;
+          }
+        } else if (typeof curVal === 'object' && curVal !== null && !Array.isArray(curVal)) {
           const nested: Record<string, unknown> = {};
           extract(defVal, curVal, nested);
           if (Object.keys(nested).length > 0) {
