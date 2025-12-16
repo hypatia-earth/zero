@@ -16,10 +16,16 @@ export class InfoService {
   private cache = new Map<string, string>();
 
   constructor() {
-    // Configure marked for safety
-    marked.setOptions({
+    // Configure marked
+    marked.use({
       gfm: true,
       breaks: true,
+      renderer: {
+        heading({ text, depth }: { text: string; depth: number }) {
+          const id = text.toLowerCase().replace(/[^\w]+/g, '-');
+          return `<h${depth} id="${id}">${text}</h${depth}>\n`;
+        }
+      }
     });
   }
 

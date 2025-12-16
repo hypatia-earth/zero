@@ -2,6 +2,8 @@
 
 Hypatia Zero is a WebGPU-powered weather visualization app.
 
+**Contents:** [Features](#features) · [Controls](#controls) · [Data Source](#data-source) · [Install as App](#install-as-app) · [About](#about)
+
 ## Features
 
 - **Real-time weather data** from ECMWF
