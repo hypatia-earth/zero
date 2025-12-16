@@ -33,7 +33,8 @@ fn colormapTemp(tempC: f32) -> vec3f {
     (tempC - u.tempPaletteRange.x) / (u.tempPaletteRange.y - u.tempPaletteRange.x),
     0.0, 1.0
   );
-  return textureSample(tempPalette, tempPaletteSampler, vec2f(t, 0.5)).rgb;
+  // Use textureSampleLevel to avoid non-uniform control flow issues
+  return textureSampleLevel(tempPalette, tempPaletteSampler, vec2f(t, 0.5), 0.0).rgb;
 }
 
 // ESRI "Meaningful Temperature Palette" - designed for intuitive weather mapping

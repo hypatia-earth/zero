@@ -2,7 +2,7 @@
 
 Hypatia Zero is a WebGPU-powered weather visualization app.
 
-**Contents:** [Features](#features) · [Controls](#controls) · [Data Source](#data-source) · [Install as App](#install-as-app) · [About](#about)
+**Contents:** [Features](#features) · [Controls](#controls) · [Data Source](#data-source) · [Install as App](#install-as-app) · [Known Quirks](#known-quirks) · [About](#about)
 
 ## Features
 
@@ -32,6 +32,12 @@ For the best fullscreen experience, install Hypatia Zero as an app:
 | Chrome / Edge | Click install icon in address bar, or Menu → "Install Hypatia Zero" |
 | Android | Menu → "Add to Home Screen" |
 | iOS Safari | Share → "Add to Home Screen" |
+
+## Known Quirks
+
+- **Download ETA is approximate** - Caching, bandwidth fluctuations, and varying file sizes make precise estimates impossible.
+
+![Download indicator](info/download-eta.png)
 
 ## About
 
