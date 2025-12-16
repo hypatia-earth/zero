@@ -125,7 +125,7 @@ export class RenderService {
     return {
       tempOpacity: tempEnabled ? options.temp.opacity : 0,
       tempDataReady: tempDataValid,
-      tempLerp: rawLerp < 0 ? 0 : rawLerp,
+      tempLerp: rawLerp === -1 ? 0 : rawLerp,  // -2 = single slot mode (no interpolation)
       tempLoadedPoints: this.tempLoadedPoints,
       tempSlot0: this.tempSlot0,
       tempSlot1: this.tempSlot1,

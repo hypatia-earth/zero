@@ -351,7 +351,7 @@ export class SlotService {
     return (tc - t0) / (t1 - t0);
   }
 
-  /** Initialize with first timestep pair */
+  /** Initialize with first timestep(s) - single if exact, pair if between */
   async initialize(): Promise<void> {
     // Set data window from discovered timesteps
     this.dataWindowStart = this.timestepService.first();
