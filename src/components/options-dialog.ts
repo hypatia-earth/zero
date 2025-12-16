@@ -17,7 +17,9 @@ import {
   type FlatOption,
 } from '../schemas/options.schema';
 import type { OptionsService } from '../services/options-service';
+import type { PaletteService } from '../services/palette-service';
 import { clearCache } from '../services/sw-registration';
+import { RadioPaletteControl } from './radio-palette-control';
 
 // ============================================================
 // Type guards for control types
@@ -100,8 +102,23 @@ function formatValue(value: number, meta: SliderMeta): string {
 // Control renderers
 // ============================================================
 
-function renderControl(opt: FlatOption, currentValue: unknown, optionsService: OptionsService): m.Children {
+function renderControl(opt: FlatOption, currentValue: unknown, optionsService: OptionsService, paletteService: PaletteService): m.Children {
   const { path, meta } = opt;
+
+  // Special handling for palette selection
+  if (path.endsWith('.palette')) {
+    const layerId = path.split('.')[0];
+    const palettes = paletteService.getPalettes(layerId ?? 'temp');
+
+    return m(RadioPaletteControl, {
+      palettes,
+      selected: currentValue as string,
+      onSelect: (paletteName: string) => {
+        setOptionValue(optionsService, path, paletteName);
+        paletteService.setPalette(layerId ?? 'temp', paletteName);
+      }
+    });
+  }
 
   switch (meta.control) {
     case 'toggle':
@@ -168,7 +185,7 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
   }
 }
 
-function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: OptionsService): m.Children {
+function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: OptionsService, paletteService: PaletteService): m.Children {
   const currentValue = getByPath(options, opt.path);
   const modified = isModified(opt.path, currentValue);
 
@@ -183,7 +200,7 @@ function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: Opt
         onclick: () => optionsService.reset(opt.path),
         style: { visibility: modified ? 'visible' : 'hidden' }
       }, '↺'),
-      renderControl(opt, currentValue, optionsService)
+      renderControl(opt, currentValue, optionsService, paletteService)
     ])
   ]);
 }
@@ -228,6 +245,7 @@ function renderGroup(
   groupOptions: FlatOption[],
   options: ZeroOptions,
   optionsService: OptionsService,
+  paletteService: PaletteService,
   showAdvancedOptions: boolean,
   skipGroupHeader: boolean = false
 ): m.Children {
@@ -260,7 +278,7 @@ function renderGroup(
       ...Array.from(byLayer.entries()).map(([layerId, opts]) =>
         m('div.subsection', { key: layerId }, [
           m('h4.title', { key: `${layerId}_title` }, layerLabels[layerId] || layerId),
-          ...opts.map(opt => renderOption(opt, options, optionsService))
+          ...opts.map(opt => renderOption(opt, options, optionsService, paletteService))
         ])
       )
     ].filter(Boolean));
@@ -286,7 +304,7 @@ function renderGroup(
       ...sortedSubgroups.map(([subgroupKey, opts]) =>
         m('div.subsection', { key: subgroupKey }, [
           m('h4.title', { key: `${subgroupKey}_title` }, advancedSubgroups[subgroupKey] || subgroupKey),
-          ...opts.map(opt => renderOption(opt, options, optionsService))
+          ...opts.map(opt => renderOption(opt, options, optionsService, paletteService))
         ])
       )
     ].filter(Boolean));
@@ -295,7 +313,7 @@ function renderGroup(
   return m('div.section', { key: groupId }, [
     !skipGroupHeader ? m('h3.title', { key: '_title' }, group.label) : null,
     !skipGroupHeader && group.description ? m('p.description', { key: '_desc' }, group.description) : null,
-    ...visibleOptions.map(opt => renderOption(opt, options, optionsService))
+    ...visibleOptions.map(opt => renderOption(opt, options, optionsService, paletteService))
   ].filter(Boolean));
 }
 
@@ -305,12 +323,13 @@ function renderGroup(
 
 export interface OptionsDialogAttrs {
   optionsService: OptionsService;
+  paletteService: PaletteService;
 }
 
 export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
   return {
     view({ attrs }) {
-      const { optionsService } = attrs;
+      const { optionsService, paletteService } = attrs;
 
     if (!optionsService.dialogOpen) return null;
 
@@ -417,7 +436,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
           ...sortedGroupIds.map(groupId => {
             const groupOpts = filteredGroups[groupId];
             if (!groupOpts) return null;
-            return renderGroup(groupId, groupOpts, options, optionsService, showAdvanced, !!filter && filter !== 'global');
+            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, showAdvanced, !!filter && filter !== 'global');
           }).filter(Boolean),
 
           // Danger zone (only in global view, above advanced toggle)
@@ -455,7 +474,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
 
           // Advanced group
           showAdvanced && advancedGroup
-            ? renderGroup('advanced', advancedGroup, options, optionsService, true)
+            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, true)
             : null
         ].filter(Boolean)),
         m('div.footer', [

@@ -145,7 +145,6 @@ export class SlotService {
         this.activePair.set(param, { t0, t1 });
         this.renderService.setTempSlots(slot0.slotIndex, slot1.slotIndex);
         this.renderService.setTempLoadedPoints(Math.min(slot0.loadedPoints, slot1.loadedPoints));
-        console.log(`[Slot] Pair: ${t0} ↔ ${t1}`);
       } else {
         this.activePair.delete(param);  // Clear stale pair
       }

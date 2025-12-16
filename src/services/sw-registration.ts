@@ -42,11 +42,18 @@ export async function registerServiceWorker(): Promise<void> {
     await navigator.serviceWorker.register('/sw.js');
     await navigator.serviceWorker.ready;
 
-    // Wait for SW to claim this client (skipWaiting + clients.claim)
+    // Wait for SW to claim this client (skipWaiting + clients.claim), with timeout
     if (!navigator.serviceWorker.controller) {
-      await new Promise<void>(resolve => {
-        navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
-      });
+      let timedOut = false;
+      await Promise.race([
+        new Promise<void>(resolve => {
+          navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
+        }),
+        new Promise<void>(resolve => setTimeout(() => { timedOut = true; resolve(); }, 2000)),
+      ]);
+      if (timedOut) {
+        console.warn('[SW] Timeout waiting for controller, continuing without SW');
+      }
     }
 
     // Log available cached slices

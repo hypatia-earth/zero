@@ -1,0 +1,15 @@
+{
+  "name": "Hypatia Rain",
+  "description": "Blue gradient for precipitation intensity",
+  "unit": "mm/h",
+  "stops": [
+    { "value": 0.0004, "color": [ 10,  61, 150], "alpha": 0.30 },
+    { "value": 0.0007, "color": [ 28,  77, 158], "alpha": 0.40 },
+    { "value": 0.0013, "color": [ 46,  92, 168], "alpha": 0.50 },
+    { "value": 0.0024, "color": [ 64, 110, 179], "alpha": 0.55 },
+    { "value": 0.0042, "color": [ 82, 125, 189], "alpha": 0.60 },
+    { "value": 0.0076, "color": [ 99, 140, 196], "alpha": 0.65 },
+    { "value": 0.0136, "color": [120, 158, 207], "alpha": 0.70 },
+    { "value": null,   "color": [255, 255, 255], "alpha": 0.75 }
+  ]
+}

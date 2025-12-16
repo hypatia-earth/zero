@@ -1,0 +1,18 @@
+{
+  "name": "Simple Gradient Temperature",
+  "description": "Simple blue to red linear gradient",
+  "unit": "C",
+  "interpolate": true,
+  "stops": [
+    { "value": -40, "color": [  0,   0, 255] },
+    { "value": -30, "color": [  0, 128, 255] },
+    { "value": -20, "color": [  0, 223, 255] },
+    { "value": -10, "color": [  0, 255, 191] },
+    { "value":   0, "color": [  0, 255,  96] },
+    { "value":  10, "color": [ 96, 255,   0] },
+    { "value":  20, "color": [191, 255,   0] },
+    { "value":  30, "color": [255, 223,   0] },
+    { "value":  40, "color": [255, 128,   0] },
+    { "value":  50, "color": [255,   0,   0] }
+  ]
+}

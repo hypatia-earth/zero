@@ -7,6 +7,7 @@
  */
 
 import m from 'mithril';
+import { effect } from '@preact/signals-core';
 import { ConfigService } from './services/config-service';
 import { OptionsService } from './services/options-service';
 import { StateService } from './services/state-service';
@@ -18,6 +19,7 @@ import { OmService } from './services/om-service';
 import { TimestepService } from './services/timestep-service';
 import { SlotService } from './services/slot-service';
 import { RenderService } from './services/render-service';
+import { PaletteService } from './services/palette-service';
 import { setupCameraControls } from './services/camera-controls';
 import { initOmWasm } from './adapters/om-file-adapter';
 import { BootstrapModal } from './components/bootstrap-modal';
@@ -42,6 +44,7 @@ export const App: m.ClosureComponent = () => {
   let timestepService: TimestepService;
   let slotService: SlotService;
   let keyboardService: KeyboardService;
+  let paletteService: PaletteService;
 
   return {
     async oninit() {
@@ -57,6 +60,7 @@ export const App: m.ClosureComponent = () => {
       optionsService = new OptionsService();
       stateService = new StateService(configService);
       omService = new OmService();
+      paletteService = new PaletteService();
 
       m.redraw();
 
@@ -155,6 +159,16 @@ export const App: m.ClosureComponent = () => {
         // 5d. Font atlas
         await renderer.loadFontAtlas(fontAtlas);
 
+        // 5e. Load palettes
+        await paletteService.loadPalettes('temp');
+
+        // 5f. Initialize default palette texture
+        const tempPalette = paletteService.getPalette('temp');
+        const tempTextureData = paletteService.generateTextureData(tempPalette);
+        const tempRange = paletteService.getRange(tempPalette);
+        renderer.updateTempPalette(tempTextureData as Uint8Array<ArrayBuffer>);
+        renderService.updateTempPalette(tempTextureData as Uint8Array<ArrayBuffer>, tempRange.min, tempRange.max);
+
         // Finalize renderer
         renderer.finalize();
 
@@ -167,11 +181,11 @@ export const App: m.ClosureComponent = () => {
           optionsService
         );
 
-        // 5f. Temperature timesteps
+        // 5g. Temperature timesteps
         await BootstrapService.updateProgress('Loading temperature...', 50);
         await slotService.initialize();
 
-        // 5g. Precipitation (placeholder)
+        // 5h. Precipitation (placeholder)
         await BootstrapService.updateProgress('Loading precipitation 1/2...', 85);
         await BootstrapService.updateProgress('Loading precipitation 2/2...', 95);
 
@@ -181,6 +195,15 @@ export const App: m.ClosureComponent = () => {
         stateService.enableSync();
         keyboardService = new KeyboardService(stateService);
         setupCameraControls(canvas, renderer.camera, stateService, configService);
+
+        // Wire up palette reactivity
+        effect(() => {
+          void paletteService.paletteChanged.value; // Subscribe to changes
+          const palette = paletteService.getPalette('temp');
+          const textureData = paletteService.generateTextureData(palette);
+          const range = paletteService.getRange(palette);
+          renderService.updateTempPalette(textureData as Uint8Array<ArrayBuffer>, range.min, range.max);
+        });
 
         BootstrapService.complete();
         console.log('%c[ZERO] Bootstrap complete', 'color: darkgreen; font-weight: bold');
@@ -199,6 +222,7 @@ export const App: m.ClosureComponent = () => {
             renderService,
             slotService,
             keyboardService,
+            paletteService,
           };
         }
 
@@ -224,7 +248,7 @@ export const App: m.ClosureComponent = () => {
 
       return [
         m(BootstrapModal),
-        m(OptionsDialog, { optionsService }),
+        m(OptionsDialog, { optionsService, paletteService }),
         m('.ui-container', [
           m(LogoPanel),
           m(LayersPanel, { configService, stateService, optionsService }),

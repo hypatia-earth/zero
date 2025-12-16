@@ -27,18 +27,13 @@ fn tempLatLonToCell(lat: f32, lon: f32) -> u32 {
   return ringOffsets[ring] + lonIdx;
 }
 
+// Texture-based colormap using 1D palette
 fn colormapTemp(tempC: f32) -> vec3f {
-  let t = clamp((tempC + 40.0) / 90.0, 0.0, 1.0);
-  // Blue -> Cyan -> Green -> Yellow -> Red
-  if (t < 0.25) {
-    return mix(vec3f(0.0, 0.0, 1.0), vec3f(0.0, 1.0, 1.0), t * 4.0);
-  } else if (t < 0.5) {
-    return mix(vec3f(0.0, 1.0, 1.0), vec3f(0.0, 1.0, 0.0), (t - 0.25) * 4.0);
-  } else if (t < 0.75) {
-    return mix(vec3f(0.0, 1.0, 0.0), vec3f(1.0, 1.0, 0.0), (t - 0.5) * 4.0);
-  } else {
-    return mix(vec3f(1.0, 1.0, 0.0), vec3f(1.0, 0.0, 0.0), (t - 0.75) * 4.0);
-  }
+  let t = clamp(
+    (tempC - u.tempPaletteRange.x) / (u.tempPaletteRange.y - u.tempPaletteRange.x),
+    0.0, 1.0
+  );
+  return textureSample(tempPalette, tempPaletteSampler, vec2f(t, 0.5)).rgb;
 }
 
 // ESRI "Meaningful Temperature Palette" - designed for intuitive weather mapping
@@ -127,6 +122,6 @@ fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
   // Skip invalid data
   if (tempC < -100.0 || tempC > 100.0) { return color; }
 
-  let tempColor = colormapTempESRI(tempC);
+  let tempColor = colormapTemp(tempC);
   return vec4f(mix(color.rgb, tempColor, u.tempOpacity), color.a);
 }

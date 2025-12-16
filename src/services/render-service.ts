@@ -18,6 +18,7 @@ export class RenderService {
   private tempSlot0 = 0;  // Current active slot indices
   private tempSlot1 = 1;
   private tempLerpFn: ((time: Date) => number) | null = null;
+  private tempPaletteRange: Float32Array = new Float32Array([-40, 50]); // Default range
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -131,6 +132,7 @@ export class RenderService {
       tempLoadedPoints: this.tempLoadedPoints,
       tempSlot0: this.tempSlot0,
       tempSlot1: this.tempSlot1,
+      tempPaletteRange: this.tempPaletteRange,
     };
   }
 
@@ -173,6 +175,18 @@ export class RenderService {
    */
   setTempLerpFn(fn: (time: Date) => number): void {
     this.tempLerpFn = fn;
+  }
+
+  /**
+   * Update temperature palette texture
+   */
+  updateTempPalette(textureData: Uint8Array<ArrayBuffer>, min: number, max: number): void {
+    if (!this.renderer) {
+      throw new Error('RenderService not initialized');
+    }
+    this.renderer.updateTempPalette(textureData);
+    this.tempPaletteRange = new Float32Array([min, max]);
+    console.log(`[RenderService] Updated temp palette range: [${min}, ${max}]`);
   }
 
   dispose(): void {

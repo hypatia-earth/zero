@@ -35,6 +35,7 @@ struct Uniforms {
   tempSlot1: u32,         // slot index for time1 in tempData buffer
   gridFontSize: f32, // font size in screen pixels for grid labels
   tempLoadedPad: f32,     // padding to 16-byte alignment
+  tempPaletteRange: vec2f, // min/max temperature values for palette mapping (Celsius)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -52,6 +53,9 @@ struct Uniforms {
 // Font atlas for grid labels (declared in grid-text.wgsl)
 // @group(0) @binding(11) var fontAtlas: texture_2d<f32>;
 // @group(0) @binding(12) var fontSampler: sampler;
+// Temperature palette (1D texture for color mapping)
+@group(0) @binding(13) var tempPalette: texture_2d<f32>;
+@group(0) @binding(14) var tempPaletteSampler: sampler;
 
 // Fullscreen triangle vertex shader
 @vertex

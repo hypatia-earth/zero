@@ -1,0 +1,15 @@
+{
+  "name": "Hypatia Temperature",
+  "description": "Original Hypatia gradient from purple to red",
+  "unit": "C",
+  "stops": [
+    { "value": -30, "color": [170, 102, 170] },
+    { "value": -20, "color": [206, 155, 229] },
+    { "value": -10, "color": [118, 206, 226] },
+    { "value":   0, "color": [108, 239, 108] },
+    { "value":  10, "color": [237, 249, 108] },
+    { "value":  20, "color": [255, 187,  85] },
+    { "value":  30, "color": [251, 101,  78] },
+    { "value":  40, "color": [204,  64,  64] }
+  ]
+}

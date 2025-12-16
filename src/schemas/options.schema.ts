@@ -427,6 +427,18 @@ export const optionsSchema = z.object({
         step: 0.05,
       }
     ),
+    palette: opt(
+      z.string().default('ESRI Temperature'),
+      {
+        label: 'Color palette',
+        description: 'Visual color scheme for temperature data',
+        group: 'layers',
+        filter: ['global', 'temp'],
+        order: 10.3,
+        control: 'select',
+        options: [],
+      }
+    ),
     resolution: opt(
       z.enum(['0p25', '0p5', '1p0']).default('0p25'),
       {
@@ -740,7 +752,7 @@ export const defaultOptions: ZeroOptions = {
   earth: { opacity: 1, blend: 0 },
   sun: { enabled: true },
   grid: { enabled: true, opacity: 0.3, fontSize: 14 },
-  temp: { opacity: 0.6, resolution: '0p25' },
+  temp: { opacity: 0.6, palette: 'ESRI Temperature', resolution: '0p25' },
   rain: { opacity: 1.0, resolution: '0p25' },
   clouds: { opacity: 0.5, resolution: '0p25' },
   humidity: { opacity: 0.6, resolution: '0p25' },

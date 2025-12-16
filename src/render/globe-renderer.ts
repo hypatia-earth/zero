@@ -30,6 +30,7 @@ export interface GlobeUniforms {
   tempLoadedPoints: number;  // progressive loading: cells 0..N valid
   tempSlot0: number;         // slot index for time0 in large buffer
   tempSlot1: number;         // slot index for time1 in large buffer
+  tempPaletteRange: Float32Array; // min/max temperature values for palette mapping
 }
 
 const POINTS_PER_TIMESTEP = 6_599_680;
@@ -54,9 +55,11 @@ export class GlobeRenderer {
   private format!: GPUTextureFormat;
   private fontAtlasTexture!: GPUTexture;
   private fontAtlasSampler!: GPUSampler;
+  private tempPaletteTexture!: GPUTexture;
+  private tempPaletteSampler!: GPUSampler;
 
   readonly camera: Camera;
-  private uniformData = new ArrayBuffer(336);  // Increased for new uniforms
+  private uniformData = new ArrayBuffer(352);  // Includes padding for vec2f alignment
   private uniformView = new DataView(this.uniformData);
 
   constructor(private canvas: HTMLCanvasElement, cameraConfig?: CameraConfig) {
@@ -67,10 +70,10 @@ export class GlobeRenderer {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) throw new Error('No WebGPU adapter found');
 
-    // Request higher limits (defaults are only 128-256 MB)
+    // Request higher limits based on requested slots
     const adapterStorageLimit = adapter.limits.maxStorageBufferBindingSize;
     const adapterBufferLimit = adapter.limits.maxBufferSize;
-    const cap = 2 * 1024 * 1024 * 1024; // Cap at 2 GB
+    const cap = requestedSlots * BYTES_PER_TIMESTEP;
 
     // Check for float32-filterable support (use float16 LUTs if not available)
     const hasFloat32Filterable = adapter.features.has('float32-filterable');
@@ -108,7 +111,7 @@ export class GlobeRenderer {
     this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied' });
 
     this.uniformBuffer = this.device.createBuffer({
-      size: 336,  // Increased for tempSlot0, tempSlot1
+      size: 352,  // Includes padding for vec2f alignment
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -157,6 +160,18 @@ export class GlobeRenderer {
       minFilter: 'linear',
     });
 
+    // Temperature palette texture (256x1 for 1D color lookup)
+    this.tempPaletteTexture = this.device.createTexture({
+      size: [256, 1],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    this.tempPaletteSampler = this.device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+      addressModeU: 'clamp-to-edge',
+    });
+
     // Shader code is pre-processed by wgsl-plus (see vite.config.ts)
     const shaderModule = this.device.createShaderModule({ code: shaderCode });
 
@@ -177,6 +192,9 @@ export class GlobeRenderer {
         // Font atlas for grid labels
         { binding: 11, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
         { binding: 12, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        // Temperature palette
+        { binding: 13, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+        { binding: 14, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       ],
     });
 
@@ -221,6 +239,9 @@ export class GlobeRenderer {
         // Font atlas
         { binding: 11, resource: this.fontAtlasTexture.createView() },
         { binding: 12, resource: this.fontAtlasSampler },
+        // Temperature palette
+        { binding: 13, resource: this.tempPaletteTexture.createView() },
+        { binding: 14, resource: this.tempPaletteSampler },
       ],
     });
   }
@@ -309,6 +330,12 @@ export class GlobeRenderer {
     view.setUint32(offset, uniforms.tempSlot1, true); offset += 4;
     view.setFloat32(offset, uniforms.gridFontSize, true); offset += 4;
 
+    // tempLoadedPad + extra padding for vec2f 8-byte alignment + tempPaletteRange
+    offset += 4; // tempLoadedPad
+    offset += 4; // extra padding for vec2f alignment
+    view.setFloat32(offset, uniforms.tempPaletteRange[0]!, true); offset += 4;
+    view.setFloat32(offset, uniforms.tempPaletteRange[1]!, true); offset += 4;
+
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
   }
 
@@ -372,6 +399,9 @@ export class GlobeRenderer {
         // Font atlas
         { binding: 11, resource: this.fontAtlasTexture.createView() },
         { binding: 12, resource: this.fontAtlasSampler },
+        // Temperature palette
+        { binding: 13, resource: this.tempPaletteTexture.createView() },
+        { binding: 14, resource: this.tempPaletteSampler },
       ],
     });
   }
@@ -397,6 +427,22 @@ export class GlobeRenderer {
   uploadGaussianLUTs(lats: Float32Array, offsets: Uint32Array): void {
     this.device.queue.writeBuffer(this.gaussianLatsBuffer, 0, lats.buffer, lats.byteOffset, lats.byteLength);
     this.device.queue.writeBuffer(this.ringOffsetsBuffer, 0, offsets.buffer, offsets.byteOffset, offsets.byteLength);
+  }
+
+  /**
+   * Update temperature palette texture data
+   * @param colors Array of RGB colors (256 colors x 4 components RGBA, 1024 bytes total)
+   */
+  updateTempPalette(colors: Uint8Array<ArrayBuffer>): void {
+    if (colors.length !== 256 * 4) {
+      throw new Error(`Expected 1024 bytes (256 RGBA colors), got ${colors.length}`);
+    }
+    this.device.queue.writeTexture(
+      { texture: this.tempPaletteTexture },
+      colors,
+      { bytesPerRow: 256 * 4 },
+      [256, 1]
+    );
   }
 
   /**
@@ -458,5 +504,6 @@ export class GlobeRenderer {
     this.tempDataBuffer?.destroy();
     this.rainDataBuffer?.destroy();
     this.fontAtlasTexture?.destroy();
+    this.tempPaletteTexture?.destroy();
   }
 }
