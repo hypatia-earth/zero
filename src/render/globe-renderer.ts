@@ -12,7 +12,7 @@ export interface GlobeUniforms {
   resolution: Float32Array;
   time: number;
   tanFov: number;
-  sunEnabled: boolean;
+  sunOpacity: number;
   sunDirection: Float32Array;
   sunCoreRadius: number;
   sunGlowRadius: number;
@@ -284,9 +284,9 @@ export class GlobeRenderer {
     view.setFloat32(offset, uniforms.tanFov, true); offset += 4;
     offset += 4; // padding
 
-    // time, sunEnabled + padding to align sunDirection to 16 bytes
+    // time, sunOpacity + padding to align sunDirection to 16 bytes
     view.setFloat32(offset, uniforms.time, true); offset += 4;
-    view.setUint32(offset, uniforms.sunEnabled ? 1 : 0, true); offset += 4;
+    view.setFloat32(offset, uniforms.sunOpacity, true); offset += 4;
     offset += 8; // padding for vec3f alignment
 
     // vec3 sunDirection + padding (16 bytes)

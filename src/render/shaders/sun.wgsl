@@ -1,7 +1,7 @@
 // Sun layer - sun disc and glow rendering
 
 fn blendSun(color: vec4f, fragCoord: vec2f) -> vec4f {
-  if (u.sunEnabled == 0u) { return color; }
+  if (u.sunOpacity < 0.01) { return color; }
 
   // Project sun direction to screen space
   let aspect = u.resolution.x / u.resolution.y;
@@ -43,13 +43,13 @@ fn blendSun(color: vec4f, fragCoord: vec2f) -> vec4f {
 
   // Core disc
   if (dist < u.sunCoreRadius) {
-    return vec4f(u.sunCoreColor, 1.0);
+    return vec4f(mix(color.rgb, u.sunCoreColor, u.sunOpacity), 1.0);
   }
 
   // Glow falloff - directly outside core
   if (dist < u.sunGlowRadius) {
     let t = 1.0 - (dist - u.sunCoreRadius) / (u.sunGlowRadius - u.sunCoreRadius);
-    let glow = u.sunGlowColor * t * t * 0.4;
+    let glow = u.sunGlowColor * t * t * 0.4 * u.sunOpacity;
     return vec4f(color.rgb + glow, 1.0);
   }
 

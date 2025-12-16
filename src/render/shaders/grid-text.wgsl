@@ -128,7 +128,7 @@ fn renderLonRow(
 
 // Blend grid text labels onto surface
 fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
-  if (u.gridEnabled == 0u) { return color; }
+  if (u.gridOpacity < 0.01) { return color; }
 
   let latDeg = degrees(lat);
   let lonDeg = degrees(lon);
@@ -192,5 +192,5 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
     return color;
   }
 
-  return vec4f(mix(color.rgb, vec3f(1.0), opacity * TEXT_OPACITY), color.a);
+  return vec4f(mix(color.rgb, vec3f(1.0), opacity * TEXT_OPACITY * u.gridOpacity), color.a);
 }

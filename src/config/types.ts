@@ -189,4 +189,9 @@ export interface ZeroConfig {
 
   /** Sun rendering settings */
   sun: SunConfig;
+
+  /** Render settings */
+  render: {
+    opacityAnimationMs: number;  // Layer fade in/out duration
+  };
 }

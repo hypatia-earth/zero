@@ -26,7 +26,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
 
       const isEnabled = (layerId: string): boolean => {
         switch (layerId) {
-          case 'earth': return true; // earth always enabled
+          case 'earth': return opts.earth.enabled;
           case 'sun': return opts.sun.enabled;
           case 'grid': return opts.grid.enabled;
           case 'temp': return opts.temp.enabled;
@@ -42,6 +42,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
       const toggleLayer = (layerId: string) => {
         optionsService.update(draft => {
           switch (layerId) {
+            case 'earth': draft.earth.enabled = !draft.earth.enabled; break;
             case 'sun': draft.sun.enabled = !draft.sun.enabled; break;
             case 'grid': draft.grid.enabled = !draft.grid.enabled; break;
             case 'temp': draft.temp.enabled = !draft.temp.enabled; break;

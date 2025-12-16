@@ -268,6 +268,7 @@ function renderGroup(
 
   // Filter options
   const visibleOptions = groupOptions.filter(o => {
+    if (o.meta.hidden) return false;
     if (!showAdvancedOptions && o.meta.group === 'advanced') return false;
     if (o.meta.model && o.meta.model !== currentModel) return false;
     return true;

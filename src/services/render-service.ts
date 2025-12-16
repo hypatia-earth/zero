@@ -18,6 +18,16 @@ export class RenderService {
   private tempLerpFn: ((time: Date) => number) | null = null;
   private tempPaletteRange: Float32Array = new Float32Array([-40, 50]); // Default range
 
+  // Animated opacity state (lerps toward target each frame)
+  private lastFrameTime = 0;
+  private animatedOpacity = {
+    sun: 0,
+    grid: 0,
+    earth: 0,
+    temp: 0,
+    rain: 0,
+  };
+
   constructor(
     private canvas: HTMLCanvasElement,
     private optionsService: OptionsService,
@@ -68,13 +78,19 @@ export class RenderService {
       const time = options.viewState.time;
       const rawLerp = this.tempLerpFn ? this.tempLerpFn(time) : -1;
 
+      // Update animated opacities
+      const now = performance.now() / 1000;
+      const dt = this.lastFrameTime ? now - this.lastFrameTime : 0;
+      this.lastFrameTime = now;
+      this.updateAnimatedOpacities(options, rawLerp, dt);
+
       renderer.updateUniforms({
         ...this.getCameraUniforms(renderer),
-        ...this.getSunUniforms(options, time),
-        ...this.getGridUniforms(options),
-        ...this.getLayerUniforms(options),
-        ...this.getTempUniforms(options, rawLerp),
-        ...this.getRainUniforms(options),
+        ...this.getSunUniforms(time),
+        ...this.getGridUniforms(),
+        ...this.getLayerUniforms(),
+        ...this.getTempUniforms(rawLerp),
+        ...this.getRainUniforms(),
       });
 
       renderer.render();
@@ -93,10 +109,10 @@ export class RenderService {
     };
   }
 
-  private getSunUniforms(options: ZeroOptions, time: Date) {
+  private getSunUniforms(time: Date) {
     const cfg = this.configService.getConfig().sun;
     return {
-      sunEnabled: options.sun.enabled,
+      sunOpacity: this.animatedOpacity.sun,
       sunDirection: getSunDirection(time),
       sunCoreRadius: cfg.coreRadius,
       sunGlowRadius: cfg.glowRadius,
@@ -105,25 +121,24 @@ export class RenderService {
     };
   }
 
-  private getGridUniforms(options: ZeroOptions) {
+  private getGridUniforms() {
     return {
-      gridEnabled: options.grid.enabled,
-      gridOpacity: options.grid.opacity,
-      gridFontSize: options.grid.fontSize,
+      gridEnabled: this.animatedOpacity.grid > 0.01,  // Animated boolean
+      gridOpacity: this.animatedOpacity.grid,
+      gridFontSize: this.optionsService.options.value.grid.fontSize,
     };
   }
 
-  private getLayerUniforms(options: ZeroOptions) {
+  private getLayerUniforms() {
     return {
-      earthOpacity: options.earth.enabled ? options.earth.opacity : 0,
+      earthOpacity: this.animatedOpacity.earth,
     };
   }
 
-  private getTempUniforms(options: ZeroOptions, rawLerp: number) {
-    const tempEnabled = options.temp.enabled;
+  private getTempUniforms(rawLerp: number) {
     const tempDataValid = rawLerp >= -2 && rawLerp !== -1 && this.tempLoadedPoints > 0;
     return {
-      tempOpacity: tempEnabled ? options.temp.opacity : 0,
+      tempOpacity: this.animatedOpacity.temp,
       tempDataReady: tempDataValid,
       tempLerp: rawLerp === -1 ? 0 : rawLerp,  // -2 = single slot mode (no interpolation)
       tempLoadedPoints: this.tempLoadedPoints,
@@ -133,11 +148,36 @@ export class RenderService {
     };
   }
 
-  private getRainUniforms(options: ZeroOptions) {
+  private getRainUniforms() {
     return {
-      rainOpacity: options.rain.enabled ? options.rain.opacity : 0,
+      rainOpacity: this.animatedOpacity.rain,
       rainDataReady: false,
     };
+  }
+
+  /**
+   * Update animated opacities toward targets (called each frame)
+   * Uses exponential decay for smooth ~100ms transitions
+   */
+  private updateAnimatedOpacities(options: ZeroOptions, rawLerp: number, dt: number): void {
+    const animMs = this.configService.getConfig().render.opacityAnimationMs;
+    const rate = 1000 / animMs;  // Convert ms to rate (e.g., 100ms → 10/s)
+    const factor = Math.min(1, dt * rate);
+
+    // Compute targets: enabled && (dataReady for data layers) ? userOpacity : 0
+    const tempDataReady = rawLerp >= -2 && rawLerp !== -1 && this.tempLoadedPoints > 0;
+    const targets = {
+      sun: options.sun.enabled ? options.sun.opacity : 0,
+      grid: options.grid.enabled ? options.grid.opacity : 0,
+      earth: options.earth.enabled ? options.earth.opacity : 0,
+      temp: (options.temp.enabled && tempDataReady) ? options.temp.opacity : 0,
+      rain: options.rain.enabled ? options.rain.opacity : 0,  // TODO: add rainDataReady
+    };
+
+    // Lerp each toward target
+    for (const key of Object.keys(this.animatedOpacity) as (keyof typeof this.animatedOpacity)[]) {
+      this.animatedOpacity[key] += (targets[key] - this.animatedOpacity[key]) * factor;
+    }
   }
 
   stop(): void {

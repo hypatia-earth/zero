@@ -31,6 +31,7 @@ interface UIMetadata {
   control: ControlType;
   persist?: PersistMode;  // default: 'local'
   advanced?: boolean;
+  hidden?: boolean;       // Hide from options dialog (for internal use)
   model?: 'inertia' | 'velocity';
   device?: 'mouse' | 'touch';
   impact?: OptionImpact;
@@ -385,6 +386,20 @@ export const optionsSchema = z.object({
         filter: ['global', 'sun'],
         order: 2,
         control: 'toggle',
+      }
+    ),
+    opacity: opt(
+      z.number().min(0).max(1).default(1),
+      {
+        label: 'Sun opacity',
+        group: 'layers',
+        filter: ['sun'],
+        order: 3,
+        control: 'slider',
+        min: 0,
+        max: 1,
+        step: 0.1,
+        hidden: true,  // Internal use for animation, not user-facing
       }
     ),
   }),
@@ -848,7 +863,7 @@ export const defaultOptions: ZeroOptions = {
     },
   },
   earth: { enabled: true, opacity: 1, blend: 0 },
-  sun: { enabled: true },
+  sun: { enabled: true, opacity: 1 },
   grid: { enabled: true, opacity: 0.3, fontSize: 8 },
   temp: { enabled: true, opacity: 0.6, palette: 'ESRI Temperature', resolution: 'full' },
   rain: { enabled: false, opacity: 1.0, resolution: 'full' },

@@ -4,7 +4,7 @@
 // Lines appear thicker when zoomed in, thinner when zoomed out
 // Good for: consistent geographic meaning (0.4° is always 0.4°)
 fn blendGridDegrees(color: vec4f, lat: f32, lon: f32) -> vec4f {
-  if (u.gridEnabled == 0u) { return color; }
+  if (u.gridOpacity < 0.01) { return color; }
 
   let latDeg = degrees(lat);
   let lonDeg = degrees(lon);
@@ -29,7 +29,7 @@ fn blendGridDegrees(color: vec4f, lat: f32, lon: f32) -> vec4f {
 // Lines appear same thickness regardless of zoom level
 // Good for: consistent visual appearance, clean UI at any zoom
 fn blendGrid(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
-  if (u.gridEnabled == 0u) { return color; }
+  if (u.gridOpacity < 0.01) { return color; }
 
   let latDeg = degrees(lat);
   let lonDeg = degrees(lon);

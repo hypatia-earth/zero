@@ -11,7 +11,7 @@ struct Uniforms {
   tanFov: f32,                // 4 bytes
   resPad: f32,                // 4 bytes pad = 16 bytes total
   time: f32,                  // 4 bytes
-  sunEnabled: u32,            // 4 bytes
+  sunOpacity: f32,            // 4 bytes (replaces sunEnabled)
   sunPad: vec2f,              // 8 bytes pad for vec3f alignment
   sunDirection: vec3f,        // 12 + 4 pad = 16 bytes
   sunDirPad: f32,

@@ -60,4 +60,8 @@ export const defaultConfig: ZeroConfig = {
     coreColor: [1.0, 0.7, 0.3],
     glowColor: [1.0, 0.6, 0.2],
   },
+
+  render: {
+    opacityAnimationMs: 100,  // Layer fade in/out duration
+  },
 };
