@@ -18,6 +18,8 @@ import {
   type ZeroOptions,
   type OptionFilter,
 } from '../schemas/options.schema';
+import { layerIds } from '../config/defaults';
+import type { LayerId } from '../config/types';
 import { throttle } from '../utils/debounce';
 
 const DB_NAME = 'hypatia-zero';
@@ -141,7 +143,7 @@ function deleteByPath<T extends object>(obj: T, path: string): T {
 // OptionsService
 // ============================================================
 
-export type LayerId = 'temp' | 'rain' | 'clouds' | 'humidity' | 'wind' | 'pressure';
+export type { LayerId };
 
 export class OptionsService {
   /** User overrides only (persisted to IndexedDB) */
@@ -237,6 +239,16 @@ export class OptionsService {
 
     this.userOverrides.value = this.extractOverrides(merged);
     this.initialized = true;
+
+    // Log what viewState defaults were applied
+    const vs = merged.viewState;
+    const urlVs = (urlOverrides.viewState ?? {}) as Record<string, unknown>;
+    const applied: string[] = [];
+    if (!('time' in urlVs)) applied.push(`time=${vs.time.toISOString().slice(0, 16)}`);
+    if (!('lat' in urlVs)) applied.push(`lat=${vs.lat}`);
+    if (!('lon' in urlVs)) applied.push(`lon=${vs.lon}`);
+    if (!('altitude' in urlVs)) applied.push(`alt=${vs.altitude}`);
+    if (applied.length) console.log(`[Sanitized] ${applied.join(', ')}`);
   }
 
   /**
@@ -336,13 +348,6 @@ export class OptionsService {
     const params = new URLSearchParams(window.location.search);
     const overrides: Record<string, unknown> = {};
 
-    // No params at all = fresh visit, apply full defaults
-    const isFirstVisit = params.toString() === '';
-    if (isFirstVisit) {
-      overrides.temp = { enabled: true };
-      return overrides as Partial<ZeroOptions>;
-    }
-
     // Parse viewState from URL
     const viewState: Record<string, unknown> = {};
 
@@ -379,7 +384,6 @@ export class OptionsService {
     const layersStr = params.get('layers');
     if (layersStr !== null) {
       const enabledLayers = new Set(layersStr.split(',').filter(l => l.length > 0));
-      const layerIds: LayerId[] = ['temp', 'rain', 'clouds', 'humidity', 'wind', 'pressure'];
 
       for (const layerId of layerIds) {
         if (enabledLayers.has(layerId)) {
@@ -417,7 +421,6 @@ export class OptionsService {
     const alt = Math.round(viewState.altitude).toString();
 
     // Build layers param
-    const layerIds: LayerId[] = ['temp', 'rain', 'clouds', 'humidity', 'wind', 'pressure'];
     const enabledLayers = layerIds.filter(id => options[id].enabled);
 
     // Build URL manually to keep commas unencoded

@@ -2,9 +2,12 @@
  * Default configuration for Hypatia Zero
  */
 
-import type { ZeroConfig } from './types';
+import type { ZeroConfig, LayerId } from './types';
 
 export const EARTH_RADIUS = 6371000; // meters
+
+/** All layer IDs in render order */
+export const layerIds: LayerId[] = ['earth', 'sun', 'grid', 'temp', 'rain', 'clouds', 'humidity', 'wind', 'pressure'];
 
 export const defaultConfig: ZeroConfig = {
   app: {

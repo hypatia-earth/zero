@@ -115,7 +115,7 @@ export class RenderService {
 
   private getLayerUniforms(options: ZeroOptions) {
     return {
-      earthOpacity: options.earth.opacity,
+      earthOpacity: options.earth.enabled ? options.earth.opacity : 0,
     };
   }
 

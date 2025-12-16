@@ -331,6 +331,17 @@ export const optionsSchema = z.object({
   // Layer: Earth
   // ----------------------------------------------------------
   earth: z.object({
+    enabled: opt(
+      z.boolean().default(true),
+      {
+        label: 'Show earth',
+        description: 'Display earth basemap',
+        group: 'layers',
+        filter: ['global', 'earth'],
+        order: 0,
+        control: 'toggle',
+      }
+    ),
     opacity: opt(
       z.number().min(0.05).max(1).default(1),
       {
@@ -408,7 +419,7 @@ export const optionsSchema = z.object({
       }
     ),
     fontSize: opt(
-      z.number().min(8).max(32).default(14),
+      z.number().min(2).max(16).default(8),
       {
         label: 'Label size',
         description: 'Font size for grid coordinate labels',
@@ -416,9 +427,9 @@ export const optionsSchema = z.object({
         filter: ['global', 'grid'],
         order: 5,
         control: 'slider',
-        min: 8,
-        max: 32,
-        step: 2,
+        min: 2,
+        max: 16,
+        step: 1,
       }
     ),
   }),
@@ -428,7 +439,7 @@ export const optionsSchema = z.object({
   // ----------------------------------------------------------
   temp: z.object({
     enabled: opt(
-      z.boolean().default(false),
+      z.boolean().default(true),
       {
         label: 'Temperature',
         description: 'Show temperature overlay',
@@ -841,10 +852,10 @@ export const defaultOptions: ZeroOptions = {
       twoFingerPinch: { speed: 0.8, invert: false },
     },
   },
-  earth: { opacity: 1, blend: 0 },
+  earth: { enabled: true, opacity: 1, blend: 0 },
   sun: { enabled: true },
-  grid: { enabled: true, opacity: 0.3, fontSize: 14 },
-  temp: { enabled: false, opacity: 0.6, palette: 'ESRI Temperature', resolution: '0p25' },
+  grid: { enabled: true, opacity: 0.3, fontSize: 8 },
+  temp: { enabled: true, opacity: 0.6, palette: 'ESRI Temperature', resolution: '0p25' },
   rain: { enabled: false, opacity: 1.0, resolution: '0p25' },
   clouds: { enabled: false, opacity: 0.5, resolution: '0p25' },
   humidity: { enabled: false, opacity: 0.6, resolution: '0p25' },

@@ -4,7 +4,7 @@
 
 import type { Signal } from '@preact/signals-core';
 
-export type LayerId = 'earth' | 'sun' | 'grid' | 'temp' | 'rain';
+export type LayerId = 'earth' | 'sun' | 'grid' | 'temp' | 'rain' | 'clouds' | 'humidity' | 'wind' | 'pressure';
 
 export type TModel = 'ecmwf_ifs' | 'ecmwf_ifs025';
 
