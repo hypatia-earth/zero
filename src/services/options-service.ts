@@ -22,6 +22,8 @@ import { layerIds } from '../config/defaults';
 import type { LayerId } from '../config/types';
 import { throttle } from '../utils/debounce';
 
+const DEBUG = false;
+
 const DB_NAME = 'hypatia-zero';
 const DB_VERSION = 1;
 const STORE_NAME = 'options';
@@ -289,7 +291,7 @@ export class OptionsService {
     if (!changedKey) return;
 
     const newValue = getByPath(newOverrides, changedKey);
-    console.log(newValue !== undefined
+    DEBUG && console.log(newValue !== undefined
       ? `[Options] ${changedKey} = ${JSON.stringify(newValue)}`
       : `[Options] ${changedKey} reset to default`);
   }
@@ -300,12 +302,12 @@ export class OptionsService {
    */
   reset(path?: string): void {
     if (!path) {
-      console.log('[Options] Reset all to defaults');
+      DEBUG && console.log('[Options] Reset all to defaults');
       this.userOverrides.value = {};
       return;
     }
 
-    console.log(`[Options] Reset ${path} to default`);
+    DEBUG && console.log(`[Options] Reset ${path} to default`);
     this.userOverrides.value = deleteByPath(this.userOverrides.value, path);
   }
 
