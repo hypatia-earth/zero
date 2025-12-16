@@ -3,7 +3,7 @@
  */
 
 import type { Camera } from '../render/camera';
-import type { StateService } from './state-service';
+import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 
 interface DragState {
@@ -17,7 +17,7 @@ interface DragState {
 export function setupCameraControls(
   canvas: HTMLCanvasElement,
   camera: Camera,
-  stateService: StateService,
+  optionsService: OptionsService,
   configService: ConfigService
 ): void {
   const drag: DragState = {
@@ -34,9 +34,9 @@ export function setupCameraControls(
   const minDistance = cameraConfig.minDistance;
   const maxDistance = cameraConfig.maxDistance;
 
-  // Sync camera from URL state
-  const urlState = stateService.getCamera();
-  camera.setPosition(urlState.lat, urlState.lon, urlState.altitude / 10_000_000);
+  // Sync camera from options state
+  const viewState = optionsService.options.value.viewState;
+  camera.setPosition(viewState.lat, viewState.lon, viewState.altitude / 10_000_000);
 
   // Mouse events
   canvas.addEventListener('mousedown', (e) => {
@@ -156,6 +156,10 @@ export function setupCameraControls(
   canvas.style.cursor = 'grab';
 
   function updateState() {
-    stateService.setCamera(camera.lat, camera.lon, camera.distance * 10_000_000);
+    optionsService.update(draft => {
+      draft.viewState.lat = camera.lat;
+      draft.viewState.lon = camera.lon;
+      draft.viewState.altitude = camera.distance * 10_000_000;
+    });
   }
 }

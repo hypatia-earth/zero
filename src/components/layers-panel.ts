@@ -5,7 +5,6 @@
 import m from 'mithril';
 import { GearIcon } from './gear-icon';
 import type { ConfigService } from '../services/config-service';
-import type { StateService } from '../services/state-service';
 import type { OptionsService } from '../services/options-service';
 import type { LayerId } from '../config/types';
 import type { OptionFilter } from '../schemas/options.schema';
@@ -15,16 +14,45 @@ const LAYERS_WITH_OPTIONS: LayerId[] = ['earth', 'sun', 'grid', 'temp', 'rain'];
 
 interface LayersPanelAttrs {
   configService: ConfigService;
-  stateService: StateService;
   optionsService: OptionsService;
 }
 
 export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
   return {
     view({ attrs }) {
-      const { configService, stateService, optionsService } = attrs;
+      const { configService, optionsService } = attrs;
       const layers = configService.getLayers();
-      const activeLayers = stateService.getLayers();
+      const opts = optionsService.options.value;
+
+      const isEnabled = (layerId: string): boolean => {
+        switch (layerId) {
+          case 'earth': return true; // earth always enabled
+          case 'sun': return opts.sun.enabled;
+          case 'grid': return opts.grid.enabled;
+          case 'temp': return opts.temp.enabled;
+          case 'rain': return opts.rain.enabled;
+          case 'clouds': return opts.clouds.enabled;
+          case 'humidity': return opts.humidity.enabled;
+          case 'wind': return opts.wind.enabled;
+          case 'pressure': return opts.pressure.enabled;
+          default: return false;
+        }
+      };
+
+      const toggleLayer = (layerId: string) => {
+        optionsService.update(draft => {
+          switch (layerId) {
+            case 'sun': draft.sun.enabled = !draft.sun.enabled; break;
+            case 'grid': draft.grid.enabled = !draft.grid.enabled; break;
+            case 'temp': draft.temp.enabled = !draft.temp.enabled; break;
+            case 'rain': draft.rain.enabled = !draft.rain.enabled; break;
+            case 'clouds': draft.clouds.enabled = !draft.clouds.enabled; break;
+            case 'humidity': draft.humidity.enabled = !draft.humidity.enabled; break;
+            case 'wind': draft.wind.enabled = !draft.wind.enabled; break;
+            case 'pressure': draft.pressure.enabled = !draft.pressure.enabled; break;
+          }
+        });
+      };
 
       const categories = ['base', 'weather', 'overlay'] as const;
       const categoryLabels = { base: 'Base', weather: 'Weather', overlay: 'Overlays' };
@@ -41,9 +69,9 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
               return m(LayerWidget, {
                 key: layer.id,
                 layer,
-                active: activeLayers.includes(layer.id),
+                active: isEnabled(layer.id),
                 hasOptions,
-                onToggle: () => stateService.toggleLayer(layer.id),
+                onToggle: () => toggleLayer(layer.id),
                 onOptions: () => hasOptions && optionsService.openDialog(layer.id as OptionFilter),
               });
             }),

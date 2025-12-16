@@ -10,7 +10,6 @@ import m from 'mithril';
 import { effect } from '@preact/signals-core';
 import { ConfigService } from './services/config-service';
 import { OptionsService } from './services/options-service';
-import { StateService } from './services/state-service';
 import { BootstrapService } from './services/bootstrap-service';
 import { CapabilitiesService } from './services/capabilities-service';
 import { KeyboardService } from './services/keyboard-service';
@@ -36,7 +35,6 @@ export const App: m.ClosureComponent = () => {
   // Services - initialized during bootstrap, then stable
   let configService: ConfigService;
   let optionsService: OptionsService;
-  let stateService: StateService;
   let capabilitiesService: CapabilitiesService;
   let omService: OmService;
   let queueService: QueueService;
@@ -58,7 +56,6 @@ export const App: m.ClosureComponent = () => {
       configService = new ConfigService();
       await configService.init();
       optionsService = new OptionsService();
-      stateService = new StateService(configService);
       omService = new OmService();
       paletteService = new PaletteService();
 
@@ -139,7 +136,7 @@ export const App: m.ClosureComponent = () => {
 
         // Step 5: GPU Init
         BootstrapService.setStep('GPU_INIT');
-        renderService = new RenderService(canvas, optionsService, stateService, configService);
+        renderService = new RenderService(canvas, optionsService, configService);
         await renderService.initialize(gaussianLats, ringOffsets);
 
         // Step 5: DATA - Initialize with assets from Step 4
@@ -174,7 +171,6 @@ export const App: m.ClosureComponent = () => {
 
         // SlotService - manages timestep data loading
         slotService = new SlotService(
-          stateService,
           timestepService,
           renderService,
           queueService,
@@ -192,9 +188,9 @@ export const App: m.ClosureComponent = () => {
         // Step 6: Activate
         BootstrapService.setStep('ACTIVATE');
         renderService.start();
-        stateService.enableSync();
-        keyboardService = new KeyboardService(stateService);
-        setupCameraControls(canvas, renderer.camera, stateService, configService);
+        optionsService.enableUrlSync();
+        keyboardService = new KeyboardService(optionsService);
+        setupCameraControls(canvas, renderer.camera, optionsService, configService);
 
         // Wire up palette reactivity
         effect(() => {
@@ -214,7 +210,6 @@ export const App: m.ClosureComponent = () => {
           (window as unknown as { __hypatia: object }).__hypatia = {
             configService,
             optionsService,
-            stateService,
             capabilitiesService,
             omService,
             timestepService,
@@ -251,10 +246,10 @@ export const App: m.ClosureComponent = () => {
         m(OptionsDialog, { optionsService, paletteService }),
         m('.ui-container', [
           m(LogoPanel),
-          m(LayersPanel, { configService, stateService, optionsService }),
-          m(TimeCirclePanel, { stateService }),
+          m(LayersPanel, { configService, optionsService }),
+          m(TimeCirclePanel, { optionsService }),
           m(QueuePanel, { queueService }),
-          m(TimeBarPanel, { stateService, slotService, timestepService }),
+          m(TimeBarPanel, { optionsService, slotService, timestepService }),
           m(FullscreenPanel),
           m(OptionsPanel, { optionsService }),
         ]),

@@ -18,6 +18,7 @@ import {
   type ZeroOptions,
   type OptionFilter,
 } from '../schemas/options.schema';
+import { throttle } from '../utils/debounce';
 
 const DB_NAME = 'hypatia-zero';
 const DB_VERSION = 1;
@@ -137,6 +138,8 @@ function deleteByPath<T extends object>(obj: T, path: string): T {
 // OptionsService
 // ============================================================
 
+export type LayerId = 'temp' | 'rain' | 'clouds' | 'humidity' | 'wind' | 'pressure';
+
 export class OptionsService {
   /** User overrides only (persisted to IndexedDB) */
   private userOverrides = signal<Partial<ZeroOptions>>({});
@@ -152,6 +155,7 @@ export class OptionsService {
   dialogFilter: OptionFilter | undefined = undefined;
 
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private urlSyncEnabled = false;
   private initialized = false;
 
   constructor() {
@@ -166,6 +170,18 @@ export class OptionsService {
       if (!this.initialized) return;
       if (this.saveTimeout) clearTimeout(this.saveTimeout);
       this.saveTimeout = setTimeout(() => this.save(), 500);
+    });
+
+    // Auto-sync to URL when options change (throttled, last value guaranteed)
+    const throttledUrlSync = throttle(() => {
+      if (this.urlSyncEnabled) {
+        this.syncToUrl(this.options.value);  // read fresh value
+      }
+    }, 100);
+
+    effect(() => {
+      this.options.value;  // subscribe to changes
+      throttledUrlSync();
     });
 
     // Force save before page unload
@@ -194,19 +210,29 @@ export class OptionsService {
       console.log('[Options] IndexedDB initialized');
     }
 
+    // Merge: defaults < IndexedDB < URL
+    let merged = defaultOptions;
+
     if (stored) {
       const result = optionsSchema.partial().safeParse(stored);
       if (result.success) {
-        this.userOverrides.value = this.extractOverrides(
-          deepMerge(defaultOptions, result.data as Partial<ZeroOptions>)
-        );
-        const count = Object.keys(this.userOverrides.value).length;
-        console.log(`[Options] Loaded ${count} override(s)`);
+        merged = deepMerge(merged, result.data as Partial<ZeroOptions>);
+        const count = Object.keys(result.data).length;
+        console.log(`[Options] Loaded ${count} override(s) from IndexedDB`);
       }
     } else {
       console.log('[Options] No stored options, using defaults');
     }
 
+    // Apply URL overrides (takes precedence)
+    const urlOverrides = this.readUrlOptions();
+    if (Object.keys(urlOverrides).length > 0) {
+      merged = deepMerge(merged, urlOverrides);
+      const layerKeys = Object.keys(urlOverrides).filter(k => k !== '_version' && k !== '_lastModified');
+      console.log(`[Options] Applied URL overrides: ${layerKeys.join(', ')}`);
+    }
+
+    this.userOverrides.value = this.extractOverrides(merged);
     this.initialized = true;
   }
 
@@ -283,6 +309,119 @@ export class OptionsService {
    */
   getOverrides(): Partial<ZeroOptions> {
     return this.userOverrides.value;
+  }
+
+  // ----------------------------------------------------------
+  // URL synchronization
+  // ----------------------------------------------------------
+
+  /**
+   * Enable URL synchronization (call after initial load)
+   */
+  enableUrlSync(): void {
+    this.urlSyncEnabled = true;
+  }
+
+  /**
+   * Read options from URL query parameters
+   * Full sanitize (defaults) only when URL has NO params at all
+   * Any params = explicit state, respect exactly what's given
+   */
+  private readUrlOptions(): Partial<ZeroOptions> {
+    const params = new URLSearchParams(window.location.search);
+    const overrides: Record<string, unknown> = {};
+
+    // No params at all = fresh visit, apply full defaults
+    const isFirstVisit = params.toString() === '';
+    if (isFirstVisit) {
+      overrides.temp = { enabled: true };
+      return overrides as Partial<ZeroOptions>;
+    }
+
+    // Parse viewState from URL
+    const viewState: Record<string, unknown> = {};
+
+    const dt = params.get('dt');
+    if (dt) {
+      const time = this.parseDateFromUrl(dt);
+      if (time) viewState.time = time;
+    }
+
+    const ll = params.get('ll');
+    if (ll) {
+      const [latStr, lonStr] = ll.split(',');
+      const lat = parseFloat(latStr ?? '');
+      const lon = parseFloat(lonStr ?? '');
+      if (!isNaN(lat) && !isNaN(lon)) {
+        viewState.lat = Math.max(-90, Math.min(90, lat));
+        viewState.lon = ((lon + 180) % 360) - 180;
+      }
+    }
+
+    const alt = params.get('alt');
+    if (alt) {
+      const altitude = parseFloat(alt);
+      if (!isNaN(altitude) && altitude > 0) {
+        viewState.altitude = altitude;
+      }
+    }
+
+    if (Object.keys(viewState).length > 0) {
+      overrides.viewState = viewState;
+    }
+
+    // Parse layers
+    const layersStr = params.get('layers');
+    if (layersStr !== null) {
+      const enabledLayers = new Set(layersStr.split(',').filter(l => l.length > 0));
+      const layerIds: LayerId[] = ['temp', 'rain', 'clouds', 'humidity', 'wind', 'pressure'];
+
+      for (const layerId of layerIds) {
+        if (enabledLayers.has(layerId)) {
+          if (!overrides[layerId]) {
+            overrides[layerId] = {};
+          }
+          (overrides[layerId] as Record<string, unknown>).enabled = true;
+        }
+      }
+    }
+
+    return overrides as Partial<ZeroOptions>;
+  }
+
+  private parseDateFromUrl(dt: string): Date | null {
+    const normalized = dt.replace('h', ':').replace('z', ':00.000Z');
+    const date = new Date(normalized);
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  private formatDateForUrl(date: Date): string {
+    return date.toISOString().slice(0, 16).replace(':', 'h') + 'z';
+  }
+
+  /**
+   * Sync persist:'url' options to URL query parameters
+   * Builds URL manually to keep commas unencoded
+   */
+  private syncToUrl(options: ZeroOptions): void {
+    const { viewState } = options;
+
+    // Build viewState params
+    const dt = this.formatDateForUrl(viewState.time);
+    const ll = `${viewState.lat.toFixed(1)},${viewState.lon.toFixed(1)}`;
+    const alt = Math.round(viewState.altitude).toString();
+
+    // Build layers param
+    const layerIds: LayerId[] = ['temp', 'rain', 'clouds', 'humidity', 'wind', 'pressure'];
+    const enabledLayers = layerIds.filter(id => options[id].enabled);
+
+    // Build URL manually to keep commas unencoded
+    let search = `?dt=${dt}&ll=${ll}&alt=${alt}`;
+    if (enabledLayers.length > 0) {
+      search += '&layers=' + enabledLayers.join(',');
+    }
+
+    window.history.replaceState(null, '', search);
   }
 
   // ----------------------------------------------------------

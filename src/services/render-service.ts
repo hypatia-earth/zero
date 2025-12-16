@@ -4,9 +4,7 @@
 
 import { GlobeRenderer } from '../render/globe-renderer';
 import type { OptionsService } from './options-service';
-import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
-import type { LayerId } from '../config/types';
 import type { ZeroOptions } from '../schemas/options.schema';
 import { getSunDirection } from '../utils/sun-position';
 
@@ -23,7 +21,6 @@ export class RenderService {
   constructor(
     private canvas: HTMLCanvasElement,
     private optionsService: OptionsService,
-    private stateService: StateService,
     private configService: ConfigService
   ) {}
 
@@ -68,16 +65,16 @@ export class RenderService {
       this.animationId = requestAnimationFrame(render);
 
       const options = this.optionsService.options.value;
-      const state = this.stateService.get();
-      const rawLerp = this.tempLerpFn ? this.tempLerpFn(state.time) : -1;
+      const time = options.viewState.time;
+      const rawLerp = this.tempLerpFn ? this.tempLerpFn(time) : -1;
 
       renderer.updateUniforms({
         ...this.getCameraUniforms(renderer),
-        ...this.getSunUniforms(state.layers, state.time),
-        ...this.getGridUniforms(state.layers, options),
-        ...this.getLayerUniforms(state.layers, options),
-        ...this.getTempUniforms(state.layers, options, rawLerp),
-        ...this.getRainUniforms(state.layers, options),
+        ...this.getSunUniforms(options, time),
+        ...this.getGridUniforms(options),
+        ...this.getLayerUniforms(options),
+        ...this.getTempUniforms(options, rawLerp),
+        ...this.getRainUniforms(options),
       });
 
       renderer.render();
@@ -96,10 +93,10 @@ export class RenderService {
     };
   }
 
-  private getSunUniforms(layers: LayerId[], time: Date) {
+  private getSunUniforms(options: ZeroOptions, time: Date) {
     const cfg = this.configService.getConfig().sun;
     return {
-      sunEnabled: layers.includes('sun'),
+      sunEnabled: options.sun.enabled,
       sunDirection: getSunDirection(time),
       sunCoreRadius: cfg.coreRadius,
       sunGlowRadius: cfg.glowRadius,
@@ -108,22 +105,22 @@ export class RenderService {
     };
   }
 
-  private getGridUniforms(layers: LayerId[], options: ZeroOptions) {
+  private getGridUniforms(options: ZeroOptions) {
     return {
-      gridEnabled: layers.includes('grid'),
+      gridEnabled: options.grid.enabled,
       gridOpacity: options.grid.opacity,
       gridFontSize: options.grid.fontSize,
     };
   }
 
-  private getLayerUniforms(layers: LayerId[], options: ZeroOptions) {
+  private getLayerUniforms(options: ZeroOptions) {
     return {
-      earthOpacity: layers.includes('earth') ? options.earth.opacity : 0,
+      earthOpacity: options.earth.opacity,
     };
   }
 
-  private getTempUniforms(layers: LayerId[], options: ZeroOptions, rawLerp: number) {
-    const tempEnabled = layers.includes('temp');
+  private getTempUniforms(options: ZeroOptions, rawLerp: number) {
+    const tempEnabled = options.temp.enabled;
     const tempDataValid = rawLerp >= -2 && rawLerp !== -1 && this.tempLoadedPoints > 0;
     return {
       tempOpacity: tempEnabled ? options.temp.opacity : 0,
@@ -136,9 +133,9 @@ export class RenderService {
     };
   }
 
-  private getRainUniforms(layers: LayerId[], options: ZeroOptions) {
+  private getRainUniforms(options: ZeroOptions) {
     return {
-      rainOpacity: layers.includes('rain') ? options.rain.opacity : 0,
+      rainOpacity: options.rain.enabled ? options.rain.opacity : 0,
       rainDataReady: false,
     };
   }

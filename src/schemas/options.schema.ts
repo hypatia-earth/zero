@@ -16,16 +16,20 @@ type ControlType = 'toggle' | 'slider' | 'select' | 'radio';
 /** Impact level for option changes */
 type OptionImpact = 'uniform' | 'recreate';
 
+/** Persistence mode: 'url' for shareable view state, 'local' for user preferences */
+type PersistMode = 'url' | 'local';
+
 /** Filter determines which dialog entry points show this option */
-type OptionFilter = 'global' | 'earth' | 'sun' | 'grid' | 'temp' | 'rain' | 'wind' | 'clouds' | 'humidity' | 'pressure' | 'dataCache' | 'gpu';
+type OptionFilter = 'global' | 'earth' | 'sun' | 'grid' | 'temp' | 'rain' | 'wind' | 'clouds' | 'humidity' | 'pressure' | 'dataCache' | 'gpu' | 'viewState';
 
 interface UIMetadata {
   label: string;
   description?: string;
-  group: 'regional' | 'download' | 'interaction' | 'layers' | 'gpu' | 'advanced';
+  group: 'regional' | 'download' | 'interaction' | 'layers' | 'gpu' | 'advanced' | 'viewState';
   filter: OptionFilter | OptionFilter[];
   order: number;
   control: ControlType;
+  persist?: PersistMode;  // default: 'local'
   advanced?: boolean;
   model?: 'inertia' | 'velocity';
   device?: 'mouse' | 'touch';
@@ -109,6 +113,16 @@ export const optionGroups = {
 
 export const optionsSchema = z.object({
   _version: z.number().default(1),
+
+  // ----------------------------------------------------------
+  // View State (URL-persisted, no UI)
+  // ----------------------------------------------------------
+  viewState: z.object({
+    time: z.coerce.date(),
+    lat: z.number().min(-90).max(90),
+    lon: z.number(),
+    altitude: z.number().positive(),
+  }),
 
   // ----------------------------------------------------------
   // GPU Settings
@@ -413,6 +427,18 @@ export const optionsSchema = z.object({
   // Layer: Temperature
   // ----------------------------------------------------------
   temp: z.object({
+    enabled: opt(
+      z.boolean().default(false),
+      {
+        label: 'Temperature',
+        description: 'Show temperature overlay',
+        group: 'layers',
+        filter: 'temp',
+        order: 10,
+        control: 'toggle',
+        persist: 'url',
+      }
+    ),
     opacity: opt(
       z.number().min(0.05).max(1).default(0.6),
       {
@@ -462,6 +488,18 @@ export const optionsSchema = z.object({
   // Layer: Precipitation
   // ----------------------------------------------------------
   rain: z.object({
+    enabled: opt(
+      z.boolean().default(false),
+      {
+        label: 'Precipitation',
+        description: 'Show rain/snow overlay',
+        group: 'layers',
+        filter: 'rain',
+        order: 11,
+        control: 'toggle',
+        persist: 'url',
+      }
+    ),
     opacity: opt(
       z.number().min(0.05).max(1).default(1.0),
       {
@@ -499,6 +537,18 @@ export const optionsSchema = z.object({
   // Layer: Clouds
   // ----------------------------------------------------------
   clouds: z.object({
+    enabled: opt(
+      z.boolean().default(false),
+      {
+        label: 'Clouds',
+        description: 'Show cloud cover overlay',
+        group: 'layers',
+        filter: 'clouds',
+        order: 12,
+        control: 'toggle',
+        persist: 'url',
+      }
+    ),
     opacity: opt(
       z.number().min(0.05).max(1).default(0.5),
       {
@@ -536,6 +586,18 @@ export const optionsSchema = z.object({
   // Layer: Humidity
   // ----------------------------------------------------------
   humidity: z.object({
+    enabled: opt(
+      z.boolean().default(false),
+      {
+        label: 'Humidity',
+        description: 'Show relative humidity overlay',
+        group: 'layers',
+        filter: 'humidity',
+        order: 13,
+        control: 'toggle',
+        persist: 'url',
+      }
+    ),
     opacity: opt(
       z.number().min(0.05).max(1).default(0.6),
       {
@@ -573,6 +635,18 @@ export const optionsSchema = z.object({
   // Layer: Wind
   // ----------------------------------------------------------
   wind: z.object({
+    enabled: opt(
+      z.boolean().default(false),
+      {
+        label: 'Wind',
+        description: 'Show animated wind particles',
+        group: 'layers',
+        filter: 'wind',
+        order: 14,
+        control: 'toggle',
+        persist: 'url',
+      }
+    ),
     seedCount: opt(
       z.enum(['8192', '16384', '32768']).default('8192'),
       {
@@ -640,6 +714,18 @@ export const optionsSchema = z.object({
   // Layer: Pressure
   // ----------------------------------------------------------
   pressure: z.object({
+    enabled: opt(
+      z.boolean().default(false),
+      {
+        label: 'Pressure',
+        description: 'Show isobar contour lines',
+        group: 'layers',
+        filter: 'pressure',
+        order: 17,
+        control: 'toggle',
+        persist: 'url',
+      }
+    ),
     opacity: opt(
       z.number().min(0.05).max(1).default(0.85),
       {
@@ -735,6 +821,12 @@ export type ZeroOptions = z.infer<typeof optionsSchema>;
 
 export const defaultOptions: ZeroOptions = {
   _version: 1,
+  viewState: {
+    time: new Date(),
+    lat: 0,
+    lon: 0,
+    altitude: 20_000_000,
+  },
   gpu: { slotsPerLayer: '8' },
   viewport: {
     physicsModel: 'inertia',
@@ -752,12 +844,12 @@ export const defaultOptions: ZeroOptions = {
   earth: { opacity: 1, blend: 0 },
   sun: { enabled: true },
   grid: { enabled: true, opacity: 0.3, fontSize: 14 },
-  temp: { opacity: 0.6, palette: 'ESRI Temperature', resolution: '0p25' },
-  rain: { opacity: 1.0, resolution: '0p25' },
-  clouds: { opacity: 0.5, resolution: '0p25' },
-  humidity: { opacity: 0.6, resolution: '0p25' },
-  wind: { seedCount: '8192', opacity: 0.6, speed: 20, resolution: '0p25' },
-  pressure: { opacity: 0.85, smoothing: '1' },
+  temp: { enabled: false, opacity: 0.6, palette: 'ESRI Temperature', resolution: '0p25' },
+  rain: { enabled: false, opacity: 1.0, resolution: '0p25' },
+  clouds: { enabled: false, opacity: 0.5, resolution: '0p25' },
+  humidity: { enabled: false, opacity: 0.6, resolution: '0p25' },
+  wind: { enabled: false, seedCount: '8192', opacity: 0.6, speed: 20, resolution: '0p25' },
+  pressure: { enabled: false, opacity: 0.85, smoothing: '1' },
   dataCache: { cacheStrategy: 'alternate', downloadMode: 'on-demand' },
   debug: { showDevLog: false },
 };

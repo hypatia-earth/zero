@@ -6,11 +6,11 @@
  * Ctrl/Cmd+Arrow: ±24 hours
  */
 
-import type { StateService } from './state-service';
+import type { OptionsService } from './options-service';
 import { toggleFullscreen } from '../components/fullscreen-panel';
 
 export class KeyboardService {
-  constructor(private stateService: StateService) {
+  constructor(private optionsService: OptionsService) {
     window.addEventListener('keydown', this.handleKeydown);
   }
 
@@ -29,7 +29,7 @@ export class KeyboardService {
 
     e.preventDefault();
     const direction = e.code === 'ArrowLeft' ? -1 : 1;
-    const currentTime = this.stateService.getTime();
+    const currentTime = this.optionsService.options.value.viewState.time;
     let newTime: Date;
 
     if (e.ctrlKey || e.metaKey) {
@@ -43,7 +43,7 @@ export class KeyboardService {
       newTime = this.roundToHour(currentTime, direction);
     }
 
-    this.stateService.setTime(newTime);
+    this.optionsService.update(d => { d.viewState.time = newTime; });
   };
 
   private addDays(date: Date, days: number): Date {

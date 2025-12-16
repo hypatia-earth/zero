@@ -12,7 +12,6 @@
 
 import { effect, signal } from '@preact/signals-core';
 import type { TParam, TTimestep, TimestepOrder } from '../config/types';
-import type { StateService } from './state-service';
 import type { TimestepService } from './timestep-service';
 import type { RenderService } from './render-service';
 import type { QueueService } from './queue-service';
@@ -60,7 +59,6 @@ export class SlotService {
   private readonly wanted = signal<WantedState | null>(null);
 
   constructor(
-    private stateService: StateService,
     private timestepService: TimestepService,
     private renderService: RenderService,
     private queueService: QueueService,
@@ -74,7 +72,7 @@ export class SlotService {
 
     // Effect: pure computation of wanted state + shader activation (no I/O)
     this.disposeEffect = effect(() => {
-      const time = this.stateService.state.value.time;
+      const time = this.optionsService.options.value.viewState.time;
       if (!this.initialized) return;
 
       const wanted = this.computeWanted(time);
@@ -181,7 +179,7 @@ export class SlotService {
     }
 
     console.log(`[Slot] Fetching ${orders.length} timesteps`);
-    this.loadTimestepsBatch(param, orders, this.stateService.getTime());
+    this.loadTimestepsBatch(param, orders, this.optionsService.options.value.viewState.time);
   }
 
   /** Calculate ideal load window around time (always centered ~50/50) */
@@ -263,7 +261,7 @@ export class SlotService {
             return;
           }
           // Allocate slot just-in-time - use CURRENT time for eviction (user may have moved)
-          const slotIndex = this.allocateSlot(param, order.timestep, this.stateService.getTime());
+          const slotIndex = this.allocateSlot(param, order.timestep, this.optionsService.options.value.viewState.time);
           if (slotIndex !== null) {
             this.uploadToSlot(param, order.timestep, slotIndex, slice.data);
           }
@@ -359,7 +357,7 @@ export class SlotService {
     this.dataWindowStart = this.timestepService.first();
     this.dataWindowEnd = this.timestepService.last();
 
-    const time = this.stateService.getTime();
+    const time = this.optionsService.options.value.viewState.time;
     const param: TParam = 'temp';
     const wanted = this.computeWanted(time);
 

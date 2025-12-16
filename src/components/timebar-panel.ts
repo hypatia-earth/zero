@@ -10,21 +10,23 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import type { StateService } from '../services/state-service';
 import type { SlotService } from '../services/slot-service';
 import type { TimestepService } from '../services/timestep-service';
+import type { OptionsService } from '../services/options-service';
 import { getSunDirection } from '../utils/sun-position';
 
 const DEBUG = false;
 
-/** Weather layers in display order (top to bottom) */
-const WEATHER_LAYERS = ['temp', 'rain'] as const;
+/** Weather layers in display order (top to bottom) - must match TParam */
+const WEATHER_LAYERS = ['temp', 'rain', 'wind', 'pressure'] as const;
 type WeatherLayer = typeof WEATHER_LAYERS[number];
 
 /** Layer colors (full brightness for GPU, 50% for cached) */
 const LAYER_COLORS: Record<WeatherLayer, { gpu: string; cached: string }> = {
   temp: { gpu: '#ff6b35', cached: '#803518' },  // Orange
   rain: { gpu: '#4a90d9', cached: '#25486c' },  // Blue
+  wind: { gpu: '#00ff00', cached: '#008000' },  // Green
+  pressure: { gpu: '#ff00ff', cached: '#800080' },  // Magenta
 };
 
 /** Tick colors */
@@ -82,7 +84,7 @@ function getSunBrightness(lat: number, lon: number, time: Date): number {
 }
 
 interface TimeBarPanelAttrs {
-  stateService: StateService;
+  optionsService: OptionsService;
   slotService: SlotService;
   timestepService: TimestepService;
 }
@@ -237,7 +239,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
   return {
     oncreate() {
       unsubscribe = effect(() => {
-        initialVnode.attrs.stateService.state.value;
+        initialVnode.attrs.optionsService.options.value;
         initialVnode.attrs.slotService.slotsVersion.value;
         initialVnode.attrs.timestepService.state.value;
         m.redraw();
@@ -249,8 +251,8 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     },
 
     view({ attrs }) {
-    const { stateService, slotService, timestepService } = attrs;
-    const currentTime = stateService.getTime();
+    const { optionsService, slotService, timestepService } = attrs;
+    const currentTime = optionsService.options.value.viewState.time;
     const window = {
       start: timestepService.toDate(timestepService.first()),
       end: timestepService.toDate(timestepService.last()),
@@ -270,12 +272,14 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
 
     const handleMouseDown = (e: MouseEvent) => {
       isDragging = true;
-      stateService.setTime(mouseToTime(e));
+      const time = mouseToTime(e);
+      optionsService.update(d => { d.viewState.time = time; });
     };
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging) return;
-      stateService.setTime(mouseToTime(e));
+      const time = mouseToTime(e);
+      optionsService.update(d => { d.viewState.time = time; });
     };
 
     const handleMouseUp = () => {
@@ -334,13 +338,21 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
 
     DEBUG && console.log(`[Timebar] ECMWF: ${ecmwfSet.size}, cache temp: ${cachedMap.get('temp')?.size}, GPU temp: ${gpuMap.get('temp')?.size}`);
 
-    // Filter to only active weather layers
-    const activeLayers = stateService.getLayers();
-    const activeWeatherLayers = WEATHER_LAYERS.filter(l => activeLayers.includes(l));
+    // Filter to only active weather layers (read from OptionsService)
+    const opts = attrs.optionsService.options.value;
+    const activeWeatherLayers = WEATHER_LAYERS.filter(layer => {
+      switch (layer) {
+        case 'temp': return opts.temp.enabled;
+        case 'rain': return opts.rain.enabled;
+        case 'wind': return opts.wind.enabled;
+        case 'pressure': return opts.pressure.enabled;
+        default: return false;
+      }
+    });
 
     // Get camera position and sun state for brightness calculation
-    const camera = stateService.getCamera();
-    const sunEnabled = activeLayers.includes('sun');
+    const viewState = opts.viewState;
+    const sunEnabled = opts.sun.enabled;
 
     return m('.panel.timebar', [
       m('.control.timeslider', { style: 'width: 100%; height: 42px; position: relative;' }, [
@@ -363,8 +375,8 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
                 activeMap,
                 new Date(),
                 progress,
-                camera.lat,
-                camera.lon,
+                viewState.lat,
+                viewState.lon,
                 sunEnabled
               );
             },
@@ -380,8 +392,8 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
                 activeMap,
                 new Date(),
                 progress,
-                camera.lat,
-                camera.lon,
+                viewState.lat,
+                viewState.lon,
                 sunEnabled
               );
             },
