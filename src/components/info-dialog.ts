@@ -41,6 +41,7 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
 
       // Drag handlers (desktop only)
       const onMouseDown = (e: MouseEvent) => {
+        dialogService.bringToFront('info');
         if (!isDesktop) return;
         dragState.isDragging = true;
         dragState.startX = e.clientX - dragState.offsetX;
@@ -48,8 +49,19 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
 
         const onMouseMove = (e: MouseEvent) => {
           if (!dragState.isDragging) return;
-          dragState.offsetX = e.clientX - dragState.startX;
-          dragState.offsetY = e.clientY - dragState.startY;
+          const win = document.querySelector('.dialog.info .window') as HTMLElement;
+          if (!win) return;
+          // Get base rect without current transform
+          const baseX = (window.innerWidth - win.offsetWidth) / 2;
+          const baseY = (window.innerHeight - win.offsetHeight) / 2;
+          const headerHeight = 56;
+          // Clamp so header stays in viewport
+          const minX = -baseX;
+          const maxX = window.innerWidth - baseX - win.offsetWidth;
+          const minY = -baseY;
+          const maxY = window.innerHeight - baseY - headerHeight;
+          dragState.offsetX = Math.max(minX, Math.min(maxX, e.clientX - dragState.startX));
+          dragState.offsetY = Math.max(minY, Math.min(maxY, e.clientY - dragState.startY));
           m.redraw();
         };
 
@@ -67,11 +79,10 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
       if (dragState.offsetX !== 0 || dragState.offsetY !== 0) {
         windowStyle.transform = `translate(${dragState.offsetX}px, ${dragState.offsetY}px)`;
       }
-      if (isFloating) {
-        windowStyle.zIndex = String(zIndex);
-      }
 
-      return m('div.dialog.info', { class: isFloating ? 'floating' : '' }, [
+      const dialogStyle = isFloating ? { zIndex: String(zIndex) } : {};
+
+      return m('div.dialog.info', { class: isFloating ? 'floating' : '', style: dialogStyle }, [
         m('div.backdrop', {
           onclick: () => {
             if (dialogService.shouldCloseOnBackdrop('info')) {
@@ -87,19 +98,21 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
         }, [
           m('div.header', { onmousedown: onMouseDown }, [
             m('h2', 'Information'),
-            isDesktop ? m('button.float-toggle', {
-              onclick: (e: Event) => {
-                e.stopPropagation();
-                dialogService.toggleFloating('info');
-              },
-              title: isFloating ? 'Disable floating' : 'Keep floating'
-            }, isFloating ? '📌' : '📍') : null,
-            m('button.close', {
-              onclick: () => {
-                resetDragState();
-                infoService.closeDialog();
-              }
-            }, '×')
+            m('div.bar', [
+              isDesktop ? m('button.float-toggle', {
+                onclick: (e: Event) => {
+                  e.stopPropagation();
+                  dialogService.toggleFloating('info');
+                },
+                title: isFloating ? 'Disable floating' : 'Keep floating'
+              }, isFloating ? '◎' : '○') : null,
+              m('button.close', {
+                onclick: () => {
+                  resetDragState();
+                  infoService.closeDialog();
+                }
+              }, '×')
+            ])
           ]),
           m('div.content.markdown', [
             infoService.loading

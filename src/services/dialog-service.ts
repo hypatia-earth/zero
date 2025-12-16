@@ -54,6 +54,7 @@ export class DialogService {
   bringToFront(id: DialogId): void {
     this.zCounter++;
     this.zIndexMap.set(id, this.zCounter);
+    console.log(`[Dialog] bringToFront: ${id} → z-index ${this.zCounter}`);
     m.redraw();
   }
 

@@ -184,6 +184,10 @@
     cursor: move;
     user-select: none;
   }
+  .dialog.options .header h2,
+  .dialog.options .header button {
+    cursor: default;
+  }
   .dialog.options .window.dragging {
     transition: none;
   }
@@ -223,6 +227,13 @@
   font-size: 18px;
   font-weight: 500;
   color: var(--color-text-primary);
+}
+
+.dialog.options .header .bar {
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  gap: 4px;
 }
 
 .dialog.options .close {
@@ -658,7 +669,7 @@
 .dialog.options .footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 16px 20px;
   border-top: 1px solid var(--color-border-light);
 }
@@ -723,6 +734,10 @@
     cursor: move;
     user-select: none;
   }
+  .dialog.info .header h2,
+  .dialog.info .header button {
+    cursor: default;
+  }
   .dialog.info .window.dragging {
     transition: none;
   }
@@ -757,6 +772,13 @@
   font-size: 18px;
   font-weight: 500;
   color: var(--color-text-primary);
+}
+
+.dialog.info .header .bar {
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  gap: 4px;
 }
 
 .dialog.info .close {
@@ -980,6 +1002,7 @@
 .dialog .float-toggle {
   background: none;
   border: none;
+  color: white;
   font-size: 16px;
   cursor: pointer;
   padding: 4px 8px;

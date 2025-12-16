@@ -402,6 +402,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
 
     // Drag handlers
     const onMouseDown = (e: MouseEvent) => {
+      dialogService.bringToFront('options');
       if (!isDesktop) return;
       if ((e.target as HTMLElement).tagName === 'BUTTON') return;
       dragState.isDragging = true;
@@ -413,8 +414,19 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
 
     const onMouseMove = (e: MouseEvent) => {
       if (!dragState.isDragging) return;
-      dragState.offsetX = e.clientX - dragState.startX;
-      dragState.offsetY = e.clientY - dragState.startY;
+      const win = document.querySelector('.dialog.options .window') as HTMLElement;
+      if (!win) return;
+      // Get base rect without current transform
+      const baseX = (window.innerWidth - win.offsetWidth) / 2;
+      const baseY = (window.innerHeight - win.offsetHeight) / 2;
+      const headerHeight = 56;
+      // Clamp so header stays in viewport
+      const minX = -baseX;
+      const maxX = window.innerWidth - baseX - win.offsetWidth;
+      const minY = -baseY;
+      const maxY = window.innerHeight - baseY - headerHeight;
+      dragState.offsetX = Math.max(minX, Math.min(maxX, e.clientX - dragState.startX));
+      dragState.offsetY = Math.max(minY, Math.min(maxY, e.clientY - dragState.startY));
       m.redraw();
     };
 
@@ -428,11 +440,10 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
     if (dragState.offsetX !== 0 || dragState.offsetY !== 0) {
       windowStyle.transform = `translate(${dragState.offsetX}px, ${dragState.offsetY}px)`;
     }
-    if (isFloating) {
-      windowStyle.zIndex = String(zIndex);
-    }
 
-    return m('div.dialog.options', { class: isFloating ? 'floating' : '' }, [
+    const dialogStyle = isFloating ? { zIndex: String(zIndex) } : {};
+
+    return m('div.dialog.options', { class: isFloating ? 'floating' : '', style: dialogStyle }, [
       m('div.backdrop', {
         onclick: () => {
           if (dialogService.shouldCloseOnBackdrop('options')) {
@@ -448,19 +459,21 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
       }, [
         m('div.header', { onmousedown: onMouseDown }, [
           m('h2', dialogTitle),
-          dialogService.isDesktop ? m('button.float-toggle', {
-            onclick: (e: Event) => {
-              e.stopPropagation();
-              dialogService.toggleFloating('options');
-            },
-            title: isFloating ? 'Disable floating' : 'Keep floating'
-          }, isFloating ? '📌' : '📍') : null,
-          m('button.close', {
-            onclick: () => {
-              resetDragState();
-              optionsService.closeDialog();
-            }
-          }, '×')
+          m('div.bar', [
+            dialogService.isDesktop ? m('button.float-toggle', {
+              onclick: (e: Event) => {
+                e.stopPropagation();
+                dialogService.toggleFloating('options');
+              },
+              title: isFloating ? 'Disable floating' : 'Keep floating'
+            }, isFloating ? '◎' : '○') : null,
+            m('button.close', {
+              onclick: () => {
+                resetDragState();
+                optionsService.closeDialog();
+              }
+            }, '×')
+          ])
         ]),
         m('div.content', [
           ...sortedGroupIds.map(groupId => {
