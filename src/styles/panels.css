@@ -61,6 +61,18 @@
   right: 20px;
 }
 
+.panel.info {
+  top: calc(20px + var(--layout-timecircle-size) + 55px + 44px + 10px + 44px + 10px);
+  right: 20px;
+}
+
+.panel.info img {
+  width: 24px;
+  height: 24px;
+  filter: brightness(0) saturate(100%) invert(100%);
+  opacity: 0.8;
+}
+
 .panel.timebar {
   left: var(--layout-margin-left);
   right: var(--layout-margin-right);

@@ -1,0 +1,30 @@
+# Welcome to Hypatia Zero
+
+Hypatia Zero is a WebGPU-powered weather visualization app.
+
+## Features
+
+- **Real-time weather data** from ECMWF
+- **Temperature**, precipitation, clouds, humidity, wind, and pressure layers
+- **Smooth globe navigation** with mouse and touch controls
+- **Time travel** through forecast data
+
+## Controls
+
+| Action | Mouse | Touch |
+|--------|-------|-------|
+| Rotate | Drag | One finger drag |
+| Zoom | Scroll wheel | Pinch |
+| Time | Click timebar | Click timebar |
+
+## Data Source
+
+Weather data is provided by [Open-Meteo](https://open-meteo.com/) from ECMWF IFS model forecasts.
+
+## About
+
+Built with WebGPU, TypeScript, and Mithril.js.
+
+---
+
+*Hypatia Zero v0.1*
