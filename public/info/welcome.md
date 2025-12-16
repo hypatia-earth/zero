@@ -21,6 +21,16 @@ Hypatia Zero is a WebGPU-powered weather visualization app.
 
 Weather data is provided by [Open-Meteo](https://open-meteo.com/) from ECMWF IFS model forecasts.
 
+## Install as App
+
+For the best fullscreen experience, install Hypatia Zero as an app:
+
+| Platform | How |
+|----------|-----|
+| Chrome / Edge | Click install icon in address bar, or Menu → "Install Hypatia Zero" |
+| Android | Menu → "Add to Home Screen" |
+| iOS Safari | Share → "Add to Home Screen" |
+
 ## About
 
 Built with WebGPU, TypeScript, and Mithril.js.
