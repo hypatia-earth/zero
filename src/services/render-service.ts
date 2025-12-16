@@ -183,7 +183,6 @@ export class RenderService {
     }
     this.renderer.updateTempPalette(textureData);
     this.tempPaletteRange = new Float32Array([min, max]);
-    console.log(`[RenderService] Updated temp palette range: [${min}, ${max}]`);
   }
 
   dispose(): void {

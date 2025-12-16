@@ -251,13 +251,15 @@ export class OptionsService {
     }
 
     // Lat/lon: defaulted or clamped
+    // URL uses 1 decimal (toFixed(1)) ≈ 11km precision, matching ECMWF 0.1° grid (~10km)
+    // Integer scaling avoids IEEE 754 false positives in comparison
     const llParam = params.get('ll');
     if (!llParam) {
       changes.push(`lat=${vs.lat}`, `lon=${vs.lon}`);
     } else {
       const [rawLat, rawLon] = llParam.split(',').map(parseFloat);
-      if (rawLat !== vs.lat) changes.push(`lat=${rawLat}→${vs.lat}`);
-      if (rawLon !== vs.lon) changes.push(`lon=${rawLon}→${vs.lon}`);
+      if (Math.round(rawLat * 10) !== Math.round(vs.lat * 10)) changes.push(`lat=${rawLat}→${vs.lat}`);
+      if (Math.round(rawLon * 10) !== Math.round(vs.lon * 10)) changes.push(`lon=${rawLon}→${vs.lon}`);
     }
 
     // Altitude: defaulted or clamped
