@@ -84,6 +84,9 @@ export const App: m.ClosureComponent = () => {
         timestepService = new TimestepService(configService);
         await timestepService.initialize();
 
+        // Step 3b: Sanitize options (snap time to closest available timestep)
+        optionsService.sanitize((time) => timestepService.getClosestTimestep(time));
+
         // Step 4: Assets via QueueService
         BootstrapService.setStep('ASSETS');
         queueService = new QueueService();

@@ -565,6 +565,16 @@ export class TimestepService implements IDiscoveryService {
     return this.contains(ts, model) ? ts : null;
   }
 
+  /** Get closest available timestep to given time */
+  getClosestTimestep(time: Date, model?: TModel): Date {
+    const [t0, t1] = this.adjacent(time, model);
+    const t0Date = this.toDate(t0);
+    const t1Date = this.toDate(t1);
+    const d0 = Math.abs(time.getTime() - t0Date.getTime());
+    const d1 = Math.abs(time.getTime() - t1Date.getTime());
+    return d0 <= d1 ? t0Date : t1Date;
+  }
+
   variables(model?: TModel): string[] {
     return this.variablesData[model ?? this.defaultModel];
   }

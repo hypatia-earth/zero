@@ -239,30 +239,39 @@ export class OptionsService {
 
     this.userOverrides.value = this.extractOverrides(merged);
     this.initialized = true;
+  }
 
-    // Log what viewState was changed (defaulted or clamped)
-    const vs = merged.viewState;
+  /**
+   * Sanitize time after timestep discovery - snap to closest available timestep
+   * Call from app.ts after TimestepService.initialize()
+   */
+  sanitize(getClosestTimestep: (time: Date) => Date): void {
     const params = new URLSearchParams(window.location.search);
     const changes: string[] = [];
+    const vs = this.options.value.viewState;
 
-    // Time: defaulted if not in URL
-    if (!params.get('dt')) {
-      changes.push(`time=${vs.time.toISOString().slice(0, 16)}`);
+    // Time: snap to closest timestep (whether from URL, DB, or default)
+    const snappedTime = getClosestTimestep(vs.time);
+    if (snappedTime.getTime() !== vs.time.getTime()) {
+      this.update(o => { o.viewState.time = snappedTime; });
+      changes.push(`time=${vs.time.toISOString().slice(0, 13)}→${snappedTime.toISOString().slice(0, 13)}`);
     }
 
-    // Lat/lon: defaulted or clamped
+    // Lat/lon: log if defaulted or clamped
     // URL uses 1 decimal (toFixed(1)) ≈ 11km precision, matching ECMWF 0.1° grid (~10km)
     // Integer scaling avoids IEEE 754 false positives in comparison
     const llParam = params.get('ll');
     if (!llParam) {
-      changes.push(`lat=${vs.lat}`, `lon=${vs.lon}`);
+      changes.push(`lat=${vs.lat.toFixed(1)}`, `lon=${vs.lon.toFixed(1)}`);
     } else {
-      const [rawLat, rawLon] = llParam.split(',').map(parseFloat);
+      const parts = llParam.split(',').map(parseFloat);
+      const rawLat = parts[0] ?? NaN;
+      const rawLon = parts[1] ?? NaN;
       if (Math.round(rawLat * 10) !== Math.round(vs.lat * 10)) changes.push(`lat=${rawLat}→${vs.lat}`);
       if (Math.round(rawLon * 10) !== Math.round(vs.lon * 10)) changes.push(`lon=${rawLon}→${vs.lon}`);
     }
 
-    // Altitude: defaulted or clamped
+    // Altitude: log if defaulted or clamped
     const altParam = params.get('alt');
     if (!altParam) {
       changes.push(`alt=${vs.altitude}`);
@@ -272,6 +281,9 @@ export class OptionsService {
     }
 
     if (changes.length) console.log(`[Sanitized] ${changes.join(', ')}`);
+
+    // Write sanitized state to URL
+    this.syncToUrl(this.options.value);
   }
 
   /**
