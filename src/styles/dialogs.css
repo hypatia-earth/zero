@@ -94,7 +94,7 @@
 }
 
 .dialog.bootstrap .tagline {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   opacity: 0.4;
   margin-top: 8px;
   letter-spacing: 1px;
@@ -108,7 +108,7 @@
 }
 
 .dialog.bootstrap .progress-text {
-  font-size: 14px;
+  font-size: var(--font-size-md);
   font-weight: 500;
   opacity: 0.7;
 }
@@ -146,7 +146,7 @@
 }
 
 .dialog.bootstrap .error .detail {
-  font-size: 12px;
+  font-size: var(--font-size-2xs);
   opacity: 0.7;
   font-family: 'Courier New', monospace;
 }
@@ -158,7 +158,7 @@
 }
 
 .dialog.bootstrap .footer .version {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   opacity: 0.4;
   font-family: 'Courier New', monospace;
 }
@@ -224,7 +224,7 @@
 
 .dialog.options .header h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   font-weight: 500;
   color: var(--color-text-primary);
 }
@@ -240,7 +240,7 @@
   background: none;
   border: none;
   color: var(--color-glow);
-  font-size: 24px;
+  font-size: var(--font-size-xl);
   cursor: pointer;
   padding: 0;
   width: 32px;
@@ -277,7 +277,7 @@
 
 .dialog.options .section > .title {
   margin: 0 0 8px 0;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -287,7 +287,7 @@
 .dialog.options .section > .description {
   margin: 0 0 12px 0;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--font-size-2xs);
   color: var(--color-text-subtle);
   background: none;
   border: none;
@@ -304,7 +304,7 @@
 
 .dialog.options .subsection > .title {
   margin: 0 0 8px 0;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -360,12 +360,12 @@
 
 .radio-palette-control .palette-name {
   font-weight: bold;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
 .radio-palette-control .palette-description {
   font-weight: normal;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--color-text-subtle);
 }
 
@@ -385,13 +385,13 @@
 
 .dialog.options .row .label {
   display: block;
-  font-size: 14px;
+  font-size: var(--font-size-md);
   color: var(--color-text-primary);
 }
 
 .dialog.options .row .hint {
   display: block;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--color-text-subtle);
   margin-top: 2px;
 }
@@ -408,7 +408,7 @@
   background: none;
   border: none;
   color: var(--color-text-subtle);
-  font-size: 16px;
+  font-size: var(--font-size-base);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -508,7 +508,7 @@
 }
 
 .dialog.options .slider .value {
-  font-size: 12px;
+  font-size: var(--font-size-2xs);
   color: var(--color-glow);
   width: 44px;
   flex-shrink: 0;
@@ -523,7 +523,7 @@
   border-radius: 6px;
   color: var(--color-text-primary);
   padding: 6px 28px 6px 10px;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
@@ -571,7 +571,7 @@
 }
 
 .dialog.options .radio span {
-  font-size: 12px;
+  font-size: var(--font-size-2xs);
   color: var(--color-glow);
 }
 
@@ -616,7 +616,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   cursor: pointer;
 }
@@ -640,7 +640,7 @@
 
 .dialog.options .danger-zone h3 {
   margin: 0 0 12px 0;
-  font-size: 14px;
+  font-size: var(--font-size-md);
   color: #ff8888;
 }
 
@@ -657,7 +657,7 @@
   padding: 8px 16px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
 }
 
 @media (hover: hover) {
@@ -685,7 +685,7 @@
   color: #ff8888;
   padding: 8px 16px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -702,7 +702,7 @@
   color: var(--color-primary);
   padding: 8px 24px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -769,7 +769,7 @@
 
 .dialog.info .header h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--font-size-lg);
   font-weight: 500;
   color: var(--color-text-primary);
 }
@@ -785,7 +785,7 @@
   background: none;
   border: none;
   color: var(--color-glow);
-  font-size: 24px;
+  font-size: var(--font-size-xl);
   cursor: pointer;
   padding: 0;
   width: 32px;
@@ -809,6 +809,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 20px 24px;
+  font-weight: 400;
 }
 
 .dialog.info .content.markdown {
@@ -817,22 +818,22 @@
 
 /* Markdown typography */
 .dialog.info .content h1 {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
   margin: 0 0 16px 0;
   color: var(--color-text-primary);
 }
 
 .dialog.info .content h2 {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
   margin: 24px 0 12px 0;
   color: var(--color-text-primary);
 }
 
 .dialog.info .content h3 {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
   margin: 20px 0 8px 0;
   color: var(--color-text-primary);
 }
@@ -876,7 +877,7 @@
   background: var(--color-surface);
   padding: 2px 6px;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   font-family: monospace;
 }
 
@@ -910,7 +911,7 @@
   width: 100%;
   border-collapse: collapse;
   margin: 0 0 12px 0;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
 }
 
 .dialog.info .content th,
@@ -974,7 +975,7 @@
   color: var(--color-primary);
   padding: 8px 24px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -1003,7 +1004,7 @@
   background: none;
   border: none;
   color: white;
-  font-size: 16px;
+  font-size: var(--font-size-base);
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 4px;

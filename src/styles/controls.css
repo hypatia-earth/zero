@@ -10,7 +10,7 @@
   backdrop-filter: blur(10px);
   width: 100%;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-md);
   color: inherit;
   font-family: inherit;
 }
@@ -85,19 +85,19 @@
 
 /* Time circle display */
 .time-year {
-  font-size: 14px;
+  font-size: var(--font-size-md);
   opacity: 0.6;
   margin-bottom: 4px;
 }
 
 .time-date {
-  font-size: 28px;
+  font-size: var(--font-size-2xl);
   font-weight: 300;
   margin-bottom: 4px;
 }
 
 .time-time {
-  font-size: 16px;
+  font-size: var(--font-size-base);
   opacity: 0.8;
   font-family: 'Courier New', monospace;
 }
