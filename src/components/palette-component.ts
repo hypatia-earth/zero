@@ -10,16 +10,12 @@ export interface PaletteStop {
   alpha?: number;
 }
 
-export interface PaletteData {
-  name: string;
-  unit: string;
-  interpolate?: boolean;
-  stops: PaletteStop[];
-}
+import type { PaletteData, LabelMode } from '../services/palette-service';
+export type { PaletteData, LabelMode };
 
 interface PaletteComponentAttrs {
   palette: PaletteData;
-  width?: number;
+  width?: number | '100%';
   height?: number;
   font?: string;
   fontSize?: number;
@@ -38,66 +34,117 @@ function formatLabel(value: number | null): string {
   return String(value);
 }
 
-/** Calculate which labels to show (first, last, evenly spaced middle) */
+interface LabelInfo {
+  text: string;
+  x: number;
+  width: number;
+  align: 'left' | 'center' | 'right';
+}
+
+/** Calculate label positions based on labelMode */
 function calculateLabels(
   stops: PaletteStop[],
   width: number,
-  ctx: CanvasRenderingContext2D
-): { text: string; x: number; width: number; index: number }[] {
+  ctx: CanvasRenderingContext2D,
+  labelMode: LabelMode,
+  unit: string
+): LabelInfo[] {
   if (stops.length === 0) return [];
 
-  const labels = stops.map((stop, i) => {
-    const text = formatLabel(stop.value);
-    const metrics = ctx.measureText(text);
-    const x = stops.length > 1 ? (width * i) / (stops.length - 1) : width / 2;
-    return { text, x, width: metrics.width, index: i };
-  });
+  const values = stops.map(s => s.value).filter((v): v is number => v !== null);
+  if (values.length < 2) return [];
 
-  if (labels.length <= 2) return labels;
-
-  const result = [labels[0]!, labels[labels.length - 1]!];
+  const minVal = values[0]!;
+  const maxVal = values[values.length - 1]!;
+  const range = maxVal - minVal;
   const minSpacing = 8;
 
-  // First label is left-aligned, last is right-aligned
-  const firstEnd = labels[0]!.width + minSpacing;
-  const lastStart = width - labels[labels.length - 1]!.width - minSpacing;
-  const availableWidth = lastStart - firstEnd;
+  const valueToX = (v: number) => width * (v - minVal) / range;
+  const degree = unit === 'F' || unit === 'C' ? '°' : ' ';
 
-  if (availableWidth <= 0) return result;
+  if (labelMode === 'value-centered') {
+    // Labels centered at exact value positions
+    const labels: LabelInfo[] = stops.map((stop, i) => {
+      const text = formatLabel(stop.value);
+      const x = stop.value !== null ? valueToX(stop.value) : (i === 0 ? 0 : width);
+      const align: 'left' | 'center' | 'right' = i === 0 ? 'left' : i === stops.length - 1 ? 'right' : 'center';
+      return { text, x, width: ctx.measureText(text).width, align };
+    });
 
-  const middleLabels = labels.slice(1, -1);
+    // Add unit to first label
+    labels[0]!.text = `${labels[0]!.text}${degree}${unit}`;
+    labels[0]!.width = ctx.measureText(labels[0]!.text).width;
 
-  // Find max labels that fit
-  const canFit = (n: number): boolean => {
-    if (n === 0) return true;
-    if (n > middleLabels.length) return false;
-
-    const step = middleLabels.length / (n + 1);
-    const selected = Array.from({ length: n }, (_, i) =>
-      middleLabels[Math.floor((i + 1) * step)]!
-    );
-
-    let prevEnd = firstEnd;
-    for (const label of selected) {
-      const labelStart = label.x - label.width / 2;
-      if (labelStart < prevEnd) return false;
-      prevEnd = label.x + label.width / 2 + minSpacing;
-    }
-    return prevEnd <= lastStart + minSpacing;
-  };
-
-  let maxLabels = 0;
-  for (let n = middleLabels.length; n > 0; n--) {
-    if (canFit(n)) {
-      maxLabels = n;
-      break;
-    }
+    return filterOverlapping(labels, width, minSpacing);
   }
 
-  if (maxLabels > 0) {
-    const step = middleLabels.length / (maxLabels + 1);
-    for (let i = 0; i < maxLabels; i++) {
-      result.push(middleLabels[Math.floor((i + 1) * step)]!);
+  if (labelMode === 'band-edge') {
+    // Labels at left edge of each band
+    const labels: LabelInfo[] = stops.map((stop, i) => {
+      const text = formatLabel(stop.value);
+      const x = stop.value !== null ? valueToX(stop.value) : (i === 0 ? 0 : width);
+      // First label: left-aligned at x=0, others: just right of value position
+      const align: 'left' | 'center' | 'right' = i === 0 ? 'left' : 'left';
+      return { text, x, width: ctx.measureText(text).width, align };
+    });
+
+    // Add unit to first label
+    labels[0]!.text = `${labels[0]!.text}${degree}${unit}`;
+    labels[0]!.width = ctx.measureText(labels[0]!.text).width;
+
+    return filterOverlapping(labels, width, minSpacing);
+  }
+
+  if (labelMode === 'band-range') {
+    // Range labels centered over each band
+    const labels: LabelInfo[] = [];
+    for (let i = 0; i < stops.length - 1; i++) {
+      const v1 = stops[i]!.value;
+      const v2 = stops[i + 1]!.value;
+      if (v1 === null || v2 === null) continue;
+
+      const text = `${formatLabel(v1)}-${formatLabel(v2)}`;
+      const x1 = valueToX(v1);
+      const x2 = valueToX(v2);
+      const x = (x1 + x2) / 2;
+      labels.push({ text, x, width: ctx.measureText(text).width, align: 'center' });
+    }
+
+    // Add unit to first label
+    if (labels.length > 0) {
+      labels[0]!.text = `${labels[0]!.text}${degree}${unit}`;
+      labels[0]!.width = ctx.measureText(labels[0]!.text).width;
+    }
+
+    return filterOverlapping(labels, width, minSpacing);
+  }
+
+  return [];
+}
+
+/** Remove overlapping labels, keeping first, last, and as many middle as fit */
+function filterOverlapping(labels: LabelInfo[], _width: number, minSpacing: number): LabelInfo[] {
+  if (labels.length <= 2) return labels;
+
+  const getExtent = (label: LabelInfo): [number, number] => {
+    if (label.align === 'left') return [label.x, label.x + label.width];
+    if (label.align === 'right') return [label.x - label.width, label.x];
+    return [label.x - label.width / 2, label.x + label.width / 2];
+  };
+
+  const result = [labels[0]!, labels[labels.length - 1]!];
+
+  for (let i = 1; i < labels.length - 1; i++) {
+    const label = labels[i]!;
+    const [start, end] = getExtent(label);
+
+    const overlaps = result.some(existing => {
+      const [eStart, eEnd] = getExtent(existing);
+      return start < eEnd + minSpacing && end > eStart - minSpacing;
+    });
+
+    if (!overlaps) {
+      result.push(label);
     }
   }
 
@@ -130,28 +177,45 @@ function drawPalette(
 
   const labelHeight = height / 2;
 
-  // Draw color bar (full width)
+  // Get value range for position mapping
+  const values = stops.map(s => s.value).filter((v): v is number => v !== null);
+  const minVal = values[0] ?? 0;
+  const maxVal = values[values.length - 1] ?? 1;
+  const range = maxVal - minVal;
+
+  // Draw color bar (full width) - map pixel position to value
   for (let x = 0; x < width; x++) {
     const progress = x / (width - 1);
-    const stopIndex = progress * (stops.length - 1);
-    const idx = Math.min(Math.floor(stopIndex), stops.length - 2);
+    const value = minVal + progress * range;
 
-    let color: [number, number, number];
-    if (interpolate) {
-      const t = stopIndex - idx;
-      const c1 = stops[idx]!.color;
-      const c2 = stops[idx + 1]!.color;
-      color = [
-        Math.round(c1[0] + (c2[0] - c1[0]) * t),
-        Math.round(c1[1] + (c2[1] - c1[1]) * t),
-        Math.round(c1[2] + (c2[2] - c1[2]) * t),
-      ];
-    } else {
-      const nearest = Math.min(Math.round(stopIndex), stops.length - 1);
-      color = stops[nearest]!.color;
+    // Find surrounding stops by value
+    let idx = 0;
+    for (let i = 0; i < stops.length - 1; i++) {
+      if (stops[i + 1]!.value !== null && value <= stops[i + 1]!.value!) {
+        idx = i;
+        break;
+      }
+      idx = i;
     }
 
-    const alpha = stops[Math.min(Math.round(stopIndex), stops.length - 1)]!.alpha ?? 1;
+    let color: [number, number, number];
+    const stop1 = stops[idx]!;
+    const stop2 = stops[idx + 1]!;
+    const v1 = stop1.value ?? minVal;
+    const v2 = stop2.value ?? maxVal;
+    const t = v2 !== v1 ? (value - v1) / (v2 - v1) : 0;
+
+    if (interpolate) {
+      color = [
+        Math.round(stop1.color[0] + (stop2.color[0] - stop1.color[0]) * t),
+        Math.round(stop1.color[1] + (stop2.color[1] - stop1.color[1]) * t),
+        Math.round(stop1.color[2] + (stop2.color[2] - stop1.color[2]) * t),
+      ];
+    } else {
+      color = t < 0.5 ? stop1.color : stop2.color;
+    }
+
+    const alpha = (t < 0.5 ? stop1.alpha : stop2.alpha) ?? 1;
     ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
     ctx.fillRect(x, labelHeight, 1, height - labelHeight);
   }
@@ -161,30 +225,22 @@ function drawPalette(
   ctx.fillStyle = labelColor;
   ctx.textBaseline = 'top';
 
-  const labels = calculateLabels(stops, width, ctx);
+  const labels = calculateLabels(stops, width, ctx, palette.labelMode, unit);
 
-  labels.forEach((label, i) => {
-    let text = label.text;
-
-    // Add unit to first label
-    if (i === 0 && unit) {
-      const degree = unit === 'F' || unit === 'C' ? '°' : ' ';
-      text = `${text}${degree}${unit}`;
-    }
-
-    const metrics = ctx.measureText(text);
-
-    // First label: left-aligned, last: right-aligned, middle: centered
+  labels.forEach(label => {
     let textX: number;
-    if (i === 0) {
-      textX = 0;
-    } else if (i === labels.length - 1) {
-      textX = width - metrics.width;
+    if (label.align === 'left') {
+      textX = label.x;
+    } else if (label.align === 'right') {
+      textX = label.x - label.width;
     } else {
-      textX = label.x - metrics.width / 2;
+      textX = label.x - label.width / 2;
     }
 
-    ctx.fillText(text, textX, 2);
+    // Clamp to canvas bounds
+    textX = Math.max(0, Math.min(textX, width - label.width));
+
+    ctx.fillText(label.text, textX, 2);
   });
 }
 
@@ -193,15 +249,17 @@ export const PaletteComponent: m.ClosureComponent<PaletteComponentAttrs> = () =>
     view({ attrs }) {
       const {
         palette,
-        width = 400,
+        width = '100%',
         height = 40,
         font = 'Inter',
         fontSize = 12,
         color = '#000000',
       } = attrs;
 
+      const widthStyle = typeof width === 'number' ? `${width}px` : width;
+
       return m('canvas.palette', {
-        style: `width: ${width}px; height: ${height}px;`,
+        style: `width: ${widthStyle}; height: ${height}px;`,
         oncreate: (vnode: m.VnodeDOM) => {
           drawPalette(vnode.dom as HTMLCanvasElement, palette, font, fontSize, color);
         },

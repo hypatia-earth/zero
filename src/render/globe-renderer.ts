@@ -167,8 +167,8 @@ export class GlobeRenderer {
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
     this.tempPaletteSampler = this.device.createSampler({
-      magFilter: 'linear',
-      minFilter: 'linear',
+      magFilter: 'nearest',
+      minFilter: 'nearest',
       addressModeU: 'clamp-to-edge',
     });
 

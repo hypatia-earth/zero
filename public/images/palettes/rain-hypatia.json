@@ -2,6 +2,8 @@
   "name": "Hypatia Rain",
   "description": "Blue gradient for precipitation intensity",
   "unit": "mm/h",
+  "interpolate": true,
+  "labelMode": "value-centered",
   "stops": [
     { "value": 0.0004, "color": [ 10,  61, 150], "alpha": 0.30 },
     { "value": 0.0007, "color": [ 28,  77, 158], "alpha": 0.40 },

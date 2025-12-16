@@ -312,6 +312,59 @@
   border-bottom: none;
 }
 
+/* Palette row - vertical layout */
+.dialog.options .row.palette-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.dialog.options .row.palette-row .info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.dialog.options .row.palette-row .controls {
+  width: 100%;
+}
+
+/* Palette options */
+.radio-palette-control {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.radio-palette-control {
+  width: 100%;
+}
+
+.radio-palette-control .palette-option {
+  cursor: pointer;
+}
+
+.radio-palette-control .palette-name {
+  font-weight: bold;
+  font-size: 11px;
+}
+
+.radio-palette-control .palette-description {
+  font-weight: normal;
+  font-size: 11px;
+  color: var(--color-text-subtle);
+}
+
+.radio-palette-control .palette-option canvas {
+  margin-top: 6px;
+  background-color: transparent;
+}
+
+.radio-palette-control .palette-option.selected canvas {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
 .dialog.options .row .info {
   flex: 1;
   min-width: 0;

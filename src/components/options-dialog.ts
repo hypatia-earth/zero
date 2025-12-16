@@ -188,20 +188,31 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
 function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: OptionsService, paletteService: PaletteService): m.Children {
   const currentValue = getByPath(options, opt.path);
   const modified = isModified(opt.path, currentValue);
+  const isPalette = opt.path.endsWith('.palette');
 
-  return m('div.row', { key: opt.path }, [
-    m('div.info', [
-      m('label.label', opt.meta.label),
-      opt.meta.description ? m('span.hint', opt.meta.description) : null
-    ].filter(Boolean)),
-    m('div.controls', [
+  return m('div.row', { key: opt.path, class: isPalette ? 'palette-row' : '' }, [
+    m('div.info', isPalette ? [
+      m('div.text', [
+        m('label.label', opt.meta.label),
+        opt.meta.description ? m('span.hint', opt.meta.description) : null
+      ]),
       m('button.reset', {
         title: 'Reset to default',
         onclick: () => optionsService.reset(opt.path),
         style: { visibility: modified ? 'visible' : 'hidden' }
-      }, '↺'),
+      }, '↺')
+    ] : [
+      m('label.label', opt.meta.label),
+      opt.meta.description ? m('span.hint', opt.meta.description) : null
+    ].filter(Boolean)),
+    m('div.controls', [
+      !isPalette ? m('button.reset', {
+        title: 'Reset to default',
+        onclick: () => optionsService.reset(opt.path),
+        style: { visibility: modified ? 'visible' : 'hidden' }
+      }, '↺') : null,
       renderControl(opt, currentValue, optionsService, paletteService)
-    ])
+    ].filter(Boolean))
   ]);
 }
 

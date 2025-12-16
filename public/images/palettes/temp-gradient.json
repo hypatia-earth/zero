@@ -3,6 +3,7 @@
   "description": "Simple blue to red linear gradient",
   "unit": "C",
   "interpolate": true,
+  "labelMode": "value-centered",
   "stops": [
     { "value": -40, "color": [  0,   0, 255] },
     { "value": -30, "color": [  0, 128, 255] },

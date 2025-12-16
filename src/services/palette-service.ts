@@ -20,11 +20,14 @@ export interface PaletteStop {
   alpha?: number;
 }
 
+export type LabelMode = 'value-centered' | 'band-edge' | 'band-range';
+
 export interface PaletteData {
   name: string;
   description?: string;
   unit: string;
-  interpolate?: boolean;
+  interpolate: boolean;
+  labelMode: LabelMode;
   stops: PaletteStop[];
 }
 
@@ -41,6 +44,8 @@ const DEFAULT_PALETTES: Record<string, PaletteData> = {
   temp: {
     name: 'ESRI Temperature',
     unit: 'F',
+    interpolate: false,
+    labelMode: 'band-edge',
     stops: [
       { value: -60, color: [209, 219, 224] },
       { value: 125, color: [107, 28, 43] },
@@ -145,6 +150,8 @@ export class PaletteService {
       return DEFAULT_PALETTES[layer] ?? {
         name: 'Default',
         unit: '',
+        interpolate: true,
+        labelMode: 'value-centered',
         stops: [
           { value: 0, color: [0, 0, 0] },
           { value: 1, color: [255, 255, 255] },
@@ -161,6 +168,8 @@ export class PaletteService {
     return {
       name: 'Default',
       unit: '',
+      interpolate: true,
+      labelMode: 'value-centered',
       stops: [
         { value: 0, color: [0, 0, 0] },
         { value: 1, color: [255, 255, 255] },
@@ -305,21 +314,19 @@ export class PaletteService {
     const range = upperStop.value! - lowerStop.value!;
     const t = range > 0 ? (value - lowerStop.value!) / range : 0;
 
-    if (palette.interpolate === false) {
-      // Nearest neighbor (no interpolation)
-      const stop = t < 0.5 ? lowerStop : upperStop;
-      return [...stop.color, stop.alpha ?? 255];
+    if (palette.interpolate) {
+      // Linear interpolation
+      const r = Math.round(lowerStop.color[0] + t * (upperStop.color[0] - lowerStop.color[0]));
+      const g = Math.round(lowerStop.color[1] + t * (upperStop.color[1] - lowerStop.color[1]));
+      const b = Math.round(lowerStop.color[2] + t * (upperStop.color[2] - lowerStop.color[2]));
+      const a = Math.round(
+        (lowerStop.alpha ?? 255) + t * ((upperStop.alpha ?? 255) - (lowerStop.alpha ?? 255))
+      );
+      return [r, g, b, a];
     }
 
-    // Linear interpolation
-    const r = Math.round(lowerStop.color[0] + t * (upperStop.color[0] - lowerStop.color[0]));
-    const g = Math.round(lowerStop.color[1] + t * (upperStop.color[1] - lowerStop.color[1]));
-    const b = Math.round(lowerStop.color[2] + t * (upperStop.color[2] - lowerStop.color[2]));
-    const a = Math.round(
-      (lowerStop.alpha ?? 255) + t * ((upperStop.alpha ?? 255) - (lowerStop.alpha ?? 255))
-    );
-
-    return [r, g, b, a];
+    // Default: nearest neighbor (no interpolation) - use lower stop color
+    return [...lowerStop.color, lowerStop.alpha ?? 255];
   }
 
   /**
