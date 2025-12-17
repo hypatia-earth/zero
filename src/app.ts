@@ -188,13 +188,9 @@ export const App: m.ClosureComponent = () => {
           optionsService
         );
 
-        // 5g. Temperature timesteps
-        await BootstrapService.updateProgress('Loading temperature...', 50);
+        // 5g. Load initial timesteps for all enabled weather layers
+        await BootstrapService.updateProgress('Loading weather data...', 50);
         await slotService.initialize();
-
-        // 5h. Precipitation (placeholder)
-        await BootstrapService.updateProgress('Loading precipitation 1/2...', 85);
-        await BootstrapService.updateProgress('Loading precipitation 2/2...', 95);
 
         // Step 6: Activate
         BootstrapService.setStep('ACTIVATE');

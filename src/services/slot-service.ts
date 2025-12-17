@@ -401,55 +401,70 @@ export class SlotService {
     return (tc - t0) / (t1 - t0);
   }
 
-  /** Initialize with first timestep(s) - loads temp initially, effect handles other params */
+  /** Initialize with priority timesteps for all enabled params */
   async initialize(): Promise<void> {
     // Set data window from discovered timesteps
     this.dataWindowStart = this.timestepService.first();
     this.dataWindowEnd = this.timestepService.last();
 
     const time = this.optionsService.options.value.viewState.time;
-    const param: TParam = 'temp';  // Initialize temp first (most common default)
-    const wanted = this.computeWanted(time, param);
+    const opts = this.optionsService.options.value;
 
-    console.log(`[Slot] ${P(param)} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
-
-    // Track loading keys
-    for (const ts of wanted.priority) {
-      this.loadingKeys.add(this.makeKey(param, ts));
+    // Get enabled params that use slots
+    const enabledParams = SLOT_PARAMS.filter(p => this.isParamEnabled(p, opts));
+    if (enabledParams.length === 0) {
+      this.initialized = true;
+      console.log('[Slot] Initialized (no layers enabled)');
+      return;
     }
 
-    // Load priority timesteps
-    const orders: TimestepOrder[] = wanted.priority.map(ts => ({
-      url: this.timestepService.url(ts),
-      param,
-      timestep: ts,
-      sizeEstimate: this.timestepService.getSize(param, ts),
-    }));
+    // Build orders for all enabled params
+    const allOrders: TimestepOrder[] = [];
+    const wantedByParam = new Map<TParam, WantedState>();
 
+    for (const param of enabledParams) {
+      const wanted = this.computeWanted(time, param);
+      wantedByParam.set(param, wanted);
+
+      console.log(`[Slot] ${P(param)} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
+
+      for (const ts of wanted.priority) {
+        this.loadingKeys.add(this.makeKey(param, ts));
+        allOrders.push({
+          url: this.timestepService.url(ts),
+          param,
+          timestep: ts,
+          sizeEstimate: this.timestepService.getSize(param, ts),
+        });
+      }
+    }
+
+    // Load all priority timesteps
     await this.queueService.submitTimestepOrders(
-      orders,
+      allOrders,
       (order, slice) => {
         if (slice.done) {
-          const slotIndex = this.allocateSlot(param, order.timestep, time);
+          const slotIndex = this.allocateSlot(order.param, order.timestep, time);
           if (slotIndex !== null) {
-            this.uploadToSlot(param, order.timestep, slotIndex, slice.data);
+            this.uploadToSlot(order.param, order.timestep, slotIndex, slice.data);
           }
         }
       },
       (order, actualBytes) => {
-        this.timestepService.setSize(param, order.timestep, actualBytes);
+        this.timestepService.setSize(order.param, order.timestep, actualBytes);
       }
     );
 
-    // Clear loading keys
-    for (const ts of wanted.priority) {
-      this.loadingKeys.delete(this.makeKey(param, ts));
+    // Clear loading keys and activate shaders
+    for (const param of enabledParams) {
+      const wanted = wantedByParam.get(param)!;
+      for (const ts of wanted.priority) {
+        this.loadingKeys.delete(this.makeKey(param, ts));
+      }
+      const wantedSignal = this.wantedPerParam.get(param)!;
+      wantedSignal.value = wanted;
+      this.activateIfReady(param, wanted);
     }
-
-    // Set wanted state so shader activation works
-    const wantedSignal = this.wantedPerParam.get(param)!;
-    wantedSignal.value = wanted;
-    this.activateIfReady(param, wanted);
 
     this.initialized = true;
     this.slotsVersion.value++;
