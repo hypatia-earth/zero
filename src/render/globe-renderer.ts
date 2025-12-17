@@ -696,9 +696,9 @@ export class GlobeRenderer {
       pressureData: this.pressureDataBuffer,
     });
 
-    // Test levels within synthetic data range (980-1020 hPa)
-    // These should appear at different latitudes
-    const testLevels = [984, 992, 1000, 1008, 1016];
+    // Test levels to show cyclone structure
+    // Center ~970 hPa, outer ~1010-1020 hPa
+    const testLevels = [976, 984, 992, 1000, 1008, 1016];
     const maxVerticesPerLevel = 63724;  // Estimate from previous run
 
     let totalVertices = 0;
@@ -721,29 +721,47 @@ export class GlobeRenderer {
 
   /**
    * Generate synthetic O1280 pressure data
-   * Pressure gradient: 1020 hPa at equator, 980 hPa at poles
+   * Base gradient + cyclone over Germany (51°N, 10°E)
    */
   private generateSyntheticO1280Pressure(): Float32Array {
     const data = new Float32Array(POINTS_PER_TIMESTEP);
+
+    // Cyclone center - Germany (51°N, 10°E)
+    // Formula: cycloneLon = (90 - targetLon) for O1280 grid offset
+    const targetLat = 51, targetLon = 10;
+    const cycloneLat = targetLat * Math.PI / 180;
+    const cycloneLon = (90 - targetLon) * Math.PI / 180;
+    const cycloneDepth = 40;  // hPa drop at center
+    const cycloneRadius = 15 * Math.PI / 180;  // ~15° radius (~1500km)
 
     // O1280: 2560 rings, variable points per ring
     let idx = 0;
     for (let ring = 0; ring < 2560; ring++) {
       // Latitude: 90° at ring 0, -90° at ring 2559
-      const lat = 90 - (ring + 0.5) * 180 / 2560;
-      const latRad = Math.abs(lat) * Math.PI / 180;
-
-      // Pressure: cosine of latitude gives smooth gradient
-      // cos(0) = 1 at equator, cos(90°) = 0 at poles
-      const pressure = 980 + 40 * Math.cos(latRad);  // 980-1020 hPa
+      const latDeg = 90 - (ring + 0.5) * 180 / 2560;
+      const lat = latDeg * Math.PI / 180;
 
       // Points in this ring
       const ringFromPole = ring < 1280 ? ring + 1 : 2560 - ring;
       const nPoints = 4 * ringFromPole + 16;
 
-      // Fill all points in ring with same pressure (pure lat gradient)
       for (let i = 0; i < nPoints; i++) {
-        data[idx++] = pressure;
+        // Longitude for this point (O1280 starts at 0°)
+        const lon = (i / nPoints) * 2 * Math.PI;  // 0 to 2π
+
+        // Base pressure: higher at equator, lower at poles
+        const basePressure = 1010 + 10 * Math.cos(Math.abs(lat));
+
+        // Distance from cyclone center (great circle)
+        const dLon = lon - cycloneLon;
+        const cosD = Math.sin(cycloneLat) * Math.sin(lat) +
+                     Math.cos(cycloneLat) * Math.cos(lat) * Math.cos(dLon);
+        const dist = Math.acos(Math.max(-1, Math.min(1, cosD)));
+
+        // Gaussian pressure drop for cyclone
+        const cycloneEffect = cycloneDepth * Math.exp(-(dist * dist) / (2 * cycloneRadius * cycloneRadius));
+
+        data[idx++] = basePressure - cycloneEffect;
       }
     }
 
