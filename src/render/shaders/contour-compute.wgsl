@@ -182,17 +182,14 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
   var edges = EDGE_TABLE[caseIdx];
   let values = array<f32, 4>(v0, v1, v2, v3);
 
-  // Saddle point disambiguation: check bilinear center value
-  // Case 5: corners 0,2 high (0101) - Case 10: corners 1,3 high (1010)
-  // When center > iso: high regions connected through center, flip to wrap around low corners
-  // When center < iso: high regions separate, use default edges
-  if (caseIdx == 5u || caseIdx == 10u) {
-    let center = (v0 + v1 + v2 + v3) * 0.25;
-    if (center > uniforms.isovalue) {
-      // Swap edge pairs: (a,b,c,d) → (a,d,c,b) to flip diagonal
-      edges = vec4<i32>(edges.x, edges.w, edges.z, edges.y);
-    }
-  }
+  // Saddle point disambiguation: TODO - needs correct edge swap logic
+  // Currently disabled due to geometry artifacts
+  // if (caseIdx == 5u || caseIdx == 10u) {
+  //   let center = (v0 + v1 + v2 + v3) * 0.25;
+  //   if (center > uniforms.isovalue) {
+  //     edges = vec4<i32>(edges.x, edges.w, edges.z, edges.y);
+  //   }
+  // }
 
   // Base index with level offset
   let baseIdx = uniforms.vertexOffset + offset * 2u;
