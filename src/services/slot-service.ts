@@ -175,7 +175,7 @@ export class SlotService {
       if (slot?.loaded) {
         this.activePair.set(param, { t0: ts, t1: null });
         this.renderService.activateSlots(param, slot.slotIndex, slot.slotIndex, slot.loadedPoints);
-        console.log(`[Slot] ${P(param)} single: ${fmt(ts)}`);
+        console.log(`[Slot] ${P(param)} activated: ${fmt(ts)}`);
       } else {
         this.activePair.delete(param);  // Clear stale pair
       }
@@ -187,7 +187,7 @@ export class SlotService {
       if (slot0?.loaded && slot1?.loaded) {
         this.activePair.set(param, { t0, t1 });
         this.renderService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, Math.min(slot0.loadedPoints, slot1.loadedPoints));
-        console.log(`[Slot] ${P(param)} pair: ${fmt(t0)} → ${fmt(t1)}`);
+        console.log(`[Slot] ${P(param)} activated: ${fmt(t0)} → ${fmt(t1)}`);
       } else {
         this.activePair.delete(param);  // Clear stale pair
       }
