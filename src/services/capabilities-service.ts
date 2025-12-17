@@ -7,10 +7,11 @@
 
 import type { ConfigService } from './config-service';
 
-const DEBUG = false;
+const DEBUG = true;
 
 export class CapabilitiesService {
   float32_filterable = false;
+  timestamp_query = false;
   maxBufferSizeMB = 0;
 
   constructor(private configService: ConfigService) {}
@@ -53,7 +54,8 @@ export class CapabilitiesService {
     this.maxBufferSizeMB = Math.floor(effectiveLimit / 1024 / 1024);
 
     this.float32_filterable = adapter.features.has('float32-filterable');
+    this.timestamp_query = adapter.features.has('timestamp-query');
 
-    DEBUG && console.log(`[Capabilities] float32_filterable: ${this.float32_filterable}`);
+    DEBUG && console.log(`[Capabilities] float32_filterable: ${this.float32_filterable}, timestamp_query: ${this.timestamp_query}`);
   }
 }

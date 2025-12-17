@@ -18,6 +18,8 @@ import type { QueueService } from './queue-service';
 import type { OptionsService } from './options-service';
 import { BootstrapService } from './bootstrap-service';
 import { debounce } from '../utils/debounce';
+
+const DEBUG = false;
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
 
 /** Short timestep format for logs: "MM-DDTHH" */
@@ -58,6 +60,11 @@ export class SlotService {
 
     // Wire up lerp calculation (temp-specific for now)
     this.renderService.setTempLerpFn((time) => this.getTempLerp(time));
+
+    // Wire up data-ready functions for each slot-based param
+    for (const param of SLOT_PARAMS) {
+      this.renderService.setDataReadyFn(param, () => this.getActivePair(param) !== null);
+    }
 
     // Effect: pure computation of wanted state + shader activation (no I/O)
     this.disposeEffect = effect(() => {
@@ -131,7 +138,7 @@ export class SlotService {
       if (slot?.loaded) {
         // Skip if already activated with same timestep
         if (current?.t0 === ts && current.t1 === null) {
-          console.log(`[Slot] ${pcode} skip (same): ${fmt(ts)}`);
+          DEBUG && console.log(`[Slot] ${pcode} skip (same): ${fmt(ts)}`);
           return;
         }
         ps.setActivePair({ t0: ts, t1: null });
@@ -148,7 +155,7 @@ export class SlotService {
       if (slot0?.loaded && slot1?.loaded) {
         // Skip if already activated with same pair
         if (current?.t0 === t0 && current?.t1 === t1) {
-          console.log(`[Slot] ${pcode} skip (same): ${fmt(t0)} → ${fmt(t1)}`);
+          DEBUG && console.log(`[Slot] ${pcode} skip (same): ${fmt(t0)} → ${fmt(t1)}`);
           return;
         }
         ps.setActivePair({ t0, t1 });

@@ -30,6 +30,7 @@ import { InfoDialog } from './components/info-dialog';
 import { LayersPanel } from './components/layers-panel';
 import { TimeCirclePanel } from './components/timecircle-panel';
 import { QueuePanel } from './components/queue-panel';
+import { PerfPanel } from './components/perf-panel';
 import { TimeBarPanel } from './components/timebar-panel';
 import { LogoPanel } from './components/logo-panel';
 import { OptionsPanel } from './components/options-panel';
@@ -267,6 +268,7 @@ export const App: m.ClosureComponent = () => {
           m(FullscreenPanel),
           m(OptionsPanel, { optionsService, dialogService }),
           m(InfoPanel, { infoService, dialogService }),
+          m(PerfPanel, { renderService }),
         ]),
       ];
     },

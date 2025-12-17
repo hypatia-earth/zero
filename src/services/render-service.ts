@@ -9,6 +9,7 @@ import type { ConfigService } from './config-service';
 import type { ZeroOptions } from '../schemas/options.schema';
 import type { TParam } from '../config/types';
 import { getSunDirection } from '../utils/sun-position';
+import { createRingBuffer, type RingBuffer } from '../utils/ringbuffer';
 
 export class RenderService {
   private renderer: GlobeRenderer | null = null;
@@ -31,8 +32,12 @@ export class RenderService {
     pressure: 0,
   };
 
-  // Pressure layer state
-  private pressureDataLoaded = false;
+  // Data-ready functions per param (provided by SlotService)
+  private dataReadyFns = new Map<TParam, () => boolean>();
+
+  // Frame timing (60-frame rolling average)
+  private frameTimes: RingBuffer = createRingBuffer(60);
+  private perfElement: HTMLElement | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -103,7 +108,15 @@ export class RenderService {
         ...this.getPressureUniforms(),
       });
 
+      const t0 = performance.now();
       renderer.render();
+      const frameMs = performance.now() - t0;
+      this.frameTimes.push(frameMs);
+
+      // Update perf panel DOM directly (no mithril redraw)
+      if (this.perfElement) {
+        this.perfElement.textContent = `pass: ${this.frameTimes.avg().toFixed(1)} ms`;
+      }
     };
 
     render();
@@ -180,15 +193,18 @@ export class RenderService {
     const rate = 1000 / animMs;  // Convert ms to rate (e.g., 100ms → 10/s)
     const factor = Math.min(1, dt * rate);
 
-    // Compute targets: enabled && (dataReady for data layers) ? userOpacity : 0
+    // Compute targets: enabled && dataReady ? userOpacity : 0
+    // Temp uses lerp check + loadedPoints, other data layers use dataReadyFns
     const tempDataReady = rawLerp >= -2 && rawLerp !== -1 && this.tempLoadedPoints > 0;
+    const isReady = (param: TParam) => this.dataReadyFns.get(param)?.() ?? false;
+
     const targets = {
       sun: options.sun.enabled ? options.sun.opacity : 0,
       grid: options.grid.enabled ? options.grid.opacity : 0,
       earth: options.earth.enabled ? options.earth.opacity : 0,
       temp: (options.temp.enabled && tempDataReady) ? options.temp.opacity : 0,
-      rain: options.rain.enabled ? options.rain.opacity : 0,  // TODO: add rainDataReady
-      pressure: (options.pressure.enabled && this.pressureDataLoaded) ? options.pressure.opacity : 0,
+      rain: (options.rain.enabled && isReady('rain')) ? options.rain.opacity : 0,
+      pressure: (options.pressure.enabled && isReady('pressure')) ? options.pressure.opacity : 0,
     };
 
     // Lerp each toward target
@@ -213,6 +229,20 @@ export class RenderService {
   }
 
   /**
+   * Get average frame time in ms (60-frame rolling average)
+   */
+  getFrameTimeAvg(): number {
+    return this.frameTimes.avg();
+  }
+
+  /**
+   * Set DOM element for perf panel (updated directly in render loop)
+   */
+  setPerfElement(el: HTMLElement | null): void {
+    this.perfElement = el;
+  }
+
+  /**
    * Set active slot indices for temperature interpolation
    */
   setTempSlots(slot0: number, slot1: number): void {
@@ -225,10 +255,18 @@ export class RenderService {
   }
 
   /**
-   * Set the function to calculate temp lerp (from BudgetService)
+   * Set the function to calculate temp lerp (from SlotService)
    */
   setTempLerpFn(fn: (time: Date) => number): void {
     this.tempLerpFn = fn;
+  }
+
+  /**
+   * Set data-ready function for a param (from SlotService)
+   * Returns true when param has loaded data for current time
+   */
+  setDataReadyFn(param: TParam, fn: () => boolean): void {
+    this.dataReadyFns.set(param, fn);
   }
 
   /**
@@ -248,13 +286,6 @@ export class RenderService {
    */
   uploadPressureData(data: Float32Array): void {
     this.uploadToSlot('pressure', data, 0);
-  }
-
-  /**
-   * Check if pressure data is loaded
-   */
-  isPressureDataLoaded(): boolean {
-    return this.pressureDataLoaded;
   }
 
   // ============================================================
@@ -277,7 +308,6 @@ export class RenderService {
       case 'pressure':
         // Upload to raw slot and trigger regrid
         this.renderer.uploadPressureDataToSlot(data, slotIndex);
-        this.pressureDataLoaded = true;
         break;
       case 'rain':
       case 'wind':
