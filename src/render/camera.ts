@@ -78,6 +78,11 @@ export class Camera {
     return this.viewProjInverse;
   }
 
+  getViewProj(): Float32Array {
+    this.updateMatrices();
+    return this.viewProjMatrix;
+  }
+
   private updateMatrices(): void {
     const eye = this.getEyePosition();
     this.lookAt(this.viewMatrix, eye, [0, 0, 0], [0, 1, 0]);
@@ -148,12 +153,15 @@ export class Camera {
   }
 
   private multiply(out: Float32Array, a: Float32Array, b: Float32Array): void {
-    for (let i = 0; i < 4; i++) {
-      for (let j = 0; j < 4; j++) {
-        out[i * 4 + j] = 0;
+    // Column-major matrix multiplication: C = A * B
+    // Element at [row][col] stored at index col*4+row
+    for (let col = 0; col < 4; col++) {
+      for (let row = 0; row < 4; row++) {
+        let sum = 0;
         for (let k = 0; k < 4; k++) {
-          out[i * 4 + j]! += a[i * 4 + k]! * b[k * 4 + j]!;
+          sum += a[k * 4 + row]! * b[col * 4 + k]!;
         }
+        out[col * 4 + row] = sum;
       }
     }
   }

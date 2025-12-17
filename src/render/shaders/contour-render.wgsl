@@ -41,24 +41,17 @@ fn vertexMain(@builtin(vertex_index) idx: u32) -> VertexOutput {
 
 @fragment
 fn fragmentMain(in: VertexOutput) -> FragmentOutput {
-  // Day/night tinting
-  let surfaceNormal = normalize(in.worldPos);
-  let sunDot = dot(surfaceNormal, uniforms.sunDirection);
-  let dayFactor = smoothstep(-0.1, 0.2, sunDot);
-
-  let dayColor = vec3<f32>(0.85, 0.85, 0.85);
-  let nightColor = vec3<f32>(0.35, 0.35, 0.4);
-  var color = mix(nightColor, dayColor, dayFactor);
+  // Base white/gray color - atmosphere post-process will apply day/night
+  var color = vec3<f32>(0.85, 0.85, 0.85);
+  var alpha = uniforms.opacity;
 
   // Highlight standard pressure (1012 hPa)
-  var alpha = uniforms.opacity;
   if (uniforms.isStandard == 1u) {
-    color = mix(color, vec3<f32>(1.0, 1.0, 0.9), 0.3);  // Slight yellow tint
-    alpha = min(alpha * 1.2, 1.0);  // Slightly more opaque
+    color = vec3<f32>(1.0, 1.0, 0.9);  // Slightly warm
+    alpha = min(alpha * 1.2, 1.0);
   }
 
   // Compute linear depth matching globe shader
-  // Globe: depth = hit.t / (cameraDistance * 2.0)
   let hitT = length(in.worldPos - uniforms.eyePosition);
   let cameraDistance = length(uniforms.eyePosition);
   let linearDepth = clamp(hitT / (cameraDistance * 2.0), 0.0, 1.0);

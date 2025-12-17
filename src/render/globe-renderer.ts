@@ -6,6 +6,7 @@ import { Camera, type CameraConfig } from './camera';
 import shaderCode from './shaders/zero.wgsl?raw';
 import postprocessShaderCode from './shaders/postprocess.wgsl?raw';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
+import { PressureLayer } from './pressure-layer';
 
 export interface GlobeUniforms {
   viewProjInverse: Float32Array;
@@ -61,6 +62,8 @@ export class GlobeRenderer {
   private depthTexture!: GPUTexture;
   // Post-process pass for atmosphere
   private colorTexture!: GPUTexture;
+  // Pressure contour layer
+  private pressureLayer!: PressureLayer;
   private postProcessPipeline!: GPURenderPipeline;
   private postProcessBindGroup!: GPUBindGroup;
   private postProcessBindGroupLayout!: GPUBindGroupLayout;
@@ -266,6 +269,11 @@ export class GlobeRenderer {
       primitive: { topology: 'triangle-list' },
     });
 
+    // Initialize pressure layer (default 2° resolution)
+    this.pressureLayer = new PressureLayer(this.device, this.format, 2);
+    // Enable with test contour for visual debugging
+    this.initTestPressureContour();
+
     this.resize();
   }
 
@@ -438,6 +446,24 @@ export class GlobeRenderer {
     view.setFloat32(offset, uniforms.tempPaletteRange[1]!, true); offset += 4;
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
+
+    // Update pressure layer uniforms if enabled
+    if (this.pressureLayer?.isEnabled()) {
+      this.pressureLayer.updateUniforms({
+        viewProj: this.camera.getViewProj(),
+        eyePosition: [
+          uniforms.eyePosition[0]!,
+          uniforms.eyePosition[1]!,
+          uniforms.eyePosition[2]!,
+        ],
+        sunDirection: [
+          uniforms.sunDirection[0]!,
+          uniforms.sunDirection[1]!,
+          uniforms.sunDirection[2]!,
+        ],
+        opacity: 0.85,  // TODO: get from options
+      }, false);
+    }
   }
 
   render(): void {
@@ -464,7 +490,27 @@ export class GlobeRenderer {
     globePass.draw(3);
     globePass.end();
 
-    // PASS 2: Post-process - apply atmosphere to final output
+    // PASS 2: Geometry layers (pressure contours, etc.)
+    // Renders to same color/depth textures, depth-tested against globe
+    if (this.pressureLayer.isEnabled() && this.pressureLayer.getVertexCount() > 0) {
+      const geometryPass = commandEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: this.colorTexture.createView(),
+          loadOp: 'load',  // Preserve globe render
+          storeOp: 'store',
+        }],
+        depthStencilAttachment: {
+          view: this.depthTexture.createView(),
+          depthLoadOp: 'load',  // Preserve globe depth
+          depthStoreOp: 'store',
+        },
+      });
+
+      this.pressureLayer.render(geometryPass);
+      geometryPass.end();
+    }
+
+    // PASS 3: Post-process - apply atmosphere to final output
     const canvasView = this.context.getCurrentTexture().createView();
     const postProcessPass = commandEncoder.beginRenderPass({
       colorAttachments: [{
@@ -619,6 +665,55 @@ export class GlobeRenderer {
     this.maxTempSlots = slots;
   }
 
+  /** Get pressure layer for external control */
+  getPressureLayer(): PressureLayer {
+    return this.pressureLayer;
+  }
+
+  /**
+   * Initialize test pressure contour for visual debugging
+   * Creates a simple latitude circle to verify render pipeline
+   */
+  private initTestPressureContour(): void {
+    const EARTH_RADIUS = 1.02;  // 2% above globe surface for visibility
+    const segments = 72;  // 5° per segment
+    const vertices: number[] = [];
+
+    // Create test circles at various latitudes (like isobars)
+    const testLatitudes = [0, 30, -30, 60, -60];  // degrees
+
+    for (const latDeg of testLatitudes) {
+      const lat = latDeg * Math.PI / 180;
+      const cosLat = Math.cos(lat);
+      const sinLat = Math.sin(lat);
+      const r = EARTH_RADIUS * cosLat;
+      const y = EARTH_RADIUS * sinLat;
+
+      for (let i = 0; i < segments; i++) {
+        const lon0 = (i / segments) * Math.PI * 2;
+        const lon1 = ((i + 1) / segments) * Math.PI * 2;
+
+        // Line segment start
+        vertices.push(r * Math.sin(lon0), y, r * Math.cos(lon0), 1.0);
+        // Line segment end
+        vertices.push(r * Math.sin(lon1), y, r * Math.cos(lon1), 1.0);
+      }
+    }
+
+    // Upload test vertices and enable layer
+    this.pressureLayer.setTestVertices(new Float32Array(vertices));
+    this.pressureLayer.setEnabled(true);
+
+    // Set initial uniforms (will be updated in render loop)
+    const viewProj = new Float32Array(16);
+    this.pressureLayer.updateUniforms({
+      viewProj,
+      eyePosition: [0, 0, 3],
+      sunDirection: [1, 0, 0],
+      opacity: 0.85,
+    }, false);
+  }
+
   dispose(): void {
     this.uniformBuffer?.destroy();
     this.basemapTexture?.destroy();
@@ -630,5 +725,6 @@ export class GlobeRenderer {
     this.tempPaletteTexture?.destroy();
     this.depthTexture?.destroy();
     this.colorTexture?.destroy();
+    this.pressureLayer?.dispose();
   }
 }

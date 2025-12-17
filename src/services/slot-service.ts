@@ -133,7 +133,7 @@ export class SlotService {
         this.activePair.set(param, { t0: ts, t1: null });
         this.renderService.setTempSlots(slot.slotIndex, slot.slotIndex);
         this.renderService.setTempLoadedPoints(slot.loadedPoints);
-        console.log(`[Slot] Single: ${fmt(ts)}`);
+        console.log(`[Slot] ${param} single: ${fmt(ts)}`);
       } else {
         this.activePair.delete(param);  // Clear stale pair
       }
@@ -146,6 +146,7 @@ export class SlotService {
         this.activePair.set(param, { t0, t1 });
         this.renderService.setTempSlots(slot0.slotIndex, slot1.slotIndex);
         this.renderService.setTempLoadedPoints(Math.min(slot0.loadedPoints, slot1.loadedPoints));
+        console.log(`[Slot] ${param} pair: ${fmt(t0)} → ${fmt(t1)}`);
       } else {
         this.activePair.delete(param);  // Clear stale pair
       }
@@ -181,7 +182,7 @@ export class SlotService {
       this.loadingKeys.add(this.makeKey(param, timestep));
     }
 
-    console.log(`[Slot] Fetching ${orders.length} timesteps`);
+    console.log(`[Slot] ${param} fetching ${orders.length} timesteps`);
     this.loadTimestepsBatch(param, orders, this.optionsService.options.value.viewState.time);
   }
 
@@ -364,7 +365,7 @@ export class SlotService {
     const param: TParam = 'temp';
     const wanted = this.computeWanted(time);
 
-    console.log(`[Slot] Initializing ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
+    console.log(`[Slot] ${param} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
 
     // Track loading keys
     for (const ts of wanted.priority) {
