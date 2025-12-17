@@ -250,12 +250,14 @@ export class OptionsService {
     const changes: string[] = [];
     const vs = this.options.value.viewState;
 
-    // Time: snap to closest timestep (whether from URL, DB, or default)
-    const snappedTime = getClosestTimestep(vs.time);
-    if (snappedTime.getTime() !== vs.time.getTime()) {
-      this.update(o => { o.viewState.time = snappedTime; });
-      changes.push(`time=${vs.time.toISOString().slice(0, 13)}→${snappedTime.toISOString().slice(0, 13)}`);
-    }
+    // Time: snap disabled - allow any time for pair mode interpolation
+    // const snappedTime = getClosestTimestep(vs.time);
+    // if (snappedTime.getTime() !== vs.time.getTime()) {
+    //   this.update(o => { o.viewState.time = snappedTime; });
+    //   changes.push(`time=${vs.time.toISOString().slice(0, 13)}→${snappedTime.toISOString().slice(0, 13)}`);
+    // }
+    void getClosestTimestep;  // Suppress unused param warning
+    console.log('[Sanitize] URL time snap disabled');
 
     // Lat/lon: log if defaulted or clamped
     // URL uses 1 decimal (toFixed(1)) ≈ 11km precision, matching ECMWF 0.1° grid (~10km)
@@ -415,18 +417,21 @@ export class OptionsService {
       overrides.viewState = viewState;
     }
 
-    // Parse layers
+    // Parse layers - explicit state when URL has any params
+    const hasAnyParams = params.toString().length > 0;
     const layersStr = params.get('layers');
-    if (layersStr !== null) {
-      const enabledLayers = new Set(layersStr.split(',').filter(l => l.length > 0));
+
+    if (hasAnyParams) {
+      // Explicit state: disable all layers first, enable only what's listed
+      const enabledLayers = layersStr !== null
+        ? new Set(layersStr.split(',').filter(l => l.length > 0))
+        : new Set<string>();  // No layers param = no layers enabled
 
       for (const layerId of layerIds) {
-        if (enabledLayers.has(layerId)) {
-          if (!overrides[layerId]) {
-            overrides[layerId] = {};
-          }
-          (overrides[layerId] as Record<string, unknown>).enabled = true;
+        if (!overrides[layerId]) {
+          overrides[layerId] = {};
         }
+        (overrides[layerId] as Record<string, unknown>).enabled = enabledLayers.has(layerId);
       }
     }
 
