@@ -48,6 +48,9 @@ interface LayerDetail {
 
 const PARAMS: TParam[] = ['temp', 'rain', 'wind', 'pressure'];
 
+/** 4-letter uppercase param code for logs */
+const P = (param: TParam) => param.slice(0, 4).toUpperCase();
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TimestepService
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,7 +113,7 @@ export class TimestepService implements IDiscoveryService {
       params.set(param, { cache, gpu: new Set(), sizes });
       if (sizes.size > 0) {
         const avgKB = [...sizes.values()].reduce((a, b) => a + b, 0) / sizes.size / 1024;
-        console.log(`[Timestep] ${param}: ${sizes.size} cached timesteps, avg ${(avgKB / 1024).toFixed(1)}MB`);
+        console.log(`[Timestep] ${P(param)}: ${sizes.size} cached, avg ${(avgKB / 1024).toFixed(1)}MB`);
       }
     }
 

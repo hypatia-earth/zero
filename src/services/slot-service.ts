@@ -22,6 +22,9 @@ import { debounce } from '../utils/debounce';
 /** Short timestep format for logs: "MM-DDTHH" */
 const fmt = (ts: TTimestep) => ts.slice(5, 13);
 
+/** 4-letter uppercase param code for logs */
+const P = (param: TParam) => param.slice(0, 4).toUpperCase();
+
 export type LoadingStrategy = 'alternate' | 'future-first';
 
 /** What timesteps the current time needs */
@@ -167,7 +170,7 @@ export class SlotService {
       if (slot?.loaded) {
         this.activePair.set(param, { t0: ts, t1: null });
         this.renderService.activateSlots(param, slot.slotIndex, slot.slotIndex, slot.loadedPoints);
-        console.log(`[Slot] ${param} single: ${fmt(ts)}`);
+        console.log(`[Slot] ${P(param)} single: ${fmt(ts)}`);
       } else {
         this.activePair.delete(param);  // Clear stale pair
       }
@@ -179,7 +182,7 @@ export class SlotService {
       if (slot0?.loaded && slot1?.loaded) {
         this.activePair.set(param, { t0, t1 });
         this.renderService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, Math.min(slot0.loadedPoints, slot1.loadedPoints));
-        console.log(`[Slot] ${param} pair: ${fmt(t0)} → ${fmt(t1)}`);
+        console.log(`[Slot] ${P(param)} pair: ${fmt(t0)} → ${fmt(t1)}`);
       } else {
         this.activePair.delete(param);  // Clear stale pair
       }
@@ -215,7 +218,7 @@ export class SlotService {
       this.loadingKeys.add(this.makeKey(param, timestep));
     }
 
-    console.log(`[Slot] ${param} fetching ${orders.length} timesteps`);
+    console.log(`[Slot] ${P(param)} fetching ${orders.length} timesteps`);
     this.loadTimestepsBatch(param, orders, this.optionsService.options.value.viewState.time);
   }
 
@@ -345,7 +348,7 @@ export class SlotService {
     }
 
     const [evictKey, evictSlot] = candidates[0]!;
-    console.log(`[Slot] Evicting ${evictKey} for ${key}`);
+    console.log(`[Slot] ${P(param)} evict ${fmt(evictSlot.timestep)} for ${fmt(timestep)}`);
     this.slots.delete(evictKey);
     this.timestepService.setGpuUnloaded(param, evictSlot.timestep);
     return evictSlot.slotIndex;
@@ -363,10 +366,8 @@ export class SlotService {
     this.timestepService.refreshCacheState(param);
     this.slotsVersion.value++;
 
-    const totalSlots = SLOT_PARAMS.reduce((sum, p) => {
-      return sum + [...this.slots.values()].filter(s => s.param === p).length;
-    }, 0);
-    console.log(`[Slot] Loaded ${param}:${fmt(timestep)} → slot ${slotIndex} (${totalSlots} total)`);
+    const paramSlots = [...this.slots.values()].filter(s => s.param === param).length;
+    console.log(`[Slot] ${P(param)} loaded ${fmt(timestep)} → slot ${slotIndex} (${paramSlots}/${this.maxSlotsPerParam})`);
 
     this.updateShaderIfReady(param);
   }
@@ -405,7 +406,7 @@ export class SlotService {
     const param: TParam = 'temp';  // Initialize temp first (most common default)
     const wanted = this.computeWanted(time, param);
 
-    console.log(`[Slot] ${param} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
+    console.log(`[Slot] ${P(param)} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
 
     // Track loading keys
     for (const ts of wanted.priority) {
