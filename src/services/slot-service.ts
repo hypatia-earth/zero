@@ -119,15 +119,24 @@ export class SlotService {
   /**
    * Activate shader if required slots are loaded.
    * Single mode: 1 slot, Pair mode: 2 slots for interpolation.
+   * Skips if already activated with same pair (avoids redundant GPU updates).
    */
   private activateIfReady(param: TParam, ps: ParamSlots, wanted: WantedState): void {
+    const current = ps.getActivePair();
+    const pcode = P(param);
+
     if (wanted.mode === 'single') {
       const ts = wanted.priority[0]!;
       const slot = ps.getSlot(ts);
       if (slot?.loaded) {
+        // Skip if already activated with same timestep
+        if (current?.t0 === ts && current.t1 === null) {
+          console.log(`[Slot] ${pcode} skip (same): ${fmt(ts)}`);
+          return;
+        }
         ps.setActivePair({ t0: ts, t1: null });
         this.renderService.activateSlots(param, slot.slotIndex, slot.slotIndex, slot.loadedPoints);
-        console.log(`[Slot] ${P(param)} activated: ${fmt(ts)}`);
+        console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
       } else {
         ps.setActivePair(null);
       }
@@ -137,9 +146,14 @@ export class SlotService {
       const slot0 = ps.getSlot(t0);
       const slot1 = ps.getSlot(t1);
       if (slot0?.loaded && slot1?.loaded) {
+        // Skip if already activated with same pair
+        if (current?.t0 === t0 && current?.t1 === t1) {
+          console.log(`[Slot] ${pcode} skip (same): ${fmt(t0)} → ${fmt(t1)}`);
+          return;
+        }
         ps.setActivePair({ t0, t1 });
         this.renderService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, Math.min(slot0.loadedPoints, slot1.loadedPoints));
-        console.log(`[Slot] ${P(param)} activated: ${fmt(t0)} → ${fmt(t1)}`);
+        console.log(`[Slot] ${pcode} activated: ${fmt(t0)} → ${fmt(t1)}`);
       } else {
         ps.setActivePair(null);
       }
