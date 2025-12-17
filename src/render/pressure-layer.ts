@@ -105,7 +105,7 @@ export class PressureLayer {
     // Set grid dimensions based on resolution
     this.gridWidth = 360 / resolution;   // 360 (1°) or 180 (2°)
     this.gridHeight = 180 / resolution;  // 180 (1°) or 90 (2°)
-    this.numCells = (this.gridWidth - 1) * (this.gridHeight - 1);
+    this.numCells = this.gridWidth * (this.gridHeight - 1);  // Extra column for longitude wrap
 
     this.createComputePipelines();
     this.createComputeBuffers();
@@ -432,12 +432,12 @@ export class PressureLayer {
       this.device.queue.writeBuffer(this.segmentCountsBuffer, this.numCells * 4, clearData);
     }
 
-    // Pass 1: Count segments per cell
+    // Pass 1: Count segments per cell (gridWidth includes wrap column)
     const countPass = commandEncoder.beginComputePass();
     countPass.setPipeline(this.countPipeline);
     countPass.setBindGroup(0, contourBindGroup);
     countPass.dispatchWorkgroups(
-      Math.ceil((this.gridWidth - 1) / 8),
+      Math.ceil(this.gridWidth / 8),
       Math.ceil((this.gridHeight - 1) / 8)
     );
     countPass.end();
@@ -487,12 +487,12 @@ export class PressureLayer {
       paddedCells * 4
     );
 
-    // Pass 3: Generate vertices
+    // Pass 3: Generate vertices (gridWidth includes wrap column)
     const generatePass = commandEncoder.beginComputePass();
     generatePass.setPipeline(this.generatePipeline);
     generatePass.setBindGroup(0, contourBindGroup);
     generatePass.dispatchWorkgroups(
-      Math.ceil((this.gridWidth - 1) / 8),
+      Math.ceil(this.gridWidth / 8),
       Math.ceil((this.gridHeight - 1) / 8)
     );
     generatePass.end();

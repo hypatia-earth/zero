@@ -71,6 +71,11 @@
   right: 20px;
 }
 
+.panel.perf .perf-frame,
+.panel.perf .perf-pass {
+  font-family: monospace;
+}
+
 .panel.info img {
   width: 24px;
   height: 24px;

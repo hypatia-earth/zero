@@ -21,6 +21,12 @@ export class RenderService {
   private tempLerpFn: ((time: Date) => number) | null = null;
   private tempPaletteRange: Float32Array = new Float32Array([-40, 50]); // Default range
 
+  // Pressure contour state
+  private pressureSlot0 = 0;
+  private pressureSlot1 = 0;
+  private pressureLerpFn: ((time: Date) => number) | null = null;
+  private lastPressureLerp = -1;  // For change detection
+
   // Animated opacity state (lerps toward target each frame)
   private lastFrameTime = 0;
   private animatedOpacity = {
@@ -37,7 +43,9 @@ export class RenderService {
 
   // Frame timing (60-frame rolling average)
   private frameTimes: RingBuffer = createRingBuffer(60);
-  private perfElement: HTMLElement | null = null;
+  private passTimes: RingBuffer = createRingBuffer(60);
+  private perfFrameElement: HTMLElement | null = null;
+  private perfPassElement: HTMLElement | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -86,6 +94,9 @@ export class RenderService {
     const renderer = this.renderer;
 
     const render = () => {
+
+      const tFrame = performance.now();
+
       this.animationId = requestAnimationFrame(render);
 
       const options = this.optionsService.options.value;
@@ -98,6 +109,16 @@ export class RenderService {
       this.lastFrameTime = now;
       this.updateAnimatedOpacities(options, rawLerp, dt);
 
+      // Recompute pressure contours when lerp changes (threshold 0.005 ≈ 1 min at 3h timesteps)
+      if (options.pressure.enabled && this.pressureLerpFn) {
+        const pressureLerp = this.pressureLerpFn(time);
+        const validLerp = pressureLerp >= 0 ? pressureLerp : (pressureLerp === -2 ? 0 : -1);
+        if (validLerp >= 0 && Math.abs(validLerp - this.lastPressureLerp) > 0.005) {
+          this.lastPressureLerp = validLerp;
+          renderer.runPressureContour(this.pressureSlot0, this.pressureSlot1, validLerp, [...ISOBAR_CONFIG.levels]);
+        }
+      }
+
       renderer.updateUniforms({
         ...this.getCameraUniforms(renderer),
         ...this.getSunUniforms(time),
@@ -108,14 +129,16 @@ export class RenderService {
         ...this.getPressureUniforms(),
       });
 
-      const t0 = performance.now();
-      renderer.render();
-      const frameMs = performance.now() - t0;
-      this.frameTimes.push(frameMs);
+      const gpuTimeMs = renderer.render();
+      this.frameTimes.push(performance.now() - tFrame);
 
       // Update perf panel DOM directly (no mithril redraw)
-      if (this.perfElement) {
-        this.perfElement.textContent = `pass: ${this.frameTimes.avg().toFixed(1)} ms`;
+      if (this.perfFrameElement) {
+        this.perfFrameElement.textContent = `frame: ${this.frameTimes.avg().toFixed(1)} ms`;
+      }
+      if (this.perfPassElement && gpuTimeMs !== null) {
+        this.passTimes.push(gpuTimeMs);
+        this.perfPassElement.textContent = ` · pass: ${this.passTimes.avg().toFixed(1)} ms`;
       }
     };
 
@@ -236,10 +259,11 @@ export class RenderService {
   }
 
   /**
-   * Set DOM element for perf panel (updated directly in render loop)
+   * Set DOM elements for perf panel (updated directly in render loop)
    */
-  setPerfElement(el: HTMLElement | null): void {
-    this.perfElement = el;
+  setPerfElements(frameEl: HTMLElement | null, passEl: HTMLElement | null): void {
+    this.perfFrameElement = frameEl;
+    this.perfPassElement = passEl;
   }
 
   /**
@@ -259,6 +283,13 @@ export class RenderService {
    */
   setTempLerpFn(fn: (time: Date) => number): void {
     this.tempLerpFn = fn;
+  }
+
+  /**
+   * Set the function to calculate pressure lerp (from SlotService)
+   */
+  setPressureLerpFn(fn: (time: Date) => number): void {
+    this.pressureLerpFn = fn;
   }
 
   /**
@@ -329,9 +360,10 @@ export class RenderService {
         this.tempLoadedPoints = loadedPoints;
         break;
       case 'pressure':
-        // Run contour compute with both grid slots
-        // For now, lerp=0 (use slot0 only until interpolation is wired up)
-        this.renderer?.runPressureContour(slot0, slot1, 0, [...ISOBAR_CONFIG.levels]);
+        // Store slots for render loop interpolation
+        this.pressureSlot0 = slot0;
+        this.pressureSlot1 = slot1;
+        this.lastPressureLerp = -1;  // Force recompute on next frame
         break;
       case 'rain':
       case 'wind':

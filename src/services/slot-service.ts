@@ -58,8 +58,9 @@ export class SlotService {
       this.paramSlots.set(param, createParamSlots(param, this.maxSlotsPerParam));
     }
 
-    // Wire up lerp calculation (temp-specific for now)
-    this.renderService.setTempLerpFn((time) => this.getTempLerp(time));
+    // Wire up lerp calculations
+    this.renderService.setTempLerpFn((time) => this.getLerp('temp', time));
+    this.renderService.setPressureLerpFn((time) => this.getLerp('pressure', time));
 
     // Wire up data-ready functions for each slot-based param
     for (const param of SLOT_PARAMS) {
@@ -278,8 +279,8 @@ export class SlotService {
   }
 
   /** Calculate lerp for shader interpolation */
-  getTempLerp(currentTime: Date): number {
-    const ps = this.paramSlots.get('temp');
+  getLerp(param: TParam, currentTime: Date): number {
+    const ps = this.paramSlots.get(param);
     const pair = ps?.getActivePair();
     if (!pair) return -1;
 
@@ -291,6 +292,11 @@ export class SlotService {
 
     if (tc < t0 || tc > t1) return -1;
     return (tc - t0) / (t1 - t0);
+  }
+
+  /** @deprecated Use getLerp('temp', time) */
+  getTempLerp(currentTime: Date): number {
+    return this.getLerp('temp', currentTime);
   }
 
   /** Initialize with priority timesteps for all enabled params */

@@ -77,6 +77,14 @@ export class GlobeRenderer {
 
   // Track layer opacities for depth test decision
   private currentEarthOpacity = 0;
+
+  // Timestamp queries for GPU timing
+  private hasTimestampQuery = false;
+  private timestampQuerySet: GPUQuerySet | null = null;
+  private timestampBuffer: GPUBuffer | null = null;
+  private timestampReadBuffer: GPUBuffer | null = null;
+  private lastGpuTimeMs: number | null = null;
+  private timestampPending = false;
   private currentTempOpacity = 0;
 
   constructor(private canvas: HTMLCanvasElement, cameraConfig?: CameraConfig) {
@@ -96,7 +104,12 @@ export class GlobeRenderer {
     const hasFloat32Filterable = adapter.features.has('float32-filterable');
     this.useFloat16Luts = !hasFloat32Filterable;
 
-    const requiredFeatures: GPUFeatureName[] = hasFloat32Filterable ? ['float32-filterable'] : [];
+    // Check for timestamp-query support
+    this.hasTimestampQuery = adapter.features.has('timestamp-query');
+
+    const requiredFeatures: GPUFeatureName[] = [];
+    if (hasFloat32Filterable) requiredFeatures.push('float32-filterable');
+    if (this.hasTimestampQuery) requiredFeatures.push('timestamp-query');
 
     this.device = await adapter.requestDevice({
       requiredFeatures,
@@ -126,6 +139,25 @@ export class GlobeRenderer {
     this.context = this.canvas.getContext('webgpu')!;
     this.format = navigator.gpu.getPreferredCanvasFormat();
     this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied' });
+
+    // Create timestamp query resources if supported (using timestampWrites, spec-compliant)
+    if (this.hasTimestampQuery) {
+      this.timestampQuerySet = this.device.createQuerySet({
+        type: 'timestamp',
+        count: 2,  // beginning and end of pass
+      });
+      this.timestampBuffer = this.device.createBuffer({
+        size: 16,  // 2 × BigInt64
+        usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
+      });
+      this.timestampReadBuffer = this.device.createBuffer({
+        size: 16,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+      });
+      console.log('[Globe] Timestamp queries enabled (timestampWrites)');
+    } else {
+      console.log('[Globe] Timestamp queries not available');
+    }
 
     this.uniformBuffer = this.device.createBuffer({
       size: 352,  // Includes padding for vec2f alignment
@@ -491,11 +523,12 @@ export class GlobeRenderer {
     }
   }
 
-  render(): void {
+  render(): number | null {
     const commandEncoder = this.device.createCommandEncoder();
 
     // PASS 1: Render globe to offscreen textures (no atmosphere)
-    const globePass = commandEncoder.beginRenderPass({
+    // Use timestampWrites for GPU timing (spec-compliant approach)
+    const globePassDescriptor: GPURenderPassDescriptor = {
       colorAttachments: [{
         view: this.colorTexture.createView(),
         clearValue: { r: 0.086, g: 0.086, b: 0.086, a: 1 },
@@ -508,7 +541,18 @@ export class GlobeRenderer {
         depthLoadOp: 'clear',
         depthStoreOp: 'store',
       },
-    });
+    };
+
+    // Add timestampWrites if supported
+    if (this.hasTimestampQuery && this.timestampQuerySet) {
+      globePassDescriptor.timestampWrites = {
+        querySet: this.timestampQuerySet,
+        beginningOfPassWriteIndex: 0,
+        endOfPassWriteIndex: 1,
+      };
+    }
+
+    const globePass = commandEncoder.beginRenderPass(globePassDescriptor);
 
     globePass.setPipeline(this.pipeline);
     globePass.setBindGroup(0, this.bindGroup);
@@ -555,7 +599,34 @@ export class GlobeRenderer {
     postProcessPass.draw(3);
     postProcessPass.end();
 
+    // Resolve timestamp queries only if read buffer is not mapped
+    const canReadTimestamp = this.hasTimestampQuery && this.timestampQuerySet &&
+      this.timestampBuffer && this.timestampReadBuffer && !this.timestampPending;
+
+    if (canReadTimestamp) {
+      commandEncoder.resolveQuerySet(this.timestampQuerySet!, 0, 2, this.timestampBuffer!, 0);
+      commandEncoder.copyBufferToBuffer(this.timestampBuffer!, 0, this.timestampReadBuffer!, 0, 16);
+    }
+
     this.device.queue.submit([commandEncoder.finish()]);
+
+    // Start async readback for GPU timing
+    if (canReadTimestamp) {
+      const readBuffer = this.timestampReadBuffer!;
+      this.timestampPending = true;
+      readBuffer.mapAsync(GPUMapMode.READ).then(() => {
+        const data = readBuffer.getMappedRange();
+        const times = new BigInt64Array(data);
+        const durationNs = Number(times[1]! - times[0]!);
+        this.lastGpuTimeMs = durationNs / 1_000_000;
+        readBuffer.unmap();
+        this.timestampPending = false;
+      }).catch(() => {
+        this.timestampPending = false;
+      });
+    }
+
+    return this.lastGpuTimeMs;
   }
 
   async loadBasemap(faces: ImageBitmap[]): Promise<void> {

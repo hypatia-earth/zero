@@ -51,8 +51,10 @@ const EDGE_TABLE: array<vec4<i32>, 16> = array<vec4<i32>, 16>(
 );
 
 // Sample pressure at grid position with interpolation between two timesteps
+// x wraps around for longitude continuity (359° → 0°)
 fn samplePressure(x: u32, y: u32) -> f32 {
-  let idx = y * uniforms.gridWidth + x;
+  let wx = x % uniforms.gridWidth;  // Wrap longitude
+  let idx = y * uniforms.gridWidth + wx;
   let v0 = pressureGrid0[idx];
   let v1 = pressureGrid1[idx];
   return mix(v0, v1, uniforms.lerp);
@@ -104,7 +106,9 @@ fn interpolateEdge(edge: i32, cellX: u32, cellY: u32, v: array<f32, 4>, iso: f32
 
 // Convert grid position to 3D sphere position
 fn gridToSphere(gridPos: vec2<f32>) -> vec3<f32> {
-  let lon = (gridPos.x / f32(uniforms.gridWidth - 1u)) * 360.0 - 180.0;
+  // Wrap x for longitude continuity (wrap column produces x >= gridWidth)
+  let wx = gridPos.x - floor(gridPos.x / f32(uniforms.gridWidth)) * f32(uniforms.gridWidth);
+  let lon = (wx / f32(uniforms.gridWidth)) * 360.0 - 180.0;
   let lat = 90.0 - (gridPos.y / f32(uniforms.gridHeight - 1u)) * 180.0;
 
   let latRad = radians(lat);
@@ -129,8 +133,8 @@ fn countSegments(@builtin(global_invocation_id) id: vec3<u32>) {
   let x = id.x;
   let y = id.y;
 
-  // Grid is (width-1) x (height-1) cells
-  if (x >= uniforms.gridWidth - 1u || y >= uniforms.gridHeight - 1u) {
+  // Grid is width x (height-1) cells (extra column for longitude wrap)
+  if (x >= uniforms.gridWidth || y >= uniforms.gridHeight - 1u) {
     return;
   }
 
@@ -141,7 +145,7 @@ fn countSegments(@builtin(global_invocation_id) id: vec3<u32>) {
   let v3 = samplePressure(x, y + 1u);     // top-left
 
   let caseIdx = getCaseIndex(v0, v1, v2, v3, uniforms.isovalue);
-  let cellIdx = y * (uniforms.gridWidth - 1u) + x;
+  let cellIdx = y * uniforms.gridWidth + x;  // width cells per row (with wrap)
 
   segmentCounts[cellIdx] = SEGMENT_COUNT[caseIdx];
 }
@@ -154,11 +158,12 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
   let x = id.x;
   let y = id.y;
 
-  if (x >= uniforms.gridWidth - 1u || y >= uniforms.gridHeight - 1u) {
+  // Grid is width x (height-1) cells (extra column for longitude wrap)
+  if (x >= uniforms.gridWidth || y >= uniforms.gridHeight - 1u) {
     return;
   }
 
-  let cellIdx = y * (uniforms.gridWidth - 1u) + x;
+  let cellIdx = y * uniforms.gridWidth + x;  // width cells per row (with wrap)
   let count = segmentCounts[cellIdx];
 
   if (count == 0u) {

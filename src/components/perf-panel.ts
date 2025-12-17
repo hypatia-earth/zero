@@ -15,12 +15,13 @@ export interface PerfPanelAttrs {
 export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = (initialVnode) => {
   return {
     oncreate({ dom }) {
-      const el = dom.querySelector('.perf-text') as HTMLElement;
-      initialVnode.attrs.renderService.setPerfElement(el);
+      const frameEl = dom.querySelector('.perf-frame') as HTMLElement;
+      const passEl = dom.querySelector('.perf-pass') as HTMLElement;
+      initialVnode.attrs.renderService.setPerfElements(frameEl, passEl);
     },
 
     onremove() {
-      initialVnode.attrs.renderService.setPerfElement(null);
+      initialVnode.attrs.renderService.setPerfElements(null, null);
     },
 
     view() {
@@ -28,7 +29,8 @@ export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = (initialVnode) => {
         m('button.control.pill', {
           title: 'Frame timing (60-frame avg)'
         }, [
-          m('span.perf-text', 'pass: -- ms')
+          m('span.perf-frame', 'frame: -- ms'),
+          m('span.perf-pass', '')  // GPU pass time (if timestamp queries available)
         ])
       ]);
     }
