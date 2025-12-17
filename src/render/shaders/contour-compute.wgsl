@@ -11,14 +11,16 @@ struct Uniforms {
   isovalue: f32,
   earthRadius: f32,
   vertexOffset: u32,  // Base offset for multi-level rendering
-  _pad: vec3<u32>,
+  lerp: f32,          // Interpolation factor (0 = grid0, 1 = grid1)
+  _pad: vec2<u32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-@group(0) @binding(1) var<storage, read> pressureGrid: array<f32>;  // Regridded data (f32)
+@group(0) @binding(1) var<storage, read> pressureGrid0: array<f32>;  // Regridded data slot 0
 @group(0) @binding(2) var<storage, read_write> segmentCounts: array<u32>;
 @group(0) @binding(3) var<storage, read> offsets: array<u32>;  // from prefix sum
 @group(0) @binding(4) var<storage, read_write> vertices: array<vec4<f32>>;
+@group(0) @binding(5) var<storage, read> pressureGrid1: array<f32>;  // Regridded data slot 1
 
 // Segment count per case (0-15)
 const SEGMENT_COUNT: array<u32, 16> = array<u32, 16>(
@@ -48,10 +50,12 @@ const EDGE_TABLE: array<vec4<i32>, 16> = array<vec4<i32>, 16>(
   vec4(-1, -1, -1, -1),  // 15: all inside, no contour
 );
 
-// Sample pressure at grid position (already f32 from regrid pass)
+// Sample pressure at grid position with interpolation between two timesteps
 fn samplePressure(x: u32, y: u32) -> f32 {
   let idx = y * uniforms.gridWidth + x;
-  return pressureGrid[idx];
+  let v0 = pressureGrid0[idx];
+  let v1 = pressureGrid1[idx];
+  return mix(v0, v1, uniforms.lerp);
 }
 
 // Get case index from 4 corner values

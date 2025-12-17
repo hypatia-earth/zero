@@ -129,10 +129,11 @@ export class PressureLayer {
     this.contourBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },  // pressureGrid0
         { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
         { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
         { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },  // pressureGrid1
       ],
     });
 
@@ -181,9 +182,10 @@ export class PressureLayer {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Contour uniform buffer (48 bytes - shader struct alignment requires this)
+    // Contour uniform buffer (32 bytes)
+    // Struct: gridWidth, gridHeight, isovalue, earthRadius, vertexOffset, lerp, _pad(vec2)
     this.contourUniformBuffer = this.device.createBuffer({
-      size: 48,
+      size: 32,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -376,8 +378,8 @@ export class PressureLayer {
   runContour(
     commandEncoder: GPUCommandEncoder,
     slot0: number,
-    _slot1: number,   // TODO: use for interpolation
-    _lerp: number,    // TODO: use for interpolation
+    slot1: number,
+    lerp: number,
     isovalue: number,
     vertexOffset: number
   ): void {
@@ -386,9 +388,10 @@ export class PressureLayer {
       return;
     }
 
-    // Update contour uniforms (48 bytes to match shader struct alignment)
-    // Struct: gridWidth, gridHeight, isovalue, earthRadius, vertexOffset, _pad(vec3)
-    const contourUniforms = new ArrayBuffer(48);
+    // Update contour uniforms (32 bytes)
+    // Struct: gridWidth(u32), gridHeight(u32), isovalue(f32), earthRadius(f32),
+    //         vertexOffset(u32), lerp(f32), _pad(vec2<u32>)
+    const contourUniforms = new ArrayBuffer(32);
     const contourU32 = new Uint32Array(contourUniforms);
     const contourF32 = new Float32Array(contourUniforms);
     contourU32[0] = this.gridWidth;
@@ -396,13 +399,11 @@ export class PressureLayer {
     contourF32[2] = isovalue;
     contourF32[3] = EARTH_RADIUS;
     contourU32[4] = vertexOffset;
-    // _pad: vec3<u32> at offset 20-31, then padding to 48
-    // For now, lerp and slot indices stored but not used by shader yet
+    contourF32[5] = lerp;
+    // _pad: vec2<u32> at offset 24-31
     this.device.queue.writeBuffer(this.contourUniformBuffer, 0, contourUniforms);
 
     // Create contour bind group with both grid slots
-    // TODO: Update shader to read from two slots and interpolate
-    // For now, use slot0 only (no interpolation)
     const contourBindGroup = this.device.createBindGroup({
       layout: this.contourBindGroupLayout,
       entries: [
@@ -411,6 +412,7 @@ export class PressureLayer {
         { binding: 2, resource: { buffer: this.segmentCountsBuffer } },
         { binding: 3, resource: { buffer: this.offsetsBuffer } },
         { binding: 4, resource: { buffer: this.vertexBuffer } },
+        { binding: 5, resource: { buffer: this.gridSlotBuffers[slot1]! } },
       ],
     });
 

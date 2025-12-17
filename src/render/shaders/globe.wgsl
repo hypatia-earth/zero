@@ -119,6 +119,20 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
   color = blendBasemap(color, hit.point);
   color = blendTemp(color, lat, lon);
   color = blendRain(color, lat, lon);
+
+  // When earth/temp are off, render back-side grid first (visible through transparent front)
+  let showBackGrid = u.earthOpacity < 0.01 && u.tempOpacity < 0.01;
+  if (showBackGrid) {
+    let farHit = raySphereIntersectFar(u.eyePosition, rayDir, EARTH_RADIUS);
+    if (farHit.valid) {
+      let backLat = asin(farHit.point.y);
+      let backLon = atan2(farHit.point.x, farHit.point.z);
+      color = blendGrid(color, backLat, backLon, farHit.point);
+      color = blendGridText(color, backLat, backLon, farHit.point);
+    }
+  }
+
+  // Front grid (always on top)
   color = blendGrid(color, lat, lon, hit.point);
   color = blendGridText(color, lat, lon, hit.point);
 

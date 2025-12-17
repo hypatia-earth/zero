@@ -75,6 +75,10 @@ export class GlobeRenderer {
   private uniformData = new ArrayBuffer(352);  // Includes padding for vec2f alignment
   private uniformView = new DataView(this.uniformData);
 
+  // Track layer opacities for depth test decision
+  private currentEarthOpacity = 0;
+  private currentTempOpacity = 0;
+
   constructor(private canvas: HTMLCanvasElement, cameraConfig?: CameraConfig) {
     this.camera = new Camera({ lat: 30, lon: 0, distance: 3 }, cameraConfig);
   }
@@ -441,6 +445,10 @@ export class GlobeRenderer {
     view.setFloat32(offset, uniforms.earthOpacity, true); offset += 4;
     view.setFloat32(offset, uniforms.tempOpacity, true); offset += 4;
 
+    // Track for depth test decision in render()
+    this.currentEarthOpacity = uniforms.earthOpacity;
+    this.currentTempOpacity = uniforms.tempOpacity;
+
     // rainOpacity, tempDataReady, rainDataReady, tempLerp
     view.setFloat32(offset, uniforms.rainOpacity, true); offset += 4;
     view.setUint32(offset, uniforms.tempDataReady ? 1 : 0, true); offset += 4;
@@ -510,6 +518,9 @@ export class GlobeRenderer {
     // PASS 2: Geometry layers (pressure contours, etc.)
     // Renders to same color/depth textures, depth-tested against globe
     if (this.pressureLayer.isEnabled() && this.pressureLayer.getVertexCount() > 0) {
+      // Use depth test only when earth or temp layers are visible
+      const useGlobeDepth = this.currentEarthOpacity > 0.01 || this.currentTempOpacity > 0.01;
+
       const geometryPass = commandEncoder.beginRenderPass({
         colorAttachments: [{
           view: this.colorTexture.createView(),
@@ -518,7 +529,8 @@ export class GlobeRenderer {
         }],
         depthStencilAttachment: {
           view: this.depthTexture.createView(),
-          depthLoadOp: 'load',  // Preserve globe depth
+          depthClearValue: 1.0,
+          depthLoadOp: useGlobeDepth ? 'load' : 'clear',  // Clear = render full geometry
           depthStoreOp: 'store',
         },
       });
