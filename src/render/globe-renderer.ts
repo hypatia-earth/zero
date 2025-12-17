@@ -6,7 +6,7 @@ import { Camera, type CameraConfig } from './camera';
 import shaderCode from './shaders/zero.wgsl?raw';
 import postprocessShaderCode from './shaders/postprocess.wgsl?raw';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
-import { PressureLayer } from './pressure-layer';
+import { PressureLayer, type PressureResolution } from './pressure-layer';
 
 export interface GlobeUniforms {
   viewProjInverse: Float32Array;
@@ -79,7 +79,7 @@ export class GlobeRenderer {
     this.camera = new Camera({ lat: 30, lon: 0, distance: 3 }, cameraConfig);
   }
 
-  async initialize(requestedSlots: number): Promise<void> {
+  async initialize(requestedSlots: number, pressureResolution: PressureResolution = 2): Promise<void> {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) throw new Error('No WebGPU adapter found');
 
@@ -284,8 +284,9 @@ export class GlobeRenderer {
       primitive: { topology: 'triangle-list' },
     });
 
-    // Initialize pressure layer (default 2° resolution)
-    this.pressureLayer = new PressureLayer(this.device, this.format, 2);
+    // Initialize pressure layer with configured resolution
+    this.pressureLayer = new PressureLayer(this.device, this.format, pressureResolution);
+    console.log(`[Globe] Pressure resolution: ${pressureResolution}°`);
 
     this.resize();
   }
