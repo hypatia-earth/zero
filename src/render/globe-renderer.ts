@@ -26,6 +26,7 @@ export interface GlobeUniforms {
   earthOpacity: number;
   tempOpacity: number;
   rainOpacity: number;
+  pressureOpacity: number;
   tempDataReady: boolean;
   rainDataReady: boolean;
   tempLerp: number;
@@ -452,8 +453,11 @@ export class GlobeRenderer {
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 
-    // Update pressure layer uniforms if enabled
-    if (this.pressureLayer?.isEnabled()) {
+    // Update pressure layer based on opacity
+    const pressureVisible = uniforms.pressureOpacity > 0.01;
+    this.pressureLayer.setEnabled(pressureVisible);
+
+    if (pressureVisible) {
       this.pressureLayer.updateUniforms({
         viewProj: this.camera.getViewProj(),
         eyePosition: [
@@ -466,7 +470,7 @@ export class GlobeRenderer {
           uniforms.sunDirection[1]!,
           uniforms.sunDirection[2]!,
         ],
-        opacity: 0.85,  // TODO: get from options
+        opacity: uniforms.pressureOpacity,
       }, false);
     }
   }
@@ -673,6 +677,43 @@ export class GlobeRenderer {
   /** Get pressure layer for external control */
   getPressureLayer(): PressureLayer {
     return this.pressureLayer;
+  }
+
+  /**
+   * Upload real pressure data and run compute pipeline for all isobar levels
+   * @param data O1280 pressure data (Float32Array, ~6.6M points)
+   * @param levels Isobar levels to compute (hPa values)
+   */
+  uploadPressureDataAndCompute(data: Float32Array, levels: number[]): void {
+    // Upload to GPU
+    this.device.queue.writeBuffer(
+      this.pressureDataBuffer, 0,
+      data.buffer, data.byteOffset, data.byteLength
+    );
+
+    // Set up external buffers if not done
+    if (!this.pressureLayer.isComputeReady()) {
+      this.pressureLayer.setExternalBuffers({
+        gaussianLats: this.gaussianLatsBuffer,
+        ringOffsets: this.ringOffsetsBuffer,
+        pressureData: this.pressureDataBuffer,
+      });
+    }
+
+    // Run compute for all levels
+    const maxVerticesPerLevel = 63724;  // Estimate
+    let totalVertices = 0;
+
+    for (let i = 0; i < levels.length; i++) {
+      const vertexOffset = i * maxVerticesPerLevel;
+      const commandEncoder = this.device.createCommandEncoder();
+      this.pressureLayer.runCompute(commandEncoder, levels[i]!, 0, vertexOffset);
+      this.device.queue.submit([commandEncoder.finish()]);
+      totalVertices += maxVerticesPerLevel;
+    }
+
+    this.pressureLayer.setVertexCount(totalVertices);
+    console.log(`[Globe] Pressure computed: ${levels.length} levels, ~${totalVertices} vertices`);
   }
 
   /**

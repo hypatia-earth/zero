@@ -3,6 +3,7 @@
  */
 
 import { GlobeRenderer } from '../render/globe-renderer';
+import { ISOBAR_CONFIG } from '../render/pressure-layer';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { ZeroOptions } from '../schemas/options.schema';
@@ -26,7 +27,11 @@ export class RenderService {
     earth: 0,
     temp: 0,
     rain: 0,
+    pressure: 0,
   };
+
+  // Pressure layer state
+  private pressureDataLoaded = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -91,6 +96,7 @@ export class RenderService {
         ...this.getLayerUniforms(),
         ...this.getTempUniforms(rawLerp),
         ...this.getRainUniforms(),
+        ...this.getPressureUniforms(),
       });
 
       renderer.render();
@@ -155,6 +161,12 @@ export class RenderService {
     };
   }
 
+  private getPressureUniforms() {
+    return {
+      pressureOpacity: this.animatedOpacity.pressure,
+    };
+  }
+
   /**
    * Update animated opacities toward targets (called each frame)
    * Uses exponential decay for smooth ~100ms transitions
@@ -172,6 +184,7 @@ export class RenderService {
       earth: options.earth.enabled ? options.earth.opacity : 0,
       temp: (options.temp.enabled && tempDataReady) ? options.temp.opacity : 0,
       rain: options.rain.enabled ? options.rain.opacity : 0,  // TODO: add rainDataReady
+      pressure: (options.pressure.enabled && this.pressureDataLoaded) ? options.pressure.opacity : 0,
     };
 
     // Lerp each toward target
@@ -223,6 +236,25 @@ export class RenderService {
     }
     this.renderer.updateTempPalette(textureData);
     this.tempPaletteRange = new Float32Array([min, max]);
+  }
+
+  /**
+   * Upload pressure data and run compute pipeline
+   * @param data O1280 pressure data
+   */
+  uploadPressureData(data: Float32Array): void {
+    if (!this.renderer) {
+      throw new Error('RenderService not initialized');
+    }
+    this.renderer.uploadPressureDataAndCompute(data, [...ISOBAR_CONFIG.levels]);
+    this.pressureDataLoaded = true;
+  }
+
+  /**
+   * Check if pressure data is loaded
+   */
+  isPressureDataLoaded(): boolean {
+    return this.pressureDataLoaded;
   }
 
   dispose(): void {
