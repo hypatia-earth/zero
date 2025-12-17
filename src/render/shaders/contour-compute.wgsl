@@ -10,6 +10,8 @@ struct Uniforms {
   gridHeight: u32,
   isovalue: f32,
   earthRadius: f32,
+  vertexOffset: u32,  // Base offset for multi-level rendering
+  _pad: vec3<u32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -171,6 +173,9 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
   let edges = EDGE_TABLE[caseIdx];
   let values = array<f32, 4>(v0, v1, v2, v3);
 
+  // Base index with level offset
+  let baseIdx = uniforms.vertexOffset + offset * 2u;
+
   // First line segment
   if (edges.x >= 0) {
     let p0 = interpolateEdge(edges.x, x, y, values, uniforms.isovalue);
@@ -179,8 +184,8 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
     let world0 = gridToSphere(p0);
     let world1 = gridToSphere(p1);
 
-    vertices[offset * 2u] = vec4<f32>(world0, 1.0);
-    vertices[offset * 2u + 1u] = vec4<f32>(world1, 1.0);
+    vertices[baseIdx] = vec4<f32>(world0, 1.0);
+    vertices[baseIdx + 1u] = vec4<f32>(world1, 1.0);
   }
 
   // Second line segment (saddle cases 5 and 10)
@@ -191,7 +196,7 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
     let world0 = gridToSphere(p0);
     let world1 = gridToSphere(p1);
 
-    vertices[(offset + 1u) * 2u] = vec4<f32>(world0, 1.0);
-    vertices[(offset + 1u) * 2u + 1u] = vec4<f32>(world1, 1.0);
+    vertices[baseIdx + 2u] = vec4<f32>(world0, 1.0);
+    vertices[baseIdx + 3u] = vec4<f32>(world1, 1.0);
   }
 }

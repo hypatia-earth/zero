@@ -696,16 +696,27 @@ export class GlobeRenderer {
       pressureData: this.pressureDataBuffer,
     });
 
-    // Run compute for a single isobar level (1000 hPa)
-    const commandEncoder = this.device.createCommandEncoder();
-    const vertexCount = this.pressureLayer.runCompute(commandEncoder, 1000, 0);
-    this.device.queue.submit([commandEncoder.finish()]);
+    // Test levels within synthetic data range (980-1020 hPa)
+    // These should appear at different latitudes
+    const testLevels = [984, 992, 1000, 1008, 1016];
+    const maxVerticesPerLevel = 63724;  // Estimate from previous run
 
-    // Set vertex count and enable
-    this.pressureLayer.setVertexCount(vertexCount);
+    let totalVertices = 0;
+
+    // Submit each level separately to ensure proper synchronization
+    for (let i = 0; i < testLevels.length; i++) {
+      const vertexOffset = i * maxVerticesPerLevel;
+      const commandEncoder = this.device.createCommandEncoder();
+      this.pressureLayer.runCompute(commandEncoder, testLevels[i]!, 0, vertexOffset);
+      this.device.queue.submit([commandEncoder.finish()]);
+      totalVertices += maxVerticesPerLevel;
+    }
+
+    // Set total vertex count and enable
+    this.pressureLayer.setVertexCount(totalVertices);
     this.pressureLayer.setEnabled(true);
 
-    console.log(`[Globe] Synthetic pressure initialized, ~${vertexCount} vertices`);
+    console.log(`[Globe] Synthetic pressure: ${testLevels.length} levels, ~${totalVertices} vertices`);
   }
 
   /**

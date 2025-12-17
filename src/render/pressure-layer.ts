@@ -179,9 +179,9 @@ export class PressureLayer {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Contour uniform buffer
+    // Contour uniform buffer (48 bytes due to vec3 alignment)
     this.contourUniformBuffer = this.device.createBuffer({
-      size: 16,  // gridWidth, gridHeight, isovalue, earthRadius
+      size: 48,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -213,12 +213,13 @@ export class PressureLayer {
     });
 
     // Max segments per isobar level (worst case: 2 per cell for saddle points)
-    const maxSegments = this.numCells * 2;
-    const maxVertices = maxSegments * 2;  // 2 vertices per segment
+    const maxSegmentsPerLevel = this.numCells * 2;
+    const maxVerticesPerLevel = maxSegmentsPerLevel * 2;  // 2 vertices per segment
+    const numLevels = ISOBAR_CONFIG.levels.length;  // 21 levels
 
-    // Vertex buffer (output of generate pass, also CPU-writable for testing)
+    // Vertex buffer sized for ALL isobar levels
     this.vertexBuffer = this.device.createBuffer({
-      size: Math.max(maxVertices * 16, 64),  // vec4f per vertex
+      size: Math.max(maxVerticesPerLevel * numLevels * 16, 64),  // vec4f per vertex
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
   }
@@ -285,12 +286,14 @@ export class PressureLayer {
 
   /**
    * Run compute pipeline for a single isovalue
-   * Returns number of vertices generated
+   * @param vertexOffset - Base vertex index for multi-level rendering
+   * Returns number of vertices generated (estimate)
    */
   runCompute(
     commandEncoder: GPUCommandEncoder,
     isovalue: number,
-    slotIndex: number
+    slotIndex: number,
+    vertexOffset: number = 0
   ): number {
     if (!this.computeReady || !this.externalBuffers) {
       console.warn('[Pressure] Compute not ready - call setExternalBuffers first');
@@ -306,14 +309,16 @@ export class PressureLayer {
     ]);
     this.device.queue.writeBuffer(this.regridUniformBuffer, 0, regridUniforms);
 
-    // Update contour uniforms
-    const contourUniforms = new ArrayBuffer(16);
+    // Update contour uniforms (48 bytes due to vec3 alignment)
+    const contourUniforms = new ArrayBuffer(48);
     const contourU32 = new Uint32Array(contourUniforms);
     const contourF32 = new Float32Array(contourUniforms);
     contourU32[0] = this.gridWidth;
     contourU32[1] = this.gridHeight;
     contourF32[2] = isovalue;
     contourF32[3] = EARTH_RADIUS;
+    contourU32[4] = vertexOffset;
+    // Remaining bytes are padding for vec3 alignment
     this.device.queue.writeBuffer(this.contourUniformBuffer, 0, contourUniforms);
 
     // Create regrid bind group
