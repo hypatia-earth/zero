@@ -7,11 +7,17 @@
  */
 
 import { signal } from '@preact/signals-core';
-import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice } from '../config/types';
+import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TParam } from '../config/types';
 import { fetchStreaming } from '../utils/fetch';
 import type { OmService } from './om-service';
 
 const DEBUG = false;
+
+/** Short timestep format for logs: "MM-DDTHH" */
+const fmt = (ts: string) => ts.slice(5, 13);
+
+/** 4-letter uppercase param code for logs */
+const P = (param: TParam) => param.slice(0, 4).toUpperCase();
 
 /** Default estimated size for unknown timesteps (~8MB for 10 slices) */
 const DEFAULT_SIZE_ESTIMATE = 8.0 * 1024 * 1024;
@@ -137,8 +143,18 @@ export class QueueService implements IQueueService {
     this.pendingExpectedBytes = this.timestepQueue.reduce((sum, q) => sum + q.estimatedBytes, 0);
     this.updateStats();
 
-    const fmt = (ts: string) => ts.slice(5, 13); // "MM-DDTHH"
-    console.log(`[Queue] ${orders.length} TS orders, first: ${fmt(orders[0]!.timestep)}, last: ${fmt(orders[orders.length - 1]!.timestep)}`);
+    // Log one line per param (grouped, in order of first appearance)
+    const byParam = new Map<TParam, TimestepOrder[]>();
+    for (const order of orders) {
+      const list = byParam.get(order.param) || [];
+      list.push(order);
+      byParam.set(order.param, list);
+    }
+    for (const [param, paramOrders] of byParam) {
+      const first = fmt(paramOrders[0]!.timestep);
+      const last = fmt(paramOrders[paramOrders.length - 1]!.timestep);
+      console.log(`[Queue] ${P(param)} ${paramOrders.length} TS, ${first} -> ${last}`);
+    }
 
     // Start processing if not already running
     if (!this.processingPromise) {
