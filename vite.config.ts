@@ -32,19 +32,27 @@ function cacheHeaders(): Plugin {
  */
 function wgslProcess(): Plugin {
   const shadersDir = path.resolve(__dirname, 'src/render/shaders');
-  const masterPath = path.join(shadersDir, 'master.wgsl');
-  const outputPath = path.join(shadersDir, 'zero.wgsl');
+
+  // Shader builds: { master: output }
+  const shaderBuilds = {
+    'master.wgsl': 'zero.wgsl',
+    'master-postprocess.wgsl': 'postprocess.wgsl',
+  };
 
   function buildShaders(isProd: boolean) {
     const obfuscateFlag = isProd ? ' --obfuscate' : '';
-    try {
-      execSync(`npx wgsl-plus "${masterPath}" -o "${outputPath}"${obfuscateFlag}`, {
-        stdio: 'pipe',
-        cwd: shadersDir,
-      });
-      console.log(`[wgsl] Built zero.wgsl (${isProd ? 'obfuscated' : 'linked'})`);
-    } catch (e) {
-      console.error('[wgsl] Build failed:', e);
+    for (const [master, output] of Object.entries(shaderBuilds)) {
+      const masterPath = path.join(shadersDir, master);
+      const outputPath = path.join(shadersDir, output);
+      try {
+        execSync(`npx wgsl-plus "${masterPath}" -o "${outputPath}"${obfuscateFlag}`, {
+          stdio: 'pipe',
+          cwd: shadersDir,
+        });
+        console.log(`[wgsl] Built ${output} (${isProd ? 'obfuscated' : 'linked'})`);
+      } catch (e) {
+        console.error(`[wgsl] Build failed for ${output}:`, e);
+      }
     }
   }
 
@@ -55,18 +63,16 @@ function wgslProcess(): Plugin {
       buildShaders(isProd);
     },
     configureServer(server) {
-      // Watch all .wgsl files except zero.wgsl
+      // Watch all .wgsl files except generated outputs
+      const generatedFiles = Object.values(shaderBuilds);
       server.watcher.add(path.join(shadersDir, '*.wgsl'));
       server.watcher.on('change', (file) => {
-        if (file.endsWith('.wgsl') && !file.endsWith('zero.wgsl')) {
-          console.log(`[wgsl] ${path.basename(file)} changed, rebuilding...`);
+        const basename = path.basename(file);
+        if (file.endsWith('.wgsl') && !generatedFiles.includes(basename)) {
+          console.log(`[wgsl] ${basename} changed, rebuilding...`);
           buildShaders(false);
-          // Trigger HMR by invalidating zero.wgsl
-          const mod = server.moduleGraph.getModuleById(outputPath + '?raw');
-          if (mod) {
-            server.moduleGraph.invalidateModule(mod);
-            server.ws.send({ type: 'full-reload' });
-          }
+          // Trigger HMR
+          server.ws.send({ type: 'full-reload' });
         }
       });
     },

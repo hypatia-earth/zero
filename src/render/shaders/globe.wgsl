@@ -95,30 +95,38 @@ fn computeRay(fragCoord: vec2f) -> vec3f {
   return rayDir;
 }
 
+struct FragmentOutput {
+  @location(0) color: vec4f,
+  @builtin(frag_depth) depth: f32,
+}
+
 @fragment
-fn fs_main(@builtin(position) fragPos: vec4f) -> @location(0) vec4f {
+fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
   let rayDir = computeRay(fragPos.xy);
   let hit = raySphereIntersect(u.eyePosition, rayDir, EARTH_RADIUS);
 
-  // Convert to km scale for atmosphere (zero uses unit sphere, atmosphere uses 6360km earth)
-  let camera_km = u.eyePosition * UNIT_TO_KM;
-
   if (!hit.valid) {
-    // Ray misses earth - render sky/space with atmosphere
-    return blendAtmosphereSpace(BG_COLOR, rayDir, camera_km, ATM_EXPOSURE, fragPos);
+    // Ray misses earth - return background color (atmosphere applied in post-process)
+    return FragmentOutput(BG_COLOR, 1.0);  // Far plane depth for sky
   }
 
   let lat = asin(hit.point.y);
   let lon = atan2(hit.point.x, hit.point.z);
 
   // Layer compositing (back to front)
+  // Atmosphere applied in post-process pass
   var color = vec4f(0.1, 0.1, 0.15, 1.0); // Base dark color
   color = blendBasemap(color, hit.point);
   color = blendTemp(color, lat, lon);
   color = blendRain(color, lat, lon);
   color = blendGrid(color, lat, lon, hit.point);
   color = blendGridText(color, lat, lon, hit.point);
-  color = blendAtmosphereGlobe(color, hit.point, camera_km, ATM_EXPOSURE);
 
-  return color;
+  // Compute normalized depth from ray hit distance
+  // hit.t is distance from camera to globe surface
+  // Normalize against camera distance to globe (gives ~0.5-0.7 for typical views)
+  let cameraDistance = length(u.eyePosition);
+  let normalizedDepth = clamp(hit.t / (cameraDistance * 2.0), 0.0, 1.0);
+
+  return FragmentOutput(color, normalizedDepth);
 }

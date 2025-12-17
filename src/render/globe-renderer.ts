@@ -4,6 +4,7 @@
 
 import { Camera, type CameraConfig } from './camera';
 import shaderCode from './shaders/zero.wgsl?raw';
+import postprocessShaderCode from './shaders/postprocess.wgsl?raw';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 
 export interface GlobeUniforms {
@@ -57,6 +58,13 @@ export class GlobeRenderer {
   private fontAtlasSampler!: GPUSampler;
   private tempPaletteTexture!: GPUTexture;
   private tempPaletteSampler!: GPUSampler;
+  private depthTexture!: GPUTexture;
+  // Post-process pass for atmosphere
+  private colorTexture!: GPUTexture;
+  private postProcessPipeline!: GPURenderPipeline;
+  private postProcessBindGroup!: GPUBindGroup;
+  private postProcessBindGroupLayout!: GPUBindGroupLayout;
+  private colorSampler!: GPUSampler;
 
   readonly camera: Camera;
   private uniformData = new ArrayBuffer(352);  // Includes padding for vec2f alignment
@@ -172,8 +180,34 @@ export class GlobeRenderer {
       addressModeU: 'clamp-to-edge',
     });
 
+    // Offscreen textures for two-pass rendering (globe + post-process)
+    const dpr = window.devicePixelRatio;
+    const texWidth = Math.floor(this.canvas.clientWidth * dpr);
+    const texHeight = Math.floor(this.canvas.clientHeight * dpr);
+
+    // Color texture (globe renders here, post-process reads)
+    this.colorTexture = this.device.createTexture({
+      size: [texWidth, texHeight],
+      format: this.format,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    // Depth texture (globe writes, post-process reads for world position reconstruction)
+    this.depthTexture = this.device.createTexture({
+      size: [texWidth, texHeight],
+      format: 'depth32float',  // Need float for texture binding
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    // Sampler for reading color/depth textures in post-process
+    this.colorSampler = this.device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+    });
+
     // Shader code is pre-processed by wgsl-plus (see vite.config.ts)
     const shaderModule = this.device.createShaderModule({ code: shaderCode });
+    const postProcessModule = this.device.createShaderModule({ code: postprocessShaderCode });
 
     this.bindGroupLayout = this.device.createBindGroupLayout({
       entries: [
@@ -203,6 +237,33 @@ export class GlobeRenderer {
       vertex: { module: shaderModule, entryPoint: 'vs_main' },
       fragment: { module: shaderModule, entryPoint: 'fs_main', targets: [{ format: this.format }] },
       primitive: { topology: 'triangle-list' },
+      depthStencil: {
+        format: 'depth32float',
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+      },
+    });
+
+    // Post-process bind group layout (atmosphere applied after globe render)
+    this.postProcessBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // sceneColor
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth' } },  // sceneDepth
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        // Atmosphere LUTs
+        { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // transmittance
+        { binding: 5, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } },  // scattering
+        { binding: 6, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // irradiance
+        { binding: 7, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+      ],
+    });
+
+    this.postProcessPipeline = this.device.createRenderPipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.postProcessBindGroupLayout] }),
+      vertex: { module: postProcessModule, entryPoint: 'vs_main' },
+      fragment: { module: postProcessModule, entryPoint: 'fs_main', targets: [{ format: this.format }] },
+      primitive: { topology: 'triangle-list' },
     });
 
     this.resize();
@@ -217,10 +278,11 @@ export class GlobeRenderer {
   }
 
   /**
-   * Finalize renderer setup - creates bind group after all textures are loaded
+   * Finalize renderer setup - creates bind groups after all textures are loaded
    * Must be called after createAtmosphereTextures() and loadBasemap()
    */
   finalize(): void {
+    // Globe pass bind group
     this.bindGroup = this.device.createBindGroup({
       layout: this.bindGroupLayout,
       entries: [
@@ -244,6 +306,9 @@ export class GlobeRenderer {
         { binding: 14, resource: this.tempPaletteSampler },
       ],
     });
+
+    // Post-process bind group for atmosphere pass
+    this.createPostProcessBindGroup();
   }
 
   /**
@@ -260,6 +325,42 @@ export class GlobeRenderer {
     this.canvas.width = width;
     this.canvas.height = height;
     this.camera.setAspect(width, height);
+
+    // Recreate offscreen textures at new size
+    this.colorTexture?.destroy();
+    this.colorTexture = this.device.createTexture({
+      size: [width, height],
+      format: this.format,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    this.depthTexture?.destroy();
+    this.depthTexture = this.device.createTexture({
+      size: [width, height],
+      format: 'depth32float',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    // Recreate post-process bind group with new texture views (if LUTs loaded)
+    if (this.atmosphereLUTs) {
+      this.createPostProcessBindGroup();
+    }
+  }
+
+  private createPostProcessBindGroup(): void {
+    this.postProcessBindGroup = this.device.createBindGroup({
+      layout: this.postProcessBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.uniformBuffer } },
+        { binding: 1, resource: this.colorTexture.createView() },
+        { binding: 2, resource: this.depthTexture.createView() },
+        { binding: 3, resource: this.colorSampler },
+        { binding: 4, resource: this.atmosphereLUTs.transmittance.createView() },
+        { binding: 5, resource: this.atmosphereLUTs.scattering.createView() },
+        { binding: 6, resource: this.atmosphereLUTs.irradiance.createView() },
+        { binding: 7, resource: this.atmosphereLUTs.sampler },
+      ],
+    });
   }
 
   updateUniforms(uniforms: GlobeUniforms): void {
@@ -341,21 +442,43 @@ export class GlobeRenderer {
 
   render(): void {
     const commandEncoder = this.device.createCommandEncoder();
-    const textureView = this.context.getCurrentTexture().createView();
 
-    const renderPass = commandEncoder.beginRenderPass({
+    // PASS 1: Render globe to offscreen textures (no atmosphere)
+    const globePass = commandEncoder.beginRenderPass({
       colorAttachments: [{
-        view: textureView,
+        view: this.colorTexture.createView(),
         clearValue: { r: 0.086, g: 0.086, b: 0.086, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+      depthStencilAttachment: {
+        view: this.depthTexture.createView(),
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store',
+      },
+    });
+
+    globePass.setPipeline(this.pipeline);
+    globePass.setBindGroup(0, this.bindGroup);
+    globePass.draw(3);
+    globePass.end();
+
+    // PASS 2: Post-process - apply atmosphere to final output
+    const canvasView = this.context.getCurrentTexture().createView();
+    const postProcessPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: canvasView,
+        clearValue: { r: 0, g: 0, b: 0, a: 1 },
         loadOp: 'clear',
         storeOp: 'store',
       }],
     });
 
-    renderPass.setPipeline(this.pipeline);
-    renderPass.setBindGroup(0, this.bindGroup);
-    renderPass.draw(3);
-    renderPass.end();
+    postProcessPass.setPipeline(this.postProcessPipeline);
+    postProcessPass.setBindGroup(0, this.postProcessBindGroup);
+    postProcessPass.draw(3);
+    postProcessPass.end();
 
     this.device.queue.submit([commandEncoder.finish()]);
   }
@@ -505,5 +628,7 @@ export class GlobeRenderer {
     this.rainDataBuffer?.destroy();
     this.fontAtlasTexture?.destroy();
     this.tempPaletteTexture?.destroy();
+    this.depthTexture?.destroy();
+    this.colorTexture?.destroy();
   }
 }

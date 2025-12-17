@@ -11,3 +11,4 @@ DEBUG.md
 
 # Generated shader (built by wgsl-plus from master.wgsl)
 src/render/shaders/zero.wgsl
+src/render/shaders/postprocess.wgsl
