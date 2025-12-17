@@ -98,14 +98,14 @@ fn interpolateEdge(edge: i32, cellX: u32, cellY: u32, v: array<f32, 4>, iso: f32
 
 // Convert grid position to 3D sphere position
 fn gridToSphere(gridPos: vec2<f32>) -> vec3<f32> {
-  // Grid is 0.25° resolution, starting at -180°, 90°
   let lon = (gridPos.x / f32(uniforms.gridWidth - 1u)) * 360.0 - 180.0;
   let lat = 90.0 - (gridPos.y / f32(uniforms.gridHeight - 1u)) * 180.0;
 
   let latRad = radians(lat);
   let lonRad = radians(lon);
 
-  let r = uniforms.earthRadius;
+  // Slight offset above globe surface to avoid z-fighting
+  let r = uniforms.earthRadius * 1.002;
   let cosLat = cos(latRad);
 
   return vec3<f32>(

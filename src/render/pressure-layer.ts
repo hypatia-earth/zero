@@ -1,10 +1,7 @@
 /**
  * PressureLayer - GPU-based isobar contour rendering
  *
- * Phase 3: Skeleton with render pipeline structure
- * Phase 4: Full compute pipeline implementation
- *
- * Compute pipeline (Phase 4):
+ * Compute pipeline:
  * 1. Regrid: O1280 Gaussian → regular grid (1° or 2°)
  * 2. Count: Marching squares segment count per cell
  * 3. Prefix sum: Compute output offsets
@@ -16,6 +13,9 @@
  */
 
 import contourRenderCode from './shaders/contour-render.wgsl?raw';
+import regridCode from './shaders/regrid.wgsl?raw';
+import contourComputeCode from './shaders/contour-compute.wgsl?raw';
+import prefixSumCode from './shaders/prefix-sum.wgsl?raw';
 
 /** Isobar configuration from Hypatia */
 export const ISOBAR_CONFIG = {
@@ -35,6 +35,17 @@ interface PressureUniforms {
   opacity: number;
 }
 
+/** External GPU buffers provided by GlobeRenderer */
+export interface PressureExternalBuffers {
+  gaussianLats: GPUBuffer;   // 2560 latitudes
+  ringOffsets: GPUBuffer;    // 2560 ring offsets
+  pressureData: GPUBuffer;   // O1280 pressure data
+}
+
+// Constants
+const EARTH_RADIUS = 1.0;
+const SCAN_BLOCK_SIZE = 512;
+
 export class PressureLayer {
   private device: GPUDevice;
   private format: GPUTextureFormat;
@@ -42,6 +53,30 @@ export class PressureLayer {
   // Grid dimensions based on resolution
   private gridWidth: number;
   private gridHeight: number;
+  private numCells: number;
+
+  // External buffers (set via setExternalBuffers)
+  private externalBuffers: PressureExternalBuffers | null = null;
+
+  // Compute pipelines
+  private regridPipeline!: GPUComputePipeline;
+  private countPipeline!: GPUComputePipeline;
+  private generatePipeline!: GPUComputePipeline;
+  private scanBlocksPipeline!: GPUComputePipeline;
+  private addBlockSumsPipeline!: GPUComputePipeline;
+
+  // Compute buffers
+  private regridUniformBuffer!: GPUBuffer;
+  private contourUniformBuffer!: GPUBuffer;
+  private regularGridBuffer!: GPUBuffer;
+  private segmentCountsBuffer!: GPUBuffer;
+  private offsetsBuffer!: GPUBuffer;
+  private blockSumsBuffer!: GPUBuffer;
+
+  // Bind group layouts
+  private regridBindGroupLayout!: GPUBindGroupLayout;
+  private contourBindGroupLayout!: GPUBindGroupLayout;
+  private prefixSumBindGroupLayout!: GPUBindGroupLayout;
 
   // Render pipeline
   private renderPipeline!: GPURenderPipeline;
@@ -49,12 +84,13 @@ export class PressureLayer {
   private renderBindGroup!: GPUBindGroup;
   private renderBindGroupLayout!: GPUBindGroupLayout;
 
-  // Placeholder vertex buffer (Phase 4 will generate real vertices)
+  // Vertex buffer (filled by compute)
   private vertexBuffer!: GPUBuffer;
 
   // State
   private enabled = false;
   private vertexCount = 0;
+  private computeReady = false;
 
   constructor(
     device: GPUDevice,
@@ -67,9 +103,124 @@ export class PressureLayer {
     // Set grid dimensions based on resolution
     this.gridWidth = 360 / resolution;   // 360 (1°) or 180 (2°)
     this.gridHeight = 180 / resolution;  // 180 (1°) or 90 (2°)
+    this.numCells = (this.gridWidth - 1) * (this.gridHeight - 1);
 
+    this.createComputePipelines();
+    this.createComputeBuffers();
     this.createRenderPipeline();
-    this.createBuffers();
+    this.createRenderBuffers();
+  }
+
+  private createComputePipelines(): void {
+    // Regrid bind group layout
+    this.regridBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      ],
+    });
+
+    // Contour compute bind group layout
+    this.contourBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      ],
+    });
+
+    // Prefix sum bind group layout
+    this.prefixSumBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      ],
+    });
+
+    // Regrid pipeline
+    const regridModule = this.device.createShaderModule({ code: regridCode });
+    this.regridPipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.regridBindGroupLayout] }),
+      compute: { module: regridModule, entryPoint: 'main' },
+    });
+
+    // Contour compute pipelines
+    const contourModule = this.device.createShaderModule({ code: contourComputeCode });
+    this.countPipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.contourBindGroupLayout] }),
+      compute: { module: contourModule, entryPoint: 'countSegments' },
+    });
+    this.generatePipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.contourBindGroupLayout] }),
+      compute: { module: contourModule, entryPoint: 'generateSegments' },
+    });
+
+    // Prefix sum pipelines
+    const prefixSumModule = this.device.createShaderModule({ code: prefixSumCode });
+    this.scanBlocksPipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.prefixSumBindGroupLayout] }),
+      compute: { module: prefixSumModule, entryPoint: 'scanBlocks' },
+    });
+    this.addBlockSumsPipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.prefixSumBindGroupLayout] }),
+      compute: { module: prefixSumModule, entryPoint: 'addBlockSums' },
+    });
+  }
+
+  private createComputeBuffers(): void {
+    // Regrid uniform buffer
+    this.regridUniformBuffer = this.device.createBuffer({
+      size: 16,  // 4 u32: outputWidth, outputHeight, inputSlot, pad
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    // Contour uniform buffer
+    this.contourUniformBuffer = this.device.createBuffer({
+      size: 16,  // gridWidth, gridHeight, isovalue, earthRadius
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    // Regular grid buffer (output of regrid, input to contour)
+    this.regularGridBuffer = this.device.createBuffer({
+      size: this.gridWidth * this.gridHeight * 4,  // f32 per cell
+      usage: GPUBufferUsage.STORAGE,
+    });
+
+    // Segment counts buffer (padded to multiple of SCAN_BLOCK_SIZE for prefix sum)
+    const paddedCells = Math.ceil(this.numCells / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
+    this.segmentCountsBuffer = this.device.createBuffer({
+      size: paddedCells * 4,  // u32 per cell
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    });
+
+    // Offsets buffer (same size as counts, filled by prefix sum via copy)
+    this.offsetsBuffer = this.device.createBuffer({
+      size: paddedCells * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Block sums buffer for prefix sum
+    const numBlocks = Math.ceil(paddedCells / SCAN_BLOCK_SIZE);
+    const paddedBlocks = Math.ceil(numBlocks / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
+    this.blockSumsBuffer = this.device.createBuffer({
+      size: Math.max(paddedBlocks * 4, 64),
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Max segments per isobar level (worst case: 2 per cell for saddle points)
+    const maxSegments = this.numCells * 2;
+    const maxVertices = maxSegments * 2;  // 2 vertices per segment
+
+    // Vertex buffer (output of generate pass, also CPU-writable for testing)
+    this.vertexBuffer = this.device.createBuffer({
+      size: Math.max(maxVertices * 16, 64),  // vec4f per vertex
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
   }
 
   private createRenderPipeline(): void {
@@ -106,20 +257,11 @@ export class PressureLayer {
     });
   }
 
-  private createBuffers(): void {
-    const maxSegments = (this.gridWidth - 1) * (this.gridHeight - 1) * 2;
-    const maxVertices = maxSegments * 2;
-
+  private createRenderBuffers(): void {
     // Render uniform buffer (viewProj + eyePos + sunDir + opacity + isStandard)
     this.renderUniformBuffer = this.device.createBuffer({
       size: 128,  // mat4 + vec3 + pad + vec3 + f32 + u32 + vec3 pad
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    // Placeholder vertex buffer
-    this.vertexBuffer = this.device.createBuffer({
-      size: Math.max(maxVertices * 16, 64),  // vec4f per vertex, min 64 bytes
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
     // Create bind group
@@ -130,6 +272,176 @@ export class PressureLayer {
         { binding: 1, resource: { buffer: this.vertexBuffer } },
       ],
     });
+  }
+
+  /**
+   * Set external GPU buffers from GlobeRenderer
+   * Must be called before runCompute()
+   */
+  setExternalBuffers(buffers: PressureExternalBuffers): void {
+    this.externalBuffers = buffers;
+    this.computeReady = true;
+  }
+
+  /**
+   * Run compute pipeline for a single isovalue
+   * Returns number of vertices generated
+   */
+  runCompute(
+    commandEncoder: GPUCommandEncoder,
+    isovalue: number,
+    slotIndex: number
+  ): number {
+    if (!this.computeReady || !this.externalBuffers) {
+      console.warn('[Pressure] Compute not ready - call setExternalBuffers first');
+      return 0;
+    }
+
+    // Update regrid uniforms
+    const regridUniforms = new Uint32Array([
+      this.gridWidth,
+      this.gridHeight,
+      slotIndex,
+      0, // padding
+    ]);
+    this.device.queue.writeBuffer(this.regridUniformBuffer, 0, regridUniforms);
+
+    // Update contour uniforms
+    const contourUniforms = new ArrayBuffer(16);
+    const contourU32 = new Uint32Array(contourUniforms);
+    const contourF32 = new Float32Array(contourUniforms);
+    contourU32[0] = this.gridWidth;
+    contourU32[1] = this.gridHeight;
+    contourF32[2] = isovalue;
+    contourF32[3] = EARTH_RADIUS;
+    this.device.queue.writeBuffer(this.contourUniformBuffer, 0, contourUniforms);
+
+    // Create regrid bind group
+    const regridBindGroup = this.device.createBindGroup({
+      layout: this.regridBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.regridUniformBuffer } },
+        { binding: 1, resource: { buffer: this.externalBuffers.pressureData } },
+        { binding: 2, resource: { buffer: this.externalBuffers.gaussianLats } },
+        { binding: 3, resource: { buffer: this.externalBuffers.ringOffsets } },
+        { binding: 4, resource: { buffer: this.regularGridBuffer } },
+      ],
+    });
+
+    // Create contour bind group
+    const contourBindGroup = this.device.createBindGroup({
+      layout: this.contourBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.contourUniformBuffer } },
+        { binding: 1, resource: { buffer: this.regularGridBuffer } },
+        { binding: 2, resource: { buffer: this.segmentCountsBuffer } },
+        { binding: 3, resource: { buffer: this.offsetsBuffer } },
+        { binding: 4, resource: { buffer: this.vertexBuffer } },
+      ],
+    });
+
+    // Create prefix sum bind group (counts → offsets)
+    const prefixSumBindGroup = this.device.createBindGroup({
+      layout: this.prefixSumBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.segmentCountsBuffer } },
+        { binding: 1, resource: { buffer: this.blockSumsBuffer } },
+      ],
+    });
+
+    // Clear segment counts (padding area)
+    const paddedCells = Math.ceil(this.numCells / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
+    const clearData = new Uint32Array(paddedCells - this.numCells);
+    if (clearData.length > 0) {
+      this.device.queue.writeBuffer(
+        this.segmentCountsBuffer,
+        this.numCells * 4,
+        clearData
+      );
+    }
+
+    // Pass 1: Regrid O1280 → regular grid
+    const regridPass = commandEncoder.beginComputePass();
+    regridPass.setPipeline(this.regridPipeline);
+    regridPass.setBindGroup(0, regridBindGroup);
+    regridPass.dispatchWorkgroups(
+      Math.ceil(this.gridWidth / 8),
+      Math.ceil(this.gridHeight / 8)
+    );
+    regridPass.end();
+
+    // Pass 2: Count segments per cell
+    const countPass = commandEncoder.beginComputePass();
+    countPass.setPipeline(this.countPipeline);
+    countPass.setBindGroup(0, contourBindGroup);
+    countPass.dispatchWorkgroups(
+      Math.ceil((this.gridWidth - 1) / 8),
+      Math.ceil((this.gridHeight - 1) / 8)
+    );
+    countPass.end();
+
+    // Pass 3: Prefix sum (scan blocks)
+    const numBlocks = Math.ceil(paddedCells / SCAN_BLOCK_SIZE);
+    const scanPass = commandEncoder.beginComputePass();
+    scanPass.setPipeline(this.scanBlocksPipeline);
+    scanPass.setBindGroup(0, prefixSumBindGroup);
+    scanPass.dispatchWorkgroups(numBlocks);
+    scanPass.end();
+
+    // If more than one block, need to scan block sums and add them back
+    if (numBlocks > 1) {
+      // Scan the block sums themselves
+      const blockSumsBindGroup = this.device.createBindGroup({
+        layout: this.prefixSumBindGroupLayout,
+        entries: [
+          { binding: 0, resource: { buffer: this.blockSumsBuffer } },
+          { binding: 1, resource: { buffer: this.blockSumsBuffer } }, // dummy, not used for single block
+        ],
+      });
+
+      const scanBlockSumsPass = commandEncoder.beginComputePass();
+      scanBlockSumsPass.setPipeline(this.scanBlocksPipeline);
+      scanBlockSumsPass.setBindGroup(0, blockSumsBindGroup);
+      scanBlockSumsPass.dispatchWorkgroups(1);
+      scanBlockSumsPass.end();
+
+      // Add block sums back to all elements
+      const addBackBindGroup = this.device.createBindGroup({
+        layout: this.prefixSumBindGroupLayout,
+        entries: [
+          { binding: 0, resource: { buffer: this.segmentCountsBuffer } },
+          { binding: 1, resource: { buffer: this.blockSumsBuffer } },
+        ],
+      });
+
+      const addPass = commandEncoder.beginComputePass();
+      addPass.setPipeline(this.addBlockSumsPipeline);
+      addPass.setBindGroup(0, addBackBindGroup);
+      addPass.dispatchWorkgroups(numBlocks);
+      addPass.end();
+    }
+
+    // Copy scanned counts to offsets buffer
+    commandEncoder.copyBufferToBuffer(
+      this.segmentCountsBuffer, 0,
+      this.offsetsBuffer, 0,
+      paddedCells * 4
+    );
+
+    // Pass 4: Generate line segment vertices
+    const generatePass = commandEncoder.beginComputePass();
+    generatePass.setPipeline(this.generatePipeline);
+    generatePass.setBindGroup(0, contourBindGroup);
+    generatePass.dispatchWorkgroups(
+      Math.ceil((this.gridWidth - 1) / 8),
+      Math.ceil((this.gridHeight - 1) / 8)
+    );
+    generatePass.end();
+
+    // We don't know the exact vertex count without reading back from GPU
+    // For now, estimate max and let render pass handle empty draws
+    // TODO: Use indirect draw buffer with actual count from prefix sum
+    return this.numCells * 2 * 2;  // max: cells * maxSegmentsPerCell * verticesPerSegment
   }
 
   /**
@@ -154,12 +466,20 @@ export class PressureLayer {
   }
 
   /**
-   * Set test vertices for visual debugging
-   * Phase 4 will replace this with compute-generated vertices
+   * Set test vertices for visual debugging (CPU upload)
+   * Use this to verify render pipeline before compute is wired up
    */
   setTestVertices(vertices: Float32Array): void {
-    this.device.queue.writeBuffer(this.vertexBuffer, 0, vertices.buffer);
+    this.device.queue.writeBuffer(this.vertexBuffer, 0, vertices.buffer, vertices.byteOffset, vertices.byteLength);
     this.vertexCount = vertices.length / 4;  // vec4f per vertex
+  }
+
+  /**
+   * Set vertex count after compute pass
+   * In a real implementation this would come from GPU readback
+   */
+  setVertexCount(count: number): void {
+    this.vertexCount = count;
   }
 
   /**
@@ -189,7 +509,20 @@ export class PressureLayer {
     return { width: this.gridWidth, height: this.gridHeight };
   }
 
+  isComputeReady(): boolean {
+    return this.computeReady;
+  }
+
   dispose(): void {
+    // Compute buffers
+    this.regridUniformBuffer?.destroy();
+    this.contourUniformBuffer?.destroy();
+    this.regularGridBuffer?.destroy();
+    this.segmentCountsBuffer?.destroy();
+    this.offsetsBuffer?.destroy();
+    this.blockSumsBuffer?.destroy();
+
+    // Render buffers
     this.renderUniformBuffer?.destroy();
     this.vertexBuffer?.destroy();
   }

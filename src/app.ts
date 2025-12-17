@@ -180,6 +180,9 @@ export const App: m.ClosureComponent = () => {
         // Finalize renderer
         renderer.finalize();
 
+        // Initialize synthetic pressure for compute pipeline testing
+        renderer.initSyntheticPressure();
+
         // SlotService - manages timestep data loading
         slotService = new SlotService(
           timestepService,

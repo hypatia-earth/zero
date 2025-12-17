@@ -51,6 +51,7 @@ export class GlobeRenderer {
   private ringOffsetsBuffer!: GPUBuffer;
   private tempDataBuffer!: GPUBuffer;  // Single large buffer with slots
   private rainDataBuffer!: GPUBuffer;
+  private pressureDataBuffer!: GPUBuffer;  // Pressure data (single slot for now)
   private maxTempSlots!: number;
   private atmosphereLUTs!: AtmosphereLUTs;
   private useFloat16Luts = false;
@@ -156,6 +157,12 @@ export class GlobeRenderer {
 
     // Rain data (single timestep for now)
     this.rainDataBuffer = this.device.createBuffer({
+      size: BYTES_PER_TIMESTEP,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Pressure data (single slot for now - O1280 requires same size as temp)
+    this.pressureDataBuffer = this.device.createBuffer({
       size: BYTES_PER_TIMESTEP,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
@@ -271,8 +278,6 @@ export class GlobeRenderer {
 
     // Initialize pressure layer (default 2° resolution)
     this.pressureLayer = new PressureLayer(this.device, this.format, 2);
-    // Enable with test contour for visual debugging
-    this.initTestPressureContour();
 
     this.resize();
   }
@@ -671,47 +676,67 @@ export class GlobeRenderer {
   }
 
   /**
-   * Initialize test pressure contour for visual debugging
-   * Creates a simple latitude circle to verify render pipeline
+   * Initialize pressure layer with synthetic O1280 data for testing
+   * Generates lat-based pressure gradient: high at equator, low at poles
    */
-  private initTestPressureContour(): void {
-    const EARTH_RADIUS = 1.02;  // 2% above globe surface for visibility
-    const segments = 72;  // 5° per segment
-    const vertices: number[] = [];
+  initSyntheticPressure(): void {
+    // Generate synthetic O1280 pressure data
+    const syntheticData = this.generateSyntheticO1280Pressure();
 
-    // Create test circles at various latitudes (like isobars)
-    const testLatitudes = [0, 30, -30, 60, -60];  // degrees
+    // Upload to GPU
+    this.device.queue.writeBuffer(
+      this.pressureDataBuffer, 0,
+      syntheticData.buffer, syntheticData.byteOffset, syntheticData.byteLength
+    );
 
-    for (const latDeg of testLatitudes) {
-      const lat = latDeg * Math.PI / 180;
-      const cosLat = Math.cos(lat);
-      const sinLat = Math.sin(lat);
-      const r = EARTH_RADIUS * cosLat;
-      const y = EARTH_RADIUS * sinLat;
+    // Set up external buffers for compute pipeline
+    this.pressureLayer.setExternalBuffers({
+      gaussianLats: this.gaussianLatsBuffer,
+      ringOffsets: this.ringOffsetsBuffer,
+      pressureData: this.pressureDataBuffer,
+    });
 
-      for (let i = 0; i < segments; i++) {
-        const lon0 = (i / segments) * Math.PI * 2;
-        const lon1 = ((i + 1) / segments) * Math.PI * 2;
+    // Run compute for a single isobar level (1000 hPa)
+    const commandEncoder = this.device.createCommandEncoder();
+    const vertexCount = this.pressureLayer.runCompute(commandEncoder, 1000, 0);
+    this.device.queue.submit([commandEncoder.finish()]);
 
-        // Line segment start
-        vertices.push(r * Math.sin(lon0), y, r * Math.cos(lon0), 1.0);
-        // Line segment end
-        vertices.push(r * Math.sin(lon1), y, r * Math.cos(lon1), 1.0);
+    // Set vertex count and enable
+    this.pressureLayer.setVertexCount(vertexCount);
+    this.pressureLayer.setEnabled(true);
+
+    console.log(`[Globe] Synthetic pressure initialized, ~${vertexCount} vertices`);
+  }
+
+  /**
+   * Generate synthetic O1280 pressure data
+   * Pressure gradient: 1020 hPa at equator, 980 hPa at poles
+   */
+  private generateSyntheticO1280Pressure(): Float32Array {
+    const data = new Float32Array(POINTS_PER_TIMESTEP);
+
+    // O1280: 2560 rings, variable points per ring
+    let idx = 0;
+    for (let ring = 0; ring < 2560; ring++) {
+      // Latitude: 90° at ring 0, -90° at ring 2559
+      const lat = 90 - (ring + 0.5) * 180 / 2560;
+      const latRad = Math.abs(lat) * Math.PI / 180;
+
+      // Pressure: cosine of latitude gives smooth gradient
+      // cos(0) = 1 at equator, cos(90°) = 0 at poles
+      const pressure = 980 + 40 * Math.cos(latRad);  // 980-1020 hPa
+
+      // Points in this ring
+      const ringFromPole = ring < 1280 ? ring + 1 : 2560 - ring;
+      const nPoints = 4 * ringFromPole + 16;
+
+      // Fill all points in ring with same pressure (pure lat gradient)
+      for (let i = 0; i < nPoints; i++) {
+        data[idx++] = pressure;
       }
     }
 
-    // Upload test vertices and enable layer
-    this.pressureLayer.setTestVertices(new Float32Array(vertices));
-    this.pressureLayer.setEnabled(true);
-
-    // Set initial uniforms (will be updated in render loop)
-    const viewProj = new Float32Array(16);
-    this.pressureLayer.updateUniforms({
-      viewProj,
-      eyePosition: [0, 0, 3],
-      sunDirection: [1, 0, 0],
-      opacity: 0.85,
-    }, false);
+    return data;
   }
 
   dispose(): void {
@@ -719,6 +744,7 @@ export class GlobeRenderer {
     this.basemapTexture?.destroy();
     this.gaussianLatsBuffer?.destroy();
     this.ringOffsetsBuffer?.destroy();
+    this.pressureDataBuffer?.destroy();
     this.tempDataBuffer?.destroy();
     this.rainDataBuffer?.destroy();
     this.fontAtlasTexture?.destroy();
