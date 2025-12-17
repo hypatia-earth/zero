@@ -13,7 +13,7 @@ struct Uniforms {
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-@group(0) @binding(1) var<storage, read> pressureData: array<u32>;  // fp16 packed
+@group(0) @binding(1) var<storage, read> pressureGrid: array<f32>;  // Regridded data (f32)
 @group(0) @binding(2) var<storage, read_write> segmentCounts: array<u32>;
 @group(0) @binding(3) var<storage, read> offsets: array<u32>;  // from prefix sum
 @group(0) @binding(4) var<storage, read_write> vertices: array<vec4<f32>>;
@@ -46,22 +46,10 @@ const EDGE_TABLE: array<vec4<i32>, 16> = array<vec4<i32>, 16>(
   vec4(-1, -1, -1, -1),  // 15: all inside, no contour
 );
 
-// Decode fp16 from packed u32
-fn fp16ToFloat(fp16: u32) -> f32 {
-  let sign = (fp16 >> 15u) & 1u;
-  let exponent = (fp16 >> 10u) & 31u;
-  let fraction = fp16 & 1023u;
-  if (exponent == 0u) { return 0.0; }
-  let signF = select(1.0, -1.0, sign == 1u);
-  let expF = f32(i32(exponent) - 15);
-  let fracF = f32(fraction) / 1024.0;
-  return signF * pow(2.0, expF) * (1.0 + fracF);
-}
-
-// Sample pressure at grid position
+// Sample pressure at grid position (already f32 from regrid pass)
 fn samplePressure(x: u32, y: u32) -> f32 {
   let idx = y * uniforms.gridWidth + x;
-  return fp16ToFloat(pressureData[idx]);
+  return pressureGrid[idx];
 }
 
 // Get case index from 4 corner values
