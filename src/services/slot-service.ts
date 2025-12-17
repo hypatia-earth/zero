@@ -25,13 +25,11 @@ const fmt = (ts: TTimestep) => ts.slice(5, 13);
 /** 4-letter uppercase param code for logs */
 const P = (param: TParam) => param.slice(0, 4).toUpperCase();
 
-export type LoadingStrategy = 'alternate' | 'future-first';
-
 /** What timesteps the current time needs */
 export interface WantedState {
   mode: 'single' | 'pair';
   priority: TTimestep[];    // [exactTs] for single, [t0, t1] for pair
-  window: TTimestep[];      // Full prefetch window sorted by strategy
+  window: TTimestep[];      // Full prefetch window (queue applies strategy)
 }
 
 export interface Slot {
@@ -143,15 +141,14 @@ export class SlotService {
   /** Pure computation: what timesteps does current time need? */
   private computeWanted(time: Date, param: TParam): WantedState {
     const exactTs = this.timestepService.getExactTimestep(time);
-    const centeredWindow = this.calculateLoadWindow(time, param);
-    const sortedWindow = this.sortByStrategy(centeredWindow);
+    const window = this.calculateLoadWindow(time, param);
 
     if (exactTs) {
       // Single mode: exact timestep is priority
       return {
         mode: 'single',
         priority: [exactTs],
-        window: sortedWindow,
+        window,
       };
     } else {
       // Pair mode: adjacent timesteps are priority
@@ -159,7 +156,7 @@ export class SlotService {
       return {
         mode: 'pair',
         priority: [t0, t1],
-        window: sortedWindow,
+        window,
       };
     }
   }
@@ -261,33 +258,6 @@ export class SlotService {
     }
 
     return window;
-  }
-
-  /** Sort window by loading strategy (t0, t1 always first) */
-  private sortByStrategy(window: TTimestep[]): TTimestep[] {
-    if (window.length <= 2) return window;
-
-    const [t0, t1] = window;
-    const rest = window.slice(2);
-    const past = rest.filter(ts => ts < t0!).sort().reverse(); // newest past first
-    const future = rest.filter(ts => ts > t1!).sort(); // oldest future first
-
-    switch (this.strategy) {
-      case 'future-first':
-        return [t0!, t1!, ...future, ...past];
-
-      case 'alternate':
-      default: {
-        // Interleave: f1, p1, f2, p2, ...
-        const interleaved: TTimestep[] = [];
-        const maxLen = Math.max(future.length, past.length);
-        for (let i = 0; i < maxLen; i++) {
-          if (i < future.length) interleaved.push(future[i]!);
-          if (i < past.length) interleaved.push(past[i]!);
-        }
-        return [t0!, t1!, ...interleaved];
-      }
-    }
   }
 
   /** Check if timestep is within data window */
@@ -498,11 +468,6 @@ export class SlotService {
   /** Get data window */
   getDataWindow(): { start: TTimestep; end: TTimestep } {
     return { start: this.dataWindowStart, end: this.dataWindowEnd };
-  }
-
-  /** Get current strategy from options */
-  private get strategy(): LoadingStrategy {
-    return this.optionsService.options.value.dataCache.cacheStrategy as LoadingStrategy;
   }
 
   /** Get max slots per layer */

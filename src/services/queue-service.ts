@@ -7,9 +7,12 @@
  */
 
 import { signal } from '@preact/signals-core';
-import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TParam } from '../config/types';
+import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TParam, TTimestep } from '../config/types';
 import { fetchStreaming } from '../utils/fetch';
 import type { OmService } from './om-service';
+import type { OptionsService } from './options-service';
+
+export type LoadingStrategy = 'alternate' | 'future-first';
 
 const DEBUG = false;
 
@@ -59,10 +62,16 @@ export class QueueService implements IQueueService {
   private processingPromise: Promise<void> | null = null;
 
   private omService: OmService | null = null;
+  private optionsService: OptionsService | null = null;
 
   /** Set OmService (injected later to avoid circular deps) */
   setOmService(omService: OmService): void {
     this.omService = omService;
+  }
+
+  /** Set OptionsService for strategy access */
+  setOptionsService(optionsService: OptionsService): void {
+    this.optionsService = optionsService;
   }
 
   async submitFileOrders(
@@ -121,8 +130,14 @@ export class QueueService implements IQueueService {
       ? orders.filter(o => o.timestep !== this.currentlyFetching!.timestep)
       : orders;
 
-    // Build queue with size estimates (instant, no async)
-    this.timestepQueue = newOrders.map(order => {
+    // Get param(s) being submitted - keep other params' pending orders
+    const submittedParams = new Set(newOrders.map(o => o.param));
+    const keepFromExisting = this.timestepQueue.filter(q => !submittedParams.has(q.order.param));
+
+    // Build queue: keep other params + new orders for this param
+    this.timestepQueue = [
+      ...keepFromExisting,
+      ...newOrders.map(order => {
       const estimatedBytes = isNaN(order.sizeEstimate) ? DEFAULT_SIZE_ESTIMATE : order.sizeEstimate;
       return {
         order,
@@ -137,7 +152,11 @@ export class QueueService implements IQueueService {
           onPreflight?.(order, actualBytes);
         },
       };
-    });
+    }),
+    ];
+
+    // Sort queue by strategy (priority timesteps first, then by strategy)
+    this.sortQueueByStrategy();
 
     // Calculate pending bytes from estimates (instant)
     this.pendingExpectedBytes = this.timestepQueue.reduce((sum, q) => sum + q.estimatedBytes, 0);
@@ -285,6 +304,47 @@ export class QueueService implements IQueueService {
       console.log('[Queue] Done');
     }
     DEBUG && console.log('[Queue]', formatStats(this.stats.value));
+  }
+
+  /**
+   * Sort queue by loading strategy.
+   * Priority: timesteps closest to current time come first (across all params).
+   * Then rest sorted by strategy (alternate: interleave future/past, future-first: all future then past).
+   */
+  private sortQueueByStrategy(): void {
+    if (!this.optionsService || this.timestepQueue.length <= 1) return;
+
+    const currentTime = this.optionsService.options.value.viewState.time;
+    const strategy = this.optionsService.options.value.dataCache.cacheStrategy as LoadingStrategy;
+
+    // Parse timestep to Date for comparison
+    const toDate = (ts: TTimestep): Date => {
+      // Format: "2025-12-19T0400" -> "2025-12-19T04:00:00Z"
+      const formatted = ts.slice(0, 11) + ts.slice(11, 13) + ':00:00Z';
+      return new Date(formatted);
+    };
+
+    // Sort by distance from current time, with strategy for ties
+    this.timestepQueue.sort((a, b) => {
+      const tsA = toDate(a.order.timestep);
+      const tsB = toDate(b.order.timestep);
+      const distA = Math.abs(tsA.getTime() - currentTime.getTime());
+      const distB = Math.abs(tsB.getTime() - currentTime.getTime());
+
+      // Primary: closest to current time first
+      if (distA !== distB) return distA - distB;
+
+      // Secondary: by strategy
+      const isFutureA = tsA.getTime() >= currentTime.getTime();
+      const isFutureB = tsB.getTime() >= currentTime.getTime();
+
+      if (strategy === 'future-first') {
+        // Future before past
+        if (isFutureA !== isFutureB) return isFutureA ? -1 : 1;
+      }
+      // 'alternate' or same future/past status: maintain relative order
+      return 0;
+    });
   }
 
   dispose(): void {

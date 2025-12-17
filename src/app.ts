@@ -91,6 +91,7 @@ export const App: m.ClosureComponent = () => {
         BootstrapService.setStep('ASSETS');
         queueService = new QueueService();
         queueService.setOmService(omService);
+        queueService.setOptionsService(optionsService);
         const f16 = !capabilitiesService.float32_filterable;
         const suffix = f16 ? '-16' : '';
 
