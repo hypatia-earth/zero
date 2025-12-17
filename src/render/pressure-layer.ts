@@ -37,9 +37,9 @@ interface PressureUniforms {
 
 /** External GPU buffers provided by GlobeRenderer */
 export interface PressureExternalBuffers {
-  gaussianLats: GPUBuffer;   // 2560 latitudes
-  ringOffsets: GPUBuffer;    // 2560 ring offsets
-  pressureData: GPUBuffer;   // O1280 pressure data
+  gaussianLats: GPUBuffer;        // 2560 latitudes
+  ringOffsets: GPUBuffer;         // 2560 ring offsets
+  pressureDataSlots: GPUBuffer[]; // O1280 raw data per slot
 }
 
 // Constants
@@ -68,10 +68,12 @@ export class PressureLayer {
   // Compute buffers
   private regridUniformBuffer!: GPUBuffer;
   private contourUniformBuffer!: GPUBuffer;
-  private regularGridBuffer!: GPUBuffer;
+  private gridSlotBuffers: GPUBuffer[] = [];  // Regridded data per slot
+  private gridSlotReady: boolean[] = [];      // Track which slots are regridded
   private segmentCountsBuffer!: GPUBuffer;
   private offsetsBuffer!: GPUBuffer;
   private blockSumsBuffer!: GPUBuffer;
+  private maxSlots = 0;
 
   // Bind group layouts
   private regridBindGroupLayout!: GPUBindGroupLayout;
@@ -179,17 +181,13 @@ export class PressureLayer {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Contour uniform buffer (48 bytes due to vec3 alignment)
+    // Contour uniform buffer (48 bytes - shader struct alignment requires this)
     this.contourUniformBuffer = this.device.createBuffer({
       size: 48,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Regular grid buffer (output of regrid, input to contour)
-    this.regularGridBuffer = this.device.createBuffer({
-      size: this.gridWidth * this.gridHeight * 4,  // f32 per cell
-      usage: GPUBufferUsage.STORAGE,
-    });
+    // Grid slot buffers created in setExternalBuffers (need to know slot count)
 
     // Segment counts buffer (padded to multiple of SCAN_BLOCK_SIZE for prefix sum)
     const paddedCells = Math.ceil(this.numCells / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
@@ -277,95 +275,82 @@ export class PressureLayer {
 
   /**
    * Set external GPU buffers from GlobeRenderer
-   * Must be called before runCompute()
+   * Creates grid slot buffers for regridded data
    */
   setExternalBuffers(buffers: PressureExternalBuffers): void {
     this.externalBuffers = buffers;
+    this.maxSlots = buffers.pressureDataSlots.length;
+
+    // Create grid slot buffers (regridded data per slot)
+    const gridSlotSize = this.gridWidth * this.gridHeight * 4;  // f32 per cell
+    for (let i = 0; i < this.maxSlots; i++) {
+      this.gridSlotBuffers.push(this.device.createBuffer({
+        size: gridSlotSize,
+        usage: GPUBufferUsage.STORAGE,
+      }));
+      this.gridSlotReady.push(false);
+    }
+
+    const totalKB = (gridSlotSize * this.maxSlots / 1024).toFixed(0);
+    console.log(`[Pressure] ${this.maxSlots} grid slots, ${totalKB} KB total`);
+
     this.computeReady = true;
   }
 
   /**
-   * Run compute pipeline for a single isovalue
-   * @param vertexOffset - Base vertex index for multi-level rendering
-   * Returns number of vertices generated (estimate)
+   * Mark a grid slot as needing regrid (called when raw slot updated)
    */
-  runCompute(
-    commandEncoder: GPUCommandEncoder,
-    isovalue: number,
-    slotIndex: number,
-    vertexOffset: number = 0
-  ): number {
+  invalidateGridSlot(slotIndex: number): void {
+    if (slotIndex >= 0 && slotIndex < this.maxSlots) {
+      this.gridSlotReady[slotIndex] = false;
+    }
+  }
+
+  /**
+   * Check if a grid slot is ready (regridded)
+   */
+  isGridSlotReady(slotIndex: number): boolean {
+    return slotIndex >= 0 && slotIndex < this.maxSlots && this.gridSlotReady[slotIndex] === true;
+  }
+
+  /**
+   * Run regrid compute for a single slot (raw → grid)
+   * Called after raw data is uploaded
+   */
+  regridSlot(slotIndex: number): void {
     if (!this.computeReady || !this.externalBuffers) {
       console.warn('[Pressure] Compute not ready - call setExternalBuffers first');
-      return 0;
+      return;
+    }
+
+    if (slotIndex < 0 || slotIndex >= this.maxSlots) {
+      console.warn(`[Pressure] Invalid slot index: ${slotIndex}`);
+      return;
     }
 
     // Update regrid uniforms
     const regridUniforms = new Uint32Array([
       this.gridWidth,
       this.gridHeight,
-      slotIndex,
-      0, // padding
+      0,  // Not used for single slot regrid
+      0,
     ]);
     this.device.queue.writeBuffer(this.regridUniformBuffer, 0, regridUniforms);
 
-    // Update contour uniforms (48 bytes due to vec3 alignment)
-    const contourUniforms = new ArrayBuffer(48);
-    const contourU32 = new Uint32Array(contourUniforms);
-    const contourF32 = new Float32Array(contourUniforms);
-    contourU32[0] = this.gridWidth;
-    contourU32[1] = this.gridHeight;
-    contourF32[2] = isovalue;
-    contourF32[3] = EARTH_RADIUS;
-    contourU32[4] = vertexOffset;
-    // Remaining bytes are padding for vec3 alignment
-    this.device.queue.writeBuffer(this.contourUniformBuffer, 0, contourUniforms);
-
-    // Create regrid bind group
+    // Create regrid bind group for this slot
     const regridBindGroup = this.device.createBindGroup({
       layout: this.regridBindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.regridUniformBuffer } },
-        { binding: 1, resource: { buffer: this.externalBuffers.pressureData } },
+        { binding: 1, resource: { buffer: this.externalBuffers.pressureDataSlots[slotIndex]! } },
         { binding: 2, resource: { buffer: this.externalBuffers.gaussianLats } },
         { binding: 3, resource: { buffer: this.externalBuffers.ringOffsets } },
-        { binding: 4, resource: { buffer: this.regularGridBuffer } },
+        { binding: 4, resource: { buffer: this.gridSlotBuffers[slotIndex]! } },
       ],
     });
 
-    // Create contour bind group
-    const contourBindGroup = this.device.createBindGroup({
-      layout: this.contourBindGroupLayout,
-      entries: [
-        { binding: 0, resource: { buffer: this.contourUniformBuffer } },
-        { binding: 1, resource: { buffer: this.regularGridBuffer } },
-        { binding: 2, resource: { buffer: this.segmentCountsBuffer } },
-        { binding: 3, resource: { buffer: this.offsetsBuffer } },
-        { binding: 4, resource: { buffer: this.vertexBuffer } },
-      ],
-    });
-
-    // Create prefix sum bind group (counts → offsets)
-    const prefixSumBindGroup = this.device.createBindGroup({
-      layout: this.prefixSumBindGroupLayout,
-      entries: [
-        { binding: 0, resource: { buffer: this.segmentCountsBuffer } },
-        { binding: 1, resource: { buffer: this.blockSumsBuffer } },
-      ],
-    });
-
-    // Clear segment counts (padding area)
-    const paddedCells = Math.ceil(this.numCells / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
-    const clearData = new Uint32Array(paddedCells - this.numCells);
-    if (clearData.length > 0) {
-      this.device.queue.writeBuffer(
-        this.segmentCountsBuffer,
-        this.numCells * 4,
-        clearData
-      );
-    }
-
-    // Pass 1: Regrid O1280 → regular grid
+    // Run regrid
+    const commandEncoder = this.device.createCommandEncoder();
     const regridPass = commandEncoder.beginComputePass();
     regridPass.setPipeline(this.regridPipeline);
     regridPass.setBindGroup(0, regridBindGroup);
@@ -374,8 +359,78 @@ export class PressureLayer {
       Math.ceil(this.gridHeight / 8)
     );
     regridPass.end();
+    this.device.queue.submit([commandEncoder.finish()]);
 
-    // Pass 2: Count segments per cell
+    this.gridSlotReady[slotIndex] = true;
+    console.log(`[Pressure] Regrid slot ${slotIndex} → ${this.gridWidth}×${this.gridHeight}`);
+  }
+
+  /**
+   * Run contour compute with interpolation between two grid slots
+   * @param slot0 First grid slot index
+   * @param slot1 Second grid slot index (same as slot0 for single mode)
+   * @param lerp Interpolation factor (0 = slot0, 1 = slot1)
+   * @param isovalue Pressure level in Pa
+   * @param vertexOffset Base vertex index for multi-level rendering
+   */
+  runContour(
+    commandEncoder: GPUCommandEncoder,
+    slot0: number,
+    _slot1: number,   // TODO: use for interpolation
+    _lerp: number,    // TODO: use for interpolation
+    isovalue: number,
+    vertexOffset: number
+  ): void {
+    if (!this.computeReady || !this.externalBuffers) {
+      console.warn('[Pressure] Compute not ready');
+      return;
+    }
+
+    // Update contour uniforms (48 bytes to match shader struct alignment)
+    // Struct: gridWidth, gridHeight, isovalue, earthRadius, vertexOffset, _pad(vec3)
+    const contourUniforms = new ArrayBuffer(48);
+    const contourU32 = new Uint32Array(contourUniforms);
+    const contourF32 = new Float32Array(contourUniforms);
+    contourU32[0] = this.gridWidth;
+    contourU32[1] = this.gridHeight;
+    contourF32[2] = isovalue;
+    contourF32[3] = EARTH_RADIUS;
+    contourU32[4] = vertexOffset;
+    // _pad: vec3<u32> at offset 20-31, then padding to 48
+    // For now, lerp and slot indices stored but not used by shader yet
+    this.device.queue.writeBuffer(this.contourUniformBuffer, 0, contourUniforms);
+
+    // Create contour bind group with both grid slots
+    // TODO: Update shader to read from two slots and interpolate
+    // For now, use slot0 only (no interpolation)
+    const contourBindGroup = this.device.createBindGroup({
+      layout: this.contourBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.contourUniformBuffer } },
+        { binding: 1, resource: { buffer: this.gridSlotBuffers[slot0]! } },
+        { binding: 2, resource: { buffer: this.segmentCountsBuffer } },
+        { binding: 3, resource: { buffer: this.offsetsBuffer } },
+        { binding: 4, resource: { buffer: this.vertexBuffer } },
+      ],
+    });
+
+    // Create prefix sum bind group
+    const prefixSumBindGroup = this.device.createBindGroup({
+      layout: this.prefixSumBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.segmentCountsBuffer } },
+        { binding: 1, resource: { buffer: this.blockSumsBuffer } },
+      ],
+    });
+
+    // Clear segment counts padding
+    const paddedCells = Math.ceil(this.numCells / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
+    const clearData = new Uint32Array(paddedCells - this.numCells);
+    if (clearData.length > 0) {
+      this.device.queue.writeBuffer(this.segmentCountsBuffer, this.numCells * 4, clearData);
+    }
+
+    // Pass 1: Count segments per cell
     const countPass = commandEncoder.beginComputePass();
     countPass.setPipeline(this.countPipeline);
     countPass.setBindGroup(0, contourBindGroup);
@@ -385,7 +440,7 @@ export class PressureLayer {
     );
     countPass.end();
 
-    // Pass 3: Prefix sum (scan blocks)
+    // Pass 2: Prefix sum
     const numBlocks = Math.ceil(paddedCells / SCAN_BLOCK_SIZE);
     const scanPass = commandEncoder.beginComputePass();
     scanPass.setPipeline(this.scanBlocksPipeline);
@@ -393,14 +448,12 @@ export class PressureLayer {
     scanPass.dispatchWorkgroups(numBlocks);
     scanPass.end();
 
-    // If more than one block, need to scan block sums and add them back
     if (numBlocks > 1) {
-      // Scan the block sums themselves
       const blockSumsBindGroup = this.device.createBindGroup({
         layout: this.prefixSumBindGroupLayout,
         entries: [
           { binding: 0, resource: { buffer: this.blockSumsBuffer } },
-          { binding: 1, resource: { buffer: this.blockSumsBuffer } }, // dummy, not used for single block
+          { binding: 1, resource: { buffer: this.blockSumsBuffer } },
         ],
       });
 
@@ -410,7 +463,6 @@ export class PressureLayer {
       scanBlockSumsPass.dispatchWorkgroups(1);
       scanBlockSumsPass.end();
 
-      // Add block sums back to all elements
       const addBackBindGroup = this.device.createBindGroup({
         layout: this.prefixSumBindGroupLayout,
         entries: [
@@ -426,14 +478,14 @@ export class PressureLayer {
       addPass.end();
     }
 
-    // Copy scanned counts to offsets buffer
+    // Copy counts to offsets
     commandEncoder.copyBufferToBuffer(
       this.segmentCountsBuffer, 0,
       this.offsetsBuffer, 0,
       paddedCells * 4
     );
 
-    // Pass 4: Generate line segment vertices
+    // Pass 3: Generate vertices
     const generatePass = commandEncoder.beginComputePass();
     generatePass.setPipeline(this.generatePipeline);
     generatePass.setBindGroup(0, contourBindGroup);
@@ -442,11 +494,6 @@ export class PressureLayer {
       Math.ceil((this.gridHeight - 1) / 8)
     );
     generatePass.end();
-
-    // We don't know the exact vertex count without reading back from GPU
-    // For now, estimate max and let render pass handle empty draws
-    // TODO: Use indirect draw buffer with actual count from prefix sum
-    return this.numCells * 2 * 2;  // max: cells * maxSegmentsPerCell * verticesPerSegment
   }
 
   /**
@@ -522,7 +569,7 @@ export class PressureLayer {
     // Compute buffers
     this.regridUniformBuffer?.destroy();
     this.contourUniformBuffer?.destroy();
-    this.regularGridBuffer?.destroy();
+    for (const buf of this.gridSlotBuffers) buf?.destroy();
     this.segmentCountsBuffer?.destroy();
     this.offsetsBuffer?.destroy();
     this.blockSumsBuffer?.destroy();

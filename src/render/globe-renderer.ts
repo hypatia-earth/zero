@@ -52,7 +52,7 @@ export class GlobeRenderer {
   private ringOffsetsBuffer!: GPUBuffer;
   private tempDataBuffer!: GPUBuffer;  // Single large buffer with slots
   private rainDataBuffer!: GPUBuffer;
-  private pressureDataBuffer!: GPUBuffer;  // Pressure data (single slot for now)
+  private pressureDataBuffers: GPUBuffer[] = [];  // Pressure raw slots (O1280)
   private maxTempSlots!: number;
   private atmosphereLUTs!: AtmosphereLUTs;
   private useFloat16Luts = false;
@@ -164,13 +164,16 @@ export class GlobeRenderer {
     });
     console.log(`[Globe] RAIN buffer: 1 slots, ${(rainBufferSize / 1024 / 1024).toFixed(1)} MB`);
 
-    // Pressure data (single slot for now - O1280 requires same size as temp)
-    const pressureBufferSize = BYTES_PER_TIMESTEP;
-    this.pressureDataBuffer = this.device.createBuffer({
-      size: pressureBufferSize,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    console.log(`[Globe] PRES buffer: 1 slots, ${(pressureBufferSize / 1024 / 1024).toFixed(1)} MB`);
+    // Pressure raw data slots (O1280 - same count as temp)
+    const pressureSlotSize = BYTES_PER_TIMESTEP;
+    for (let i = 0; i < this.maxTempSlots; i++) {
+      this.pressureDataBuffers.push(this.device.createBuffer({
+        size: pressureSlotSize,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      }));
+    }
+    const pressureTotalMB = (pressureSlotSize * this.maxTempSlots / 1024 / 1024).toFixed(1);
+    console.log(`[Globe] PRES buffer: ${this.maxTempSlots} slots, ${pressureTotalMB} MB`);
 
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
     this.fontAtlasTexture = this.device.createTexture({
@@ -684,14 +687,19 @@ export class GlobeRenderer {
   }
 
   /**
-   * Upload real pressure data and run compute pipeline for all isobar levels
+   * Upload pressure data to a raw slot and trigger regrid
    * @param data O1280 pressure data (Float32Array, ~6.6M points)
-   * @param levels Isobar levels to compute (hPa values)
+   * @param slotIndex Which slot to upload to
    */
-  uploadPressureDataAndCompute(data: Float32Array, levels: number[]): void {
-    // Upload to GPU
+  uploadPressureDataToSlot(data: Float32Array, slotIndex: number): void {
+    if (slotIndex < 0 || slotIndex >= this.pressureDataBuffers.length) {
+      console.warn(`[Globe] Invalid pressure slot index: ${slotIndex}`);
+      return;
+    }
+
+    // Upload to raw slot
     this.device.queue.writeBuffer(
-      this.pressureDataBuffer, 0,
+      this.pressureDataBuffers[slotIndex]!, 0,
       data.buffer, data.byteOffset, data.byteLength
     );
 
@@ -700,26 +708,46 @@ export class GlobeRenderer {
       this.pressureLayer.setExternalBuffers({
         gaussianLats: this.gaussianLatsBuffer,
         ringOffsets: this.ringOffsetsBuffer,
-        pressureData: this.pressureDataBuffer,
+        pressureDataSlots: this.pressureDataBuffers,
       });
     }
 
-    // Run compute for all levels
-    // Note: levels are in hPa, but Open-Meteo data is in Pa, so multiply by 100
-    const maxVerticesPerLevel = 63724;  // Estimate
+    // Trigger regrid for this slot
+    this.pressureLayer.regridSlot(slotIndex);
+  }
+
+  /**
+   * Run contour compute for pressure with interpolation between two grid slots
+   * @param slot0 First grid slot index
+   * @param slot1 Second grid slot index (same as slot0 for single mode)
+   * @param lerp Interpolation factor (0 = slot0, 1 = slot1)
+   * @param levels Isobar levels to compute (hPa values)
+   */
+  runPressureContour(slot0: number, slot1: number, lerp: number, levels: number[]): void {
+    if (!this.pressureLayer.isComputeReady()) {
+      console.warn('[Globe] Pressure layer not ready');
+      return;
+    }
+
+    // Check if grid slots are ready
+    if (!this.pressureLayer.isGridSlotReady(slot0) || !this.pressureLayer.isGridSlotReady(slot1)) {
+      console.warn(`[Globe] Grid slots not ready: ${slot0}=${this.pressureLayer.isGridSlotReady(slot0)}, ${slot1}=${this.pressureLayer.isGridSlotReady(slot1)}`);
+      return;
+    }
+
+    const maxVerticesPerLevel = 63724;
     let totalVertices = 0;
 
     for (let i = 0; i < levels.length; i++) {
       const vertexOffset = i * maxVerticesPerLevel;
       const commandEncoder = this.device.createCommandEncoder();
       const levelPa = levels[i]! * 100;  // Convert hPa to Pa
-      this.pressureLayer.runCompute(commandEncoder, levelPa, 0, vertexOffset);
+      this.pressureLayer.runContour(commandEncoder, slot0, slot1, lerp, levelPa, vertexOffset);
       this.device.queue.submit([commandEncoder.finish()]);
       totalVertices += maxVerticesPerLevel;
     }
 
     this.pressureLayer.setVertexCount(totalVertices);
-    console.log(`[Globe] Pressure computed: ${levels.length} levels, ~${totalVertices} vertices`);
   }
 
   /**
@@ -730,40 +758,15 @@ export class GlobeRenderer {
     // Generate synthetic O1280 pressure data
     const syntheticData = this.generateSyntheticO1280Pressure();
 
-    // Upload to GPU
-    this.device.queue.writeBuffer(
-      this.pressureDataBuffer, 0,
-      syntheticData.buffer, syntheticData.byteOffset, syntheticData.byteLength
-    );
+    // Upload to slot 0 (triggers regrid)
+    this.uploadPressureDataToSlot(syntheticData, 0);
 
-    // Set up external buffers for compute pipeline
-    this.pressureLayer.setExternalBuffers({
-      gaussianLats: this.gaussianLatsBuffer,
-      ringOffsets: this.ringOffsetsBuffer,
-      pressureData: this.pressureDataBuffer,
-    });
-
-    // Test levels to show cyclone structure
-    // Center ~970 hPa, outer ~1010-1020 hPa
+    // Run contour with slot0=slot1 (single mode, no interpolation)
     const testLevels = [976, 984, 992, 1000, 1008, 1016];
-    const maxVerticesPerLevel = 63724;  // Estimate from previous run
+    this.runPressureContour(0, 0, 0, testLevels);
 
-    let totalVertices = 0;
-
-    // Submit each level separately to ensure proper synchronization
-    for (let i = 0; i < testLevels.length; i++) {
-      const vertexOffset = i * maxVerticesPerLevel;
-      const commandEncoder = this.device.createCommandEncoder();
-      this.pressureLayer.runCompute(commandEncoder, testLevels[i]!, 0, vertexOffset);
-      this.device.queue.submit([commandEncoder.finish()]);
-      totalVertices += maxVerticesPerLevel;
-    }
-
-    // Set total vertex count and enable
-    this.pressureLayer.setVertexCount(totalVertices);
     this.pressureLayer.setEnabled(true);
-
-    console.log(`[Globe] Synthetic pressure: ${testLevels.length} levels, ~${totalVertices} vertices`);
+    console.log(`[Globe] Synthetic pressure: ${testLevels.length} levels`);
   }
 
   /**
@@ -820,7 +823,7 @@ export class GlobeRenderer {
     this.basemapTexture?.destroy();
     this.gaussianLatsBuffer?.destroy();
     this.ringOffsetsBuffer?.destroy();
-    this.pressureDataBuffer?.destroy();
+    for (const buf of this.pressureDataBuffers) buf?.destroy();
     this.tempDataBuffer?.destroy();
     this.rainDataBuffer?.destroy();
     this.fontAtlasTexture?.destroy();

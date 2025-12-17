@@ -240,15 +240,11 @@ export class RenderService {
   }
 
   /**
-   * Upload pressure data and run compute pipeline
-   * @param data O1280 pressure data
+   * Upload pressure data to slot 0 (backwards compat)
+   * @deprecated Use uploadToSlot with slotIndex instead
    */
   uploadPressureData(data: Float32Array): void {
-    if (!this.renderer) {
-      throw new Error('RenderService not initialized');
-    }
-    this.renderer.uploadPressureDataAndCompute(data, [...ISOBAR_CONFIG.levels]);
-    this.pressureDataLoaded = true;
+    this.uploadToSlot('pressure', data, 0);
   }
 
   /**
@@ -276,8 +272,8 @@ export class RenderService {
         this.renderer.uploadTempDataToSlot(data, slotIndex);
         break;
       case 'pressure':
-        // Pressure uses compute pipeline, slotIndex ignored (single buffer)
-        this.renderer.uploadPressureDataAndCompute(data, [...ISOBAR_CONFIG.levels]);
+        // Upload to raw slot and trigger regrid
+        this.renderer.uploadPressureDataToSlot(data, slotIndex);
         this.pressureDataLoaded = true;
         break;
       case 'rain':
@@ -300,8 +296,9 @@ export class RenderService {
         this.tempLoadedPoints = loadedPoints;
         break;
       case 'pressure':
-        // Pressure doesn't use slot-based activation yet (single buffer)
-        // The pressureDataLoaded flag is set in uploadToSlot
+        // Run contour compute with both grid slots
+        // For now, lerp=0 (use slot0 only until interpolation is wired up)
+        this.renderer?.runPressureContour(slot0, slot1, 0, [...ISOBAR_CONFIG.levels]);
         break;
       case 'rain':
       case 'wind':
