@@ -846,6 +846,17 @@ export const optionsSchema = z.object({
         control: 'toggle',
       }
     ),
+    showPerfPanel: opt(
+      z.boolean().default(false),
+      {
+        label: 'Show perf panel',
+        description: 'Frame and GPU pass timing',
+        group: 'advanced',
+        filter: 'global',
+        order: 100,
+        control: 'toggle',
+      }
+    ),
   }),
 });
 
@@ -887,7 +898,7 @@ export const defaultOptions: ZeroOptions = {
   wind: { enabled: false, seedCount: '8192', opacity: 0.6, speed: 20, resolution: 'full' },
   pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1' },
   dataCache: { cacheStrategy: 'alternate', downloadMode: 'on-demand' },
-  debug: { showDevLog: false },
+  debug: { showDevLog: false, showPerfPanel: false },
 };
 
 // ============================================================
