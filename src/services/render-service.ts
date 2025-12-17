@@ -7,6 +7,7 @@ import { ISOBAR_CONFIG } from '../render/pressure-layer';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { ZeroOptions } from '../schemas/options.schema';
+import type { TParam } from '../config/types';
 import { getSunDirection } from '../utils/sun-position';
 
 export class RenderService {
@@ -255,6 +256,65 @@ export class RenderService {
    */
   isPressureDataLoaded(): boolean {
     return this.pressureDataLoaded;
+  }
+
+  // ============================================================
+  // Generic slot methods (called by SlotService)
+  // ============================================================
+
+  /**
+   * Upload data to a slot for a given param
+   * Routes to param-specific upload method
+   */
+  uploadToSlot(param: TParam, data: Float32Array, slotIndex: number): void {
+    if (!this.renderer) {
+      throw new Error('RenderService not initialized');
+    }
+
+    switch (param) {
+      case 'temp':
+        this.renderer.uploadTempDataToSlot(data, slotIndex);
+        break;
+      case 'pressure':
+        // Pressure uses compute pipeline, slotIndex ignored (single buffer)
+        this.renderer.uploadPressureDataAndCompute(data, [...ISOBAR_CONFIG.levels]);
+        this.pressureDataLoaded = true;
+        break;
+      case 'rain':
+      case 'wind':
+        // TODO: implement when these layers support slots
+        console.warn(`[RenderService] uploadToSlot not implemented for ${param}`);
+        break;
+    }
+  }
+
+  /**
+   * Activate slots for a given param (shader will use these slots)
+   * Routes to param-specific activation
+   */
+  activateSlots(param: TParam, slot0: number, slot1: number, loadedPoints: number): void {
+    switch (param) {
+      case 'temp':
+        this.tempSlot0 = slot0;
+        this.tempSlot1 = slot1;
+        this.tempLoadedPoints = loadedPoints;
+        break;
+      case 'pressure':
+        // Pressure doesn't use slot-based activation yet (single buffer)
+        // The pressureDataLoaded flag is set in uploadToSlot
+        break;
+      case 'rain':
+      case 'wind':
+        // TODO: implement when these layers support slots
+        break;
+    }
+  }
+
+  /**
+   * Get max slots per layer from options
+   */
+  getMaxSlotsPerLayer(): number {
+    return parseInt(this.optionsService.options.value.gpu.slotsPerLayer, 10);
   }
 
   dispose(): void {

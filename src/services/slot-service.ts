@@ -39,12 +39,15 @@ export interface Slot {
   loadedPoints: number;
 }
 
+/** Params that use slot-based loading */
+const SLOT_PARAMS: TParam[] = ['temp', 'pressure'];
+
 export class SlotService {
   private slots: Map<string, Slot> = new Map(); // key: `${param}:${timestep}`
-  private maxSlots: number;
-  private freeSlotIndices: number[] = [];
+  private maxSlotsPerParam: number = 8;
+  private freeSlotIndicesPerParam: Map<TParam, number[]> = new Map();
   private disposeEffect: (() => void) | null = null;
-  private disposeSubscribe: (() => void) | null = null;
+  private disposeSubscribes: Map<TParam, () => void> = new Map();
   private loadingKeys: Set<string> = new Set();
   private initialized = false;
 
@@ -58,8 +61,8 @@ export class SlotService {
   /** Signal for UI reactivity */
   readonly slotsVersion = signal(0);
 
-  /** What timesteps are needed for current time (computed by effect) */
-  private readonly wanted = signal<WantedState | null>(null);
+  /** What timesteps are needed for current time, per param */
+  private readonly wantedPerParam: Map<TParam, ReturnType<typeof signal<WantedState | null>>> = new Map();
 
   constructor(
     private timestepService: TimestepService,
@@ -67,32 +70,64 @@ export class SlotService {
     private queueService: QueueService,
     private optionsService: OptionsService
   ) {
-    this.maxSlots = this.renderService.getRenderer().getMaxTempSlots();
-    this.freeSlotIndices = Array.from({ length: this.maxSlots }, (_, i) => i);
+    // Get max slots per layer from options
+    this.maxSlotsPerParam = this.renderService.getMaxSlotsPerLayer();
 
-    // Wire up lerp calculation
+    // Initialize per-param state
+    for (const param of SLOT_PARAMS) {
+      this.freeSlotIndicesPerParam.set(
+        param,
+        Array.from({ length: this.maxSlotsPerParam }, (_, i) => i)
+      );
+      this.wantedPerParam.set(param, signal<WantedState | null>(null));
+    }
+
+    // Wire up lerp calculation (temp-specific for now)
     this.renderService.setTempLerpFn((time) => this.getTempLerp(time));
 
     // Effect: pure computation of wanted state + shader activation (no I/O)
     this.disposeEffect = effect(() => {
       const time = this.optionsService.options.value.viewState.time;
+      const opts = this.optionsService.options.value;
       if (!this.initialized) return;
 
-      const wanted = this.computeWanted(time);
-      this.tryActivateShader('temp', wanted);
+      // Process each enabled param
+      for (const param of SLOT_PARAMS) {
+        const isEnabled = this.isParamEnabled(param, opts);
+        if (!isEnabled) continue;
 
-      // Only update if priority changed (avoid triggering subscribe for same wanted)
-      const prev = this.wanted.value;
-      if (!prev || prev.priority.join() !== wanted.priority.join()) {
-        this.wanted.value = wanted;
+        const wanted = this.computeWanted(time, param);
+        this.tryActivateShader(param, wanted);
+
+        // Update wanted signal if priority changed
+        const wantedSignal = this.wantedPerParam.get(param)!;
+        const prev = wantedSignal.value;
+        if (!prev || prev.priority.join() !== wanted.priority.join()) {
+          wantedSignal.value = wanted;
+        }
       }
     });
 
-    // Subscribe: side effects (fetching) debounced for rapid time changes
-    const debouncedFetch = debounce((w: WantedState) => this.fetchMissing('temp', w), 200);
-    this.disposeSubscribe = this.wanted.subscribe(wanted => {
-      if (wanted) debouncedFetch(wanted);
-    });
+    // Subscribe: side effects (fetching) debounced for rapid time changes - per param
+    for (const param of SLOT_PARAMS) {
+      const debouncedFetch = debounce((w: WantedState) => this.fetchMissing(param, w), 200);
+      const wantedSignal = this.wantedPerParam.get(param)!;
+      const unsubscribe = wantedSignal.subscribe(wanted => {
+        if (wanted) debouncedFetch(wanted);
+      });
+      this.disposeSubscribes.set(param, unsubscribe);
+    }
+  }
+
+  /** Check if a param is enabled in options */
+  private isParamEnabled(param: TParam, opts: typeof this.optionsService.options.value): boolean {
+    switch (param) {
+      case 'temp': return opts.temp.enabled;
+      case 'pressure': return opts.pressure.enabled;
+      case 'rain': return opts.rain.enabled;
+      case 'wind': return opts.wind.enabled;
+      default: return false;
+    }
   }
 
   /** Make slot key from param and timestep */
@@ -101,9 +136,9 @@ export class SlotService {
   }
 
   /** Pure computation: what timesteps does current time need? */
-  private computeWanted(time: Date): WantedState {
+  private computeWanted(time: Date, param: TParam): WantedState {
     const exactTs = this.timestepService.getExactTimestep(time);
-    const centeredWindow = this.calculateLoadWindow(time);
+    const centeredWindow = this.calculateLoadWindow(time, param);
     const sortedWindow = this.sortByStrategy(centeredWindow);
 
     if (exactTs) {
@@ -131,8 +166,7 @@ export class SlotService {
       const slot = this.slots.get(this.makeKey(param, ts));
       if (slot?.loaded) {
         this.activePair.set(param, { t0: ts, t1: null });
-        this.renderService.setTempSlots(slot.slotIndex, slot.slotIndex);
-        this.renderService.setTempLoadedPoints(slot.loadedPoints);
+        this.renderService.activateSlots(param, slot.slotIndex, slot.slotIndex, slot.loadedPoints);
         console.log(`[Slot] ${param} single: ${fmt(ts)}`);
       } else {
         this.activePair.delete(param);  // Clear stale pair
@@ -144,8 +178,7 @@ export class SlotService {
       const slot1 = this.slots.get(this.makeKey(param, t1));
       if (slot0?.loaded && slot1?.loaded) {
         this.activePair.set(param, { t0, t1 });
-        this.renderService.setTempSlots(slot0.slotIndex, slot1.slotIndex);
-        this.renderService.setTempLoadedPoints(Math.min(slot0.loadedPoints, slot1.loadedPoints));
+        this.renderService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, Math.min(slot0.loadedPoints, slot1.loadedPoints));
         console.log(`[Slot] ${param} pair: ${fmt(t0)} → ${fmt(t1)}`);
       } else {
         this.activePair.delete(param);  // Clear stale pair
@@ -187,7 +220,7 @@ export class SlotService {
   }
 
   /** Calculate ideal load window around time (always centered ~50/50) */
-  private calculateLoadWindow(time: Date): TTimestep[] {
+  private calculateLoadWindow(time: Date, _param: TParam): TTimestep[] {
     const [t0, t1] = this.timestepService.adjacent(time);
     const window: TTimestep[] = [t0, t1];
 
@@ -195,7 +228,7 @@ export class SlotService {
     let futureCursor = this.timestepService.next(t1);
 
     // Build centered window: alternate future/past to keep balanced
-    while (window.length < this.maxSlots) {
+    while (window.length < this.maxSlotsPerParam) {
       const canAddFuture = futureCursor && this.isInDataWindow(futureCursor);
       const canAddPast = pastCursor && this.isInDataWindow(pastCursor);
 
@@ -260,7 +293,8 @@ export class SlotService {
       (order, slice) => {
         if (slice.done) {
           // Skip if timestep no longer in wanted window (user moved away)
-          if (!this.wanted.value?.window.includes(order.timestep)) {
+          const wantedSignal = this.wantedPerParam.get(param);
+          if (!wantedSignal?.value?.window.includes(order.timestep)) {
             this.loadingKeys.delete(this.makeKey(param, order.timestep));
             return;
           }
@@ -290,12 +324,13 @@ export class SlotService {
     const existing = this.slots.get(key);
     if (existing) return existing.slotIndex;
 
-    // Free slot available?
-    if (this.freeSlotIndices.length > 0) {
-      return this.freeSlotIndices.pop()!;
+    // Free slot available for this param?
+    const freeIndices = this.freeSlotIndicesPerParam.get(param)!;
+    if (freeIndices.length > 0) {
+      return freeIndices.pop()!;
     }
 
-    // Need to evict - find furthest from reference time
+    // Need to evict - find furthest from reference time (only slots for this param)
     const candidates = [...this.slots.entries()]
       .filter(([, slot]) => slot.param === param && slot.loaded)
       .sort((a, b) => {
@@ -320,21 +355,26 @@ export class SlotService {
   private uploadToSlot(param: TParam, timestep: TTimestep, slotIndex: number, data: Float32Array): void {
     const key = this.makeKey(param, timestep);
 
-    const renderer = this.renderService.getRenderer();
-    renderer.uploadTempDataToSlot(data, slotIndex);
+    // Use generic upload method - RenderService routes to param-specific handler
+    this.renderService.uploadToSlot(param, data, slotIndex);
 
     this.slots.set(key, { timestep, param, slotIndex, loaded: true, loadedPoints: data.length });
     this.timestepService.setGpuLoaded(param, timestep);
     this.timestepService.refreshCacheState(param);
     this.slotsVersion.value++;
-    console.log(`[Slot] Loaded ${param}:${fmt(timestep)} → slot ${slotIndex} (${this.slots.size}/${this.maxSlots})`);
+
+    const totalSlots = SLOT_PARAMS.reduce((sum, p) => {
+      return sum + [...this.slots.values()].filter(s => s.param === p).length;
+    }, 0);
+    console.log(`[Slot] Loaded ${param}:${fmt(timestep)} → slot ${slotIndex} (${totalSlots} total)`);
 
     this.updateShaderIfReady(param);
   }
 
   /** Update shader when a slot finishes loading (uses current wanted state) */
   private updateShaderIfReady(param: TParam): void {
-    const wanted = this.wanted.value;
+    const wantedSignal = this.wantedPerParam.get(param);
+    const wanted = wantedSignal?.value;
     if (!wanted) return;
     this.tryActivateShader(param, wanted);
   }
@@ -355,15 +395,15 @@ export class SlotService {
     return (tc - t0) / (t1 - t0);
   }
 
-  /** Initialize with first timestep(s) - single if exact, pair if between */
+  /** Initialize with first timestep(s) - loads temp initially, effect handles other params */
   async initialize(): Promise<void> {
     // Set data window from discovered timesteps
     this.dataWindowStart = this.timestepService.first();
     this.dataWindowEnd = this.timestepService.last();
 
     const time = this.optionsService.options.value.viewState.time;
-    const param: TParam = 'temp';
-    const wanted = this.computeWanted(time);
+    const param: TParam = 'temp';  // Initialize temp first (most common default)
+    const wanted = this.computeWanted(time, param);
 
     console.log(`[Slot] ${param} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
 
@@ -401,7 +441,8 @@ export class SlotService {
     }
 
     // Set wanted state so shader activation works
-    this.wanted.value = wanted;
+    const wantedSignal = this.wantedPerParam.get(param)!;
+    wantedSignal.value = wanted;
     this.tryActivateShader(param, wanted);
 
     this.initialized = true;
@@ -435,84 +476,26 @@ export class SlotService {
     return this.optionsService.options.value.dataCache.cacheStrategy as LoadingStrategy;
   }
 
-  /** Get max slots */
+  /** Get max slots per layer */
   getMaxSlots(): number {
-    return this.maxSlots;
+    return this.maxSlotsPerParam;
   }
 
-  /** Get current slot count */
-  getSlotCount(): number {
+  /** Get current slot count for a param */
+  getSlotCount(param?: TParam): number {
+    if (param) {
+      return [...this.slots.values()].filter(s => s.param === param).length;
+    }
     return this.slots.size;
-  }
-
-  // ============================================================
-  // PRESSURE LOADING (simplified - single timestep, no interpolation)
-  // ============================================================
-
-  private pressureTimestep: TTimestep | null = null;
-  private pressureLoading = false;
-
-  /**
-   * Load pressure data for current time
-   * Automatically determines closest timestep
-   */
-  async loadPressureForCurrentTime(): Promise<void> {
-    const time = this.optionsService.options.value.viewState.time;
-    const exactTs = this.timestepService.getExactTimestep(time);
-    const targetTs = exactTs ?? this.timestepService.adjacent(time)[0];
-
-    // Skip if already loaded or loading
-    if (this.pressureTimestep === targetTs || this.pressureLoading) {
-      return;
-    }
-
-    this.pressureLoading = true;
-    console.log(`[Slot] Loading pressure: ${fmt(targetTs)}`);
-
-    try {
-      const order: TimestepOrder = {
-        url: this.timestepService.url(targetTs),
-        param: 'pressure',
-        timestep: targetTs,
-        sizeEstimate: this.timestepService.getSize('pressure', targetTs),
-      };
-
-      await this.queueService.submitTimestepOrders(
-        [order],
-        (order, slice) => {
-          if (slice.done) {
-            // Upload to RenderService for compute pipeline
-            this.renderService.uploadPressureData(slice.data);
-            this.pressureTimestep = order.timestep;
-            console.log(`[Slot] Pressure loaded: ${fmt(order.timestep)}`);
-          }
-        },
-        (order, actualBytes) => {
-          this.timestepService.setSize('pressure', order.timestep, actualBytes);
-        }
-      );
-    } catch (err) {
-      console.warn('[Slot] Pressure load failed:', err);
-    } finally {
-      this.pressureLoading = false;
-    }
-  }
-
-  /** Check if pressure is loaded */
-  isPressureLoaded(): boolean {
-    return this.pressureTimestep !== null;
-  }
-
-  /** Get loaded pressure timestep */
-  getPressureTimestep(): TTimestep | null {
-    return this.pressureTimestep;
   }
 
   dispose(): void {
     this.disposeEffect?.();
     this.disposeEffect = null;
-    this.disposeSubscribe?.();
-    this.disposeSubscribe = null;
+    for (const unsubscribe of this.disposeSubscribes.values()) {
+      unsubscribe();
+    }
+    this.disposeSubscribes.clear();
     this.slots.clear();
   }
 }

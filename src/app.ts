@@ -212,16 +212,8 @@ export const App: m.ClosureComponent = () => {
           renderService.updateTempPalette(textureData as Uint8Array<ArrayBuffer>, range.min, range.max);
         });
 
-        // Wire up pressure layer reactivity
-        effect(() => {
-          const pressureEnabled = optionsService.options.value.pressure.enabled;
-          if (pressureEnabled && !renderService.isPressureDataLoaded()) {
-            // Load real pressure data (async, fire and forget)
-            slotService.loadPressureForCurrentTime().catch(err => {
-              console.warn('[App] Pressure load failed:', err);
-            });
-          }
-        });
+        // Note: Pressure layer loading is handled automatically by SlotService
+        // when pressure.enabled changes (same as temp)
 
         BootstrapService.complete();
         console.log(`%c[ZERO] Bootstrap complete (${(performance.now() / 1000).toFixed(2)}s)`, 'color: darkgreen; font-weight: bold');
