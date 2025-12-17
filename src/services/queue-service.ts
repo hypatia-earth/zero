@@ -125,9 +125,9 @@ export class QueueService implements IQueueService {
       }
     }
 
-    // Filter out the currently fetching order (if in new orders)
+    // Filter out the currently fetching order (if same param AND timestep in new orders)
     const newOrders = this.currentlyFetching
-      ? orders.filter(o => o.timestep !== this.currentlyFetching!.timestep)
+      ? orders.filter(o => !(o.timestep === this.currentlyFetching!.timestep && o.param === this.currentlyFetching!.param))
       : orders;
 
     // Get param(s) being submitted - keep other params' pending orders
