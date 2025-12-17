@@ -537,6 +537,19 @@ export class PressureLayer {
   }
 
   /**
+   * Clear vertex buffer to remove stale geometry
+   * Called before recomputing contours
+   */
+  clearVertexBuffer(): void {
+    // Write zeros to the entire vertex buffer
+    const numLevels = ISOBAR_CONFIG.levels.length;
+    const maxVerticesPerLevel = 63724;
+    const bufferSize = maxVerticesPerLevel * numLevels * 16;  // vec4f per vertex
+    const zeros = new Float32Array(bufferSize / 4);
+    this.device.queue.writeBuffer(this.vertexBuffer, 0, zeros);
+  }
+
+  /**
    * Render contour lines
    */
   render(renderPass: GPURenderPassEncoder): void {

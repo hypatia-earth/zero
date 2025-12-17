@@ -250,14 +250,12 @@ export class OptionsService {
     const changes: string[] = [];
     const vs = this.options.value.viewState;
 
-    // Time: snap disabled - allow any time for pair mode interpolation
-    // const snappedTime = getClosestTimestep(vs.time);
-    // if (snappedTime.getTime() !== vs.time.getTime()) {
-    //   this.update(o => { o.viewState.time = snappedTime; });
-    //   changes.push(`time=${vs.time.toISOString().slice(0, 13)}→${snappedTime.toISOString().slice(0, 13)}`);
-    // }
-    void getClosestTimestep;  // Suppress unused param warning
-    console.log('[Sanitize] URL time snap disabled');
+    // Snap time to closest available timestep
+    const snappedTime = getClosestTimestep(vs.time);
+    if (snappedTime.getTime() !== vs.time.getTime()) {
+      this.update(o => { o.viewState.time = snappedTime; });
+      changes.push(`time=${vs.time.toISOString().slice(0, 13)}→${snappedTime.toISOString().slice(0, 13)}`);
+    }
 
     // Lat/lon: log if defaulted or clamped
     // URL uses 1 decimal (toFixed(1)) ≈ 11km precision, matching ECMWF 0.1° grid (~10km)

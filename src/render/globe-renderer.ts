@@ -828,6 +828,9 @@ export class GlobeRenderer {
     const maxVerticesPerLevel = 63724;
     let totalVertices = 0;
 
+    // Clear vertex buffer to remove stale geometry
+    this.pressureLayer.clearVertexBuffer();
+
     for (let i = 0; i < levels.length; i++) {
       const vertexOffset = i * maxVerticesPerLevel;
       const commandEncoder = this.device.createCommandEncoder();

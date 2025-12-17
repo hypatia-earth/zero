@@ -61,12 +61,13 @@ fn samplePressure(x: u32, y: u32) -> f32 {
 }
 
 // Get case index from 4 corner values
+// Use >= to avoid instability when value exactly equals isovalue
 fn getCaseIndex(v0: f32, v1: f32, v2: f32, v3: f32, iso: f32) -> u32 {
   var caseIdx = 0u;
-  if (v0 > iso) { caseIdx |= 1u; }  // bottom-left
-  if (v1 > iso) { caseIdx |= 2u; }  // bottom-right
-  if (v2 > iso) { caseIdx |= 4u; }  // top-right
-  if (v3 > iso) { caseIdx |= 8u; }  // top-left
+  if (v0 >= iso) { caseIdx |= 1u; }  // bottom-left
+  if (v1 >= iso) { caseIdx |= 2u; }  // bottom-right
+  if (v2 >= iso) { caseIdx |= 4u; }  // top-right
+  if (v3 >= iso) { caseIdx |= 8u; }  // top-left
   return caseIdx;
 }
 
