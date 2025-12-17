@@ -189,8 +189,10 @@ export const App: m.ClosureComponent = () => {
         );
 
         // 5g. Load initial timesteps for all enabled weather layers
-        await BootstrapService.updateProgress('Loading weather data...', 50);
-        await slotService.initialize();
+        await slotService.initialize((param, index, total) => {
+          const pct = 50 + (index / total) * 45;  // 50% to 95%
+          BootstrapService.updateProgress(`Loading ${param} ${index}/${total}...`, pct);
+        });
 
         // Step 6: Activate
         BootstrapService.setStep('ACTIVATE');

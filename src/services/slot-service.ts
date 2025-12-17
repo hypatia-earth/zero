@@ -402,7 +402,7 @@ export class SlotService {
   }
 
   /** Initialize with priority timesteps for all enabled params */
-  async initialize(): Promise<void> {
+  async initialize(onProgress?: (param: TParam, index: number, total: number) => void): Promise<void> {
     // Set data window from discovered timesteps
     this.dataWindowStart = this.timestepService.first();
     this.dataWindowEnd = this.timestepService.last();
@@ -439,6 +439,10 @@ export class SlotService {
       }
     }
 
+    // Track completed orders for progress
+    let completed = 0;
+    const total = allOrders.length;
+
     // Load all priority timesteps
     await this.queueService.submitTimestepOrders(
       allOrders,
@@ -448,6 +452,8 @@ export class SlotService {
           if (slotIndex !== null) {
             this.uploadToSlot(order.param, order.timestep, slotIndex, slice.data);
           }
+          completed++;
+          onProgress?.(order.param, completed, total);
         }
       },
       (order, actualBytes) => {
