@@ -316,10 +316,9 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       }
       cachedMap.set(layer, cachedSet);
 
-      // GPU loaded
+      // GPU loaded (from timestepService state)
       const gpuSet = new Set<string>();
-      const loadedTimesteps = slotService.getLoadedTimestamps(layer);
-      for (const ts of loadedTimesteps) {
+      for (const ts of paramState!.gpu) {
         gpuSet.add(timestepService.toDate(ts).toISOString());
       }
       gpuMap.set(layer, gpuSet);
