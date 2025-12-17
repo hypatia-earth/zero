@@ -761,8 +761,24 @@ export const optionsSchema = z.object({
         step: 0.05,
       }
     ),
+    resolution: opt(
+      z.enum(['1', '2']).default('2'),
+      {
+        label: 'Grid resolution',
+        description: 'Contour grid resolution (1° = finer, 2° = faster). Requires reload.',
+        group: 'layers',
+        filter: ['global', 'pressure'],
+        order: 17.5,
+        control: 'radio',
+        options: [
+          { value: '2', label: '2° (fast)' },
+          { value: '1', label: '1° (detailed)' },
+        ],
+        impact: 'recreate',
+      }
+    ),
     smoothing: opt(
-      z.enum(['0', '1', '2', '3']).default('1'),
+      z.enum(['0', '1', '2']).default('1'),
       {
         label: 'Line smoothing',
         description: 'Chaikin subdivision iterations for smoother contours',
@@ -771,10 +787,9 @@ export const optionsSchema = z.object({
         order: 18,
         control: 'radio',
         options: [
-          { value: '0', label: 'Off' },
-          { value: '1', label: 'Low' },
-          { value: '2', label: 'Med' },
-          { value: '3', label: 'High' },
+          { value: '0', label: 'None' },
+          { value: '1', label: '1 pass' },
+          { value: '2', label: '2 passes' },
         ],
       }
     ),
@@ -870,7 +885,7 @@ export const defaultOptions: ZeroOptions = {
   clouds: { enabled: false, opacity: 0.5, resolution: 'full' },
   humidity: { enabled: false, opacity: 0.6, resolution: 'full' },
   wind: { enabled: false, seedCount: '8192', opacity: 0.6, speed: 20, resolution: 'full' },
-  pressure: { enabled: false, opacity: 0.85, smoothing: '1' },
+  pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1' },
   dataCache: { cacheStrategy: 'alternate', downloadMode: 'on-demand' },
   debug: { showDevLog: false },
 };
