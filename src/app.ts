@@ -180,9 +180,6 @@ export const App: m.ClosureComponent = () => {
         // Finalize renderer
         renderer.finalize();
 
-        // Initialize synthetic pressure for compute pipeline testing
-        renderer.initSyntheticPressure();
-
         // SlotService - manages timestep data loading
         slotService = new SlotService(
           timestepService,
@@ -213,6 +210,17 @@ export const App: m.ClosureComponent = () => {
           const textureData = paletteService.generateTextureData(palette);
           const range = paletteService.getRange(palette);
           renderService.updateTempPalette(textureData as Uint8Array<ArrayBuffer>, range.min, range.max);
+        });
+
+        // Wire up pressure layer reactivity
+        effect(() => {
+          const pressureEnabled = optionsService.options.value.pressure.enabled;
+          if (pressureEnabled && !renderService.isPressureDataLoaded()) {
+            // Load real pressure data (async, fire and forget)
+            slotService.loadPressureForCurrentTime().catch(err => {
+              console.warn('[App] Pressure load failed:', err);
+            });
+          }
         });
 
         BootstrapService.complete();

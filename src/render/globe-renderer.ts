@@ -701,13 +701,15 @@ export class GlobeRenderer {
     }
 
     // Run compute for all levels
+    // Note: levels are in hPa, but Open-Meteo data is in Pa, so multiply by 100
     const maxVerticesPerLevel = 63724;  // Estimate
     let totalVertices = 0;
 
     for (let i = 0; i < levels.length; i++) {
       const vertexOffset = i * maxVerticesPerLevel;
       const commandEncoder = this.device.createCommandEncoder();
-      this.pressureLayer.runCompute(commandEncoder, levels[i]!, 0, vertexOffset);
+      const levelPa = levels[i]! * 100;  // Convert hPa to Pa
+      this.pressureLayer.runCompute(commandEncoder, levelPa, 0, vertexOffset);
       this.device.queue.submit([commandEncoder.finish()]);
       totalVertices += maxVerticesPerLevel;
     }

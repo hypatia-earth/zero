@@ -10,7 +10,7 @@ import type { LayerId } from '../config/types';
 import type { OptionFilter } from '../schemas/options.schema';
 
 /** Layers that have configurable options */
-const LAYERS_WITH_OPTIONS: LayerId[] = ['earth', 'sun', 'grid', 'temp', 'rain'];
+const LAYERS_WITH_OPTIONS: LayerId[] = ['earth', 'sun', 'grid', 'temp', 'rain', 'pressure'];
 
 interface LayersPanelAttrs {
   configService: ConfigService;

@@ -445,6 +445,69 @@ export class SlotService {
     return this.slots.size;
   }
 
+  // ============================================================
+  // PRESSURE LOADING (simplified - single timestep, no interpolation)
+  // ============================================================
+
+  private pressureTimestep: TTimestep | null = null;
+  private pressureLoading = false;
+
+  /**
+   * Load pressure data for current time
+   * Automatically determines closest timestep
+   */
+  async loadPressureForCurrentTime(): Promise<void> {
+    const time = this.optionsService.options.value.viewState.time;
+    const exactTs = this.timestepService.getExactTimestep(time);
+    const targetTs = exactTs ?? this.timestepService.adjacent(time)[0];
+
+    // Skip if already loaded or loading
+    if (this.pressureTimestep === targetTs || this.pressureLoading) {
+      return;
+    }
+
+    this.pressureLoading = true;
+    console.log(`[Slot] Loading pressure: ${fmt(targetTs)}`);
+
+    try {
+      const order: TimestepOrder = {
+        url: this.timestepService.url(targetTs),
+        param: 'pressure',
+        timestep: targetTs,
+        sizeEstimate: this.timestepService.getSize('pressure', targetTs),
+      };
+
+      await this.queueService.submitTimestepOrders(
+        [order],
+        (order, slice) => {
+          if (slice.done) {
+            // Upload to RenderService for compute pipeline
+            this.renderService.uploadPressureData(slice.data);
+            this.pressureTimestep = order.timestep;
+            console.log(`[Slot] Pressure loaded: ${fmt(order.timestep)}`);
+          }
+        },
+        (order, actualBytes) => {
+          this.timestepService.setSize('pressure', order.timestep, actualBytes);
+        }
+      );
+    } catch (err) {
+      console.warn('[Slot] Pressure load failed:', err);
+    } finally {
+      this.pressureLoading = false;
+    }
+  }
+
+  /** Check if pressure is loaded */
+  isPressureLoaded(): boolean {
+    return this.pressureTimestep !== null;
+  }
+
+  /** Get loaded pressure timestep */
+  getPressureTimestep(): TTimestep | null {
+    return this.pressureTimestep;
+  }
+
   dispose(): void {
     this.disposeEffect?.();
     this.disposeEffect = null;
