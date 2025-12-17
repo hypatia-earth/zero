@@ -100,7 +100,7 @@ export class SlotService {
         if (!isEnabled) continue;
 
         const wanted = this.computeWanted(time, param);
-        this.tryActivateShader(param, wanted);
+        this.activateIfReady(param, wanted);
 
         // Update wanted signal if priority changed
         const wantedSignal = this.wantedPerParam.get(param)!;
@@ -162,8 +162,13 @@ export class SlotService {
     }
   }
 
-  /** Activate shader if required slots are loaded, clear if not ready */
-  private tryActivateShader(param: TParam, wanted: WantedState): void {
+  /**
+   * Activate shader for param if required slots are loaded.
+   * Single mode: needs 1 slot (exact timestep match)
+   * Pair mode: needs 2 slots (interpolation between timesteps)
+   * Clears activePair if slots not ready (e.g., still loading).
+   */
+  private activateIfReady(param: TParam, wanted: WantedState): void {
     if (wanted.mode === 'single') {
       const ts = wanted.priority[0]!;  // Single mode always has 1 priority
       const slot = this.slots.get(this.makeKey(param, ts));
@@ -377,7 +382,7 @@ export class SlotService {
     const wantedSignal = this.wantedPerParam.get(param);
     const wanted = wantedSignal?.value;
     if (!wanted) return;
-    this.tryActivateShader(param, wanted);
+    this.activateIfReady(param, wanted);
   }
 
   /** Calculate lerp for shader interpolation: -1 = not ready, -2 = single slot mode, 0-1 = interpolate */
@@ -444,7 +449,7 @@ export class SlotService {
     // Set wanted state so shader activation works
     const wantedSignal = this.wantedPerParam.get(param)!;
     wantedSignal.value = wanted;
-    this.tryActivateShader(param, wanted);
+    this.activateIfReady(param, wanted);
 
     this.initialized = true;
     this.slotsVersion.value++;
