@@ -9,8 +9,10 @@
 import { signal } from '@preact/signals-core';
 import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TParam, TTimestep } from '../config/types';
 import { fetchStreaming } from '../utils/fetch';
+import { calcBandwidth, calcEta, pruneSamples, type Sample } from '../utils/bandwidth';
 import type { OmService } from './om-service';
 import type { OptionsService } from './options-service';
+import type { ConfigService } from './config-service';
 
 export type LoadingStrategy = 'alternate' | 'future-first';
 
@@ -21,9 +23,6 @@ const fmt = (ts: string) => ts.slice(5, 13);
 
 /** 4-letter uppercase param code for logs */
 const P = (param: TParam) => param.slice(0, 4).toUpperCase();
-
-/** Default estimated size for unknown timesteps (~8MB for 10 slices) */
-const DEFAULT_SIZE_ESTIMATE = 8.0 * 1024 * 1024;
 
 /** Queued order with callback */
 interface QueuedTimestepOrder {
@@ -43,7 +42,7 @@ export class QueueService implements IQueueService {
   });
 
   // Bandwidth measurement
-  private samples: Array<{ timestamp: number; bytes: number }> = [];
+  private samples: Sample[] = [];
 
   // Compression ratio learning (rolling average)
   private compressionRatio = 1.0;
@@ -61,18 +60,11 @@ export class QueueService implements IQueueService {
   private currentAbortController: AbortController | null = null;
   private processingPromise: Promise<void> | null = null;
 
-  private omService: OmService | null = null;
-  private optionsService: OptionsService | null = null;
-
-  /** Set OmService (injected later to avoid circular deps) */
-  setOmService(omService: OmService): void {
-    this.omService = omService;
-  }
-
-  /** Set OptionsService for strategy access */
-  setOptionsService(optionsService: OptionsService): void {
-    this.optionsService = optionsService;
-  }
+  constructor(
+    private omService: OmService,
+    private optionsService: OptionsService,
+    private configService: ConfigService
+  ) {}
 
   async submitFileOrders(
     orders: FileOrder[],
@@ -110,12 +102,6 @@ export class QueueService implements IQueueService {
     onSlice: (order: TimestepOrder, slice: OmSlice) => void,
     onPreflight?: (order: TimestepOrder, actualBytes: number) => void
   ): Promise<void> {
-    if (!this.omService) {
-      throw new Error('OmService not set - call setOmService first');
-    }
-
-    if (orders.length === 0) return;
-
     // Check if current fetch should be aborted (not in new orders)
     if (this.currentlyFetching && this.currentAbortController) {
       const keepCurrent = orders.some(o => o.timestep === this.currentlyFetching!.timestep);
@@ -138,7 +124,8 @@ export class QueueService implements IQueueService {
     this.timestepQueue = [
       ...keepFromExisting,
       ...newOrders.map(order => {
-      const estimatedBytes = isNaN(order.sizeEstimate) ? DEFAULT_SIZE_ESTIMATE : order.sizeEstimate;
+      const defaultSize = this.configService.getLayer(order.param)?.defaultSizeEstimate ?? 0;
+      const estimatedBytes = isNaN(order.sizeEstimate) ? defaultSize : order.sizeEstimate;
       return {
         order,
         estimatedBytes,
@@ -199,7 +186,7 @@ export class QueueService implements IQueueService {
       const omParam = paramMap[next.order.param] ?? next.order.param;
 
       try {
-        await this.omService!.fetch(
+        await this.omService.fetch(
           next.order.url,
           omParam,
           (info) => {
@@ -256,7 +243,7 @@ export class QueueService implements IQueueService {
     this.activeActualBytes += bytes;
     this.totalBytesCompleted += bytes;
     this.samples.push({ timestamp: performance.now(), bytes });
-    this.pruneOldSamples();
+    this.samples = pruneSamples(this.samples);
     this.updateStats();
   }
 
@@ -268,22 +255,8 @@ export class QueueService implements IQueueService {
     this.compressionRatio += (ratio - this.compressionRatio) / this.compressionSamples;
   }
 
-  private pruneOldSamples(): void {
-    const cutoff = performance.now() - 10_000; // 10s window
-    this.samples = this.samples.filter(s => s.timestamp >= cutoff);
-  }
-
   private updateStats(): void {
-    // Bandwidth calculation
-    let bytesPerSec: number | undefined;
-    if (this.samples.length >= 2) {
-      const first = this.samples[0]!;
-      const duration = (performance.now() - first.timestamp) / 1000;
-      if (duration >= 0.5) {
-        const totalBytes = this.samples.reduce((sum, s) => sum + s.bytes, 0);
-        bytesPerSec = totalBytes / duration;
-      }
-    }
+    const bytesPerSec = calcBandwidth(this.samples);
 
     // Estimate remaining bytes (apply compression ratio)
     const pendingWireBytes = this.pendingExpectedBytes * this.compressionRatio;
@@ -297,7 +270,7 @@ export class QueueService implements IQueueService {
       bytesQueued,
       bytesCompleted: this.totalBytesCompleted,
       bytesPerSec,
-      etaSeconds: bytesPerSec ? bytesQueued / bytesPerSec : undefined,
+      etaSeconds: calcEta(bytesQueued, bytesPerSec),
       status: newStatus,
     };
     if (wasDownloading && newStatus === 'idle') {

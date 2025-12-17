@@ -112,6 +112,7 @@ export interface LayerConfig {
   label: string;
   category: 'base' | 'weather' | 'overlay';
   defaultEnabled: boolean;
+  defaultSizeEstimate?: number;  // bytes per timestep (weather layers)
 }
 
 export interface DiscoveryConfig {

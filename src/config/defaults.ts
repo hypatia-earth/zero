@@ -48,9 +48,9 @@ export const defaultConfig: ZeroConfig = {
     { id: 'earth', label: 'Earth', category: 'base', defaultEnabled: true },
     { id: 'sun', label: 'Sun', category: 'overlay', defaultEnabled: true },
     { id: 'grid', label: 'Grid', category: 'overlay', defaultEnabled: false },
-    { id: 'temp', label: 'Temperature', category: 'weather', defaultEnabled: true },
-    { id: 'rain', label: 'Precipitation', category: 'weather', defaultEnabled: false },
-    { id: 'pressure', label: 'Pressure', category: 'weather', defaultEnabled: false },
+    { id: 'temp', label: 'Temperature', category: 'weather', defaultEnabled: true, defaultSizeEstimate: 8_000_000 },
+    { id: 'rain', label: 'Precipitation', category: 'weather', defaultEnabled: false, defaultSizeEstimate: 8_000_000 },
+    { id: 'pressure', label: 'Pressure', category: 'weather', defaultEnabled: false, defaultSizeEstimate: 500_000 },
   ],
 
   defaultLayers: ['earth', 'sun', 'temp'],

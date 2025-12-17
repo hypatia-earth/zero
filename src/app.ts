@@ -90,9 +90,7 @@ export const App: m.ClosureComponent = () => {
 
         // Step 4: Assets via QueueService
         BootstrapService.setStep('ASSETS');
-        queueService = new QueueService();
-        queueService.setOmService(omService);
-        queueService.setOptionsService(optionsService);
+        queueService = new QueueService(omService, optionsService, configService);
         const f16 = !capabilitiesService.float32_filterable;
         const suffix = f16 ? '-16' : '';
 

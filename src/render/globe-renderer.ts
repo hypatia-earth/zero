@@ -82,9 +82,9 @@ export class GlobeRenderer {
   private hasTimestampQuery = false;
   private timestampQuerySet: GPUQuerySet | null = null;
   private timestampBuffer: GPUBuffer | null = null;
-  private timestampReadBuffer: GPUBuffer | null = null;
+  private timestampReadBuffers: [GPUBuffer, GPUBuffer] | null = null;
+  private timestampPending: [boolean, boolean] = [false, false];  // Per-buffer pending state
   private lastGpuTimeMs: number | null = null;
-  private timestampPending = false;
   private currentTempOpacity = 0;
 
   constructor(private canvas: HTMLCanvasElement, cameraConfig?: CameraConfig) {
@@ -150,10 +150,11 @@ export class GlobeRenderer {
         size: 16,  // 2 × BigInt64
         usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
       });
-      this.timestampReadBuffer = this.device.createBuffer({
-        size: 16,
-        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-      });
+      // Double-buffer read buffers to avoid race between GPU copy and CPU read
+      this.timestampReadBuffers = [
+        this.device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
+        this.device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
+      ];
       console.log('[Globe] Timestamp queries enabled (timestampWrites)');
     } else {
       console.log('[Globe] Timestamp queries not available');
@@ -599,30 +600,35 @@ export class GlobeRenderer {
     postProcessPass.draw(3);
     postProcessPass.end();
 
-    // Resolve timestamp queries only if read buffer is not mapped
-    const canReadTimestamp = this.hasTimestampQuery && this.timestampQuerySet &&
-      this.timestampBuffer && this.timestampReadBuffer && !this.timestampPending;
+    // Resolve and copy timestamp queries (double-buffered: use whichever buffer is free)
+    const hasTimestamp = this.hasTimestampQuery && this.timestampQuerySet &&
+      this.timestampBuffer && this.timestampReadBuffers;
+    // Find a free buffer (not pending mapAsync)
+    const freeIdx = hasTimestamp ? (this.timestampPending[0] ? (this.timestampPending[1] ? -1 : 1) : 0) : -1;
 
-    if (canReadTimestamp) {
+    if (freeIdx >= 0) {
+      const readBuffer = this.timestampReadBuffers![freeIdx as 0 | 1];
       commandEncoder.resolveQuerySet(this.timestampQuerySet!, 0, 2, this.timestampBuffer!, 0);
-      commandEncoder.copyBufferToBuffer(this.timestampBuffer!, 0, this.timestampReadBuffer!, 0, 16);
+      commandEncoder.copyBufferToBuffer(this.timestampBuffer!, 0, readBuffer, 0, 16);
     }
 
     this.device.queue.submit([commandEncoder.finish()]);
 
     // Start async readback for GPU timing
-    if (canReadTimestamp) {
-      const readBuffer = this.timestampReadBuffer!;
-      this.timestampPending = true;
+    if (freeIdx >= 0) {
+      const idx = freeIdx as 0 | 1;
+      const readBuffer = this.timestampReadBuffers![idx];
+      this.timestampPending[idx] = true;
       readBuffer.mapAsync(GPUMapMode.READ).then(() => {
         const data = readBuffer.getMappedRange();
-        const times = new BigInt64Array(data);
-        const durationNs = Number(times[1]! - times[0]!);
+        const times = new BigUint64Array(data);
+        const t0 = times[0]!, t1 = times[1]!;
+        const durationNs = t1 > t0 ? Number(t1 - t0) : Number(t0 - t1);
         this.lastGpuTimeMs = durationNs / 1_000_000;
         readBuffer.unmap();
-        this.timestampPending = false;
+        this.timestampPending[idx] = false;
       }).catch(() => {
-        this.timestampPending = false;
+        this.timestampPending[idx] = false;
       });
     }
 
