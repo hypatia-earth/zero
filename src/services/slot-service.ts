@@ -53,7 +53,6 @@ export class SlotService {
   private disposeSubscribes: Map<TParam, () => void> = new Map();
   private loadingKeys: Set<string> = new Set();
   private initialized = false;
-  private initialTime: Date | null = null;  // Track init time to skip first effect run
 
   // Data window boundaries
   private dataWindowStart!: TTimestep;
@@ -95,12 +94,6 @@ export class SlotService {
       const opts = this.optionsService.options.value;
       if (!this.initialized) return;
 
-      // Clear initialTime on first time change (enables buffer filling)
-      if (this.initialTime && time.getTime() !== this.initialTime.getTime()) {
-        this.initialTime = null;
-        console.log('[Slot] Time changed, buffer filling enabled');
-      }
-
       // Process each enabled param
       for (const param of SLOT_PARAMS) {
         const isEnabled = this.isParamEnabled(param, opts);
@@ -123,8 +116,8 @@ export class SlotService {
       const debouncedFetch = debounce((w: WantedState) => this.fetchMissing(param, w), 200);
       const wantedSignal = this.wantedPerParam.get(param)!;
       const unsubscribe = wantedSignal.subscribe(wanted => {
-        // Skip buffer filling until time changes from initial (bootstrap only loads priority)
-        if (this.initialTime) return;
+        // Skip during bootstrap (check BEFORE debounce, not after)
+        if (!BootstrapService.state.value.complete) return;
         if (wanted) debouncedFetch(wanted);
       });
       this.disposeSubscribes.set(param, unsubscribe);
@@ -481,7 +474,6 @@ export class SlotService {
       this.activateIfReady(param, wanted);
     }
 
-    this.initialTime = time;  // Prevent buffer filling until time changes
     this.initialized = true;
     this.slotsVersion.value++;
     console.log('[Slot] Initialized');
