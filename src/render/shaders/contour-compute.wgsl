@@ -184,11 +184,11 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
 
   // Saddle point disambiguation: check bilinear center value
   // Case 5: corners 0,2 high (0101) - Case 10: corners 1,3 high (1010)
+  // When center > iso: high regions connected through center, flip to wrap around low corners
+  // When center < iso: high regions separate, use default edges
   if (caseIdx == 5u || caseIdx == 10u) {
     let center = (v0 + v1 + v2 + v3) * 0.25;
-    let centerHigh = center > uniforms.isovalue;
-    // Flip connections when center is low (contours wrap around saddle differently)
-    if ((caseIdx == 5u && !centerHigh) || (caseIdx == 10u && !centerHigh)) {
+    if (center > uniforms.isovalue) {
       // Swap edge pairs: (a,b,c,d) → (a,d,c,b) to flip diagonal
       edges = vec4<i32>(edges.x, edges.w, edges.z, edges.y);
     }
