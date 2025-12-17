@@ -148,25 +148,29 @@ export class GlobeRenderer {
     });
 
     // TODO: Should respect activated layers and varying size
-    // Weather data: single large buffer with N slots (default 7 slots = ~185 MB)
+    // Weather data buffers with N slots each
     const tempBufferSize = BYTES_PER_TIMESTEP * this.maxTempSlots;
     this.tempDataBuffer = this.device.createBuffer({
       size: tempBufferSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    console.log(`[Globe] Temp buffer: ${this.maxTempSlots} slots, ${(tempBufferSize / 1024 / 1024).toFixed(1)} MB`);
+    console.log(`[Globe] TEMP buffer: ${this.maxTempSlots} slots, ${(tempBufferSize / 1024 / 1024).toFixed(1)} MB`);
 
     // Rain data (single timestep for now)
+    const rainBufferSize = BYTES_PER_TIMESTEP;
     this.rainDataBuffer = this.device.createBuffer({
-      size: BYTES_PER_TIMESTEP,
+      size: rainBufferSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
+    console.log(`[Globe] RAIN buffer: 1 slots, ${(rainBufferSize / 1024 / 1024).toFixed(1)} MB`);
 
     // Pressure data (single slot for now - O1280 requires same size as temp)
+    const pressureBufferSize = BYTES_PER_TIMESTEP;
     this.pressureDataBuffer = this.device.createBuffer({
-      size: BYTES_PER_TIMESTEP,
+      size: pressureBufferSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
+    console.log(`[Globe] PRES buffer: 1 slots, ${(pressureBufferSize / 1024 / 1024).toFixed(1)} MB`);
 
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
     this.fontAtlasTexture = this.device.createTexture({
