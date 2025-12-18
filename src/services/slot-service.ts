@@ -37,7 +37,7 @@ const SLOT_PARAMS: TParam[] = ['temp', 'pressure'];
 export class SlotService {
   private paramSlots: Map<TParam, ParamSlots> = new Map();
   private layerStores: Map<TParam, LayerStore> = new Map();
-  private maxSlotsPerParam: number = 8;
+  private timeslotsPerLayer: number = 8;
   private disposeEffect: (() => void) | null = null;
   private disposeResizeEffect: (() => void) | null = null;
   private disposeSubscribes: Map<TParam, () => void> = new Map();
@@ -68,15 +68,15 @@ export class SlotService {
     const legacyMaxMB = Math.floor(legacyMaxBytes / 1024 / 1024);
     const maxSlabMB = 26;  // Largest slab size (temp, pressure raw)
     const maxSlotsLegacy = Math.floor(legacyMaxMB / maxSlabMB);
-    this.maxSlotsPerParam = Math.min(requestedSlots, maxSlotsLegacy);
+    this.timeslotsPerLayer = Math.min(requestedSlots, maxSlotsLegacy);
 
     const bufferMB = Math.floor(maxBufferBytes / 1024 / 1024);
     const bindingMB = Math.floor(maxBindingBytes / 1024 / 1024);
     console.log(`[Slot] GPU: bufferMB=${bufferMB}, bindingMB=${bindingMB}, legacyMax=${legacyMaxMB}MB (${maxSlotsLegacy} slots), requested=${requestedSlots}`);
     console.log(`[Slot] Per-slot layers (temp): rebind architecture, no binding limit`);
 
-    if (this.maxSlotsPerParam < requestedSlots) {
-      console.warn(`[Slot] Legacy layers capped: ${requestedSlots} → ${this.maxSlotsPerParam} timeslots (binding limit: ${legacyMaxMB} MB)`);
+    if (this.timeslotsPerLayer < requestedSlots) {
+      console.warn(`[Slot] Legacy layers capped: ${requestedSlots} → ${this.timeslotsPerLayer} timeslots (binding limit: ${legacyMaxMB} MB)`);
     }
 
     // Create LayerStores for weather layers with slab definitions
@@ -84,7 +84,7 @@ export class SlotService {
 
     // Create ParamSlots for each slot-based layer
     for (const param of SLOT_PARAMS) {
-      this.paramSlots.set(param, createParamSlots(param, this.maxSlotsPerParam));
+      this.paramSlots.set(param, createParamSlots(param, this.timeslotsPerLayer));
     }
 
     // Wire up lerp calculations
@@ -129,7 +129,7 @@ export class SlotService {
     }
 
     // Effect: resize LayerStores when timeslotsPerLayer option changes
-    let lastTimeslots = this.maxSlotsPerParam;
+    let lastTimeslots = this.timeslotsPerLayer;
     this.disposeResizeEffect = effect(() => {
       const requestedTimeslots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
       const device = this.renderService.getDevice();
@@ -186,7 +186,7 @@ export class SlotService {
       // Rewire LayerStore buffers to GlobeRenderer (new buffers after resize)
       this.wireLayerBuffers();
 
-      this.maxSlotsPerParam = newTimeslots;
+      this.timeslotsPerLayer = newTimeslots;
       lastTimeslots = newTimeslots;
       this.slotsVersion.value++;
     });
@@ -341,7 +341,7 @@ export class SlotService {
     let pastCursor = this.timestepService.prev(t0);
     let futureCursor = this.timestepService.next(t1);
 
-    while (window.length < this.maxSlotsPerParam) {
+    while (window.length < this.timeslotsPerLayer) {
       const canAddFuture = futureCursor && this.isInDataWindow(futureCursor);
       const canAddPast = pastCursor && this.isInDataWindow(pastCursor);
 
@@ -569,14 +569,14 @@ export class SlotService {
       const store = new LayerStore(device, {
         layerId: layer.id,
         slabs: layer.slabs,
-        maxTimeslots: this.maxSlotsPerParam,
+        timeslots: this.timeslotsPerLayer,
         usePerSlotBuffers,
       });
       store.initialize();
 
       this.layerStores.set(layer.id as TParam, store);
       const mode = usePerSlotBuffers ? 'per-slot' : 'legacy';
-      console.log(`[Slot] Created LayerStore: ${layer.id} (${layer.slabs.length} slabs, ${this.maxSlotsPerParam} timeslots, ${mode})`);
+      console.log(`[Slot] Created LayerStore: ${layer.id} (${layer.slabs.length} slabs, ${this.timeslotsPerLayer} timeslots, ${mode})`);
     }
 
     // Wire LayerStore buffers to GlobeRenderer

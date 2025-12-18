@@ -56,8 +56,8 @@ export interface ParamSlots {
 /** Short timestep format for logs: "MM-DDTHH" */
 const fmt = (ts: TTimestep) => ts.slice(5, 13);
 
-export function createParamSlots(param: string, maxSlots: number): ParamSlots {
-  const freeIndices = Array.from({ length: maxSlots }, (_, i) => i);
+export function createParamSlots(param: string, timeslots: number): ParamSlots {
+  const freeIndices = Array.from({ length: timeslots }, (_, i) => i);
   const wanted = signal<WantedState | null>(null);
   const slots = new Map<TTimestep, Slot>();
   const loadingKeys = new Set<TTimestep>();
@@ -100,7 +100,7 @@ export function createParamSlots(param: string, maxSlots: number): ParamSlots {
 
     markLoaded(timestep, slotIndex, loadedPoints) {
       slots.set(timestep, { timestep, slotIndex, loaded: true, loadedPoints });
-      console.log(`[Slot] ${P} loaded ${fmt(timestep)} → slot ${slotIndex} (${slots.size}/${maxSlots})`);
+      console.log(`[Slot] ${P} loaded ${fmt(timestep)} → slot ${slotIndex} (${slots.size}/${timeslots})`);
     },
 
     isLoading: (ts) => loadingKeys.has(ts),

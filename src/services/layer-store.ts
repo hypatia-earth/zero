@@ -11,7 +11,7 @@ import type { TTimestep, SlabConfig } from '../config/types';
 export interface LayerStoreConfig {
   layerId: string;
   slabs: SlabConfig[];
-  maxTimeslots: number;
+  timeslots: number;
   /**
    * Per-slot buffer mode: each timeslot gets its own GPUBuffer.
    * Enables rebinding for unlimited slots (limited only by VRAM).
@@ -33,7 +33,7 @@ export class LayerStore {
   readonly timeslotSizeMB: number;
   readonly usePerSlotBuffers: boolean;
 
-  private maxTimeslots: number;
+  private timeslotCount: number;
   private timeslots = new Map<TTimestep, TimeslotHandle>();
   private gpuBuffers: GPUBuffer[] = [];  // Legacy: one buffer per slab (all slots)
   private slotBuffers = new Map<number, GPUBuffer[]>();  // Per-slot: slotIndex -> buffer per slab
@@ -45,7 +45,7 @@ export class LayerStore {
   ) {
     this.layerId = config.layerId;
     this.slabs = config.slabs;
-    this.maxTimeslots = config.maxTimeslots;
+    this.timeslotCount = config.timeslots;
     this.usePerSlotBuffers = config.usePerSlotBuffers ?? false;
     this.timeslotSizeMB = this.slabs.reduce((sum, s) => sum + s.sizeMB, 0);
   }
@@ -55,12 +55,12 @@ export class LayerStore {
     if (this.usePerSlotBuffers) {
       // Per-slot mode: buffers created on demand in allocateTimeslot()
       // No upfront allocation - unlimited slots (limited by VRAM only)
-      console.log(`[Store] ${this.layerId} initialized (per-slot mode, max ${this.maxTimeslots})`);
+      console.log(`[Store] ${this.layerId} initialized (per-slot mode, max ${this.timeslotCount})`);
     } else {
       // Legacy mode: create one buffer per slab type, sized for maxTimeslots
       for (const slab of this.slabs) {
         const buffer = this.device.createBuffer({
-          size: slab.sizeMB * 1024 * 1024 * this.maxTimeslots,
+          size: slab.sizeMB * 1024 * 1024 * this.timeslotCount,
           usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
           label: `${this.layerId}-${slab.name}`,
         });
@@ -69,7 +69,7 @@ export class LayerStore {
     }
 
     // Initialize free slot indices
-    this.freeSlotIndices = Array.from({ length: this.maxTimeslots }, (_, i) => i);
+    this.freeSlotIndices = Array.from({ length: this.timeslotCount }, (_, i) => i);
   }
 
   /** Allocate a timeslot for the given timestep */
@@ -176,7 +176,7 @@ export class LayerStore {
 
   /** Get current capacity */
   getMaxTimeslots(): number {
-    return this.maxTimeslots;
+    return this.timeslotCount;
   }
 
   /** Get number of allocated timeslots */
@@ -236,9 +236,9 @@ export class LayerStore {
    * @throws Error if buffer creation fails (OOM)
    */
   resize(newMaxTimeslots: number): void {
-    if (newMaxTimeslots === this.maxTimeslots) return;
+    if (newMaxTimeslots === this.timeslotCount) return;
 
-    const oldMax = this.maxTimeslots;
+    const oldMax = this.timeslotCount;
     const evictedTimesteps = [...this.timeslots.keys()];
 
     if (this.usePerSlotBuffers) {
@@ -268,8 +268,8 @@ export class LayerStore {
     }
 
     this.timeslots.clear();
-    this.maxTimeslots = newMaxTimeslots;
-    this.freeSlotIndices = Array.from({ length: this.maxTimeslots }, (_, i) => i);
+    this.timeslotCount = newMaxTimeslots;
+    this.freeSlotIndices = Array.from({ length: this.timeslotCount }, (_, i) => i);
 
     console.log(`[Store] ${this.layerId} resized: ${oldMax} → ${newMaxTimeslots} timeslots (${evictedTimesteps.length} evicted)`);
   }

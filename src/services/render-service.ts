@@ -71,12 +71,11 @@ export class RenderService {
 
     // Get timeslots per layer from user options
     const timeslotsPerLayer = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
-    const maxSlots = timeslotsPerLayer;
 
     // Get pressure resolution from options (1 or 2 degrees)
     const pressureResolution = parseInt(this.optionsService.options.value.pressure.resolution, 10) as 1 | 2;
 
-    await this.renderer.initialize(maxSlots, pressureResolution);
+    await this.renderer.initialize(timeslotsPerLayer, pressureResolution);
 
     // Upload pre-computed Gaussian LUTs (O1280 grid)
     this.renderer.uploadGaussianLUTs(gaussianLats, ringOffsets);
