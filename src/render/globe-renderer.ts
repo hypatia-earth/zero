@@ -184,14 +184,12 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // TODO: Should respect activated layers and varying size
-    // Weather data buffers with N slots each
-    const tempBufferSize = BYTES_PER_TIMESTEP * this.maxTempSlots;
+    // WORKAROUND: 4-byte placeholder - replaced by LayerStore buffer via setTempDataBuffer()
+    // Must exist for initial bind group creation; replaced before render starts
     this.tempDataBuffer = this.device.createBuffer({
-      size: tempBufferSize,
+      size: 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    console.log(`[Globe] TEMP buffer: ${this.maxTempSlots} slots, ${(tempBufferSize / 1024 / 1024).toFixed(1)} MB`);
 
     // Rain data (single timestep for now)
     const rainBufferSize = BYTES_PER_TIMESTEP;
@@ -201,7 +199,9 @@ export class GlobeRenderer {
     });
     console.log(`[Globe] RAIN buffer: 1 slots, ${(rainBufferSize / 1024 / 1024).toFixed(1)} MB`);
 
-    // Pressure raw data slots (O1280 - same count as temp)
+    // WORKAROUND: Pressure uses array-of-buffers (different from LayerStore's single-buffer-with-offsets)
+    // PressureLayer expects GPUBuffer[] where each element is a timeslot
+    // TODO: Refactor to use LayerStore (requires PressureLayer to accept single buffer with offset access)
     const pressureSlotSize = BYTES_PER_TIMESTEP;
     for (let i = 0; i < this.maxTempSlots; i++) {
       this.pressureDataBuffers.push(this.device.createBuffer({

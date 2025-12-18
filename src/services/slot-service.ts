@@ -16,7 +16,6 @@ import type { TimestepService } from './timestep-service';
 import type { RenderService } from './render-service';
 import type { QueueService } from './queue-service';
 import type { OptionsService } from './options-service';
-import type { CapabilitiesService } from './capabilities-service';
 import type { ConfigService } from './config-service';
 import { LayerStore } from './layer-store';
 import { BootstrapService } from './bootstrap-service';
@@ -56,7 +55,6 @@ export class SlotService {
     private renderService: RenderService,
     private queueService: QueueService,
     private optionsService: OptionsService,
-    private capabilitiesService: CapabilitiesService,
     private configService: ConfigService,
   ) {
     // Get requested slots, but cap to what GPU device actually supports

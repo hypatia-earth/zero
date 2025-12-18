@@ -186,7 +186,6 @@ export const App: m.ClosureComponent = () => {
           renderService,
           queueService,
           optionsService,
-          capabilitiesService,
           configService,
         );
 
