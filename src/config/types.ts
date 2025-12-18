@@ -51,9 +51,6 @@ export const isWeatherTextureLayer = (layer: TWeatherLayer): layer is TWeatherTe
 // Runtime layer subsets
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Weather layers with timestep tracking (broader than GPU-loaded) */
-export const TRACKED_WEATHER_LAYERS: TWeatherLayer[] = ['temp', 'rain', 'wind', 'pressure'];
-
 /** Weather layers cached by Service Worker */
 export const SW_CACHED_WEATHER_LAYERS: TWeatherLayer[] = ['temp', 'rain'];
 

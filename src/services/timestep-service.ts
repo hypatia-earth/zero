@@ -9,7 +9,7 @@
  */
 
 import { signal } from '@preact/signals-core';
-import { TRACKED_WEATHER_LAYERS, type TWeatherLayer, type TTimestep, type TModel, type Timestep, type IDiscoveryService } from '../config/types';
+import { isWeatherLayer, type TWeatherLayer, type TTimestep, type TModel, type Timestep, type IDiscoveryService } from '../config/types';
 import type { ConfigService } from './config-service';
 import { parseTimestep, formatTimestep } from '../utils/timestep';
 import { sendSWMessage } from '../utils/sw-message';
@@ -64,7 +64,7 @@ export class TimestepService implements IDiscoveryService {
   /** Reactive state for UI */
   readonly state = signal<TimestepState>({
     ecmwf: new Set(),
-    params: new Map(TRACKED_WEATHER_LAYERS.map(p => [p, { cache: new Set(), gpu: new Set(), sizes: new Map() }])),
+    params: new Map(),  // Populated by explore()
   });
 
   constructor(private configService: ConfigService) {
@@ -105,9 +105,10 @@ export class TimestepService implements IDiscoveryService {
       ecmwf.add(ts.timestep);
     }
 
-    // Query SW cache for each param (includes sizes)
+    // Query SW cache for ready weather layers only
     const params = new Map<TWeatherLayer, ParamState>();
-    for (const param of TRACKED_WEATHER_LAYERS) {
+    const readyWeatherLayers = this.configService.getReadyLayers().filter(isWeatherLayer);
+    for (const param of readyWeatherLayers) {
       const { cache, sizes } = await this.querySWCache(param);
       params.set(param, { cache, gpu: new Set(), sizes });
       const avgMB = sizes.size > 0

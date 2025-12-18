@@ -62,7 +62,7 @@ export class SlotService {
     this.timeslotsPerLayer = this.renderService.getMaxSlotsPerLayer();
     this.readyLayers = this.configService.getReadyLayers();
     this.readyWeatherLayers = this.readyLayers.filter(isWeatherLayer);
-    console.log(`[Slot] timeslotsPerLayer: ${this.timeslotsPerLayer}, readyWeatherLayers: ${this.readyWeatherLayers.join(', ')}`);
+    console.log(`[Slot] ${this.timeslotsPerLayer} timeslots for: ${this.readyWeatherLayers.join(', ')}`);
 
     // Create LayerStores for weather layers with slab definitions
     this.initializeLayerStores();

@@ -10,10 +10,11 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import { TRACKED_WEATHER_LAYERS, type TWeatherLayer } from '../config/types';
+import { isWeatherLayer, type TWeatherLayer } from '../config/types';
 import type { SlotService } from '../services/slot-service';
 import type { TimestepService } from '../services/timestep-service';
 import type { OptionsService } from '../services/options-service';
+import type { ConfigService } from '../services/config-service';
 import { getSunDirection } from '../utils/sun-position';
 
 const DEBUG = false;
@@ -86,6 +87,7 @@ interface TimeBarPanelAttrs {
   optionsService: OptionsService;
   slotService: SlotService;
   timestepService: TimestepService;
+  configService: ConfigService;
 }
 
 
@@ -250,7 +252,8 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     },
 
     view({ attrs }) {
-    const { optionsService, slotService, timestepService } = attrs;
+    const { optionsService, slotService, timestepService, configService } = attrs;
+    const readyWeatherLayers = configService.getReadyLayers().filter(isWeatherLayer);
     const currentTime = optionsService.options.value.viewState.time;
     const window = {
       start: timestepService.toDate(timestepService.first()),
@@ -305,7 +308,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     const gpuMap = new Map<TWeatherLayer, Set<string>>();
     const activeMap = new Map<TWeatherLayer, Set<string>>();
 
-    for (const layer of TRACKED_WEATHER_LAYERS) {
+    for (const layer of readyWeatherLayers) {
       const paramState = tsState.params.get(layer);
 
       // Cached in SW
@@ -332,17 +335,9 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
 
     DEBUG && console.log(`[Timebar] ECMWF: ${ecmwfSet.size}, cache temp: ${cachedMap.get('temp')?.size}, GPU temp: ${gpuMap.get('temp')?.size}`);
 
-    // Filter to only active weather layers (read from OptionsService)
+    // Filter to only enabled weather layers
     const opts = attrs.optionsService.options.value;
-    const activeTWeatherLayers = TRACKED_WEATHER_LAYERS.filter(layer => {
-      switch (layer) {
-        case 'temp': return opts.temp.enabled;
-        case 'rain': return opts.rain.enabled;
-        case 'wind': return opts.wind.enabled;
-        case 'pressure': return opts.pressure.enabled;
-        default: return false;
-      }
-    });
+    const activeWeatherLayers = readyWeatherLayers.filter(layer => opts[layer].enabled);
 
     // Get camera position and sun state for brightness calculation
     const viewState = opts.viewState;
@@ -362,7 +357,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
               drawTimebar(
                 canvasRef,
                 window,
-                activeTWeatherLayers,
+                activeWeatherLayers,
                 ecmwfSet,
                 cachedMap,
                 gpuMap,
@@ -379,7 +374,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
               drawTimebar(
                 canvasRef,
                 window,
-                activeTWeatherLayers,
+                activeWeatherLayers,
                 ecmwfSet,
                 cachedMap,
                 gpuMap,

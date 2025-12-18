@@ -52,6 +52,10 @@ export class QueueService implements IQueueService {
   private activeActualBytes = 0;
   private totalBytesCompleted = 0;
 
+  // Batch stats (reset when new orders arrive after idle)
+  private batchStartTime = 0;
+  private batchBytesCompleted = 0;
+
   // Timestep queue (replaceable)
   private timestepQueue: QueuedTimestepOrder[] = [];
   private currentlyFetching: TimestepOrder | null = null;
@@ -240,6 +244,10 @@ export class QueueService implements IQueueService {
   private onChunk(bytes: number): void {
     this.activeActualBytes += bytes;
     this.totalBytesCompleted += bytes;
+    this.batchBytesCompleted += bytes;
+    if (this.batchStartTime === 0) {
+      this.batchStartTime = performance.now();
+    }
     this.samples.push({ timestamp: performance.now(), bytes });
     this.samples = pruneSamples(this.samples);
     this.updateStats();
@@ -271,8 +279,17 @@ export class QueueService implements IQueueService {
       etaSeconds: calcEta(bytesQueued, bytesPerSec),
       status: newStatus,
     };
+
+    // Batch complete - log summary and reset (skip small batches < 100KB)
     if (wasDownloading && newStatus === 'idle') {
-      console.log('[Queue] Done');
+      if (this.batchBytesCompleted > 100 * 1024) {
+        const elapsed = (performance.now() - this.batchStartTime) / 1000;
+        const mb = this.batchBytesCompleted / (1024 * 1024);
+        const speed = elapsed > 0 ? mb / elapsed : 0;
+        console.log(`[Queue] Done: ${mb.toFixed(1)} MB in ${elapsed.toFixed(1)}s (${speed.toFixed(1)} MB/s)`);
+      }
+      this.batchStartTime = 0;
+      this.batchBytesCompleted = 0;
     }
     DEBUG && console.log('[Queue]', formatStats(this.stats.value));
   }

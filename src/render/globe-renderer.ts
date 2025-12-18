@@ -197,26 +197,24 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Weather layer buffers (single timestep for now)
-    // TODO: Convert to LayerStore when slot-based loading implemented
-    const layerBufferSize = BYTES_PER_TIMESTEP;
+    // 4-byte placeholder buffers for unimplemented texture layers
+    // Real buffers come from LayerStore when slot-based loading is implemented
     this.rainDataBuffer = this.device.createBuffer({
-      size: layerBufferSize,
+      size: 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
     this.cloudsDataBuffer = this.device.createBuffer({
-      size: layerBufferSize,
+      size: 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
     this.humidityDataBuffer = this.device.createBuffer({
-      size: layerBufferSize,
+      size: 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
     this.windDataBuffer = this.device.createBuffer({
-      size: layerBufferSize,
+      size: 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    console.log(`[Globe] Weather buffers: rain/clouds/humidity/wind @ ${(layerBufferSize / 1024 / 1024).toFixed(1)} MB each`);
 
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
     this.fontAtlasTexture = this.device.createTexture({

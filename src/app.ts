@@ -264,7 +264,7 @@ export const App: m.ClosureComponent = () => {
           m(LayersPanel, { configService, optionsService }),
           m(TimeCirclePanel, { optionsService }),
           m(QueuePanel, { queueService, optionsService }),
-          m(TimeBarPanel, { optionsService, slotService, timestepService }),
+          m(TimeBarPanel, { optionsService, slotService, timestepService, configService }),
           m(FullscreenPanel),
           m(OptionsPanel, { optionsService, dialogService }),
           m(InfoPanel, { infoService, dialogService }),
