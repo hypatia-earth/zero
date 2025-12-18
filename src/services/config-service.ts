@@ -7,6 +7,7 @@
 
 import { defaultConfig, EARTH_RADIUS } from '../config/defaults';
 import type { ZeroConfig, TLayer, LayerConfig, AppConfig, DiscoveryConfig } from '../config/types';
+import { deepMerge } from '../utils/object';
 
 export class ConfigService {
   private config: ZeroConfig = defaultConfig;
@@ -23,7 +24,7 @@ export class ConfigService {
       const response = await fetch('/config/zero.config.json');
       if (response.ok) {
         const runtimeConfig = await response.json();
-        this.config = this.deepMerge(defaultConfig, runtimeConfig);
+        this.config = deepMerge(defaultConfig, runtimeConfig);
         console.log(`[Config] Loaded: ${this.config.app.name} v${this.config.app.version} (${this.config.app.environment})`);
       } else {
         console.log('[Config] No runtime config, using defaults');
@@ -33,23 +34,6 @@ export class ConfigService {
     }
 
     this.initialized = true;
-  }
-
-  private deepMerge<T extends object>(target: T, source: Partial<T>): T {
-    const result = { ...target };
-    for (const key in source) {
-      const sourceVal = source[key];
-      const targetVal = target[key];
-      if (sourceVal && typeof sourceVal === 'object' && !Array.isArray(sourceVal) && targetVal) {
-        (result as Record<string, unknown>)[key] = this.deepMerge(
-          targetVal as object,
-          sourceVal as object
-        );
-      } else if (sourceVal !== undefined) {
-        (result as Record<string, unknown>)[key] = sourceVal;
-      }
-    }
-    return result;
   }
 
   getConfig(): ZeroConfig {

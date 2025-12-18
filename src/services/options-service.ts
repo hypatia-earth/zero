@@ -18,6 +18,7 @@ import {
   type ZeroOptions,
   type OptionFilter,
 } from '../schemas/options.schema';
+import { deepMerge, getByPath } from '../utils/object';
 import { layerIds } from '../config/defaults';
 import type { TLayer } from '../config/types';
 import type { ConfigService } from './config-service';
@@ -91,41 +92,8 @@ async function saveToDB(options: Partial<ZeroOptions>): Promise<void> {
 }
 
 // ============================================================
-// Deep merge utility
-// ============================================================
-
-function deepMerge<T extends object>(target: T, source: Partial<T>): T {
-  const result = { ...target };
-  for (const key of Object.keys(source) as (keyof T)[]) {
-    const sourceValue = source[key];
-    const targetValue = target[key];
-    // Handle Date specially - don't recurse into it
-    if (sourceValue instanceof Date) {
-      result[key] = sourceValue as T[keyof T];
-    } else if (
-      sourceValue !== undefined &&
-      typeof sourceValue === 'object' &&
-      sourceValue !== null &&
-      !Array.isArray(sourceValue) &&
-      typeof targetValue === 'object' &&
-      targetValue !== null &&
-      !Array.isArray(targetValue)
-    ) {
-      result[key] = deepMerge(targetValue as object, sourceValue as object) as T[keyof T];
-    } else if (sourceValue !== undefined) {
-      result[key] = sourceValue as T[keyof T];
-    }
-  }
-  return result;
-}
-
-// ============================================================
 // Path utilities
 // ============================================================
-
-function getByPath(obj: unknown, path: string): unknown {
-  return path.split('.').reduce((o, k) => (o as Record<string, unknown>)?.[k], obj);
-}
 
 function deleteByPath<T extends object>(obj: T, path: string): T {
   return produce(obj, (draft) => {

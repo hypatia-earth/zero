@@ -7,6 +7,7 @@
 
 import type { ZeroOptions } from '../schemas/options.schema.ts';
 import { defaultOptions } from '../schemas/options.schema.ts';
+import { deepMerge } from './object';
 
 /**
  * Runtime context needed for sanitization
@@ -15,38 +16,6 @@ export interface SanitizeContext {
   screenWidth: number;
   screenHeight: number;
   now: Date;
-}
-
-/**
- * Deep merge two objects, with source values taking precedence
- */
-function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial<T>): T {
-  const result = { ...target } as T;
-
-  for (const key in source) {
-    const sourceValue = source[key];
-    if (sourceValue === undefined) continue;
-
-    const targetValue = result[key];
-
-    if (
-      sourceValue &&
-      typeof sourceValue === 'object' &&
-      !Array.isArray(sourceValue) &&
-      targetValue &&
-      typeof targetValue === 'object' &&
-      !Array.isArray(targetValue)
-    ) {
-      (result as Record<string, unknown>)[key] = deepMerge(
-        targetValue as Record<string, unknown>,
-        sourceValue as Record<string, unknown>
-      );
-    } else {
-      (result as Record<string, unknown>)[key] = sourceValue;
-    }
-  }
-
-  return result;
 }
 
 /**

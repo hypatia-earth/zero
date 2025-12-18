@@ -18,6 +18,7 @@ import {
 } from '../schemas/options.schema';
 import type { OptionsService } from '../services/options-service';
 import type { PaletteService } from '../services/palette-service';
+import { getByPath } from '../utils/object';
 import type { ConfigService } from '../services/config-service';
 import type { DialogService } from '../services/dialog-service';
 import { clearCache } from '../services/sw-registration';
@@ -66,10 +67,6 @@ let showAdvanced = false;
 // ============================================================
 // Helpers
 // ============================================================
-
-function getByPath(obj: unknown, path: string): unknown {
-  return path.split('.').reduce((o, k) => (o as Record<string, unknown>)?.[k], obj);
-}
 
 function setOptionValue(optionsService: OptionsService, path: string, value: unknown): void {
   optionsService.update((draft) => {
