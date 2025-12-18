@@ -76,6 +76,19 @@ export class SlotService {
     this.renderService.setTempLerpFn((time) => this.getLerp('temp', time));
     this.renderService.setPressureLerpFn((time) => this.getLerp('pressure', time));
 
+    // Wire up pressure resolution change callback (re-regrid slots with raw data)
+    this.renderService.setPressureResolutionChangeFn((slotsNeedingRegrid) => {
+      const store = this.layerStores.get('pressure');
+      if (!store) return;
+      for (const slotIndex of slotsNeedingRegrid) {
+        const buffer = store.getSlotBuffer(slotIndex, 0);
+        if (buffer) {
+          this.renderService.triggerPressureRegrid(slotIndex, buffer);
+          console.log(`[Slot] Re-regrid pressure slot ${slotIndex}`);
+        }
+      }
+    });
+
     // Wire up data-ready functions for each slot-based param
     for (const param of this.readyWeatherLayers) {
       this.renderService.setDataReadyFn(param, () => this.getActiveTimesteps(param).length > 0);

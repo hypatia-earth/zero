@@ -839,9 +839,9 @@ export class GlobeRenderer {
     return this.device;
   }
 
-  /** Change pressure resolution live */
-  setPressureResolution(resolution: PressureResolution): void {
-    this.pressureLayer.setResolution(resolution);
+  /** Change pressure resolution live, returns slots needing regrid */
+  setPressureResolution(resolution: PressureResolution): number[] {
+    return this.pressureLayer.setResolution(resolution);
   }
 
   /** Update level count (may resize vertex buffer) */

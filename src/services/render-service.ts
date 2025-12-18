@@ -46,6 +46,9 @@ export class RenderService {
   // Data-ready functions per param (provided by SlotService)
   private dataReadyFns = new Map<TWeatherLayer, () => boolean>();
 
+  // Callback when pressure resolution changes (slots needing regrid)
+  private onPressureResolutionChange: ((slotsNeedingRegrid: number[]) => void) | null = null;
+
   // Frame timing (60-frame rolling average)
   private frameTimes: RingBuffer = createRingBuffer(60);
   private passTimes: RingBuffer = createRingBuffer(60);
@@ -87,8 +90,11 @@ export class RenderService {
       const newResolution = resolutionMap[this.optionsService.options.value.pressure.resolution];
       if (newResolution !== lastResolution) {
         lastResolution = newResolution;
-        this.renderer?.setPressureResolution(newResolution);
+        const slotsNeedingRegrid = this.renderer?.setPressureResolution(newResolution) ?? [];
         this.lastPressureLerp = -1;  // Force contour recompute on next frame
+        if (slotsNeedingRegrid.length > 0) {
+          this.onPressureResolutionChange?.(slotsNeedingRegrid);
+        }
       }
     });
 
@@ -367,6 +373,11 @@ export class RenderService {
    */
   setDataReadyFn(param: TWeatherLayer, fn: () => boolean): void {
     this.dataReadyFns.set(param, fn);
+  }
+
+  /** Set callback for pressure resolution change (from SlotService) */
+  setPressureResolutionChangeFn(fn: (slotsNeedingRegrid: number[]) => void): void {
+    this.onPressureResolutionChange = fn;
   }
 
   /**

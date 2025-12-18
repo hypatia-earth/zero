@@ -382,13 +382,13 @@ export class PressureLayer {
 
   /**
    * Change resolution live - recreates all resolution-dependent buffers
-   * Note: Grid slots are invalidated; caller must re-trigger regrid for active slots
+   * Returns slot indices that need regrid (have raw data)
    */
-  setResolution(resolution: PressureResolution): void {
-    if (resolution === this.resolution) return;
+  setResolution(resolution: PressureResolution): number[] {
+    if (resolution === this.resolution) return [];
     if (!this.computeReady) {
       console.warn('[Pressure] Cannot change resolution - not ready');
-      return;
+      return [];
     }
 
     const slotCount = this.gridSlotBuffers.length;
@@ -400,13 +400,23 @@ export class PressureLayer {
     this.gridHeight = 180 / resolution;
     this.numCells = this.gridWidth * (this.gridHeight - 1);
 
-    // Destroy old grid slot buffers
+    // Destroy old grid slot buffers and recreate with new size
     for (const buffer of this.gridSlotBuffers) {
       buffer.destroy();
     }
+    const gridSlotSize = (360 / resolution) * (180 / resolution) * 4;
     this.gridSlotBuffers = [];
     this.gridSlotReady = [];
-    this.hasRawData = [];
+    for (let i = 0; i < slotCount; i++) {
+      this.gridSlotBuffers.push(this.device.createBuffer({
+        size: gridSlotSize,
+        usage: GPUBufferUsage.STORAGE,
+        label: `pressure-grid-slot${i}`,
+      }));
+      this.gridSlotReady.push(false);
+    }
+    // Keep hasRawData - raw slots still have data that needs regridding
+    // (caller should trigger regrid for active slots)
 
     // Destroy and recreate compute buffers
     this.segmentCountsBuffer.destroy();
@@ -460,9 +470,14 @@ export class PressureLayer {
       ],
     });
 
-    const gridSlotSize = this.gridWidth * this.gridHeight * 4;
     const totalKB = (gridSlotSize * slotCount / 1024).toFixed(0);
-    console.log(`[Pressure] New grid: ${this.gridWidth}×${this.gridHeight}, ~${totalKB} KB (${slotCount} slots invalidated)`);
+
+    // Return slots that need regrid (have raw data)
+    const needsRegrid = this.hasRawData
+      .map((has, i) => has ? i : -1)
+      .filter(i => i >= 0);
+    console.log(`[Pressure] New grid: ${this.gridWidth}×${this.gridHeight}, ~${totalKB} KB (${needsRegrid.length} slots need regrid)`);
+    return needsRegrid;
   }
 
   /**
