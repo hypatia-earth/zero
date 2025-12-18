@@ -776,6 +776,11 @@ export class GlobeRenderer {
     return this.pressureLayer;
   }
 
+  /** Get GPU device for external buffer creation */
+  getDevice(): GPUDevice {
+    return this.device;
+  }
+
   /** Change pressure resolution live */
   setPressureResolution(resolution: PressureResolution): void {
     this.pressureLayer.setResolution(resolution);

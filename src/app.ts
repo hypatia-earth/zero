@@ -185,7 +185,9 @@ export const App: m.ClosureComponent = () => {
           timestepService,
           renderService,
           queueService,
-          optionsService
+          optionsService,
+          capabilitiesService,
+          configService,
         );
 
         // 5g. Load initial timesteps for all enabled weather layers

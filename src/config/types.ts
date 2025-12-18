@@ -107,12 +107,19 @@ export interface IOmService {
   ): Promise<Float32Array>;
 }
 
+/** GPU buffer slab definition for weather layers */
+export interface SlabConfig {
+  name: string;   // e.g., 'data', 'u', 'v', 'raw', 'grid'
+  sizeMB: number; // Size in megabytes
+}
+
 export interface LayerConfig {
   id: LayerId;
   label: string;
   category: 'base' | 'weather' | 'overlay';
   defaultEnabled: boolean;
   defaultSizeEstimate?: number;  // bytes per timestep (weather layers)
+  slabs?: SlabConfig[];          // GPU buffer slabs (weather layers only)
 }
 
 export interface DiscoveryConfig {

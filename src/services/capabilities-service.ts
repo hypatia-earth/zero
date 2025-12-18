@@ -15,7 +15,19 @@ export class CapabilitiesService {
   msaa_8x = false;
   maxBufferSizeMB = 0;
 
+  // For testing buffer allocation - set to small value (e.g., 50) to test without big downloads
+  private readonly DEBUG_MAX_BUFFER_SIZE_MB: number | null = null;  // null = use real GPU limit
+
   constructor(private configService: ConfigService) {}
+
+  /** Get effective max buffer size (respects debug override) */
+  getEffectiveMaxBufferSize(): number {
+    if (this.DEBUG_MAX_BUFFER_SIZE_MB !== null) {
+      console.warn(`[Capabilities] DEBUG: maxBufferSize = ${this.DEBUG_MAX_BUFFER_SIZE_MB} MB`);
+      return this.DEBUG_MAX_BUFFER_SIZE_MB;
+    }
+    return this.maxBufferSizeMB;
+  }
 
   async init(): Promise<void> {
     if (!navigator.gpu) {

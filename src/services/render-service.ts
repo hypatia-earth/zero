@@ -66,9 +66,9 @@ export class RenderService {
     const cameraConfig = this.configService.getCameraConfig();
     this.renderer = new GlobeRenderer(this.canvas, cameraConfig);
 
-    // Get slots per layer from user options
-    const slotsPerLayer = parseInt(this.optionsService.options.value.gpu.slotsPerLayer, 10);
-    const maxSlots = slotsPerLayer;
+    // Get timeslots per layer from user options
+    const timeslotsPerLayer = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
+    const maxSlots = timeslotsPerLayer;
 
     // Get pressure resolution from options (1 or 2 degrees)
     const pressureResolution = parseInt(this.optionsService.options.value.pressure.resolution, 10) as 1 | 2;
@@ -412,10 +412,17 @@ export class RenderService {
   }
 
   /**
-   * Get max slots per layer from options
+   * Get max timeslots per layer from options
    */
   getMaxSlotsPerLayer(): number {
-    return parseInt(this.optionsService.options.value.gpu.slotsPerLayer, 10);
+    return parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
+  }
+
+  /**
+   * Get GPU device for external buffer creation
+   */
+  getDevice(): GPUDevice {
+    return this.renderer!.getDevice();
   }
 
   dispose(): void {

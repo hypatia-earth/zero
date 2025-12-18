@@ -48,9 +48,36 @@ export const defaultConfig: ZeroConfig = {
     { id: 'earth', label: 'Earth', category: 'base', defaultEnabled: true },
     { id: 'sun', label: 'Sun', category: 'overlay', defaultEnabled: true },
     { id: 'grid', label: 'Grid', category: 'overlay', defaultEnabled: false },
-    { id: 'temp', label: 'Temperature', category: 'weather', defaultEnabled: true, defaultSizeEstimate: 8_000_000 },
-    { id: 'rain', label: 'Precipitation', category: 'weather', defaultEnabled: false, defaultSizeEstimate: 8_000_000 },
-    { id: 'pressure', label: 'Pressure', category: 'weather', defaultEnabled: false, defaultSizeEstimate: 2_000_000 },
+    {
+      id: 'temp', label: 'Temperature', category: 'weather', defaultEnabled: true,
+      defaultSizeEstimate: 8_000_000,
+      slabs: [{ name: 'data', sizeMB: 26 }],
+    },
+    {
+      id: 'rain', label: 'Precipitation', category: 'weather', defaultEnabled: false,
+      defaultSizeEstimate: 8_000_000,
+      slabs: [{ name: 'data', sizeMB: 26 }],
+    },
+    {
+      id: 'clouds', label: 'Clouds', category: 'weather', defaultEnabled: false,
+      defaultSizeEstimate: 8_000_000,
+      slabs: [{ name: 'data', sizeMB: 26 }],
+    },
+    {
+      id: 'humidity', label: 'Humidity', category: 'weather', defaultEnabled: false,
+      defaultSizeEstimate: 8_000_000,
+      slabs: [{ name: 'data', sizeMB: 26 }],
+    },
+    {
+      id: 'wind', label: 'Wind', category: 'weather', defaultEnabled: false,
+      defaultSizeEstimate: 16_000_000,
+      slabs: [{ name: 'u', sizeMB: 26 }, { name: 'v', sizeMB: 26 }],
+    },
+    {
+      id: 'pressure', label: 'Pressure', category: 'weather', defaultEnabled: false,
+      defaultSizeEstimate: 2_000_000,
+      slabs: [{ name: 'raw', sizeMB: 26 }, { name: 'grid', sizeMB: 1 }],
+    },
   ],
 
   defaultLayers: ['earth', 'sun', 'temp'],

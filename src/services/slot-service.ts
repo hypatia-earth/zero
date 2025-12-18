@@ -16,6 +16,9 @@ import type { TimestepService } from './timestep-service';
 import type { RenderService } from './render-service';
 import type { QueueService } from './queue-service';
 import type { OptionsService } from './options-service';
+import type { CapabilitiesService } from './capabilities-service';
+import type { ConfigService } from './config-service';
+import { LayerStore } from './layer-store';
 import { BootstrapService } from './bootstrap-service';
 import { debounce } from '../utils/debounce';
 
@@ -34,6 +37,7 @@ const SLOT_PARAMS: TParam[] = ['temp', 'pressure'];
 
 export class SlotService {
   private paramSlots: Map<TParam, ParamSlots> = new Map();
+  private layerStores: Map<TParam, LayerStore> = new Map();
   private maxSlotsPerParam: number = 8;
   private disposeEffect: (() => void) | null = null;
   private disposeSubscribes: Map<TParam, () => void> = new Map();
@@ -50,9 +54,14 @@ export class SlotService {
     private timestepService: TimestepService,
     private renderService: RenderService,
     private queueService: QueueService,
-    private optionsService: OptionsService
+    private optionsService: OptionsService,
+    private capabilitiesService: CapabilitiesService,
+    private configService: ConfigService,
   ) {
     this.maxSlotsPerParam = this.renderService.getMaxSlotsPerLayer();
+
+    // Create LayerStores for weather layers with slab definitions
+    this.initializeLayerStores();
 
     // Create ParamSlots for each slot-based layer
     for (const param of SLOT_PARAMS) {
@@ -402,6 +411,32 @@ export class SlotService {
     return this.paramSlots.get(param)?.getActivePair() ?? null;
   }
 
+  /** Get LayerStore for a param */
+  getLayerStore(param: TParam): LayerStore | undefined {
+    return this.layerStores.get(param);
+  }
+
+  /** Initialize LayerStores for weather layers with slab definitions */
+  private initializeLayerStores(): void {
+    const device = this.renderService.getDevice();
+    const layers = this.configService.getLayers();
+
+    for (const layer of layers) {
+      // Only create stores for layers with slab definitions
+      if (!layer.slabs || layer.slabs.length === 0) continue;
+
+      const store = new LayerStore(device, {
+        layerId: layer.id,
+        slabs: layer.slabs,
+        maxTimeslots: this.maxSlotsPerParam,
+      });
+      store.initialize();
+
+      this.layerStores.set(layer.id as TParam, store);
+      console.log(`[Slot] Created LayerStore: ${layer.id} (${layer.slabs.length} slabs, ${this.maxSlotsPerParam} timeslots)`);
+    }
+  }
+
   dispose(): void {
     this.disposeEffect?.();
     this.disposeEffect = null;
@@ -413,5 +448,9 @@ export class SlotService {
       ps.dispose();
     }
     this.paramSlots.clear();
+    for (const store of this.layerStores.values()) {
+      store.dispose();
+    }
+    this.layerStores.clear();
   }
 }
