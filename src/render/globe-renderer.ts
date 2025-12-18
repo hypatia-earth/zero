@@ -56,7 +56,8 @@ export class GlobeRenderer {
   private basemapSampler!: GPUSampler;
   private gaussianLatsBuffer!: GPUBuffer;
   private ringOffsetsBuffer!: GPUBuffer;
-  private tempDataBuffer!: GPUBuffer;  // Single large buffer with slots
+  private tempData0Buffer!: GPUBuffer;  // Slot 0 buffer (rebound on slot change)
+  private tempData1Buffer!: GPUBuffer;  // Slot 1 buffer (rebound on slot change)
   private rainDataBuffer!: GPUBuffer;
   private cloudsDataBuffer!: GPUBuffer;
   private humidityDataBuffer!: GPUBuffer;
@@ -193,10 +194,14 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // 4-byte placeholder: WebGPU bind groups require buffers at creation time.
+    // 4-byte placeholders: WebGPU bind groups require buffers at creation time.
     // finalize() creates bind groups before SlotService/LayerStore exist.
-    // LayerStore replaces this via setTempDataBuffer() → recreateBindGroup().
-    this.tempDataBuffer = this.device.createBuffer({
+    // LayerStore replaces these via setTempSlotBuffers() → recreateBindGroup().
+    this.tempData0Buffer = this.device.createBuffer({
+      size: 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.tempData1Buffer = this.device.createBuffer({
       size: 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
@@ -288,8 +293,8 @@ export class GlobeRenderer {
         { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
         { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
         { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-        { binding: 5, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // tempData (large, slotted)
-        { binding: 6, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // rainData
+        { binding: 5, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // tempData0 (slot 0)
+        { binding: 6, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // tempData1 (slot 1)
         // Atmosphere LUTs
         { binding: 7, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // transmittance (2D)
         { binding: 8, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } },  // scattering (3D)
@@ -305,6 +310,7 @@ export class GlobeRenderer {
         { binding: 15, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // cloudsData
         { binding: 16, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // humidityData
         { binding: 17, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // windData
+        { binding: 18, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // rainData
       ],
     });
 
@@ -371,8 +377,8 @@ export class GlobeRenderer {
         { binding: 2, resource: this.basemapSampler },
         { binding: 3, resource: { buffer: this.gaussianLatsBuffer } },
         { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
-        { binding: 5, resource: { buffer: this.tempDataBuffer } },
-        { binding: 6, resource: { buffer: this.rainDataBuffer } },
+        { binding: 5, resource: { buffer: this.tempData0Buffer } },
+        { binding: 6, resource: { buffer: this.tempData1Buffer } },
         // Atmosphere LUTs
         { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
         { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
@@ -388,6 +394,7 @@ export class GlobeRenderer {
         { binding: 15, resource: { buffer: this.cloudsDataBuffer } },
         { binding: 16, resource: { buffer: this.humidityDataBuffer } },
         { binding: 17, resource: { buffer: this.windDataBuffer } },
+        { binding: 18, resource: { buffer: this.rainDataBuffer } },
       ],
     });
 
@@ -720,8 +727,8 @@ export class GlobeRenderer {
         { binding: 2, resource: this.basemapSampler },
         { binding: 3, resource: { buffer: this.gaussianLatsBuffer } },
         { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
-        { binding: 5, resource: { buffer: this.tempDataBuffer } },
-        { binding: 6, resource: { buffer: this.rainDataBuffer } },
+        { binding: 5, resource: { buffer: this.tempData0Buffer } },
+        { binding: 6, resource: { buffer: this.tempData1Buffer } },
         { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
         { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
         { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
@@ -733,21 +740,25 @@ export class GlobeRenderer {
         { binding: 15, resource: { buffer: this.cloudsDataBuffer } },
         { binding: 16, resource: { buffer: this.humidityDataBuffer } },
         { binding: 17, resource: { buffer: this.windDataBuffer } },
+        { binding: 18, resource: { buffer: this.rainDataBuffer } },
       ],
     });
   }
 
   /**
-   * Set external temp data buffer (owned by LayerStore)
-   * Replaces internal buffer and recreates bind groups
+   * Set external temp slot buffers (owned by LayerStore)
+   * Replaces internal placeholders and recreates bind groups
+   * Called when active temp slots change (rebind)
    */
-  setTempDataBuffer(buffer: GPUBuffer, destroyOld = true): void {
-    if (destroyOld && this.tempDataBuffer) {
-      this.tempDataBuffer.destroy();
+  setTempSlotBuffers(buffer0: GPUBuffer, buffer1: GPUBuffer, destroyOld = false): void {
+    if (destroyOld) {
+      this.tempData0Buffer?.destroy();
+      this.tempData1Buffer?.destroy();
     }
-    this.tempDataBuffer = buffer;
+    this.tempData0Buffer = buffer0;
+    this.tempData1Buffer = buffer1;
     this.recreateBindGroup();
-    console.log('[Globe] Temp buffer set from LayerStore');
+    console.log('[Globe] Temp slot buffers rebound');
   }
 
   /**
@@ -784,36 +795,24 @@ export class GlobeRenderer {
   }
 
   /**
-   * Upload temp data to a specific slot in the large buffer
-   * @param data The temperature data array
-   * @param slotIndex Which slot to write to (0..maxSlots-1)
+   * Upload temperature data directly to a buffer
+   * In new architecture, each timeslot has its own buffer (no offset needed)
+   * @param data Float32Array of temperature values (6.6M points)
+   * @param buffer Target GPUBuffer to write to
    */
-  async uploadTempDataToSlot(data: Float32Array, slotIndex: number): Promise<void> {
-    if (slotIndex < 0 || slotIndex >= this.maxTempSlots) {
-      throw new Error(`Invalid slot index ${slotIndex}, max is ${this.maxTempSlots - 1}`);
-    }
-    const byteOffset = slotIndex * BYTES_PER_TIMESTEP;
-    this.device.queue.writeBuffer(this.tempDataBuffer, byteOffset, data.buffer, data.byteOffset, data.byteLength);
-    await this.device.queue.onSubmittedWorkDone();
+  uploadTempDataToBuffer(data: Float32Array, buffer: GPUBuffer): void {
+    this.device.queue.writeBuffer(buffer, 0, data.buffer, data.byteOffset, data.byteLength);
   }
 
   /**
-   * Upload temp data to two adjacent slots (for backwards compatibility during transition)
-   * Writes data0 to slot 0, data1 to slot 1
+   * Upload partial temp data chunk to a buffer at offset (for progressive loading)
+   * @param data Float32Array chunk
+   * @param buffer Target GPUBuffer
+   * @param pointOffset Offset in points (not bytes)
    */
-  async uploadTempData(data0: Float32Array, data1: Float32Array): Promise<void> {
-    this.device.queue.writeBuffer(this.tempDataBuffer, 0, data0.buffer, data0.byteOffset, data0.byteLength);
-    this.device.queue.writeBuffer(this.tempDataBuffer, BYTES_PER_TIMESTEP, data1.buffer, data1.byteOffset, data1.byteLength);
-    await this.device.queue.onSubmittedWorkDone();
-    await new Promise(r => setTimeout(r, 100)); // Debug delay
-  }
-
-  /**
-   * Upload partial temp data chunk to a slot at offset (for progressive loading)
-   */
-  uploadTempDataChunkToSlot(data: Float32Array, slotIndex: number, pointOffset: number): void {
-    const byteOffset = slotIndex * BYTES_PER_TIMESTEP + pointOffset * 4;
-    this.device.queue.writeBuffer(this.tempDataBuffer, byteOffset, data.buffer, data.byteOffset, data.byteLength);
+  uploadTempDataChunkToBuffer(data: Float32Array, buffer: GPUBuffer, pointOffset: number): void {
+    const byteOffset = pointOffset * 4;
+    this.device.queue.writeBuffer(buffer, byteOffset, data.buffer, data.byteOffset, data.byteLength);
   }
 
   uploadRainData(data: Float32Array, offset: number = 0): void {
@@ -1011,7 +1010,8 @@ export class GlobeRenderer {
     this.gaussianLatsBuffer?.destroy();
     this.ringOffsetsBuffer?.destroy();
     this.pressureDataBuffer?.destroy();
-    this.tempDataBuffer?.destroy();
+    this.tempData0Buffer?.destroy();
+    this.tempData1Buffer?.destroy();
     this.rainDataBuffer?.destroy();
     this.cloudsDataBuffer?.destroy();
     this.humidityDataBuffer?.destroy();

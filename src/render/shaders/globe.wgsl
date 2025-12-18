@@ -51,8 +51,8 @@ struct Uniforms {
 @group(0) @binding(2) var basemapSampler: sampler;
 @group(0) @binding(3) var<storage, read> gaussianLats: array<f32>;
 @group(0) @binding(4) var<storage, read> ringOffsets: array<u32>;
-@group(0) @binding(5) var<storage, read> tempData: array<f32>;
-@group(0) @binding(6) var<storage, read> rainData: array<f32>;
+@group(0) @binding(5) var<storage, read> tempData0: array<f32>;  // Slot 0 for interpolation
+@group(0) @binding(6) var<storage, read> tempData1: array<f32>;  // Slot 1 for interpolation
 // Atmosphere LUTs (Bruneton precomputed scattering)
 @group(0) @binding(7) var atm_transmittance: texture_2d<f32>;
 @group(0) @binding(8) var atm_scattering: texture_3d<f32>;
@@ -68,6 +68,7 @@ struct Uniforms {
 @group(0) @binding(15) var<storage, read> cloudsData: array<f32>;
 @group(0) @binding(16) var<storage, read> humidityData: array<f32>;
 @group(0) @binding(17) var<storage, read> windData: array<f32>;
+@group(0) @binding(18) var<storage, read> rainData: array<f32>;
 
 // Fullscreen triangle vertex shader
 @vertex

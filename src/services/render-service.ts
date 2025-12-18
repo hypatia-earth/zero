@@ -403,7 +403,8 @@ export class RenderService {
 
     switch (param) {
       case 'temp':
-        this.renderer.uploadTempDataToSlot(data, slotIndex);
+        // TODO: Phase 2 - upload goes to per-slot buffer from LayerStore
+        console.warn('[RenderService] temp upload via uploadToSlot not yet implemented for per-slot buffers');
         break;
       case 'pressure':
         // Upload to raw slot and trigger regrid
@@ -456,10 +457,11 @@ export class RenderService {
   }
 
   /**
-   * Set temp data buffer from LayerStore (replaces internal buffer)
+   * Set temp slot buffers from LayerStore (rebind)
+   * Called when active temp slots change
    */
-  setTempDataBuffer(buffer: GPUBuffer): void {
-    this.renderer!.setTempDataBuffer(buffer);
+  setTempSlotBuffers(buffer0: GPUBuffer, buffer1: GPUBuffer): void {
+    this.renderer!.setTempSlotBuffers(buffer0, buffer1);
   }
 
   /**

@@ -1,6 +1,6 @@
 // Temperature layer - weather data visualization
-
-const TEMP_POINTS_PER_SLOT: u32 = 6599680u;  // Points per timestep slot
+// Uses two separate buffers (tempData0, tempData1) for interpolation
+// Buffers are rebound when active slots change (no offset math needed)
 
 // Binary search for Gaussian latitude ring
 fn tempFindRing(lat: f32) -> u32 {
@@ -96,12 +96,6 @@ fn colormapTempESRI(tempC: f32) -> vec3f {
   return vec3f(0.42, 0.11, 0.17);
 }
 
-// Read temperature value from slot-based buffer
-fn getTempFromSlot(cell: u32, slot: u32) -> f32 {
-  let index = slot * TEMP_POINTS_PER_SLOT + cell;
-  return tempData[index];
-}
-
 fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
   if (u.tempDataReady == 0u || u.tempOpacity <= 0.0) { return color; }
 
@@ -110,13 +104,13 @@ fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
   // Progressive loading: skip cells not yet loaded
   if (cell >= u.tempLoadedPoints) { return color; }
 
-  // Read from slots and interpolate (lerp < -1.5 means single slot mode)
-  let temp0 = getTempFromSlot(cell, u.tempSlot0);
+  // Read directly from bound buffers (no offset math - buffers rebound on slot change)
+  let temp0 = tempData0[cell];
   var tempC: f32;
   if (u.tempLerp < -1.5) {
     tempC = temp0;  // Single slot mode: no interpolation
   } else {
-    let temp1 = getTempFromSlot(cell, u.tempSlot1);
+    let temp1 = tempData1[cell];
     tempC = mix(temp0, temp1, u.tempLerp);  // Data is already in Celsius
   }
 

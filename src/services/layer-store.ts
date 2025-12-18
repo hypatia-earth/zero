@@ -12,6 +12,12 @@ export interface LayerStoreConfig {
   layerId: string;
   slabs: SlabConfig[];
   maxTimeslots: number;
+  /**
+   * Per-slot buffer mode: each timeslot gets its own GPUBuffer.
+   * Enables rebinding for unlimited slots (limited only by VRAM).
+   * When false (default): one large buffer with offsets (201MB binding limit).
+   */
+  usePerSlotBuffers?: boolean;
 }
 
 /** Handle to an allocated timeslot within the store */
@@ -25,10 +31,12 @@ export class LayerStore {
   readonly layerId: string;
   readonly slabs: SlabConfig[];
   readonly timeslotSizeMB: number;
+  readonly usePerSlotBuffers: boolean;
 
   private maxTimeslots: number;
   private timeslots = new Map<TTimestep, TimeslotHandle>();
-  private gpuBuffers: GPUBuffer[] = [];
+  private gpuBuffers: GPUBuffer[] = [];  // Legacy: one buffer per slab (all slots)
+  private slotBuffers = new Map<number, GPUBuffer[]>();  // Per-slot: slotIndex -> buffer per slab
   private freeSlotIndices: number[] = [];
 
   constructor(
@@ -38,19 +46,26 @@ export class LayerStore {
     this.layerId = config.layerId;
     this.slabs = config.slabs;
     this.maxTimeslots = config.maxTimeslots;
+    this.usePerSlotBuffers = config.usePerSlotBuffers ?? false;
     this.timeslotSizeMB = this.slabs.reduce((sum, s) => sum + s.sizeMB, 0);
   }
 
   /** Initialize GPU buffers - call after construction */
   initialize(): void {
-    // Create one buffer per slab type, sized for maxTimeslots
-    for (const slab of this.slabs) {
-      const buffer = this.device.createBuffer({
-        size: slab.sizeMB * 1024 * 1024 * this.maxTimeslots,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-        label: `${this.layerId}-${slab.name}`,
-      });
-      this.gpuBuffers.push(buffer);
+    if (this.usePerSlotBuffers) {
+      // Per-slot mode: buffers created on demand in allocateTimeslot()
+      // No upfront allocation - unlimited slots (limited by VRAM only)
+      console.log(`[Store] ${this.layerId} initialized (per-slot mode, max ${this.maxTimeslots})`);
+    } else {
+      // Legacy mode: create one buffer per slab type, sized for maxTimeslots
+      for (const slab of this.slabs) {
+        const buffer = this.device.createBuffer({
+          size: slab.sizeMB * 1024 * 1024 * this.maxTimeslots,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+          label: `${this.layerId}-${slab.name}`,
+        });
+        this.gpuBuffers.push(buffer);
+      }
     }
 
     // Initialize free slot indices
@@ -70,10 +85,22 @@ export class LayerStore {
 
     const slotIndex = this.freeSlotIndices.pop()!;
 
-    // Calculate byte offsets for each slab buffer
-    const slabOffsets = this.slabs.map(slab =>
-      slotIndex * slab.sizeMB * 1024 * 1024
-    );
+    // Per-slot mode: create buffers for this slot
+    if (this.usePerSlotBuffers) {
+      const buffers = this.slabs.map(slab =>
+        this.device.createBuffer({
+          size: slab.sizeMB * 1024 * 1024,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+          label: `${this.layerId}-${slab.name}-slot${slotIndex}`,
+        })
+      );
+      this.slotBuffers.set(slotIndex, buffers);
+    }
+
+    // Calculate byte offsets (legacy mode uses offsets, per-slot is always 0)
+    const slabOffsets = this.usePerSlotBuffers
+      ? this.slabs.map(() => 0)
+      : this.slabs.map(slab => slotIndex * slab.sizeMB * 1024 * 1024);
 
     const handle: TimeslotHandle = { timestep, slotIndex, slabOffsets };
     this.timeslots.set(timestep, handle);
@@ -84,6 +111,17 @@ export class LayerStore {
   disposeTimeslot(timestep: TTimestep): void {
     const handle = this.timeslots.get(timestep);
     if (!handle) return;
+
+    // Per-slot mode: destroy this slot's buffers
+    if (this.usePerSlotBuffers) {
+      const buffers = this.slotBuffers.get(handle.slotIndex);
+      if (buffers) {
+        for (const buffer of buffers) {
+          buffer.destroy();
+        }
+        this.slotBuffers.delete(handle.slotIndex);
+      }
+    }
 
     this.freeSlotIndices.push(handle.slotIndex);
     this.timeslots.delete(timestep);
@@ -99,9 +137,41 @@ export class LayerStore {
     return this.timeslots.has(timestep);
   }
 
-  /** Get all GPUBuffers (one per slab type) */
+  /** Get all GPUBuffers (one per slab type) - legacy mode only */
   getBuffers(): GPUBuffer[] {
     return this.gpuBuffers;
+  }
+
+  /** Get buffer for a specific slot (per-slot mode) */
+  getSlotBuffer(slotIndex: number, slabIndex: number): GPUBuffer | undefined {
+    return this.slotBuffers.get(slotIndex)?.[slabIndex];
+  }
+
+  /** Ensure buffers exist for a slot (per-slot mode only, creates if missing) */
+  ensureSlotBuffers(slotIndex: number): void {
+    if (!this.usePerSlotBuffers) return;
+    if (this.slotBuffers.has(slotIndex)) return;  // Already exists
+
+    const buffers = this.slabs.map(slab =>
+      this.device.createBuffer({
+        size: slab.sizeMB * 1024 * 1024,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        label: `${this.layerId}-${slab.name}-slot${slotIndex}`,
+      })
+    );
+    this.slotBuffers.set(slotIndex, buffers);
+  }
+
+  /** Destroy buffers for a slot (per-slot mode only) */
+  destroySlotBuffers(slotIndex: number): void {
+    if (!this.usePerSlotBuffers) return;
+    const buffers = this.slotBuffers.get(slotIndex);
+    if (buffers) {
+      for (const buffer of buffers) {
+        buffer.destroy();
+      }
+      this.slotBuffers.delete(slotIndex);
+    }
   }
 
   /** Get current capacity */
@@ -134,15 +204,22 @@ export class LayerStore {
   }
 
   /** Write data to a specific slab at slot index */
-  writeToSlab(slabIndex: number, slotIndex: number, data: Float32Array<ArrayBuffer>): void {
+  writeToSlab(slabIndex: number, slotIndex: number, data: Float32Array): void {
     const slab = this.slabs[slabIndex];
     if (!slab) throw new Error(`Invalid slab index: ${slabIndex}`);
 
-    const buffer = this.gpuBuffers[slabIndex];
-    if (!buffer) throw new Error(`No buffer for slab: ${slab.name}`);
-
-    const byteOffset = slotIndex * slab.sizeMB * 1024 * 1024;
-    this.device.queue.writeBuffer(buffer, byteOffset, data);
+    if (this.usePerSlotBuffers) {
+      // Per-slot mode: write at offset 0 to slot's buffer
+      const buffer = this.slotBuffers.get(slotIndex)?.[slabIndex];
+      if (!buffer) throw new Error(`No buffer for slot ${slotIndex} slab ${slab.name}`);
+      this.device.queue.writeBuffer(buffer, 0, data.buffer, data.byteOffset, data.byteLength);
+    } else {
+      // Legacy mode: write at offset within large buffer
+      const buffer = this.gpuBuffers[slabIndex];
+      if (!buffer) throw new Error(`No buffer for slab: ${slab.name}`);
+      const byteOffset = slotIndex * slab.sizeMB * 1024 * 1024;
+      this.device.queue.writeBuffer(buffer, byteOffset, data.buffer, data.byteOffset, data.byteLength);
+    }
   }
 
   /** Get slab index by name */
@@ -164,27 +241,34 @@ export class LayerStore {
     const oldMax = this.maxTimeslots;
     const evictedTimesteps = [...this.timeslots.keys()];
 
-    // Destroy old buffers
-    for (const buffer of this.gpuBuffers) {
-      buffer.destroy();
+    if (this.usePerSlotBuffers) {
+      // Per-slot mode: destroy all slot buffers
+      for (const buffers of this.slotBuffers.values()) {
+        for (const buffer of buffers) {
+          buffer.destroy();
+        }
+      }
+      this.slotBuffers.clear();
+    } else {
+      // Legacy mode: destroy slab buffers
+      for (const buffer of this.gpuBuffers) {
+        buffer.destroy();
+      }
+      this.gpuBuffers = [];
+
+      // Create new buffers (may throw OOM)
+      for (const slab of this.slabs) {
+        const buffer = this.device.createBuffer({
+          size: slab.sizeMB * 1024 * 1024 * newMaxTimeslots,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+          label: `${this.layerId}-${slab.name}`,
+        });
+        this.gpuBuffers.push(buffer);
+      }
     }
-    this.gpuBuffers = [];
+
     this.timeslots.clear();
-
-    // Update capacity
     this.maxTimeslots = newMaxTimeslots;
-
-    // Create new buffers (may throw OOM)
-    for (const slab of this.slabs) {
-      const buffer = this.device.createBuffer({
-        size: slab.sizeMB * 1024 * 1024 * this.maxTimeslots,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-        label: `${this.layerId}-${slab.name}`,
-      });
-      this.gpuBuffers.push(buffer);
-    }
-
-    // Reset free indices
     this.freeSlotIndices = Array.from({ length: this.maxTimeslots }, (_, i) => i);
 
     console.log(`[Store] ${this.layerId} resized: ${oldMax} → ${newMaxTimeslots} timeslots (${evictedTimesteps.length} evicted)`);
@@ -192,10 +276,20 @@ export class LayerStore {
 
   /** Clean up GPU resources */
   dispose(): void {
+    // Legacy mode buffers
     for (const buffer of this.gpuBuffers) {
       buffer.destroy();
     }
     this.gpuBuffers = [];
+
+    // Per-slot mode buffers
+    for (const buffers of this.slotBuffers.values()) {
+      for (const buffer of buffers) {
+        buffer.destroy();
+      }
+    }
+    this.slotBuffers.clear();
+
     this.timeslots.clear();
     this.freeSlotIndices = [];
   }

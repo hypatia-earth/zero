@@ -26,12 +26,12 @@ export interface Slot {
 export interface ParamSlots {
   readonly wanted: ReturnType<typeof signal<WantedState | null>>;
 
-  // Slot allocation - returns slotIndex and evicted timestep (if any)
+  // Slot allocation - returns slotIndex and evicted info (if any)
   allocateSlot(
     timestep: TTimestep,
     referenceTime: Date,
     toDate: (ts: TTimestep) => Date
-  ): { slotIndex: number; evicted: TTimestep | null } | null;
+  ): { slotIndex: number; evicted: TTimestep | null; evictedSlotIndex: number | null } | null;
 
   // Slot state
   markLoaded(timestep: TTimestep, slotIndex: number, loadedPoints: number): void;
@@ -71,11 +71,11 @@ export function createParamSlots(param: string, maxSlots: number): ParamSlots {
     allocateSlot(timestep, referenceTime, toDate) {
       // Already has slot?
       const existing = slots.get(timestep);
-      if (existing) return { slotIndex: existing.slotIndex, evicted: null };
+      if (existing) return { slotIndex: existing.slotIndex, evicted: null, evictedSlotIndex: null };
 
       // Free slot available?
       if (freeIndices.length > 0) {
-        return { slotIndex: freeIndices.pop()!, evicted: null };
+        return { slotIndex: freeIndices.pop()!, evicted: null, evictedSlotIndex: null };
       }
 
       // Need to evict - find furthest from reference time
@@ -95,7 +95,7 @@ export function createParamSlots(param: string, maxSlots: number): ParamSlots {
       const [evictTs, evictSlot] = candidates[0]!;
       console.log(`[Slot] ${P} evict ${fmt(evictTs)} for ${fmt(timestep)}`);
       slots.delete(evictTs);
-      return { slotIndex: evictSlot.slotIndex, evicted: evictTs };
+      return { slotIndex: evictSlot.slotIndex, evicted: evictTs, evictedSlotIndex: evictSlot.slotIndex };
     },
 
     markLoaded(timestep, slotIndex, loadedPoints) {

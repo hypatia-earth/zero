@@ -57,23 +57,26 @@ export class SlotService {
     private optionsService: OptionsService,
     private configService: ConfigService,
   ) {
-    // Get requested slots, but cap to what GPU device actually supports
-    // Note: adapter.limits != device.limits; device may get less than requested
-    // Must use min(maxBufferSize, maxStorageBufferBindingSize) since buffer must also be bindable
+    // Get requested slots - GPU limits vary by architecture:
+    // - Legacy layers (pressure): capped by min(maxBufferSize, maxStorageBufferBindingSize) ~201MB
+    // - Per-slot layers (temp): use rebinding, only limited by total VRAM
     const requestedSlots = this.renderService.getMaxSlotsPerLayer();
     const device = this.renderService.getDevice();
     const maxBufferBytes = device.limits.maxBufferSize;
     const maxBindingBytes = device.limits.maxStorageBufferBindingSize;
-    const effectiveMaxBytes = Math.min(maxBufferBytes, maxBindingBytes);
-    const effectiveMaxMB = Math.floor(effectiveMaxBytes / 1024 / 1024);
+    const legacyMaxBytes = Math.min(maxBufferBytes, maxBindingBytes);  // Legacy layers need both
+    const legacyMaxMB = Math.floor(legacyMaxBytes / 1024 / 1024);
     const maxSlabMB = 26;  // Largest slab size (temp, pressure raw)
-    const maxSlotsFromGpu = Math.floor(effectiveMaxMB / maxSlabMB);
-    this.maxSlotsPerParam = Math.min(requestedSlots, maxSlotsFromGpu);
+    const maxSlotsLegacy = Math.floor(legacyMaxMB / maxSlabMB);
+    this.maxSlotsPerParam = Math.min(requestedSlots, maxSlotsLegacy);
 
-    console.log(`[Slot] GPU cap: requested=${requestedSlots}, bufferMB=${Math.floor(maxBufferBytes/1024/1024)}, bindingMB=${Math.floor(maxBindingBytes/1024/1024)}, effectiveMB=${effectiveMaxMB}, maxSlots=${maxSlotsFromGpu}, result=${this.maxSlotsPerParam}`);
+    const bufferMB = Math.floor(maxBufferBytes / 1024 / 1024);
+    const bindingMB = Math.floor(maxBindingBytes / 1024 / 1024);
+    console.log(`[Slot] GPU: bufferMB=${bufferMB}, bindingMB=${bindingMB}, legacyMax=${legacyMaxMB}MB (${maxSlotsLegacy} slots), requested=${requestedSlots}`);
+    console.log(`[Slot] Per-slot layers (temp): rebind architecture, no binding limit`);
 
     if (this.maxSlotsPerParam < requestedSlots) {
-      console.warn(`[Slot] Capped timeslots: ${requestedSlots} → ${this.maxSlotsPerParam} (GPU limit: ${effectiveMaxMB} MB)`);
+      console.warn(`[Slot] Legacy layers capped: ${requestedSlots} → ${this.maxSlotsPerParam} timeslots (binding limit: ${legacyMaxMB} MB)`);
     }
 
     // Create LayerStores for weather layers with slab definitions
@@ -232,6 +235,12 @@ export class SlotService {
           return;
         }
         ps.setActivePair({ t0: ts, t1: null });
+
+        // Rebind temp buffers (per-slot mode)
+        if (param === 'temp') {
+          this.rebindTempBuffers(slot.slotIndex, slot.slotIndex);
+        }
+
         this.renderService.activateSlots(param, slot.slotIndex, slot.slotIndex, slot.loadedPoints);
         console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
       } else {
@@ -250,12 +259,47 @@ export class SlotService {
           return;
         }
         ps.setActivePair({ t0, t1 });
+
+        // Rebind temp buffers (per-slot mode)
+        if (param === 'temp') {
+          this.rebindTempBuffers(slot0.slotIndex, slot1.slotIndex);
+        }
+
         this.renderService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, Math.min(slot0.loadedPoints, slot1.loadedPoints));
         console.log(`[Slot] ${pcode} activated: ${fmt(t0)} → ${fmt(t1)}`);
       } else {
         DEBUG_MONKEY && console.log(`[Monkey] ${pcode} CANNOT activate pair ${fmt(t0)}→${fmt(t1)}: slot0=${!!slot0}/${slot0?.loaded} slot1=${!!slot1}/${slot1?.loaded}`);
         ps.setActivePair(null);
       }
+    }
+  }
+
+  /** Rebind temp slot buffers to renderer (per-slot mode) */
+  private rebindTempBuffers(slotIndex0: number, slotIndex1: number): void {
+    const store = this.layerStores.get('temp');
+    if (!store || !store.usePerSlotBuffers) return;
+
+    const buffer0 = store.getSlotBuffer(slotIndex0, 0);  // slab 0 = temp data
+    const buffer1 = store.getSlotBuffer(slotIndex1, 0);
+
+    if (buffer0 && buffer1) {
+      this.renderService.setTempSlotBuffers(buffer0, buffer1);
+      console.log(`[Slot] Temp buffers rebound: slots ${slotIndex0}, ${slotIndex1}`);
+    } else {
+      console.warn(`[Slot] Missing temp buffer: slot0=${!!buffer0} slot1=${!!buffer1}`);
+    }
+  }
+
+  /** Upload data to slot - routes to LayerStore (per-slot) or RenderService (legacy) */
+  private uploadData(param: TParam, data: Float32Array, slotIndex: number): void {
+    const store = this.layerStores.get(param);
+
+    if (store?.usePerSlotBuffers) {
+      // Per-slot mode: write directly to LayerStore
+      store.writeToSlab(0, slotIndex, data);  // slab 0 for single-slab layers
+    } else {
+      // Legacy mode: use RenderService (pressure, etc.)
+      this.renderService.uploadToSlot(param, data, slotIndex);
     }
   }
 
@@ -348,10 +392,20 @@ export class SlotService {
           );
 
           if (result) {
-            if (result.evicted) {
+            if (result.evicted && result.evictedSlotIndex !== null) {
               this.timestepService.setGpuUnloaded(param, result.evicted);
+              // Per-slot mode: destroy evicted slot's buffers
+              const store = this.layerStores.get(param);
+              if (store?.usePerSlotBuffers) {
+                store.destroySlotBuffers(result.evictedSlotIndex);
+              }
             }
-            this.renderService.uploadToSlot(param, slice.data, result.slotIndex);
+            // Per-slot mode: ensure buffer exists for this slot
+            const store = this.layerStores.get(param);
+            if (store?.usePerSlotBuffers) {
+              store.ensureSlotBuffers(result.slotIndex);
+            }
+            this.uploadData(param, slice.data, result.slotIndex);
             ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
             this.timestepService.setGpuLoaded(param, order.timestep);
             this.timestepService.refreshCacheState(param);
@@ -458,7 +512,12 @@ export class SlotService {
           );
 
           if (result) {
-            this.renderService.uploadToSlot(order.param, slice.data, result.slotIndex);
+            // Per-slot mode: ensure buffer exists for this slot
+            const store = this.layerStores.get(order.param);
+            if (store?.usePerSlotBuffers) {
+              store.ensureSlotBuffers(result.slotIndex);
+            }
+            this.uploadData(order.param, slice.data, result.slotIndex);
             ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
             this.timestepService.setGpuLoaded(order.param, order.timestep);
           }
@@ -504,15 +563,20 @@ export class SlotService {
       // Only create stores for layers with slab definitions
       if (!layer.slabs || layer.slabs.length === 0) continue;
 
+      // Temp uses per-slot buffers for rebinding (unlimited slots)
+      const usePerSlotBuffers = layer.id === 'temp';
+
       const store = new LayerStore(device, {
         layerId: layer.id,
         slabs: layer.slabs,
         maxTimeslots: this.maxSlotsPerParam,
+        usePerSlotBuffers,
       });
       store.initialize();
 
       this.layerStores.set(layer.id as TParam, store);
-      console.log(`[Slot] Created LayerStore: ${layer.id} (${layer.slabs.length} slabs, ${this.maxSlotsPerParam} timeslots)`);
+      const mode = usePerSlotBuffers ? 'per-slot' : 'legacy';
+      console.log(`[Slot] Created LayerStore: ${layer.id} (${layer.slabs.length} slabs, ${this.maxSlotsPerParam} timeslots, ${mode})`);
     }
 
     // Wire LayerStore buffers to GlobeRenderer
@@ -521,16 +585,10 @@ export class SlotService {
 
   /** Pass LayerStore buffers to GlobeRenderer (replaces internal buffers) */
   private wireLayerBuffers(): void {
-    // Temp layer: single 'data' slab
-    const tempStore = this.layerStores.get('temp');
-    if (tempStore) {
-      const buffers = tempStore.getBuffers();
-      if (buffers.length > 0) {
-        this.renderService.setTempDataBuffer(buffers[0]!);
-      }
-    }
+    // Temp layer: per-slot mode - buffers created/rebound dynamically via rebindTempBuffers()
+    // No initial wiring needed; first rebind happens when first pair is activated
 
-    // Pressure layer: 'raw' slab (first of 2)
+    // Pressure layer: 'raw' slab (first of 2) - legacy mode
     const pressureStore = this.layerStores.get('pressure');
     if (pressureStore) {
       const buffers = pressureStore.getBuffers();
