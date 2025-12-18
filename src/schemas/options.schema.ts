@@ -20,7 +20,7 @@ type OptionImpact = 'uniform' | 'recreate';
 type PersistMode = 'url' | 'local';
 
 /** Filter determines which dialog entry points show this option */
-type OptionFilter = 'global' | 'earth' | 'sun' | 'grid' | 'temp' | 'rain' | 'wind' | 'clouds' | 'humidity' | 'pressure' | 'dataCache' | 'gpu' | 'viewState';
+type OptionFilter = 'global' | 'earth' | 'sun' | 'grid' | 'temp' | 'rain' | 'wind' | 'clouds' | 'humidity' | 'pressure' | 'dataCache' | 'gpu' | 'viewState' | 'queue';
 
 interface UIMetadata {
   label: string;
@@ -135,7 +135,7 @@ export const optionsSchema = z.object({
         label: 'Slots per layer',
         description: 'More slots = smoother time scrubbing, more GPU memory',
         group: 'gpu',
-        filter: ['global', 'gpu'],
+        filter: ['global', 'gpu', 'queue'],
         order: 0,
         control: 'select',
         options: [
@@ -805,7 +805,7 @@ export const optionsSchema = z.object({
         label: 'Strategy',
         description: 'How to prioritize and order loading timesteps',
         group: 'download',
-        filter: ['global', 'dataCache'],
+        filter: ['global', 'dataCache', 'queue'],
         order: 0,
         control: 'radio',
         options: [
@@ -820,7 +820,7 @@ export const optionsSchema = z.object({
         label: 'Mode',
         description: 'When to fetch data files',
         group: 'download',
-        filter: ['global', 'dataCache'],
+        filter: ['global', 'dataCache', 'queue'],
         order: 1,
         control: 'radio',
         options: [

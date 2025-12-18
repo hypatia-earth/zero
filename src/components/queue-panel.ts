@@ -9,9 +9,11 @@ import m from 'mithril';
 import { effect } from '@preact/signals-core';
 import { throttle } from '../utils/debounce';
 import type { IQueueService } from '../config/types';
+import type { OptionsService } from '../services/options-service';
 
 export interface QueuePanelAttrs {
   queueService: IQueueService;
+  optionsService: OptionsService;
 }
 
 const DEBUG = false;
@@ -32,10 +34,11 @@ export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = (initialVnode) =>
       });
     },
 
-    view() {
+    view({ attrs }) {
       return m('div.queue.panel', [
         m('button.control.pill', {
-          title: 'Download queue'
+          title: 'Download queue',
+          onclick: () => attrs.optionsService.openDialog('queue')
         }, [
           m('span.queue-text', '↓ 0 MB · idle')
         ])

@@ -52,11 +52,15 @@ fn blendGrid(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
   let latLine = abs(fract(latDeg / spacing + 0.5) - 0.5) * spacing;
   let lonLine = abs(fract(lonDeg / spacing + 0.5) - 0.5) * spacing;
 
-  // On grid if within width of either lat or lon line
-  let onGrid = latLine < width || lonLine < lonWidth;
-  if (onGrid) {
+  // Antialiased edges: smoothstep from line center to edge
+  // smoothstep(edge1, edge0, x) returns 1 when x < edge0, 0 when x > edge1
+  let latFactor = 1.0 - smoothstep(width * 0.5, width, latLine);
+  let lonFactor = 1.0 - smoothstep(lonWidth * 0.5, lonWidth, lonLine);
+  let gridFactor = max(latFactor, lonFactor);
+
+  if (gridFactor > 0.001) {
     let gridColor = vec3f(1.0, 1.0, 1.0);
-    return vec4f(mix(color.rgb, gridColor, u.gridOpacity * 0.5), color.a);
+    return vec4f(mix(color.rgb, gridColor, gridFactor * u.gridOpacity * 0.5), color.a);
   }
   return color;
 }

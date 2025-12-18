@@ -394,6 +394,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
     const filterTitles: Record<string, string> = {
       dataCache: 'Download',
       gpu: 'GPU',
+      queue: 'Download',
     };
     const dialogTitle = filter && filter !== 'global'
       ? `${filterTitles[filter] ?? layerLabels[filter] ?? filter} Options`
@@ -522,6 +523,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
             : null
         ].filter(Boolean)),
         m('div.footer', [
+          m('span.version', `v${__APP_VERSION__} (${__APP_HASH__})`),
           m('div.actions', [
             filter && filter !== 'global' ? m('button.btn-reset', {
               onclick: () => optionsService.reset(filter)

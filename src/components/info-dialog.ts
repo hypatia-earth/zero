@@ -122,6 +122,7 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
                 : m.trust(infoService.content)
           ]),
           m('div.footer', [
+            m('span.version', `v${__APP_VERSION__} (${__APP_HASH__})`),
             m('div.actions', [
               m('button.btn-close', {
                 onclick: () => {

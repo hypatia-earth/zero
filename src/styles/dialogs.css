@@ -157,7 +157,7 @@
   margin-top: 8px;
 }
 
-.dialog.bootstrap .footer .version {
+.dialog .footer .version {
   font-size: var(--font-size-xs);
   opacity: 0.4;
   font-family: 'Courier New', monospace;
@@ -669,7 +669,7 @@
 .dialog.options .footer {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   padding: 16px 20px;
   border-top: 1px solid var(--color-border-light);
 }
@@ -959,7 +959,7 @@
 .dialog.info .footer {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   padding: 16px 20px;
   border-top: 1px solid var(--color-border-light);
 }

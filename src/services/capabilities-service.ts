@@ -12,6 +12,7 @@ const DEBUG = true;
 export class CapabilitiesService {
   float32_filterable = false;
   timestamp_query = false;
+  msaa_8x = false;
   maxBufferSizeMB = 0;
 
   constructor(private configService: ConfigService) {}
@@ -56,6 +57,22 @@ export class CapabilitiesService {
     this.float32_filterable = adapter.features.has('float32-filterable');
     this.timestamp_query = adapter.features.has('timestamp-query');
 
-    DEBUG && console.log(`[Capabilities] float32_filterable: ${this.float32_filterable}, timestamp_query: ${this.timestamp_query}`);
+    // Test MSAA 8x support (requires temporary device)
+    try {
+      const testDevice = await adapter.requestDevice();
+      const testTexture = testDevice.createTexture({
+        size: [1, 1],
+        format: 'bgra8unorm',
+        sampleCount: 8,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      testTexture.destroy();
+      testDevice.destroy();
+      this.msaa_8x = true;
+    } catch {
+      this.msaa_8x = false;
+    }
+
+    DEBUG && console.log(`[Capabilities] float32_filterable: ${this.float32_filterable}, timestamp_query: ${this.timestamp_query}, msaa_8x: ${this.msaa_8x}`);
   }
 }
