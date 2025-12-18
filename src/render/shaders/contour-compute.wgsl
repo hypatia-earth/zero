@@ -4,6 +4,15 @@
 // Two-pass approach:
 // Pass 1: Count segments per cell
 // Pass 2: Generate line vertices (after prefix sum computes offsets)
+//
+// DEBUG: Missing segments reported (2025-12)
+// Symptoms: gaps in HIGH pressure contours, diagonal pattern (top-left to bottom-right on screen)
+// Investigate:
+// 1. Saddle cases (5, 10) - disambiguation disabled, may cause wrong connections
+// 2. Precision in interpolateEdge() - division by near-zero if val0 ≈ val1
+// 3. Grid wrap at longitude 180°/-180° - check samplePressure() wrap logic
+// 4. Pole regions - lat calculation at y=0 or y=gridHeight-1
+// 5. Case index consistency - adjacent cells must agree on shared corners
 
 struct Uniforms {
   gridWidth: u32,
@@ -62,6 +71,9 @@ fn samplePressure(x: u32, y: u32) -> f32 {
 
 // Get case index from 4 corner values
 // Use >= to avoid instability when value exactly equals isovalue
+// DEBUG[5]: Adjacent cells share corners. If cell A sees v1 as "inside" (>=iso),
+//           cell B (to the right) must see its v0 as "inside" too (same point).
+//           Check: are v0,v1,v2,v3 sampled consistently across cell boundaries?
 fn getCaseIndex(v0: f32, v1: f32, v2: f32, v3: f32, iso: f32) -> u32 {
   var caseIdx = 0u;
   if (v0 >= iso) { caseIdx |= 1u; }  // bottom-left
@@ -100,12 +112,19 @@ fn interpolateEdge(edge: i32, cellX: u32, cellY: u32, v: array<f32, 4>, iso: f32
     }
   }
 
+  // DEBUG[2]: If val0 ≈ val1, division produces large t or NaN.
+  //           clamp() handles infinity but NaN propagates.
+  //           Could add: if (abs(val1 - val0) < epsilon) return midpoint;
   let t = clamp((iso - val0) / (val1 - val0), 0.0, 1.0);
   let localPos = mix(p0, p1, t);
   return localPos + vec2<f32>(f32(cellX), f32(cellY));
 }
 
 // Convert grid position to 3D sphere position
+// DEBUG[3]: Longitude wrap - when cellX = gridWidth-1, x+1 wraps to 0
+//           Check if wrap produces discontinuity in world coordinates
+// DEBUG[4]: Pole regions - y=0 is North Pole (lat=90°), y=gridHeight-1 is South Pole
+//           At poles, all longitudes converge to single point - may cause degenerate segments
 fn gridToSphere(gridPos: vec2<f32>) -> vec3<f32> {
   // Wrap x for longitude continuity (wrap column produces x >= gridWidth)
   let wx = gridPos.x - floor(gridPos.x / f32(uniforms.gridWidth)) * f32(uniforms.gridWidth);
@@ -183,8 +202,11 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
   var edges = EDGE_TABLE[caseIdx];
   let values = array<f32, 4>(v0, v1, v2, v3);
 
-  // Saddle point disambiguation: TODO - needs correct edge swap logic
-  // Currently disabled due to geometry artifacts
+  // DEBUG[1]: Saddle point disambiguation disabled - may cause wrong segment connections
+  // Cases 5 (0101) and 10 (1010) have two valid interpretations.
+  // Without disambiguation, contour may cross itself or leave gaps.
+  // HIGH pressure centers are surrounded by case transitions that may include saddles.
+  // TODO: Re-enable with correct edge swap logic
   // if (caseIdx == 5u || caseIdx == 10u) {
   //   let center = (v0 + v1 + v2 + v3) * 0.25;
   //   if (center > uniforms.isovalue) {
