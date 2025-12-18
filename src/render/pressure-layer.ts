@@ -92,6 +92,7 @@ export class PressureLayer {
   private segmentCountsBuffer!: GPUBuffer;
   private offsetsBuffer!: GPUBuffer;
   private blockSumsBuffer!: GPUBuffer;
+  private blockSums2Buffer!: GPUBuffer;  // Second buffer to avoid aliasing
 
   // Bind group layouts
   private regridBindGroupLayout!: GPUBindGroupLayout;
@@ -249,11 +250,16 @@ export class PressureLayer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Block sums buffer for prefix sum
+    // Block sums buffers for prefix sum (two to avoid aliasing in Chrome)
     const numBlocks = Math.ceil(paddedCells / SCAN_BLOCK_SIZE);
     const paddedBlocks = Math.ceil(numBlocks / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
+    const blockSumsSize = Math.max(paddedBlocks * 4, 64);
     this.blockSumsBuffer = this.device.createBuffer({
-      size: Math.max(paddedBlocks * 4, 64),
+      size: blockSumsSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.blockSums2Buffer = this.device.createBuffer({
+      size: blockSumsSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
@@ -422,6 +428,7 @@ export class PressureLayer {
     this.segmentCountsBuffer.destroy();
     this.offsetsBuffer.destroy();
     this.blockSumsBuffer.destroy();
+    this.blockSums2Buffer.destroy();
     this.vertexBuffer.destroy();
     this.edgeToVertexBuffer.destroy();
     this.smoothedVertexBuffer.destroy();
@@ -438,8 +445,13 @@ export class PressureLayer {
     });
     const numBlocks = Math.ceil(paddedCells / SCAN_BLOCK_SIZE);
     const paddedBlocks = Math.ceil(numBlocks / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
+    const blockSumsSize = Math.max(paddedBlocks * 4, 64);
     this.blockSumsBuffer = this.device.createBuffer({
-      size: Math.max(paddedBlocks * 4, 64),
+      size: blockSumsSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.blockSums2Buffer = this.device.createBuffer({
+      size: blockSumsSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
@@ -658,7 +670,7 @@ export class PressureLayer {
         layout: this.prefixSumBindGroupLayout,
         entries: [
           { binding: 0, resource: { buffer: this.blockSumsBuffer } },
-          { binding: 1, resource: { buffer: this.blockSumsBuffer } },
+          { binding: 1, resource: { buffer: this.blockSums2Buffer } },
         ],
       });
 
@@ -857,6 +869,7 @@ export class PressureLayer {
     this.segmentCountsBuffer?.destroy();
     this.offsetsBuffer?.destroy();
     this.blockSumsBuffer?.destroy();
+    this.blockSums2Buffer?.destroy();
 
     // Smoothing buffers
     this.smoothUniformBuffer?.destroy();
