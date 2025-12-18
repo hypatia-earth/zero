@@ -4,6 +4,7 @@
  * Registers the SW for Range request caching and exposes console utilities.
  */
 
+import { SW_CACHED_WEATHER_LAYERS } from '../config/types';
 import { sendSWMessage } from '../utils/sw-message';
 
 /** Layer stats from SW */
@@ -31,8 +32,6 @@ interface LayerDetail {
   }>;
 }
 
-/** Weather layer IDs (must match defaults.layers where category='weather') */
-const WEATHER_LAYERS = ['temp', 'rain'];
 
 /**
  * Register the Service Worker
@@ -74,7 +73,7 @@ export async function registerServiceWorker(): Promise<void> {
 async function logCachedTimesteps(): Promise<void> {
   try {
     const stats = await sendSWMessage<CacheStats>({ type: 'GET_CACHE_STATS' });
-    const parts = WEATHER_LAYERS
+    const parts = SW_CACHED_WEATHER_LAYERS
       .map(layer => {
         const layerStats = stats.layers[layer];
         return layerStats ? `${layer}: ${layerStats.entries}` : `${layer}: 0`;

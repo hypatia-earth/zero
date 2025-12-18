@@ -10,6 +10,7 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
+import { TRACKED_WEATHER_LAYERS, type TWeatherLayer } from '../config/types';
 import type { SlotService } from '../services/slot-service';
 import type { TimestepService } from '../services/timestep-service';
 import type { OptionsService } from '../services/options-service';
@@ -17,15 +18,13 @@ import { getSunDirection } from '../utils/sun-position';
 
 const DEBUG = false;
 
-/** Weather layers in display order (top to bottom) - must match TParam */
-const WEATHER_LAYERS = ['temp', 'rain', 'wind', 'pressure'] as const;
-type WeatherLayer = typeof WEATHER_LAYERS[number];
-
 /** Layer colors (full brightness for GPU, 50% for cached) */
-const LAYER_COLORS: Record<WeatherLayer, { gpu: string; cached: string }> = {
-  temp: { gpu: '#ff6b35', cached: '#803518' },  // Orange
-  rain: { gpu: '#4a90d9', cached: '#25486c' },  // Blue
-  wind: { gpu: '#00ff00', cached: '#008000' },  // Green
+const LAYER_COLORS: Record<TWeatherLayer, { gpu: string; cached: string }> = {
+  temp: { gpu: '#ff6b35', cached: '#803518' },      // Orange
+  rain: { gpu: '#4a90d9', cached: '#25486c' },      // Blue
+  clouds: { gpu: '#aaaaaa', cached: '#555555' },    // Grey
+  humidity: { gpu: '#00bfff', cached: '#006080' },  // Cyan
+  wind: { gpu: '#00ff00', cached: '#008000' },      // Green
   pressure: { gpu: '#ff00ff', cached: '#800080' },  // Magenta
 };
 
@@ -94,11 +93,11 @@ interface TimeBarPanelAttrs {
 function drawTimebar(
   canvas: HTMLCanvasElement,
   window: { start: Date; end: Date },
-  activeLayers: WeatherLayer[],
+  activeLayers: TWeatherLayer[],
   ecmwfSet: Set<string>,
-  cachedMap: Map<WeatherLayer, Set<string>>,
-  gpuMap: Map<WeatherLayer, Set<string>>,
-  activeMap: Map<WeatherLayer, Set<string>>,
+  cachedMap: Map<TWeatherLayer, Set<string>>,
+  gpuMap: Map<TWeatherLayer, Set<string>>,
+  activeMap: Map<TWeatherLayer, Set<string>>,
   nowTime: Date,
   currentProgress: number,  // 0-1 linear progress
   cameraLat: number,
@@ -302,11 +301,11 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     }
 
     // Build cached, GPU, and active maps per layer
-    const cachedMap = new Map<WeatherLayer, Set<string>>();
-    const gpuMap = new Map<WeatherLayer, Set<string>>();
-    const activeMap = new Map<WeatherLayer, Set<string>>();
+    const cachedMap = new Map<TWeatherLayer, Set<string>>();
+    const gpuMap = new Map<TWeatherLayer, Set<string>>();
+    const activeMap = new Map<TWeatherLayer, Set<string>>();
 
-    for (const layer of WEATHER_LAYERS) {
+    for (const layer of TRACKED_WEATHER_LAYERS) {
       const paramState = tsState.params.get(layer);
 
       // Cached in SW
@@ -323,14 +322,10 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       }
       gpuMap.set(layer, gpuSet);
 
-      // Active pair (t1 = null means single slot mode)
+      // Active timesteps (0, 1, or 2)
       const activeSet = new Set<string>();
-      const activePair = slotService.getActivePair(layer);
-      if (activePair) {
-        activeSet.add(timestepService.toDate(activePair.t0).toISOString());
-        if (activePair.t1) {
-          activeSet.add(timestepService.toDate(activePair.t1).toISOString());
-        }
+      for (const ts of slotService.getActiveTimesteps(layer)) {
+        activeSet.add(timestepService.toDate(ts).toISOString());
       }
       activeMap.set(layer, activeSet);
     }
@@ -339,7 +334,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
 
     // Filter to only active weather layers (read from OptionsService)
     const opts = attrs.optionsService.options.value;
-    const activeWeatherLayers = WEATHER_LAYERS.filter(layer => {
+    const activeTWeatherLayers = TRACKED_WEATHER_LAYERS.filter(layer => {
       switch (layer) {
         case 'temp': return opts.temp.enabled;
         case 'rain': return opts.rain.enabled;
@@ -367,7 +362,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
               drawTimebar(
                 canvasRef,
                 window,
-                activeWeatherLayers,
+                activeTWeatherLayers,
                 ecmwfSet,
                 cachedMap,
                 gpuMap,
@@ -384,7 +379,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
               drawTimebar(
                 canvasRef,
                 window,
-                activeWeatherLayers,
+                activeTWeatherLayers,
                 ecmwfSet,
                 cachedMap,
                 gpuMap,

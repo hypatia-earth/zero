@@ -11,7 +11,7 @@
  */
 
 import { effect, signal } from '@preact/signals-core';
-import type { TParam, TTimestep, TimestepOrder, LayerId } from '../config/types';
+import { isWeatherLayer, isWeatherTextureLayer, IMPLEMENTED_WEATHER_LAYERS, type TWeatherLayer, type TTimestep, type TimestepOrder, type TWeatherTextureLayer } from '../config/types';
 import type { TimestepService } from './timestep-service';
 import type { RenderService } from './render-service';
 import type { QueueService } from './queue-service';
@@ -22,10 +22,6 @@ import { BootstrapService } from './bootstrap-service';
 import { debounce } from '../utils/debounce';
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
 
-/** Type guard: is this layer a weather param (has slab data)? */
-const isParam = (id: LayerId): id is TParam =>
-  ['temp', 'rain', 'clouds', 'humidity', 'wind', 'pressure'].includes(id);
-
 const DEBUG = false;
 const DEBUG_MONKEY = false;
 
@@ -33,18 +29,16 @@ const DEBUG_MONKEY = false;
 const fmt = (ts: TTimestep) => ts.slice(5, 13);
 
 /** 4-letter uppercase param code for logs */
-const P = (param: TParam) => param.slice(0, 4).toUpperCase();
+const P = (param: TWeatherLayer) => param.slice(0, 4).toUpperCase();
 
-/** Params that use slot-based loading */
-const SLOT_PARAMS: TParam[] = ['temp', 'pressure'];
 
 export class SlotService {
-  private paramSlots: Map<TParam, ParamSlots> = new Map();
-  private layerStores: Map<TParam, LayerStore> = new Map();
+  private paramSlots: Map<TWeatherLayer, ParamSlots> = new Map();
+  private layerStores: Map<TWeatherLayer, LayerStore> = new Map();
   private timeslotsPerLayer: number = 8;
   private disposeEffect: (() => void) | null = null;
   private disposeResizeEffect: (() => void) | null = null;
-  private disposeSubscribes: Map<TParam, () => void> = new Map();
+  private disposeSubscribes: Map<TWeatherLayer, () => void> = new Map();
   private initialized = false;
 
   // Data window boundaries
@@ -70,7 +64,7 @@ export class SlotService {
     this.initializeLayerStores();
 
     // Create ParamSlots for each slot-based layer
-    for (const param of SLOT_PARAMS) {
+    for (const param of IMPLEMENTED_WEATHER_LAYERS) {
       this.paramSlots.set(param, createParamSlots(param, this.timeslotsPerLayer));
     }
 
@@ -79,8 +73,8 @@ export class SlotService {
     this.renderService.setPressureLerpFn((time) => this.getLerp('pressure', time));
 
     // Wire up data-ready functions for each slot-based param
-    for (const param of SLOT_PARAMS) {
-      this.renderService.setDataReadyFn(param, () => this.getActivePair(param) !== null);
+    for (const param of IMPLEMENTED_WEATHER_LAYERS) {
+      this.renderService.setDataReadyFn(param, () => this.getActiveTimesteps(param).length > 0);
     }
 
     // Effect: pure computation of wanted state + shader activation (no I/O)
@@ -89,8 +83,8 @@ export class SlotService {
       const opts = this.optionsService.options.value;
       if (!this.initialized) return;
 
-      for (const param of SLOT_PARAMS) {
-        if (!this.isParamEnabled(param, opts)) continue;
+      for (const param of IMPLEMENTED_WEATHER_LAYERS) {
+        if (!opts[param].enabled) continue;
 
         const ps = this.paramSlots.get(param)!;
         const wanted = this.computeWanted(time, param);
@@ -105,7 +99,7 @@ export class SlotService {
     });
 
     // Subscribe: side effects (fetching) debounced - per param
-    for (const param of SLOT_PARAMS) {
+    for (const param of IMPLEMENTED_WEATHER_LAYERS) {
       const ps = this.paramSlots.get(param)!;
       const debouncedFetch = debounce((w: WantedState) => this.fetchMissing(param, ps, w), 200);
       const unsubscribe = ps.wanted.subscribe(wanted => {
@@ -125,7 +119,7 @@ export class SlotService {
       console.log(`[Slot] Resizing stores: ${lastTimeslots} → ${newTimeslots} timeslots`);
 
       // Try resize all LayerStores - rollback on any failure
-      const resizedStores: TParam[] = [];
+      const resizedStores: TWeatherLayer[] = [];
       let failed = false;
 
       for (const [param, store] of this.layerStores) {
@@ -158,14 +152,11 @@ export class SlotService {
       }
 
       // Update ParamSlots capacity (recreate with new size)
-      for (const param of SLOT_PARAMS) {
+      for (const param of IMPLEMENTED_WEATHER_LAYERS) {
         const oldPs = this.paramSlots.get(param);
         oldPs?.dispose();
         this.paramSlots.set(param, createParamSlots(param, newTimeslots));
       }
-
-      // Rewire LayerStore buffers to GlobeRenderer (new buffers after resize)
-      this.wireLayerBuffers();
 
       this.timeslotsPerLayer = newTimeslots;
       lastTimeslots = newTimeslots;
@@ -173,19 +164,8 @@ export class SlotService {
     });
   }
 
-  /** Check if a param is enabled in options */
-  private isParamEnabled(param: TParam, opts: typeof this.optionsService.options.value): boolean {
-    switch (param) {
-      case 'temp': return opts.temp.enabled;
-      case 'pressure': return opts.pressure.enabled;
-      case 'rain': return opts.rain.enabled;
-      case 'wind': return opts.wind.enabled;
-      default: return false;
-    }
-  }
-
   /** Pure computation: what timesteps does current time need? */
-  private computeWanted(time: Date, param: TParam): WantedState {
+  private computeWanted(time: Date, param: TWeatherLayer): WantedState {
     const exactTs = this.timestepService.getExactTimestep(time);
     const window = this.calculateLoadWindow(time, param);
 
@@ -202,8 +182,8 @@ export class SlotService {
    * Single mode: 1 slot, Pair mode: 2 slots for interpolation.
    * Skips if already activated with same pair (avoids redundant GPU updates).
    */
-  private activateIfReady(param: TParam, ps: ParamSlots, wanted: WantedState): void {
-    const current = ps.getActivePair();
+  private activateIfReady(param: TWeatherLayer, ps: ParamSlots, wanted: WantedState): void {
+    const current = ps.getActiveTimesteps();
     const pcode = P(param);
 
     if (wanted.mode === 'single') {
@@ -211,22 +191,22 @@ export class SlotService {
       const slot = ps.getSlot(ts);
       if (slot?.loaded) {
         // Skip if already activated with same timestep
-        if (current?.t0 === ts && current.t1 === null) {
+        if (current.length === 1 && current[0] === ts) {
           DEBUG && console.log(`[Slot] ${pcode} skip (same): ${fmt(ts)}`);
           return;
         }
-        ps.setActivePair({ t0: ts, t1: null });
+        ps.setActiveTimesteps([ts]);
 
-        // Rebind temp buffers (per-slot mode)
-        if (param === 'temp') {
-          this.rebindTempBuffers(slot.slotIndex, slot.slotIndex);
+        // Rebind buffers for texture layers (per-slot mode)
+        if (isWeatherTextureLayer(param)) {
+          this.rebindTextureLayerBuffers(param, slot.slotIndex, slot.slotIndex);
         }
 
         this.renderService.activateSlots(param, slot.slotIndex, slot.slotIndex, slot.loadedPoints);
         console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
       } else {
         DEBUG_MONKEY && console.log(`[Monkey] ${pcode} CANNOT activate single ${fmt(ts)}: slot=${!!slot} loaded=${slot?.loaded}`);
-        ps.setActivePair(null);
+        ps.setActiveTimesteps([]);
       }
     } else {
       const t0 = wanted.priority[0]!;
@@ -235,44 +215,44 @@ export class SlotService {
       const slot1 = ps.getSlot(t1);
       if (slot0?.loaded && slot1?.loaded) {
         // Skip if already activated with same pair
-        if (current?.t0 === t0 && current?.t1 === t1) {
+        if (current.length === 2 && current[0] === t0 && current[1] === t1) {
           DEBUG && console.log(`[Slot] ${pcode} skip (same): ${fmt(t0)} → ${fmt(t1)}`);
           return;
         }
-        ps.setActivePair({ t0, t1 });
+        ps.setActiveTimesteps([t0, t1]);
 
-        // Rebind temp buffers (per-slot mode)
-        if (param === 'temp') {
-          this.rebindTempBuffers(slot0.slotIndex, slot1.slotIndex);
+        // Rebind buffers for texture layers (per-slot mode)
+        if (isWeatherTextureLayer(param)) {
+          this.rebindTextureLayerBuffers(param, slot0.slotIndex, slot1.slotIndex);
         }
 
         this.renderService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, Math.min(slot0.loadedPoints, slot1.loadedPoints));
         console.log(`[Slot] ${pcode} activated: ${fmt(t0)} → ${fmt(t1)}`);
       } else {
         DEBUG_MONKEY && console.log(`[Monkey] ${pcode} CANNOT activate pair ${fmt(t0)}→${fmt(t1)}: slot0=${!!slot0}/${slot0?.loaded} slot1=${!!slot1}/${slot1?.loaded}`);
-        ps.setActivePair(null);
+        ps.setActiveTimesteps([]);
       }
     }
   }
 
-  /** Rebind temp slot buffers to renderer */
-  private rebindTempBuffers(slotIndex0: number, slotIndex1: number): void {
-    const store = this.layerStores.get('temp');
+  /** Rebind texture layer slot buffers to renderer */
+  private rebindTextureLayerBuffers(param: TWeatherTextureLayer, slotIndex0: number, slotIndex1: number): void {
+    const store = this.layerStores.get(param);
     if (!store) return;
 
-    const buffer0 = store.getSlotBuffer(slotIndex0, 0);  // slab 0 = temp data
+    const buffer0 = store.getSlotBuffer(slotIndex0, 0);  // slab 0
     const buffer1 = store.getSlotBuffer(slotIndex1, 0);
 
     if (buffer0 && buffer1) {
-      this.renderService.setTempSlotBuffers(buffer0, buffer1);
-      console.log(`[Slot] Temp buffers rebound: slots ${slotIndex0}, ${slotIndex1}`);
+      this.renderService.setTextureLayerBuffers(param, buffer0, buffer1);
+      console.log(`[Slot] ${param} buffers rebound: slots ${slotIndex0}, ${slotIndex1}`);
     } else {
-      console.warn(`[Slot] Missing temp buffer: slot0=${!!buffer0} slot1=${!!buffer1}`);
+      console.warn(`[Slot] Missing ${param} buffer: slot0=${!!buffer0} slot1=${!!buffer1}`);
     }
   }
 
   /** Upload data to slot via LayerStore */
-  private uploadData(param: TParam, data: Float32Array, slotIndex: number): void {
+  private uploadData(param: TWeatherLayer, data: Float32Array, slotIndex: number): void {
     const store = this.layerStores.get(param);
     if (!store) return;
 
@@ -288,7 +268,7 @@ export class SlotService {
   }
 
   /** Fetch missing timesteps */
-  private fetchMissing(param: TParam, ps: ParamSlots, wanted: WantedState): void {
+  private fetchMissing(param: TWeatherLayer, ps: ParamSlots, wanted: WantedState): void {
     if (!BootstrapService.state.value.complete) return;
 
     const needsLoad = (ts: TTimestep) => !ps.hasSlot(ts) && !ps.isLoading(ts);
@@ -318,7 +298,7 @@ export class SlotService {
   }
 
   /** Calculate ideal load window around time */
-  private calculateLoadWindow(time: Date, _param: TParam): TTimestep[] {
+  private calculateLoadWindow(time: Date, _param: TWeatherLayer): TTimestep[] {
     const [t0, t1] = this.timestepService.adjacent(time);
     const window: TTimestep[] = [t0, t1];
 
@@ -355,7 +335,7 @@ export class SlotService {
   }
 
   /** Load timesteps via QueueService */
-  private loadTimestepsBatch(param: TParam, ps: ParamSlots, orders: TimestepOrder[]): void {
+  private loadTimestepsBatch(param: TWeatherLayer, ps: ParamSlots, orders: TimestepOrder[]): void {
     this.queueService.submitTimestepOrders(
       orders,
       (order, slice) => {
@@ -407,7 +387,7 @@ export class SlotService {
   }
 
   /** Update shader when a slot finishes loading */
-  private updateShaderIfReady(param: TParam, ps: ParamSlots): void {
+  private updateShaderIfReady(param: TWeatherLayer, ps: ParamSlots): void {
     const wanted = ps.wanted.value;
     if (!wanted) {
       DEBUG_MONKEY && console.warn(`[Monkey] ${P(param)} updateShaderIfReady: wanted is NULL!`);
@@ -418,35 +398,30 @@ export class SlotService {
   }
 
   /** Calculate lerp for shader interpolation */
-  getLerp(param: TParam, currentTime: Date): number {
+  getLerp(param: TWeatherLayer, currentTime: Date): number {
     const ps = this.paramSlots.get(param);
-    const pair = ps?.getActivePair();
-    if (!pair) return -1;
+    const active = ps?.getActiveTimesteps();
+    if (!active || active.length === 0) return -1;
 
-    if (pair.t1 === null) return -2;  // Single slot mode
+    if (active.length === 1) return -2;  // Single timestep mode
 
-    const t0 = this.timestepService.toDate(pair.t0).getTime();
-    const t1 = this.timestepService.toDate(pair.t1).getTime();
+    const t0 = this.timestepService.toDate(active[0]!).getTime();
+    const t1 = this.timestepService.toDate(active[1]!).getTime();
     const tc = currentTime.getTime();
 
     if (tc < t0 || tc > t1) return -1;
     return (tc - t0) / (t1 - t0);
   }
 
-  /** @deprecated Use getLerp('temp', time) */
-  getTempLerp(currentTime: Date): number {
-    return this.getLerp('temp', currentTime);
-  }
-
   /** Initialize with priority timesteps for all enabled params */
-  async initialize(onProgress?: (param: TParam, index: number, total: number) => void): Promise<void> {
+  async initialize(onProgress?: (param: TWeatherLayer, index: number, total: number) => void): Promise<void> {
     this.dataWindowStart = this.timestepService.first();
     this.dataWindowEnd = this.timestepService.last();
 
     const time = this.optionsService.options.value.viewState.time;
     const opts = this.optionsService.options.value;
 
-    const enabledParams = SLOT_PARAMS.filter(p => this.isParamEnabled(p, opts));
+    const enabledParams = IMPLEMENTED_WEATHER_LAYERS.filter(p => opts[p].enabled);
     if (enabledParams.length === 0) {
       this.initialized = true;
       console.log('[Slot] Initialized (no layers enabled)');
@@ -455,7 +430,7 @@ export class SlotService {
 
     // Build orders for all enabled params
     const allOrders: TimestepOrder[] = [];
-    const wantedByParam = new Map<TParam, WantedState>();
+    const wantedByParam = new Map<TWeatherLayer, WantedState>();
 
     for (const param of enabledParams) {
       const ps = this.paramSlots.get(param)!;
@@ -519,14 +494,9 @@ export class SlotService {
     console.log('[Slot] Initialized');
   }
 
-  /** Get active pair for a param */
-  getActivePair(param: TParam): { t0: TTimestep; t1: TTimestep | null } | null {
-    return this.paramSlots.get(param)?.getActivePair() ?? null;
-  }
-
-  /** Get LayerStore for a param */
-  getLayerStore(param: TParam): LayerStore | undefined {
-    return this.layerStores.get(param);
+  /** Get active timesteps for a param (0, 1, or 2 items) */
+  getActiveTimesteps(param: TWeatherLayer): TTimestep[] {
+    return this.paramSlots.get(param)?.getActiveTimesteps() ?? [];
   }
 
   /** Initialize LayerStores for weather layers with slab definitions */
@@ -537,7 +507,7 @@ export class SlotService {
     for (const layer of layers) {
       // Only create stores for weather layers with slab definitions
       if (!layer.slabs || layer.slabs.length === 0) continue;
-      if (!isParam(layer.id)) continue;
+      if (!isWeatherLayer(layer.id)) continue;
 
       const store = new LayerStore(device, {
         layerId: layer.id,
@@ -549,17 +519,6 @@ export class SlotService {
       this.layerStores.set(layer.id, store);
       console.log(`[Slot] Created LayerStore: ${layer.id} (${layer.slabs.length} slabs, ${this.timeslotsPerLayer} timeslots)`);
     }
-
-    // Wire LayerStore buffers to GlobeRenderer
-    this.wireLayerBuffers();
-  }
-
-  /** Initialize GlobeRenderer for per-slot buffer mode */
-  private wireLayerBuffers(): void {
-    // All layers use per-slot mode - buffers created/rebound dynamically
-    // Temp: rebindTempBuffers() when active pair changes
-    // Pressure: triggerPressureRegrid(slotIndex, buffer) after upload
-    // No initial wiring needed
   }
 
   dispose(): void {

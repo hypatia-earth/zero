@@ -7,7 +7,7 @@
  */
 
 import { signal } from '@preact/signals-core';
-import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TParam, TTimestep } from '../config/types';
+import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TWeatherLayer, TTimestep } from '../config/types';
 import { fetchStreaming } from '../utils/fetch';
 import { calcBandwidth, calcEta, pruneSamples, type Sample } from '../utils/bandwidth';
 import type { OmService } from './om-service';
@@ -20,7 +20,7 @@ const DEBUG = false;
 const fmt = (ts: string) => ts.slice(5, 13);
 
 /** 4-letter uppercase param code for logs */
-const P = (param: TParam) => param.slice(0, 4).toUpperCase();
+const P = (param: TWeatherLayer) => param.slice(0, 4).toUpperCase();
 
 /** Queued order with callback */
 interface QueuedTimestepOrder {
@@ -148,7 +148,7 @@ export class QueueService implements IQueueService {
     this.updateStats();
 
     // Log one line per param (grouped, in order of first appearance)
-    const byParam = new Map<TParam, TimestepOrder[]>();
+    const byParam = new Map<TWeatherLayer, TimestepOrder[]>();
     for (const order of orders) {
       const list = byParam.get(order.param) || [];
       list.push(order);
@@ -176,7 +176,7 @@ export class QueueService implements IQueueService {
       this.currentlyFetching = next.order;
       this.currentAbortController = new AbortController();
 
-      // Map TParam to Open-Meteo parameter names
+      // Map TWeatherLayer to Open-Meteo parameter names
       const paramMap: Record<string, string> = {
         temp: 'temperature_2m',
         pressure: 'pressure_msl',

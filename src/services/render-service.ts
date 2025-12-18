@@ -8,7 +8,7 @@ import { generateIsobarLevels } from '../render/pressure-layer';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { ZeroOptions } from '../schemas/options.schema';
-import type { TParam } from '../config/types';
+import type { TWeatherLayer, TWeatherTextureLayer } from '../config/types';
 import { getSunDirection } from '../utils/sun-position';
 import { createRingBuffer, type RingBuffer } from '../utils/ringbuffer';
 
@@ -44,7 +44,7 @@ export class RenderService {
   };
 
   // Data-ready functions per param (provided by SlotService)
-  private dataReadyFns = new Map<TParam, () => boolean>();
+  private dataReadyFns = new Map<TWeatherLayer, () => boolean>();
 
   // Frame timing (60-frame rolling average)
   private frameTimes: RingBuffer = createRingBuffer(60);
@@ -285,7 +285,7 @@ export class RenderService {
     // Compute targets: enabled && dataReady ? userOpacity : 0
     // Temp uses lerp check + loadedPoints, other data layers use dataReadyFns
     const tempDataReady = rawLerp >= -2 && rawLerp !== -1 && this.tempLoadedPoints > 0;
-    const isReady = (param: TParam) => this.dataReadyFns.get(param)?.() ?? false;
+    const isReady = (param: TWeatherLayer) => this.dataReadyFns.get(param)?.() ?? false;
 
     const targets = {
       sun: options.sun.enabled ? options.sun.opacity : 0,
@@ -365,7 +365,7 @@ export class RenderService {
    * Set data-ready function for a param (from SlotService)
    * Returns true when param has loaded data for current time
    */
-  setDataReadyFn(param: TParam, fn: () => boolean): void {
+  setDataReadyFn(param: TWeatherLayer, fn: () => boolean): void {
     this.dataReadyFns.set(param, fn);
   }
 
@@ -396,7 +396,7 @@ export class RenderService {
    * Upload data to a slot for a given param
    * @deprecated Use LayerStore.writeToSlab() + triggerPressureRegrid() for per-slot mode
    */
-  uploadToSlot(param: TParam, _data: Float32Array, _slotIndex: number): void {
+  uploadToSlot(param: TWeatherLayer, _data: Float32Array, _slotIndex: number): void {
     // Per-slot mode: data upload happens via LayerStore.writeToSlab()
     // Then trigger regrid via triggerPressureRegrid(slotIndex, buffer)
     console.warn(`[RenderService] uploadToSlot deprecated - use LayerStore.writeToSlab() for ${param}`);
@@ -406,7 +406,7 @@ export class RenderService {
    * Activate slots for a given param (shader will use these slots)
    * Routes to param-specific activation
    */
-  activateSlots(param: TParam, slot0: number, slot1: number, loadedPoints: number): void {
+  activateSlots(param: TWeatherLayer, slot0: number, slot1: number, loadedPoints: number): void {
     switch (param) {
       case 'temp':
         this.tempSlot0 = slot0;
@@ -441,11 +441,11 @@ export class RenderService {
   }
 
   /**
-   * Set temp slot buffers from LayerStore (rebind)
-   * Called when active temp slots change
+   * Set texture layer slot buffers from LayerStore (rebind)
+   * Called when active slots change for texture-sampled layers
    */
-  setTempSlotBuffers(buffer0: GPUBuffer, buffer1: GPUBuffer): void {
-    this.renderer!.setTempSlotBuffers(buffer0, buffer1);
+  setTextureLayerBuffers(param: TWeatherTextureLayer, buffer0: GPUBuffer, buffer1: GPUBuffer): void {
+    this.renderer!.setTextureLayerBuffers(param, buffer0, buffer1);
   }
 
   /**

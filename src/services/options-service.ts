@@ -19,7 +19,7 @@ import {
   type OptionFilter,
 } from '../schemas/options.schema';
 import { layerIds } from '../config/defaults';
-import type { LayerId } from '../config/types';
+import type { TLayer } from '../config/types';
 import { throttle } from '../utils/debounce';
 
 const DEBUG = false;
@@ -145,7 +145,7 @@ function deleteByPath<T extends object>(obj: T, path: string): T {
 // OptionsService
 // ============================================================
 
-export type { LayerId };
+export type { TLayer };
 
 export class OptionsService {
   /** User overrides only (persisted to IndexedDB) */

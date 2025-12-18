@@ -7,6 +7,7 @@ import shaderCode from './shaders/zero.wgsl?raw';
 import postprocessShaderCode from './shaders/postprocess.wgsl?raw';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 import { PressureLayer, type PressureResolution } from './pressure-layer';
+import type { TWeatherTextureLayer } from '../config/types';
 
 export interface GlobeUniforms {
   viewProjInverse: Float32Array;
@@ -728,19 +729,22 @@ export class GlobeRenderer {
   }
 
   /**
-   * Set external temp slot buffers (owned by LayerStore)
+   * Set texture layer slot buffers (owned by LayerStore)
    * Replaces internal placeholders and recreates bind groups
-   * Called when active temp slots change (rebind)
+   * Called when active slots change for texture-sampled layers (rebind)
    */
-  setTempSlotBuffers(buffer0: GPUBuffer, buffer1: GPUBuffer, destroyOld = false): void {
-    if (destroyOld) {
-      this.tempData0Buffer?.destroy();
-      this.tempData1Buffer?.destroy();
+  setTextureLayerBuffers(param: TWeatherTextureLayer, buffer0: GPUBuffer, buffer1: GPUBuffer): void {
+    switch (param) {
+      case 'temp':
+        this.tempData0Buffer = buffer0;
+        this.tempData1Buffer = buffer1;
+        break;
+      // TODO: Add rain/clouds/humidity when per-slot + interpolation is implemented
+      default:
+        console.warn(`[Globe] setTextureLayerBuffers not implemented for ${param}`);
+        return;
     }
-    this.tempData0Buffer = buffer0;
-    this.tempData1Buffer = buffer1;
     this.recreateBindGroup();
-    console.log('[Globe] Temp slot buffers rebound');
   }
 
   /**

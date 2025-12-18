@@ -6,11 +6,11 @@ import m from 'mithril';
 import { GearIcon } from './gear-icon';
 import type { ConfigService } from '../services/config-service';
 import type { OptionsService } from '../services/options-service';
-import type { LayerId } from '../config/types';
+import type { TLayer } from '../config/types';
 import type { OptionFilter } from '../schemas/options.schema';
 
 /** Layers that have configurable options */
-const LAYERS_WITH_OPTIONS: LayerId[] = ['earth', 'sun', 'grid', 'temp', 'rain', 'pressure'];
+const LAYERS_WITH_OPTIONS: TLayer[] = ['earth', 'sun', 'grid', 'temp', 'rain', 'pressure'];
 
 interface LayersPanelAttrs {
   configService: ConfigService;
@@ -84,7 +84,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
 };
 
 interface LayerWidgetAttrs {
-  layer: { id: LayerId; label: string };
+  layer: { id: TLayer; label: string };
   active: boolean;
   hasOptions: boolean;
   onToggle: () => void;

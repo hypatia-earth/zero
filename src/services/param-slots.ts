@@ -45,9 +45,9 @@ export interface ParamSlots {
   hasSlot(timestep: TTimestep): boolean;
   getSlot(timestep: TTimestep): Slot | undefined;
 
-  // Active pair (t1 = null means single slot mode)
-  getActivePair(): { t0: TTimestep; t1: TTimestep | null } | null;
-  setActivePair(pair: { t0: TTimestep; t1: TTimestep | null } | null): void;
+  // Active timesteps (0, 1, or 2) ordered by time
+  getActiveTimesteps(): TTimestep[];
+  setActiveTimesteps(ts: TTimestep[]): void;
 
   // Cleanup
   dispose(): void;
@@ -61,7 +61,7 @@ export function createParamSlots(param: string, timeslots: number): ParamSlots {
   const wanted = signal<WantedState | null>(null);
   const slots = new Map<TTimestep, Slot>();
   const loadingKeys = new Set<TTimestep>();
-  let activePair: { t0: TTimestep; t1: TTimestep | null } | null = null;
+  let activeTimesteps: TTimestep[] = [];
 
   const P = param.slice(0, 4).toUpperCase();
 
@@ -115,14 +115,14 @@ export function createParamSlots(param: string, timeslots: number): ParamSlots {
     hasSlot: (ts) => slots.has(ts),
     getSlot: (ts) => slots.get(ts),
 
-    getActivePair: () => activePair,
-    setActivePair: (pair) => { activePair = pair; },
+    getActiveTimesteps: () => activeTimesteps,
+    setActiveTimesteps: (ts) => { activeTimesteps = ts; },
 
     dispose() {
       slots.clear();
       loadingKeys.clear();
       freeIndices.length = 0;
-      activePair = null;
+      activeTimesteps = [];
     },
   };
 }

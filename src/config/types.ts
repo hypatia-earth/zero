@@ -1,17 +1,73 @@
 /**
  * Configuration types for Hypatia Zero
+ *
+ * Layer hierarchy:
+ *   TLayer (all layers, have button in Layer panel)
+ *   ├── TDecorationLayer (earth, sun, grid)
+ *   └── TWeatherLayer (need store, request data from ECMWF)
+ *       ├── TWeatherTextureLayer (simple: temp, rain, clouds, humidity)
+ *       └── TWeatherGeometryLayer (complex: pressure, wind)
  */
 
 import type { Signal } from '@preact/signals-core';
 
-/** Base/decorative layers (no weather data) */
-export type TBaseLayer = 'earth' | 'sun' | 'grid';
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer definitions (arrays as const, types derived)
+// ─────────────────────────────────────────────────────────────────────────────
 
-/** Weather parameter layers (have slab data) */
-export type TParam = 'temp' | 'rain' | 'clouds' | 'humidity' | 'wind' | 'pressure';
+/** Decoration layers (no weather data) */
+export const DECORATION_LAYERS = ['earth', 'sun', 'grid'] as const;
+export type TDecorationLayer = typeof DECORATION_LAYERS[number];
 
-/** All layer IDs */
-export type LayerId = TBaseLayer | TParam;
+/** Weather texture layers (buffer rebind + interpolation) */
+export const WEATHER_TEXTURE_LAYERS = ['temp', 'rain', 'clouds', 'humidity'] as const;
+export type TWeatherTextureLayer = typeof WEATHER_TEXTURE_LAYERS[number];
+
+/** Weather geometry layers (compute shader pipeline) */
+export const WEATHER_GEOMETRY_LAYERS = ['pressure', 'wind'] as const;
+export type TWeatherGeometryLayer = typeof WEATHER_GEOMETRY_LAYERS[number];
+
+/** All weather layers */
+export const WEATHER_LAYERS = [...WEATHER_TEXTURE_LAYERS, ...WEATHER_GEOMETRY_LAYERS] as const;
+export type TWeatherLayer = TWeatherTextureLayer | TWeatherGeometryLayer;
+
+/** All layers */
+export const ALL_LAYERS = [...DECORATION_LAYERS, ...WEATHER_LAYERS] as const;
+export type TLayer = TDecorationLayer | TWeatherLayer;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Type guards
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Type guard: is this a weather layer? */
+export const isWeatherLayer = (id: string): id is TWeatherLayer =>
+  (WEATHER_LAYERS as readonly string[]).includes(id);
+
+/** Type guard: is this a weather texture layer? */
+export const isWeatherTextureLayer = (layer: TWeatherLayer): layer is TWeatherTextureLayer =>
+  (WEATHER_TEXTURE_LAYERS as readonly string[]).includes(layer);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Implementation status (what's currently working)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Implemented weather texture layers (slot-based GPU loading) */
+export const IMPLEMENTED_TEXTURE_LAYERS: TWeatherTextureLayer[] = ['temp'];
+
+/** Implemented weather geometry layers (compute shader pipeline) */
+export const IMPLEMENTED_GEOMETRY_LAYERS: TWeatherGeometryLayer[] = ['pressure'];
+
+/** All implemented weather layers */
+export const IMPLEMENTED_WEATHER_LAYERS: TWeatherLayer[] = [
+  ...IMPLEMENTED_TEXTURE_LAYERS,
+  ...IMPLEMENTED_GEOMETRY_LAYERS,
+];
+
+/** Weather layers with timestep tracking (broader than GPU-loaded) */
+export const TRACKED_WEATHER_LAYERS: TWeatherLayer[] = ['temp', 'rain', 'wind', 'pressure'];
+
+/** Weather layers cached by Service Worker */
+export const SW_CACHED_WEATHER_LAYERS: TWeatherLayer[] = ['temp', 'rain'];
 
 export type TModel = 'ecmwf_ifs' | 'ecmwf_ifs025';
 
@@ -81,7 +137,7 @@ export interface IQueueService {
 /** Timestep download order for QueueService */
 export interface TimestepOrder {
   url: string;
-  param: TParam;
+  param: TWeatherLayer;
   timestep: TTimestep;
   sizeEstimate: number;  // Estimated bytes (NaN = use default)
 }
@@ -118,7 +174,7 @@ export interface SlabConfig {
 }
 
 export interface LayerConfig {
-  id: LayerId;
+  id: TLayer;
   label: string;
   category: 'base' | 'weather' | 'overlay';
   defaultEnabled: boolean;
@@ -196,7 +252,7 @@ export interface ZeroConfig {
   layers: LayerConfig[];
 
   /** Default active layers */
-  defaultLayers: LayerId[];
+  defaultLayers: TLayer[];
 
   /** Sun rendering settings */
   sun: SunConfig;
