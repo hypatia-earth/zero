@@ -62,7 +62,6 @@ export class GlobeRenderer {
   private cloudsDataBuffer!: GPUBuffer;
   private humidityDataBuffer!: GPUBuffer;
   private windDataBuffer!: GPUBuffer;
-  private pressureDataBuffer!: GPUBuffer;  // Pressure raw data (single buffer, slots at offsets)
   private atmosphereLUTs!: AtmosphereLUTs;
   private useFloat16Luts = false;
   private format!: GPUTextureFormat;
@@ -217,13 +216,6 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
     console.log(`[Globe] Weather buffers: rain/clouds/humidity/wind @ ${(layerBufferSize / 1024 / 1024).toFixed(1)} MB each`);
-
-    // 4-byte placeholder: same reason as temp above.
-    // LayerStore replaces via setPressureDataBuffer().
-    this.pressureDataBuffer = this.device.createBuffer({
-      size: 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
 
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
     this.fontAtlasTexture = this.device.createTexture({
@@ -753,15 +745,29 @@ export class GlobeRenderer {
   }
 
   /**
-   * Set external pressure data buffer (owned by LayerStore)
-   * Replaces internal placeholder; PressureLayer uses this via setExternalBuffers
+   * Initialize pressure layer with Gaussian LUTs (per-slot mode)
+   * Call this once after Gaussian LUTs are uploaded
    */
-  setPressureDataBuffer(buffer: GPUBuffer, destroyOld = true): void {
-    if (destroyOld && this.pressureDataBuffer) {
-      this.pressureDataBuffer.destroy();
+  initializePressureLayer(): void {
+    if (!this.pressureLayer.isComputeReady()) {
+      this.pressureLayer.setExternalBuffers({
+        gaussianLats: this.gaussianLatsBuffer,
+        ringOffsets: this.ringOffsetsBuffer,
+      });
     }
-    this.pressureDataBuffer = buffer;
-    console.log('[Globe] Pressure buffer set from LayerStore');
+  }
+
+  /**
+   * Trigger pressure regrid for a slot (per-slot mode)
+   * @param slotIndex Grid slot index for output
+   * @param inputBuffer Per-slot buffer containing O1280 raw data
+   */
+  triggerPressureRegrid(slotIndex: number, inputBuffer: GPUBuffer): void {
+    // Initialize pressure layer if not done
+    if (!this.pressureLayer.isComputeReady()) {
+      this.initializePressureLayer();
+    }
+    this.pressureLayer.regridSlot(slotIndex, inputBuffer);
   }
 
   uploadGaussianLUTs(lats: Float32Array, offsets: Uint32Array): void {
@@ -842,32 +848,6 @@ export class GlobeRenderer {
     this.pressureLayer.setLevelCount(levelCount);
   }
 
-  /**
-   * Upload pressure data to a raw slot and trigger regrid
-   * @param data O1280 pressure data (Float32Array, ~6.6M points)
-   * @param slotIndex Which slot to upload to
-   */
-  uploadPressureDataToSlot(data: Float32Array, slotIndex: number, timeslots: number): void {
-    // Upload to raw slot at offset (single buffer, slots at offsets)
-    const byteOffset = slotIndex * BYTES_PER_TIMESTEP;
-    this.device.queue.writeBuffer(
-      this.pressureDataBuffer, byteOffset,
-      data.buffer, data.byteOffset, data.byteLength
-    );
-
-    // Set up external buffers if not done
-    if (!this.pressureLayer.isComputeReady()) {
-      this.pressureLayer.setExternalBuffers({
-        gaussianLats: this.gaussianLatsBuffer,
-        ringOffsets: this.ringOffsetsBuffer,
-        pressureDataBuffer: this.pressureDataBuffer,
-        timeslots,
-      });
-    }
-
-    // Trigger regrid for this slot
-    this.pressureLayer.regridSlot(slotIndex);
-  }
 
   /**
    * Run contour compute for pressure with interpolation between two grid slots
@@ -921,8 +901,16 @@ export class GlobeRenderer {
     // Generate synthetic O1280 pressure data
     const syntheticData = this.generateSyntheticO1280Pressure();
 
-    // Upload to slot 0 (triggers regrid) - use 4 slots for test mode
-    this.uploadPressureDataToSlot(syntheticData, 0, 4);
+    // Create temporary buffer and upload synthetic data
+    const syntheticBuffer = this.device.createBuffer({
+      size: BYTES_PER_TIMESTEP,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      label: 'synthetic-pressure-data',
+    });
+    this.device.queue.writeBuffer(syntheticBuffer, 0, syntheticData.buffer, syntheticData.byteOffset, syntheticData.byteLength);
+
+    // Trigger regrid with the synthetic buffer
+    this.triggerPressureRegrid(0, syntheticBuffer);
 
     // Run contour with slot0=slot1 (single mode, no interpolation)
     const testLevels = [976, 984, 992, 1000, 1008, 1016];
@@ -930,6 +918,9 @@ export class GlobeRenderer {
 
     this.pressureLayer.setEnabled(true);
     console.log(`[Globe] Synthetic pressure: ${testLevels.length} levels`);
+
+    // Note: syntheticBuffer is kept alive for re-regrid on resolution change
+    // In production, LayerStore manages buffer lifecycle
   }
 
   /**
@@ -986,7 +977,6 @@ export class GlobeRenderer {
     this.basemapTexture?.destroy();
     this.gaussianLatsBuffer?.destroy();
     this.ringOffsetsBuffer?.destroy();
-    this.pressureDataBuffer?.destroy();
     this.tempData0Buffer?.destroy();
     this.tempData1Buffer?.destroy();
     this.rainDataBuffer?.destroy();

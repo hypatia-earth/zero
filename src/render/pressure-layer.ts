@@ -53,12 +53,10 @@ interface PressureUniforms {
   opacity: number;
 }
 
-/** External GPU buffers provided by GlobeRenderer */
+/** External GPU buffers provided by GlobeRenderer (Gaussian LUTs only) */
 export interface PressureExternalBuffers {
   gaussianLats: GPUBuffer;        // 2560 latitudes
   ringOffsets: GPUBuffer;         // 2560 ring offsets
-  pressureDataBuffer: GPUBuffer;  // O1280 raw data (single buffer, slots at offsets)
-  timeslots: number;               // Number of slots in buffer
 }
 
 // Constants
@@ -94,7 +92,6 @@ export class PressureLayer {
   private segmentCountsBuffer!: GPUBuffer;
   private offsetsBuffer!: GPUBuffer;
   private blockSumsBuffer!: GPUBuffer;
-  private timeslots = 0;
 
   // Bind group layouts
   private regridBindGroupLayout!: GPUBindGroupLayout;
@@ -341,35 +338,37 @@ export class PressureLayer {
   }
 
   /**
-   * Set external GPU buffers from GlobeRenderer
-   * Creates grid slot buffers for regridded data
+   * Set external GPU buffers from GlobeRenderer (Gaussian LUTs)
+   * Grid slot buffers are created on demand in regridSlot()
    */
   setExternalBuffers(buffers: PressureExternalBuffers): void {
     this.externalBuffers = buffers;
-    this.timeslots = buffers.timeslots;
+    this.computeReady = true;
+    console.log(`[Pressure] External buffers set (per-slot mode)`);
+  }
 
-    // Create grid slot buffers (regridded data per slot)
-    const gridSlotSize = this.gridWidth * this.gridHeight * 4;  // f32 per cell
-    for (let i = 0; i < this.timeslots; i++) {
+  /**
+   * Ensure grid slot buffer exists for a given slot index
+   * Creates buffer on demand (per-slot mode)
+   */
+  private ensureGridSlotBuffer(slotIndex: number): void {
+    while (this.gridSlotBuffers.length <= slotIndex) {
+      const gridSlotSize = this.gridWidth * this.gridHeight * 4;  // f32 per cell
       this.gridSlotBuffers.push(this.device.createBuffer({
         size: gridSlotSize,
         usage: GPUBufferUsage.STORAGE,
+        label: `pressure-grid-slot${this.gridSlotBuffers.length}`,
       }));
       this.gridSlotReady.push(false);
       this.hasRawData.push(false);
     }
-
-    const totalKB = (gridSlotSize * this.timeslots / 1024).toFixed(0);
-    console.log(`[Pressure] ${this.timeslots} grid slots, ${totalKB} KB total`);
-
-    this.computeReady = true;
   }
 
   /**
    * Mark a grid slot as needing regrid (called when raw slot updated)
    */
   invalidateGridSlot(slotIndex: number): void {
-    if (slotIndex >= 0 && slotIndex < this.timeslots) {
+    if (slotIndex >= 0 && slotIndex < this.gridSlotBuffers.length) {
       this.gridSlotReady[slotIndex] = false;
     }
   }
@@ -378,11 +377,12 @@ export class PressureLayer {
    * Check if a grid slot is ready (regridded)
    */
   isGridSlotReady(slotIndex: number): boolean {
-    return slotIndex >= 0 && slotIndex < this.timeslots && this.gridSlotReady[slotIndex] === true;
+    return slotIndex >= 0 && slotIndex < this.gridSlotBuffers.length && this.gridSlotReady[slotIndex] === true;
   }
 
   /**
-   * Change resolution live - recreates all resolution-dependent buffers and re-regrids
+   * Change resolution live - recreates all resolution-dependent buffers
+   * Note: Grid slots are invalidated; caller must re-trigger regrid for active slots
    */
   setResolution(resolution: PressureResolution): void {
     if (resolution === this.resolution) return;
@@ -391,6 +391,7 @@ export class PressureLayer {
       return;
     }
 
+    const slotCount = this.gridSlotBuffers.length;
     console.log(`[Pressure] Changing resolution: ${this.resolution}° → ${resolution}°`);
     this.resolution = resolution;
 
@@ -399,27 +400,21 @@ export class PressureLayer {
     this.gridHeight = 180 / resolution;
     this.numCells = this.gridWidth * (this.gridHeight - 1);
 
-    // Destroy old buffers
+    // Destroy old grid slot buffers
     for (const buffer of this.gridSlotBuffers) {
       buffer.destroy();
     }
     this.gridSlotBuffers = [];
+    this.gridSlotReady = [];
+    this.hasRawData = [];
+
+    // Destroy and recreate compute buffers
     this.segmentCountsBuffer.destroy();
     this.offsetsBuffer.destroy();
     this.blockSumsBuffer.destroy();
     this.vertexBuffer.destroy();
     this.edgeToVertexBuffer.destroy();
     this.smoothedVertexBuffer.destroy();
-
-    // Recreate grid slot buffers
-    const gridSlotSize = this.gridWidth * this.gridHeight * 4;
-    for (let i = 0; i < this.timeslots; i++) {
-      this.gridSlotBuffers.push(this.device.createBuffer({
-        size: gridSlotSize,
-        usage: GPUBufferUsage.STORAGE,
-      }));
-      this.gridSlotReady[i] = false;
-    }
 
     // Recreate compute buffers (same logic as createComputeBuffers)
     const paddedCells = Math.ceil(this.numCells / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
@@ -465,17 +460,9 @@ export class PressureLayer {
       ],
     });
 
-    // Re-regrid all slots that have raw data
-    let regridCount = 0;
-    for (let i = 0; i < this.timeslots; i++) {
-      if (this.hasRawData[i]) {
-        this.regridSlot(i);
-        regridCount++;
-      }
-    }
-
-    const totalKB = (gridSlotSize * this.timeslots / 1024).toFixed(0);
-    console.log(`[Pressure] New grid: ${this.gridWidth}×${this.gridHeight}, ${totalKB} KB, re-regridded ${regridCount} slots`);
+    const gridSlotSize = this.gridWidth * this.gridHeight * 4;
+    const totalKB = (gridSlotSize * slotCount / 1024).toFixed(0);
+    console.log(`[Pressure] New grid: ${this.gridWidth}×${this.gridHeight}, ~${totalKB} KB (${slotCount} slots invalidated)`);
   }
 
   /**
@@ -513,34 +500,33 @@ export class PressureLayer {
 
   /**
    * Run regrid compute for a single slot (raw → grid)
-   * Called after raw data is uploaded
+   * @param slotIndex Grid slot index for output
+   * @param inputBuffer Per-slot buffer containing O1280 raw data
    */
-  regridSlot(slotIndex: number): void {
+  regridSlot(slotIndex: number, inputBuffer: GPUBuffer): void {
     if (!this.computeReady || !this.externalBuffers) {
       console.warn('[Pressure] Compute not ready - call setExternalBuffers first');
       return;
     }
 
-    if (slotIndex < 0 || slotIndex >= this.timeslots) {
-      console.warn(`[Pressure] Invalid slot index: ${slotIndex}`);
-      return;
-    }
+    // Ensure grid slot buffer exists
+    this.ensureGridSlotBuffer(slotIndex);
 
-    // Update regrid uniforms (inputSlot used for offset in single-buffer mode)
+    // Update regrid uniforms (inputSlot=0 for per-slot mode, data starts at offset 0)
     const regridUniforms = new Uint32Array([
       this.gridWidth,
       this.gridHeight,
-      slotIndex,  // Slot offset for single-buffer mode
+      0,  // inputSlot=0 (per-slot buffer, no offset)
       0,
     ]);
     this.device.queue.writeBuffer(this.regridUniformBuffer, 0, regridUniforms);
 
-    // Create regrid bind group for this slot (single buffer, slot offset in uniform)
+    // Create regrid bind group with per-slot input buffer
     const regridBindGroup = this.device.createBindGroup({
       layout: this.regridBindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.regridUniformBuffer } },
-        { binding: 1, resource: { buffer: this.externalBuffers.pressureDataBuffer } },
+        { binding: 1, resource: { buffer: inputBuffer } },
         { binding: 2, resource: { buffer: this.externalBuffers.gaussianLats } },
         { binding: 3, resource: { buffer: this.externalBuffers.ringOffsets } },
         { binding: 4, resource: { buffer: this.gridSlotBuffers[slotIndex]! } },

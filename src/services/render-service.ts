@@ -393,28 +393,12 @@ export class RenderService {
 
   /**
    * Upload data to a slot for a given param
-   * Routes to param-specific upload method
+   * @deprecated Use LayerStore.writeToSlab() + triggerPressureRegrid() for per-slot mode
    */
-  uploadToSlot(param: TParam, data: Float32Array, slotIndex: number): void {
-    if (!this.renderer) {
-      throw new Error('RenderService not initialized');
-    }
-
-    switch (param) {
-      case 'temp':
-        // TODO: Phase 2 - upload goes to per-slot buffer from LayerStore
-        console.warn('[RenderService] temp upload via uploadToSlot not yet implemented for per-slot buffers');
-        break;
-      case 'pressure':
-        // Upload to raw slot and trigger regrid
-        this.renderer.uploadPressureDataToSlot(data, slotIndex, this.getMaxSlotsPerLayer());
-        break;
-      case 'rain':
-      case 'wind':
-        // TODO: implement when these layers support slots
-        console.warn(`[RenderService] uploadToSlot not implemented for ${param}`);
-        break;
-    }
+  uploadToSlot(param: TParam, _data: Float32Array, _slotIndex: number): void {
+    // Per-slot mode: data upload happens via LayerStore.writeToSlab()
+    // Then trigger regrid via triggerPressureRegrid(slotIndex, buffer)
+    console.warn(`[RenderService] uploadToSlot deprecated - use LayerStore.writeToSlab() for ${param}`);
   }
 
   /**
@@ -464,10 +448,12 @@ export class RenderService {
   }
 
   /**
-   * Set pressure data buffer from LayerStore (replaces internal buffer)
+   * Trigger pressure regrid for a slot (per-slot mode)
+   * @param slotIndex Grid slot index for output
+   * @param inputBuffer Per-slot buffer containing O1280 raw data
    */
-  setPressureDataBuffer(buffer: GPUBuffer): void {
-    this.renderer!.setPressureDataBuffer(buffer);
+  triggerPressureRegrid(slotIndex: number, inputBuffer: GPUBuffer): void {
+    this.renderer!.triggerPressureRegrid(slotIndex, inputBuffer);
   }
 
   dispose(): void {

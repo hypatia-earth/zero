@@ -498,20 +498,3 @@ export async function streamOmVariable(
 
   return { data: result, dims: targetDims };
 }
-
-/**
- * Legacy non-streaming read (for compatibility)
- */
-export async function readOmVariable(
-  url: string,
-  param: string,
-  slices: number
-): Promise<OmReadResult> {
-  let result: OmReadResult | null = null;
-  await streamOmVariable(url, param, slices, (chunk) => {
-    if (chunk.done) {
-      result = { data: chunk.data, dims: [] };
-    }
-  });
-  return result!;
-}
