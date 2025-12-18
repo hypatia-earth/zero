@@ -654,31 +654,7 @@ export class GlobeRenderer {
       );
     }
 
-    // Recreate bind group
-    const bindGroupLayout = this.pipeline.getBindGroupLayout(0);
-    this.bindGroup = this.device.createBindGroup({
-      layout: bindGroupLayout,
-      entries: [
-        { binding: 0, resource: { buffer: this.uniformBuffer } },
-        { binding: 1, resource: this.basemapTexture.createView({ dimension: 'cube' }) },
-        { binding: 2, resource: this.basemapSampler },
-        { binding: 3, resource: { buffer: this.gaussianLatsBuffer } },
-        { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
-        { binding: 5, resource: { buffer: this.tempDataBuffer } },
-        { binding: 6, resource: { buffer: this.rainDataBuffer } },
-        // Atmosphere LUTs
-        { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
-        { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
-        { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
-        { binding: 10, resource: this.atmosphereLUTs.sampler },
-        // Font atlas
-        { binding: 11, resource: this.fontAtlasTexture.createView() },
-        { binding: 12, resource: this.fontAtlasSampler },
-        // Temperature palette
-        { binding: 13, resource: this.tempPaletteTexture.createView() },
-        { binding: 14, resource: this.tempPaletteSampler },
-      ],
-    });
+    this.recreateBindGroup();
   }
 
   /**
@@ -697,6 +673,44 @@ export class GlobeRenderer {
       { texture: this.fontAtlasTexture },
       [imageBitmap.width, imageBitmap.height]
     );
+  }
+
+  /** Recreate main bind group (call after buffer/texture changes) */
+  private recreateBindGroup(): void {
+    const bindGroupLayout = this.pipeline.getBindGroupLayout(0);
+    this.bindGroup = this.device.createBindGroup({
+      layout: bindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.uniformBuffer } },
+        { binding: 1, resource: this.basemapTexture.createView({ dimension: 'cube' }) },
+        { binding: 2, resource: this.basemapSampler },
+        { binding: 3, resource: { buffer: this.gaussianLatsBuffer } },
+        { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
+        { binding: 5, resource: { buffer: this.tempDataBuffer } },
+        { binding: 6, resource: { buffer: this.rainDataBuffer } },
+        { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
+        { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
+        { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
+        { binding: 10, resource: this.atmosphereLUTs.sampler },
+        { binding: 11, resource: this.fontAtlasTexture.createView() },
+        { binding: 12, resource: this.fontAtlasSampler },
+        { binding: 13, resource: this.tempPaletteTexture.createView() },
+        { binding: 14, resource: this.tempPaletteSampler },
+      ],
+    });
+  }
+
+  /**
+   * Set external temp data buffer (owned by LayerStore)
+   * Replaces internal buffer and recreates bind groups
+   */
+  setTempDataBuffer(buffer: GPUBuffer, destroyOld = true): void {
+    if (destroyOld && this.tempDataBuffer) {
+      this.tempDataBuffer.destroy();
+    }
+    this.tempDataBuffer = buffer;
+    this.recreateBindGroup();
+    console.log('[Globe] Temp buffer set from LayerStore');
   }
 
   uploadGaussianLUTs(lats: Float32Array, offsets: Uint32Array): void {

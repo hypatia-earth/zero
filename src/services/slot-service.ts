@@ -158,6 +158,9 @@ export class SlotService {
         this.paramSlots.set(param, createParamSlots(param, newTimeslots));
       }
 
+      // Rewire LayerStore buffers to GlobeRenderer (new buffers after resize)
+      this.wireLayerBuffers();
+
       this.maxSlotsPerParam = newTimeslots;
       lastTimeslots = newTimeslots;
       this.slotsVersion.value++;
@@ -489,6 +492,23 @@ export class SlotService {
       this.layerStores.set(layer.id as TParam, store);
       console.log(`[Slot] Created LayerStore: ${layer.id} (${layer.slabs.length} slabs, ${this.maxSlotsPerParam} timeslots)`);
     }
+
+    // Wire LayerStore buffers to GlobeRenderer
+    this.wireLayerBuffers();
+  }
+
+  /** Pass LayerStore buffers to GlobeRenderer (replaces internal buffers) */
+  private wireLayerBuffers(): void {
+    // Temp layer: single 'data' slab
+    const tempStore = this.layerStores.get('temp');
+    if (tempStore) {
+      const buffers = tempStore.getBuffers();
+      if (buffers.length > 0) {
+        this.renderService.setTempDataBuffer(buffers[0]!);
+      }
+    }
+
+    // TODO: Wire other layers (pressure, rain, wind) when implemented
   }
 
   dispose(): void {

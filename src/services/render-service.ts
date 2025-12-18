@@ -425,6 +425,13 @@ export class RenderService {
     return this.renderer!.getDevice();
   }
 
+  /**
+   * Set temp data buffer from LayerStore (replaces internal buffer)
+   */
+  setTempDataBuffer(buffer: GPUBuffer): void {
+    this.renderer!.setTempDataBuffer(buffer);
+  }
+
   dispose(): void {
     this.stop();
     this.resizeObserver?.disconnect();
