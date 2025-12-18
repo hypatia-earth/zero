@@ -36,6 +36,14 @@ struct Uniforms {
   gridFontSize: f32, // font size in screen pixels for grid labels
   tempLoadedPad: f32,     // padding to 16-byte alignment
   tempPaletteRange: vec2f, // min/max temperature values for palette mapping (Celsius)
+  // Additional weather layer opacities
+  cloudsOpacity: f32,
+  humidityOpacity: f32,
+  windOpacity: f32,
+  cloudsDataReady: u32,
+  humidityDataReady: u32,
+  windDataReady: u32,
+  weatherPad: vec2f,      // padding to 16-byte alignment
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -56,6 +64,10 @@ struct Uniforms {
 // Temperature palette (1D texture for color mapping)
 @group(0) @binding(13) var tempPalette: texture_2d<f32>;
 @group(0) @binding(14) var tempPaletteSampler: sampler;
+// Additional weather layer data
+@group(0) @binding(15) var<storage, read> cloudsData: array<f32>;
+@group(0) @binding(16) var<storage, read> humidityData: array<f32>;
+@group(0) @binding(17) var<storage, read> windData: array<f32>;
 
 // Fullscreen triangle vertex shader
 @vertex

@@ -26,9 +26,15 @@ export interface GlobeUniforms {
   earthOpacity: number;
   tempOpacity: number;
   rainOpacity: number;
+  cloudsOpacity: number;
+  humidityOpacity: number;
+  windOpacity: number;
   pressureOpacity: number;
   tempDataReady: boolean;
   rainDataReady: boolean;
+  cloudsDataReady: boolean;
+  humidityDataReady: boolean;
+  windDataReady: boolean;
   tempLerp: number;
   tempLoadedPoints: number;  // progressive loading: cells 0..N valid
   tempSlot0: number;         // slot index for time0 in large buffer
@@ -52,6 +58,9 @@ export class GlobeRenderer {
   private ringOffsetsBuffer!: GPUBuffer;
   private tempDataBuffer!: GPUBuffer;  // Single large buffer with slots
   private rainDataBuffer!: GPUBuffer;
+  private cloudsDataBuffer!: GPUBuffer;
+  private humidityDataBuffer!: GPUBuffer;
+  private windDataBuffer!: GPUBuffer;
   private pressureDataBuffers: GPUBuffer[] = [];  // Pressure raw slots (O1280)
   private maxTempSlots!: number;
   private atmosphereLUTs!: AtmosphereLUTs;
@@ -72,7 +81,7 @@ export class GlobeRenderer {
   private colorSampler!: GPUSampler;
 
   readonly camera: Camera;
-  private uniformData = new ArrayBuffer(352);  // Includes padding for vec2f alignment
+  private uniformData = new ArrayBuffer(384);  // Includes padding for vec2f alignment + weather layers
   private uniformView = new DataView(this.uniformData);
 
   // Track layer opacities for depth test decision
@@ -161,7 +170,7 @@ export class GlobeRenderer {
     }
 
     this.uniformBuffer = this.device.createBuffer({
-      size: 352,  // Includes padding for vec2f alignment
+      size: 384,  // Includes padding for vec2f alignment + weather layers
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -191,13 +200,26 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Rain data (single timestep for now)
-    const rainBufferSize = BYTES_PER_TIMESTEP;
+    // Weather layer buffers (single timestep for now)
+    // TODO: Convert to LayerStore when slot-based loading implemented
+    const layerBufferSize = BYTES_PER_TIMESTEP;
     this.rainDataBuffer = this.device.createBuffer({
-      size: rainBufferSize,
+      size: layerBufferSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    console.log(`[Globe] RAIN buffer: 1 slots, ${(rainBufferSize / 1024 / 1024).toFixed(1)} MB`);
+    this.cloudsDataBuffer = this.device.createBuffer({
+      size: layerBufferSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.humidityDataBuffer = this.device.createBuffer({
+      size: layerBufferSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.windDataBuffer = this.device.createBuffer({
+      size: layerBufferSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    console.log(`[Globe] Weather buffers: rain/clouds/humidity/wind @ ${(layerBufferSize / 1024 / 1024).toFixed(1)} MB each`);
 
     // WORKAROUND: Pressure uses array-of-buffers (different from LayerStore's single-buffer-with-offsets)
     // PressureLayer expects GPUBuffer[] where each element is a timeslot
@@ -284,6 +306,10 @@ export class GlobeRenderer {
         // Temperature palette
         { binding: 13, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
         { binding: 14, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        // Additional weather layers
+        { binding: 15, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // cloudsData
+        { binding: 16, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // humidityData
+        { binding: 17, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // windData
       ],
     });
 
@@ -363,6 +389,10 @@ export class GlobeRenderer {
         // Temperature palette
         { binding: 13, resource: this.tempPaletteTexture.createView() },
         { binding: 14, resource: this.tempPaletteSampler },
+        // Additional weather layers
+        { binding: 15, resource: { buffer: this.cloudsDataBuffer } },
+        { binding: 16, resource: { buffer: this.humidityDataBuffer } },
+        { binding: 17, resource: { buffer: this.windDataBuffer } },
       ],
     });
 
@@ -499,6 +529,15 @@ export class GlobeRenderer {
     offset += 4; // extra padding for vec2f alignment
     view.setFloat32(offset, uniforms.tempPaletteRange[0]!, true); offset += 4;
     view.setFloat32(offset, uniforms.tempPaletteRange[1]!, true); offset += 4;
+
+    // Additional weather layer opacities (32 bytes)
+    view.setFloat32(offset, uniforms.cloudsOpacity, true); offset += 4;
+    view.setFloat32(offset, uniforms.humidityOpacity, true); offset += 4;
+    view.setFloat32(offset, uniforms.windOpacity, true); offset += 4;
+    view.setUint32(offset, uniforms.cloudsDataReady ? 1 : 0, true); offset += 4;
+    view.setUint32(offset, uniforms.humidityDataReady ? 1 : 0, true); offset += 4;
+    view.setUint32(offset, uniforms.windDataReady ? 1 : 0, true); offset += 4;
+    offset += 8; // weatherPad (vec2f)
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 
@@ -696,6 +735,9 @@ export class GlobeRenderer {
         { binding: 12, resource: this.fontAtlasSampler },
         { binding: 13, resource: this.tempPaletteTexture.createView() },
         { binding: 14, resource: this.tempPaletteSampler },
+        { binding: 15, resource: { buffer: this.cloudsDataBuffer } },
+        { binding: 16, resource: { buffer: this.humidityDataBuffer } },
+        { binding: 17, resource: { buffer: this.windDataBuffer } },
       ],
     });
   }
@@ -769,6 +811,18 @@ export class GlobeRenderer {
 
   uploadRainData(data: Float32Array, offset: number = 0): void {
     this.device.queue.writeBuffer(this.rainDataBuffer, offset, data.buffer, data.byteOffset, data.byteLength);
+  }
+
+  uploadCloudsData(data: Float32Array, offset: number = 0): void {
+    this.device.queue.writeBuffer(this.cloudsDataBuffer, offset, data.buffer, data.byteOffset, data.byteLength);
+  }
+
+  uploadHumidityData(data: Float32Array, offset: number = 0): void {
+    this.device.queue.writeBuffer(this.humidityDataBuffer, offset, data.buffer, data.byteOffset, data.byteLength);
+  }
+
+  uploadWindData(data: Float32Array, offset: number = 0): void {
+    this.device.queue.writeBuffer(this.windDataBuffer, offset, data.buffer, data.byteOffset, data.byteLength);
   }
 
   /**
@@ -955,6 +1009,9 @@ export class GlobeRenderer {
     for (const buf of this.pressureDataBuffers) buf?.destroy();
     this.tempDataBuffer?.destroy();
     this.rainDataBuffer?.destroy();
+    this.cloudsDataBuffer?.destroy();
+    this.humidityDataBuffer?.destroy();
+    this.windDataBuffer?.destroy();
     this.fontAtlasTexture?.destroy();
     this.tempPaletteTexture?.destroy();
     this.depthTexture?.destroy();

@@ -37,6 +37,9 @@ export class RenderService {
     earth: 0,
     temp: 0,
     rain: 0,
+    clouds: 0,
+    humidity: 0,
+    wind: 0,
     pressure: 0,
   };
 
@@ -165,6 +168,9 @@ export class RenderService {
         ...this.getLayerUniforms(),
         ...this.getTempUniforms(rawLerp),
         ...this.getRainUniforms(),
+        ...this.getCloudsUniforms(),
+        ...this.getHumidityUniforms(),
+        ...this.getWindUniforms(),
         ...this.getPressureUniforms(),
       });
 
@@ -240,6 +246,27 @@ export class RenderService {
     };
   }
 
+  private getCloudsUniforms() {
+    return {
+      cloudsOpacity: this.animatedOpacity.clouds,
+      cloudsDataReady: false,
+    };
+  }
+
+  private getHumidityUniforms() {
+    return {
+      humidityOpacity: this.animatedOpacity.humidity,
+      humidityDataReady: false,
+    };
+  }
+
+  private getWindUniforms() {
+    return {
+      windOpacity: this.animatedOpacity.wind,
+      windDataReady: false,
+    };
+  }
+
   private getPressureUniforms() {
     return {
       pressureOpacity: this.animatedOpacity.pressure,
@@ -266,6 +293,9 @@ export class RenderService {
       earth: options.earth.enabled ? options.earth.opacity : 0,
       temp: (options.temp.enabled && tempDataReady) ? options.temp.opacity : 0,
       rain: (options.rain.enabled && isReady('rain')) ? options.rain.opacity : 0,
+      clouds: (options.clouds.enabled && isReady('clouds')) ? options.clouds.opacity : 0,
+      humidity: (options.humidity.enabled && isReady('humidity')) ? options.humidity.opacity : 0,
+      wind: (options.wind.enabled && isReady('wind')) ? options.wind.opacity : 0,
       pressure: (options.pressure.enabled && isReady('pressure')) ? options.pressure.opacity : 0,
     };
 

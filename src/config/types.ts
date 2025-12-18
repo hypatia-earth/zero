@@ -9,7 +9,7 @@ export type LayerId = 'earth' | 'sun' | 'grid' | 'temp' | 'rain' | 'clouds' | 'h
 export type TModel = 'ecmwf_ifs' | 'ecmwf_ifs025';
 
 /** Weather parameter identifier */
-export type TParam = 'temp' | 'rain' | 'wind' | 'pressure';
+export type TParam = 'temp' | 'rain' | 'clouds' | 'humidity' | 'wind' | 'pressure';
 
 /** Branded timestep string, format: "YYYY-MM-DDTHHMM" (e.g., "2025-12-13T0600") */
 export type TTimestep = string & { readonly __brand: 'timestep' };
