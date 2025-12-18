@@ -114,8 +114,8 @@ export interface IQueueService {
   readonly stats: Signal<QueueStats>;
   submitFileOrders(
     orders: FileOrder[],
-    onProgress?: (index: number, total: number) => void | Promise<void>
-  ): Promise<ArrayBuffer[]>;
+    onComplete?: (index: number, buffer: ArrayBuffer) => void | Promise<void>
+  ): Promise<void>;
   dispose(): void;
 }
 
