@@ -40,6 +40,7 @@ export class SlotService {
   private layerStores: Map<TParam, LayerStore> = new Map();
   private maxSlotsPerParam: number = 8;
   private disposeEffect: (() => void) | null = null;
+  private disposeResizeEffect: (() => void) | null = null;
   private disposeSubscribes: Map<TParam, () => void> = new Map();
   private initialized = false;
 
@@ -108,6 +109,59 @@ export class SlotService {
       });
       this.disposeSubscribes.set(param, unsubscribe);
     }
+
+    // Effect: resize LayerStores when timeslotsPerLayer option changes
+    let lastTimeslots = this.maxSlotsPerParam;
+    this.disposeResizeEffect = effect(() => {
+      const newTimeslots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
+      if (newTimeslots === lastTimeslots) return;
+
+      console.log(`[Slot] Resizing stores: ${lastTimeslots} → ${newTimeslots} timeslots`);
+
+      // Try resize all LayerStores - rollback on any failure
+      const resizedStores: TParam[] = [];
+      let failed = false;
+
+      for (const [param, store] of this.layerStores) {
+        try {
+          store.resize(newTimeslots);
+          resizedStores.push(param);
+        } catch (err) {
+          console.error(`[Slot] OOM resizing ${param}:`, err);
+          failed = true;
+          break;
+        }
+      }
+
+      if (failed) {
+        // Rollback: resize already-resized stores back to old size
+        console.warn(`[Slot] OOM - reverting to ${lastTimeslots} timeslots`);
+        for (const param of resizedStores) {
+          try {
+            this.layerStores.get(param)?.resize(lastTimeslots);
+          } catch {
+            console.error(`[Slot] Failed to rollback ${param}`);
+          }
+        }
+
+        // Revert option (without triggering this effect again)
+        queueMicrotask(() => {
+          this.optionsService.options.value.gpu.timeslotsPerLayer = String(lastTimeslots) as typeof this.optionsService.options.value.gpu.timeslotsPerLayer;
+        });
+        return;
+      }
+
+      // Update ParamSlots capacity (recreate with new size)
+      for (const param of SLOT_PARAMS) {
+        const oldPs = this.paramSlots.get(param);
+        oldPs?.dispose();
+        this.paramSlots.set(param, createParamSlots(param, newTimeslots));
+      }
+
+      this.maxSlotsPerParam = newTimeslots;
+      lastTimeslots = newTimeslots;
+      this.slotsVersion.value++;
+    });
   }
 
   /** Check if a param is enabled in options */
@@ -440,6 +494,8 @@ export class SlotService {
   dispose(): void {
     this.disposeEffect?.();
     this.disposeEffect = null;
+    this.disposeResizeEffect?.();
+    this.disposeResizeEffect = null;
     for (const unsubscribe of this.disposeSubscribes.values()) {
       unsubscribe();
     }

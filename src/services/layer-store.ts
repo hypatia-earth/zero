@@ -152,9 +152,42 @@ export class LayerStore {
     return index;
   }
 
-  /** Resize store capacity - may grow or shrink */
+  /**
+   * Resize store capacity - may grow or shrink.
+   * Note: This destroys existing buffers and clears timeslots.
+   * Data will need to be refetched after resize.
+   * @throws Error if buffer creation fails (OOM)
+   */
   resize(newMaxTimeslots: number): void {
-    // TODO: Phase 3 - implement live resize
+    if (newMaxTimeslots === this.maxTimeslots) return;
+
+    const oldMax = this.maxTimeslots;
+    const evictedTimesteps = [...this.timeslots.keys()];
+
+    // Destroy old buffers
+    for (const buffer of this.gpuBuffers) {
+      buffer.destroy();
+    }
+    this.gpuBuffers = [];
+    this.timeslots.clear();
+
+    // Update capacity
+    this.maxTimeslots = newMaxTimeslots;
+
+    // Create new buffers (may throw OOM)
+    for (const slab of this.slabs) {
+      const buffer = this.device.createBuffer({
+        size: slab.sizeMB * 1024 * 1024 * this.maxTimeslots,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        label: `${this.layerId}-${slab.name}`,
+      });
+      this.gpuBuffers.push(buffer);
+    }
+
+    // Reset free indices
+    this.freeSlotIndices = Array.from({ length: this.maxTimeslots }, (_, i) => i);
+
+    console.log(`[Store] ${this.layerId} resized: ${oldMax} → ${newMaxTimeslots} timeslots (${evictedTimesteps.length} evicted)`);
   }
 
   /** Clean up GPU resources */
