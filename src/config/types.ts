@@ -4,12 +4,16 @@
 
 import type { Signal } from '@preact/signals-core';
 
-export type LayerId = 'earth' | 'sun' | 'grid' | 'temp' | 'rain' | 'clouds' | 'humidity' | 'wind' | 'pressure';
+/** Base/decorative layers (no weather data) */
+export type TBaseLayer = 'earth' | 'sun' | 'grid';
+
+/** Weather parameter layers (have slab data) */
+export type TParam = 'temp' | 'rain' | 'clouds' | 'humidity' | 'wind' | 'pressure';
+
+/** All layer IDs */
+export type LayerId = TBaseLayer | TParam;
 
 export type TModel = 'ecmwf_ifs' | 'ecmwf_ifs025';
-
-/** Weather parameter identifier */
-export type TParam = 'temp' | 'rain' | 'clouds' | 'humidity' | 'wind' | 'pressure';
 
 /** Branded timestep string, format: "YYYY-MM-DDTHHMM" (e.g., "2025-12-13T0600") */
 export type TTimestep = string & { readonly __brand: 'timestep' };

@@ -49,7 +49,7 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
 
         const onMouseMove = (e: MouseEvent) => {
           if (!dragState.isDragging) return;
-          const win = document.querySelector('.dialog.info .window') as HTMLElement;
+          const win = document.querySelector<HTMLElement>('.dialog.info .window');
           if (!win) return;
           // Get base rect without current transform
           const baseX = (window.innerWidth - win.offsetWidth) / 2;
@@ -115,11 +115,9 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
             ])
           ]),
           m('div.content.markdown', [
-            infoService.loading
-              ? m('div.loading', 'Loading...')
-              : infoService.error
-                ? m('div.error', infoService.error)
-                : m.trust(infoService.content)
+            infoService.error
+              ? m('div.error', infoService.error)
+              : m.trust(infoService.content)
           ]),
           m('div.footer', [
             m('span.version', `v${__APP_VERSION__} (${__APP_HASH__})`),

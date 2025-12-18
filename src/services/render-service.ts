@@ -4,7 +4,7 @@
 
 import { effect } from '@preact/signals-core';
 import { GlobeRenderer } from '../render/globe-renderer';
-import { generateIsobarLevels, type PressureResolution } from '../render/pressure-layer';
+import { generateIsobarLevels } from '../render/pressure-layer';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { ZeroOptions } from '../schemas/options.schema';
@@ -73,7 +73,8 @@ export class RenderService {
     const timeslotsPerLayer = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
 
     // Get pressure resolution from options (1 or 2 degrees)
-    const pressureResolution = parseInt(this.optionsService.options.value.pressure.resolution, 10) as 1 | 2;
+    const resolutionMap = { '1': 1, '2': 2 } as const;
+    const pressureResolution = resolutionMap[this.optionsService.options.value.pressure.resolution];
 
     await this.renderer.initialize(timeslotsPerLayer, pressureResolution);
 
@@ -83,7 +84,7 @@ export class RenderService {
     // Listen for pressure resolution changes (live update)
     let lastResolution = pressureResolution;
     effect(() => {
-      const newResolution = parseInt(this.optionsService.options.value.pressure.resolution, 10) as PressureResolution;
+      const newResolution = resolutionMap[this.optionsService.options.value.pressure.resolution];
       if (newResolution !== lastResolution) {
         lastResolution = newResolution;
         this.renderer?.setPressureResolution(newResolution);
@@ -298,7 +299,7 @@ export class RenderService {
       pressure: (options.pressure.enabled && isReady('pressure')) ? options.pressure.opacity : 0,
     };
 
-    // Lerp each toward target
+    // Lerp each toward target (cast: Object.keys returns string[], we know the actual keys)
     for (const key of Object.keys(this.animatedOpacity) as (keyof typeof this.animatedOpacity)[]) {
       this.animatedOpacity[key] += (targets[key] - this.animatedOpacity[key]) * factor;
     }
@@ -371,7 +372,7 @@ export class RenderService {
   /**
    * Update temperature palette texture
    */
-  updateTempPalette(textureData: Uint8Array<ArrayBuffer>, min: number, max: number): void {
+  updateTempPalette(textureData: Uint8Array, min: number, max: number): void {
     if (!this.renderer) {
       throw new Error('RenderService not initialized');
     }

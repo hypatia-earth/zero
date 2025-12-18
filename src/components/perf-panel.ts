@@ -15,8 +15,8 @@ export interface PerfPanelAttrs {
 export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = (initialVnode) => {
   return {
     oncreate({ dom }) {
-      const frameEl = dom.querySelector('.perf-frame') as HTMLElement;
-      const passEl = dom.querySelector('.perf-pass') as HTMLElement;
+      const frameEl = dom.querySelector<HTMLElement>('.perf-frame');
+      const passEl = dom.querySelector<HTMLElement>('.perf-pass');
       initialVnode.attrs.renderService.setPerfElements(frameEl, passEl);
     },
 

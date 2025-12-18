@@ -56,10 +56,10 @@ const P = (param: TParam) => param.slice(0, 4).toUpperCase();
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class TimestepService implements IDiscoveryService {
-  // Discovery data
-  private timestepsData!: Record<TModel, Timestep[]>;
-  private timestepIndex!: Record<TModel, Map<TTimestep, number>>;
-  private variablesData!: Record<TModel, string[]>;
+  // Discovery data (cast: populated by constructor loop)
+  private timestepsData = {} as Record<TModel, Timestep[]>;
+  private timestepIndex = {} as Record<TModel, Map<TTimestep, number>>;
+  private variablesData = {} as Record<TModel, string[]>;
   private readonly bucketRoot: string;
   private defaultModel: TModel;
 
@@ -73,6 +73,12 @@ export class TimestepService implements IDiscoveryService {
     const config = this.configService.getDiscovery();
     this.bucketRoot = config.root.replace(/\/data_spatial\/?$/, '');
     this.defaultModel = config.default;
+
+    for (const model of config.models) {
+      this.timestepsData[model] = [];
+      this.timestepIndex[model] = new Map();
+      this.variablesData[model] = [];
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -82,11 +88,6 @@ export class TimestepService implements IDiscoveryService {
   /** Initialize: explore ECMWF and query SW cache */
   async initialize(): Promise<void> {
     const config = this.configService.getDiscovery();
-
-    // Initialize records
-    this.timestepsData = {} as Record<TModel, Timestep[]>;
-    this.timestepIndex = {} as Record<TModel, Map<TTimestep, number>>;
-    this.variablesData = {} as Record<TModel, string[]>;
 
     // Discover timesteps for each model
     for (const model of config.models) {

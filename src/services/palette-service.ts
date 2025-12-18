@@ -68,51 +68,32 @@ export class PaletteService {
 
   /**
    * Load palette JSON files for a layer from /images/palettes/{layer}-*.json
+   * @throws Error if no palettes found (bootstrap should fail fast)
    */
   async loadPalettes(layer: string): Promise<PaletteData[]> {
-    try {
-      const palettes = await this.loadPalettesDirectly(layer);
+    const palettes = await this.loadPalettesDirectly(layer);
 
-      if (palettes.length === 0) {
-        throw new Error('No palettes found');
-      }
-
-      // Store loaded palettes
-      const current = this.layerPalettes.value;
-      const existing = current.get(layer);
-      const activeName = existing?.activeName ?? this.getDefaultPaletteName(layer);
-
-      current.set(layer, {
-        available: palettes,
-        activeName,
-      });
-
-      this.layerPalettes.value = new Map(current);
-
-      console.log(`[Palette] Loaded ${palettes.length} palette(s) for '${layer}'`);
-      return palettes;
-    } catch (err) {
-      console.warn(`[Palette] Failed to load palettes for '${layer}':`, err);
-
-      // Fallback to default
-      const fallback = DEFAULT_PALETTES[layer];
-      if (fallback) {
-        const current = this.layerPalettes.value;
-        current.set(layer, {
-          available: [fallback],
-          activeName: fallback.name,
-        });
-        this.layerPalettes.value = new Map(current);
-        return [fallback];
-      }
-
-      return [];
+    if (palettes.length === 0) {
+      throw new Error(`[Palette] No palettes found for '${layer}'`);
     }
+
+    // Store loaded palettes
+    const current = this.layerPalettes.value;
+    const existing = current.get(layer);
+    const activeName = existing?.activeName ?? this.getDefaultPaletteName(layer);
+
+    current.set(layer, {
+      available: palettes,
+      activeName,
+    });
+
+    this.layerPalettes.value = new Map(current);
+
+    console.log(`[Palette] Loaded ${palettes.length} palette(s) for '${layer}'`);
+    return palettes;
   }
 
-  /**
-   * Fallback: try loading known palette files directly
-   */
+  /** Load palette files by trying known suffixes */
   private async loadPalettesDirectly(layer: string): Promise<PaletteData[]> {
     const knownSuffixes = ['esri', 'gradient', 'hypatia'];
     const palettes: PaletteData[] = [];

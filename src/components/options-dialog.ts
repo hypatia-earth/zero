@@ -416,7 +416,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
 
     const onMouseMove = (e: MouseEvent) => {
       if (!dragState.isDragging) return;
-      const win = document.querySelector('.dialog.options .window') as HTMLElement;
+      const win = document.querySelector<HTMLElement>('.dialog.options .window');
       if (!win) return;
       // Get base rect without current transform
       const baseX = (window.innerWidth - win.offsetWidth) / 2;

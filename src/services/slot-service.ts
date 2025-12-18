@@ -11,7 +11,7 @@
  */
 
 import { effect, signal } from '@preact/signals-core';
-import type { TParam, TTimestep, TimestepOrder } from '../config/types';
+import type { TParam, TTimestep, TimestepOrder, LayerId } from '../config/types';
 import type { TimestepService } from './timestep-service';
 import type { RenderService } from './render-service';
 import type { QueueService } from './queue-service';
@@ -20,10 +20,14 @@ import type { ConfigService } from './config-service';
 import { LayerStore } from './layer-store';
 import { BootstrapService } from './bootstrap-service';
 import { debounce } from '../utils/debounce';
+import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
+
+/** Type guard: is this layer a weather param (has slab data)? */
+const isParam = (id: LayerId): id is TParam =>
+  ['temp', 'rain', 'clouds', 'humidity', 'wind', 'pressure'].includes(id);
 
 const DEBUG = false;
 const DEBUG_MONKEY = false;
-import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
 
 /** Short timestep format for logs: "MM-DDTHH" */
 const fmt = (ts: TTimestep) => ts.slice(5, 13);
@@ -531,8 +535,9 @@ export class SlotService {
     const layers = this.configService.getLayers();
 
     for (const layer of layers) {
-      // Only create stores for layers with slab definitions
+      // Only create stores for weather layers with slab definitions
       if (!layer.slabs || layer.slabs.length === 0) continue;
+      if (!isParam(layer.id)) continue;
 
       const store = new LayerStore(device, {
         layerId: layer.id,
@@ -541,8 +546,8 @@ export class SlotService {
       });
       store.initialize();
 
-      this.layerStores.set(layer.id as TParam, store);
-      console.log(`[Slot] Created LayerStore: ${layer.id} (${layer.slabs.length} slabs, ${this.timeslotsPerLayer} timeslots, per-slot)`);
+      this.layerStores.set(layer.id, store);
+      console.log(`[Slot] Created LayerStore: ${layer.id} (${layer.slabs.length} slabs, ${this.timeslotsPerLayer} timeslots)`);
     }
 
     // Wire LayerStore buffers to GlobeRenderer

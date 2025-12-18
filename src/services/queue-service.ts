@@ -14,8 +14,6 @@ import type { OmService } from './om-service';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 
-export type LoadingStrategy = 'alternate' | 'future-first';
-
 const DEBUG = false;
 
 /** Short timestep format for logs: "MM-DDTHH" */
@@ -288,7 +286,7 @@ export class QueueService implements IQueueService {
     if (!this.optionsService || this.timestepQueue.length <= 1) return;
 
     const currentTime = this.optionsService.options.value.viewState.time;
-    const strategy = this.optionsService.options.value.dataCache.cacheStrategy as LoadingStrategy;
+    const strategy = this.optionsService.options.value.dataCache.cacheStrategy;
 
     // Parse timestep to Date for comparison
     const toDate = (ts: TTimestep): Date => {

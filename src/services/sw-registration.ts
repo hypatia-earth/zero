@@ -176,5 +176,5 @@ __omCache utilities:
     }
   };
 
-  (window as unknown as { __omCache: typeof utils }).__omCache = utils;
+  window.__omCache = utils;
 }

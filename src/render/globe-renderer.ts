@@ -628,20 +628,17 @@ export class GlobeRenderer {
     const hasTimestamp = this.hasTimestampQuery && this.timestampQuerySet &&
       this.timestampBuffer && this.timestampReadBuffers;
     // Find a free buffer (not pending mapAsync)
-    const freeIdx = hasTimestamp ? (this.timestampPending[0] ? (this.timestampPending[1] ? -1 : 1) : 0) : -1;
+    const freeIdx: -1 | 0 | 1 = hasTimestamp ? (this.timestampPending[0] ? (this.timestampPending[1] ? -1 : 1) : 0) : -1;
 
-    if (freeIdx >= 0) {
-      const readBuffer = this.timestampReadBuffers![freeIdx as 0 | 1];
+    if (freeIdx === 0 || freeIdx === 1) {
+      const idx = freeIdx;  // Capture narrowed type for closure
+      const readBuffer = this.timestampReadBuffers![idx];
       commandEncoder.resolveQuerySet(this.timestampQuerySet!, 0, 2, this.timestampBuffer!, 0);
       commandEncoder.copyBufferToBuffer(this.timestampBuffer!, 0, readBuffer, 0, 16);
-    }
 
-    this.device.queue.submit([commandEncoder.finish()]);
+      this.device.queue.submit([commandEncoder.finish()]);
 
-    // Start async readback for GPU timing
-    if (freeIdx >= 0) {
-      const idx = freeIdx as 0 | 1;
-      const readBuffer = this.timestampReadBuffers![idx];
+      // Start async readback for GPU timing
       this.timestampPending[idx] = true;
       readBuffer.mapAsync(GPUMapMode.READ).then(() => {
         const data = readBuffer.getMappedRange();
@@ -654,6 +651,8 @@ export class GlobeRenderer {
       }).catch(() => {
         this.timestampPending[idx] = false;
       });
+    } else {
+      this.device.queue.submit([commandEncoder.finish()]);
     }
 
     return this.lastGpuTimeMs;
@@ -779,13 +778,13 @@ export class GlobeRenderer {
    * Update temperature palette texture data
    * @param colors Array of RGB colors (256 colors x 4 components RGBA, 1024 bytes total)
    */
-  updateTempPalette(colors: Uint8Array<ArrayBuffer>): void {
+  updateTempPalette(colors: Uint8Array): void {
     if (colors.length !== 256 * 4) {
       throw new Error(`Expected 1024 bytes (256 RGBA colors), got ${colors.length}`);
     }
     this.device.queue.writeTexture(
       { texture: this.tempPaletteTexture },
-      colors,
+      colors as Uint8Array<ArrayBuffer>,  // WebGPU requires ArrayBuffer, not ArrayBufferLike
       { bytesPerRow: 256 * 4 },
       [256, 1]
     );

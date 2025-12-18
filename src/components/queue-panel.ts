@@ -26,7 +26,7 @@ export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = (initialVnode) =>
 
   return {
     oncreate({ dom }) {
-      const el = dom.querySelector('.queue-text') as HTMLElement;
+      const el = dom.querySelector<HTMLElement>('.queue-text')!;
 
       effect(() => {
         const stats = initialVnode.attrs.queueService.stats.value;

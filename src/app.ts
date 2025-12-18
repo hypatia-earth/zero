@@ -67,6 +67,7 @@ export const App: m.ClosureComponent = () => {
       paletteService = new PaletteService();
       dialogService = new DialogService();
       infoService = new InfoService();
+      await infoService.init();  // TODO: Should get its own step
 
       m.redraw();
 
@@ -174,8 +175,8 @@ export const App: m.ClosureComponent = () => {
         const tempPalette = paletteService.getPalette('temp');
         const tempTextureData = paletteService.generateTextureData(tempPalette);
         const tempRange = paletteService.getRange(tempPalette);
-        renderer.updateTempPalette(tempTextureData as Uint8Array<ArrayBuffer>);
-        renderService.updateTempPalette(tempTextureData as Uint8Array<ArrayBuffer>, tempRange.min, tempRange.max);
+        renderer.updateTempPalette(tempTextureData);
+        renderService.updateTempPalette(tempTextureData, tempRange.min, tempRange.max);
 
         // Finalize renderer
         renderer.finalize();
@@ -208,7 +209,7 @@ export const App: m.ClosureComponent = () => {
           const palette = paletteService.getPalette('temp');
           const textureData = paletteService.generateTextureData(palette);
           const range = paletteService.getRange(palette);
-          renderService.updateTempPalette(textureData as Uint8Array<ArrayBuffer>, range.min, range.max);
+          renderService.updateTempPalette(textureData, range.min, range.max);
         });
 
         // Note: Pressure layer loading is handled automatically by SlotService
@@ -220,7 +221,7 @@ export const App: m.ClosureComponent = () => {
 
         // Expose services for debugging (localhost only)
         if (location.hostname === 'localhost') {
-          (window as unknown as { __hypatia: object }).__hypatia = {
+          window.__hypatia = {
             configService,
             optionsService,
             capabilitiesService,

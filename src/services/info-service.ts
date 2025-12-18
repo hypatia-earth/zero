@@ -5,11 +5,13 @@
 import m from 'mithril';
 import { marked } from 'marked';
 
+/** Known info pages - must exist at bootstrap */
+const INFO_PAGES = ['welcome'] as const;
+
 export class InfoService {
   dialogOpen = false;
   currentPage = 'welcome';
   content = '';
-  loading = false;
   error: string | null = null;
 
   // Cache loaded pages
@@ -29,12 +31,28 @@ export class InfoService {
     });
   }
 
-  async openDialog(page = 'welcome'): Promise<void> {
+  /**
+   * Preload all info pages during bootstrap
+   * @throws Error if any page is missing
+   */
+  async init(): Promise<void> {
+    for (const page of INFO_PAGES) {
+      const response = await fetch(`info/${page}.md`);
+      if (!response.ok) {
+        throw new Error(`[Info] Missing info page: ${page}.md`);
+      }
+      const markdown = await response.text();
+      const html = await marked.parse(markdown);
+      this.cache.set(page, html);
+    }
+    console.log(`[Info] Preloaded ${INFO_PAGES.length} page(s)`);
+  }
+
+  openDialog(page = 'welcome'): void {
     this.dialogOpen = true;
     this.currentPage = page;
     this.error = null;
-    m.redraw();
-    await this.loadPage(page);
+    this.loadPage(page);
   }
 
   closeDialog(): void {
@@ -42,38 +60,19 @@ export class InfoService {
     m.redraw();
   }
 
-  async loadPage(page: string): Promise<void> {
-    // Check cache
-    if (this.cache.has(page)) {
-      this.content = this.cache.get(page)!;
-      m.redraw();
-      return;
-    }
-
-    this.loading = true;
-    this.error = null;
-    m.redraw();
-
-    try {
-      const response = await fetch(`info/${page}.md`);
-      if (!response.ok) {
-        throw new Error(`Failed to load ${page}.md`);
-      }
-      const markdown = await response.text();
-      const html = await marked.parse(markdown);
-      this.content = html;
-      this.cache.set(page, html);
-    } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to load content';
+  loadPage(page: string): void {
+    const cached = this.cache.get(page);
+    if (cached) {
+      this.content = cached;
+    } else {
+      this.error = `Unknown page: ${page}`;
       this.content = '';
-    } finally {
-      this.loading = false;
-      m.redraw();
     }
+    m.redraw();
   }
 
-  async navigateTo(page: string): Promise<void> {
+  navigateTo(page: string): void {
     this.currentPage = page;
-    await this.loadPage(page);
+    this.loadPage(page);
   }
 }
