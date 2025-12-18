@@ -17,13 +17,30 @@ import regridCode from './shaders/regrid.wgsl?raw';
 import contourComputeCode from './shaders/contour-compute.wgsl?raw';
 import prefixSumCode from './shaders/prefix-sum.wgsl?raw';
 
-/** Isobar configuration from Hypatia */
+/** Isobar configuration */
 export const ISOBAR_CONFIG = {
-  levels: [960, 964, 968, 972, 976, 980, 984, 988, 992, 996,
-           1000, 1004, 1008, 1012, 1016, 1020, 1024, 1028, 1032, 1036, 1040],
-  spacing: 4,  // hPa between levels
   standard: 1012,  // Highlighted isobar (sea level pressure)
+  min: 960,
+  max: 1040,
+  maxLevels: 41,   // Max levels at 2 hPa spacing (for buffer sizing)
 } as const;
+
+/** Generate isobar levels for given spacing, always including 1012 */
+export function generateIsobarLevels(spacing: number): number[] {
+  const { standard, min, max } = ISOBAR_CONFIG;
+  const levels: number[] = [];
+
+  // Generate levels below standard
+  for (let p = standard; p >= min; p -= spacing) {
+    levels.unshift(p);
+  }
+  // Generate levels above standard (skip standard itself)
+  for (let p = standard + spacing; p <= max; p += spacing) {
+    levels.push(p);
+  }
+
+  return levels;
+}
 
 /** Grid resolution options */
 export type PressureResolution = 1 | 2;  // degrees
@@ -51,6 +68,7 @@ export class PressureLayer {
   private format: GPUTextureFormat;
 
   // Grid dimensions based on resolution
+  private resolution: PressureResolution;
   private gridWidth: number;
   private gridHeight: number;
   private numCells: number;
@@ -70,6 +88,7 @@ export class PressureLayer {
   private contourUniformBuffer!: GPUBuffer;
   private gridSlotBuffers: GPUBuffer[] = [];  // Regridded data per slot
   private gridSlotReady: boolean[] = [];      // Track which slots are regridded
+  private hasRawData: boolean[] = [];         // Track which slots have raw data (for re-regrid)
   private segmentCountsBuffer!: GPUBuffer;
   private offsetsBuffer!: GPUBuffer;
   private blockSumsBuffer!: GPUBuffer;
@@ -93,6 +112,7 @@ export class PressureLayer {
   private enabled = false;
   private vertexCount = 0;
   private computeReady = false;
+  private currentLevelCount = 21;  // Default for 4 hPa spacing
 
   constructor(
     device: GPUDevice,
@@ -101,6 +121,7 @@ export class PressureLayer {
   ) {
     this.device = device;
     this.format = format;
+    this.resolution = resolution;
 
     // Set grid dimensions based on resolution
     this.gridWidth = 360 / resolution;   // 360 (1°) or 180 (2°)
@@ -215,11 +236,10 @@ export class PressureLayer {
     // Max segments per isobar level (worst case: 2 per cell for saddle points)
     const maxSegmentsPerLevel = this.numCells * 2;
     const maxVerticesPerLevel = maxSegmentsPerLevel * 2;  // 2 vertices per segment
-    const numLevels = ISOBAR_CONFIG.levels.length;  // 21 levels
 
-    // Vertex buffer sized for ALL isobar levels
+    // Vertex buffer sized for current level count
     this.vertexBuffer = this.device.createBuffer({
-      size: Math.max(maxVerticesPerLevel * numLevels * 16, 64),  // vec4f per vertex
+      size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),  // vec4f per vertex
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
   }
@@ -291,6 +311,7 @@ export class PressureLayer {
         usage: GPUBufferUsage.STORAGE,
       }));
       this.gridSlotReady.push(false);
+      this.hasRawData.push(false);
     }
 
     const totalKB = (gridSlotSize * this.maxSlots / 1024).toFixed(0);
@@ -313,6 +334,124 @@ export class PressureLayer {
    */
   isGridSlotReady(slotIndex: number): boolean {
     return slotIndex >= 0 && slotIndex < this.maxSlots && this.gridSlotReady[slotIndex] === true;
+  }
+
+  /**
+   * Change resolution live - recreates all resolution-dependent buffers and re-regrids
+   */
+  setResolution(resolution: PressureResolution): void {
+    if (resolution === this.resolution) return;
+    if (!this.computeReady) {
+      console.warn('[Pressure] Cannot change resolution - not ready');
+      return;
+    }
+
+    console.log(`[Pressure] Changing resolution: ${this.resolution}° → ${resolution}°`);
+    this.resolution = resolution;
+
+    // Update dimensions
+    this.gridWidth = 360 / resolution;
+    this.gridHeight = 180 / resolution;
+    this.numCells = this.gridWidth * (this.gridHeight - 1);
+
+    // Destroy old buffers
+    for (const buffer of this.gridSlotBuffers) {
+      buffer.destroy();
+    }
+    this.gridSlotBuffers = [];
+    this.segmentCountsBuffer.destroy();
+    this.offsetsBuffer.destroy();
+    this.blockSumsBuffer.destroy();
+    this.vertexBuffer.destroy();
+
+    // Recreate grid slot buffers
+    const gridSlotSize = this.gridWidth * this.gridHeight * 4;
+    for (let i = 0; i < this.maxSlots; i++) {
+      this.gridSlotBuffers.push(this.device.createBuffer({
+        size: gridSlotSize,
+        usage: GPUBufferUsage.STORAGE,
+      }));
+      this.gridSlotReady[i] = false;
+    }
+
+    // Recreate compute buffers (same logic as createComputeBuffers)
+    const paddedCells = Math.ceil(this.numCells / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
+    this.segmentCountsBuffer = this.device.createBuffer({
+      size: paddedCells * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    });
+    this.offsetsBuffer = this.device.createBuffer({
+      size: paddedCells * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    const numBlocks = Math.ceil(paddedCells / SCAN_BLOCK_SIZE);
+    const paddedBlocks = Math.ceil(numBlocks / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
+    this.blockSumsBuffer = this.device.createBuffer({
+      size: Math.max(paddedBlocks * 4, 64),
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Recreate vertex buffer (sized for current level count)
+    const maxSegmentsPerLevel = this.numCells * 2;
+    const maxVerticesPerLevel = maxSegmentsPerLevel * 2;
+    this.vertexBuffer = this.device.createBuffer({
+      size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Recreate render bind group (references vertexBuffer)
+    this.renderBindGroup = this.device.createBindGroup({
+      layout: this.renderBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.renderUniformBuffer } },
+        { binding: 1, resource: { buffer: this.vertexBuffer } },
+      ],
+    });
+
+    // Re-regrid all slots that have raw data
+    let regridCount = 0;
+    for (let i = 0; i < this.maxSlots; i++) {
+      if (this.hasRawData[i]) {
+        this.regridSlot(i);
+        regridCount++;
+      }
+    }
+
+    const totalKB = (gridSlotSize * this.maxSlots / 1024).toFixed(0);
+    console.log(`[Pressure] New grid: ${this.gridWidth}×${this.gridHeight}, ${totalKB} KB, re-regridded ${regridCount} slots`);
+  }
+
+  /**
+   * Update level count and recreate vertex buffer if it grew
+   */
+  setLevelCount(levelCount: number): void {
+    if (levelCount === this.currentLevelCount) return;
+
+    const oldCount = this.currentLevelCount;
+    this.currentLevelCount = levelCount;
+
+    // Only recreate if new count is larger (smaller fits in existing buffer)
+    if (levelCount > oldCount) {
+      this.vertexBuffer.destroy();
+
+      const maxSegmentsPerLevel = this.numCells * 2;
+      const maxVerticesPerLevel = maxSegmentsPerLevel * 2;
+      this.vertexBuffer = this.device.createBuffer({
+        size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+
+      // Recreate render bind group (references vertexBuffer)
+      this.renderBindGroup = this.device.createBindGroup({
+        layout: this.renderBindGroupLayout,
+        entries: [
+          { binding: 0, resource: { buffer: this.renderUniformBuffer } },
+          { binding: 1, resource: { buffer: this.vertexBuffer } },
+        ],
+      });
+
+      console.log(`[Pressure] Vertex buffer resized for ${levelCount} levels`);
+    }
   }
 
   /**
@@ -364,6 +503,7 @@ export class PressureLayer {
     this.device.queue.submit([commandEncoder.finish()]);
 
     this.gridSlotReady[slotIndex] = true;
+    this.hasRawData[slotIndex] = true;
     console.log(`[Pressure] Regrid slot ${slotIndex} → ${this.gridWidth}×${this.gridHeight}`);
   }
 
@@ -542,9 +682,9 @@ export class PressureLayer {
    */
   clearVertexBuffer(): void {
     // Write zeros to the entire vertex buffer
-    const numLevels = ISOBAR_CONFIG.levels.length;
-    const maxVerticesPerLevel = 63724;
-    const bufferSize = maxVerticesPerLevel * numLevels * 16;  // vec4f per vertex
+    const maxSegmentsPerLevel = this.numCells * 2;
+    const maxVerticesPerLevel = maxSegmentsPerLevel * 2;
+    const bufferSize = maxVerticesPerLevel * this.currentLevelCount * 16;  // vec4f per vertex
     const zeros = new Float32Array(bufferSize / 4);
     this.device.queue.writeBuffer(this.vertexBuffer, 0, zeros);
   }

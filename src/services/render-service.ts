@@ -2,8 +2,9 @@
  * RenderService - Manages renderer and render loop
  */
 
+import { effect } from '@preact/signals-core';
 import { GlobeRenderer } from '../render/globe-renderer';
-import { ISOBAR_CONFIG } from '../render/pressure-layer';
+import { generateIsobarLevels, type PressureResolution } from '../render/pressure-layer';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { ZeroOptions } from '../schemas/options.schema';
@@ -26,6 +27,7 @@ export class RenderService {
   private pressureSlot1 = 0;
   private pressureLerpFn: ((time: Date) => number) | null = null;
   private lastPressureLerp = -1;  // For change detection
+  private isobarLevels: number[] = generateIsobarLevels(4);  // Default spacing
 
   // Animated opacity state (lerps toward target each frame)
   private lastFrameTime = 0;
@@ -75,6 +77,31 @@ export class RenderService {
 
     // Upload pre-computed Gaussian LUTs (O1280 grid)
     this.renderer.uploadGaussianLUTs(gaussianLats, ringOffsets);
+
+    // Listen for pressure resolution changes (live update)
+    let lastResolution = pressureResolution;
+    effect(() => {
+      const newResolution = parseInt(this.optionsService.options.value.pressure.resolution, 10) as PressureResolution;
+      if (newResolution !== lastResolution) {
+        lastResolution = newResolution;
+        this.renderer?.setPressureResolution(newResolution);
+        this.lastPressureLerp = -1;  // Force contour recompute on next frame
+      }
+    });
+
+    // Listen for pressure spacing changes (live update)
+    let lastSpacing = parseInt(this.optionsService.options.value.pressure.spacing, 10);
+    this.isobarLevels = generateIsobarLevels(lastSpacing);
+    effect(() => {
+      const newSpacing = parseInt(this.optionsService.options.value.pressure.spacing, 10);
+      if (newSpacing !== lastSpacing) {
+        lastSpacing = newSpacing;
+        this.isobarLevels = generateIsobarLevels(newSpacing);
+        this.renderer?.setPressureLevelCount(this.isobarLevels.length);
+        this.lastPressureLerp = -1;  // Force contour recompute on next frame
+        console.log(`[Render] Isobar spacing: ${newSpacing} hPa, ${this.isobarLevels.length} levels`);
+      }
+    });
   }
 
   getRenderer(): GlobeRenderer {
@@ -115,7 +142,7 @@ export class RenderService {
         const validLerp = pressureLerp >= 0 ? pressureLerp : (pressureLerp === -2 ? 0 : -1);
         if (validLerp >= 0 && Math.abs(validLerp - this.lastPressureLerp) > 0.005) {
           this.lastPressureLerp = validLerp;
-          renderer.runPressureContour(this.pressureSlot0, this.pressureSlot1, validLerp, [...ISOBAR_CONFIG.levels]);
+          renderer.runPressureContour(this.pressureSlot0, this.pressureSlot1, validLerp, this.isobarLevels);
         }
       }
 

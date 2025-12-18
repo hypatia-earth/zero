@@ -793,6 +793,23 @@ export const optionsSchema = z.object({
         ],
       }
     ),
+    spacing: opt(
+      z.enum(['4', '6', '8', '10']).default('4'),
+      {
+        label: 'Isobar spacing',
+        description: 'Pressure difference between contour lines (hPa)',
+        group: 'layers',
+        filter: ['global', 'pressure'],
+        order: 19,
+        control: 'radio',
+        options: [
+          { value: '4', label: '4 hPa' },
+          { value: '6', label: '6 hPa' },
+          { value: '8', label: '8 hPa' },
+          { value: '10', label: '10 hPa' },
+        ],
+      }
+    ),
   }),
 
   // ----------------------------------------------------------
@@ -896,7 +913,7 @@ export const defaultOptions: ZeroOptions = {
   clouds: { enabled: false, opacity: 0.5, resolution: 'full' },
   humidity: { enabled: false, opacity: 0.6, resolution: 'full' },
   wind: { enabled: false, seedCount: '8192', opacity: 0.6, speed: 20, resolution: 'full' },
-  pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1' },
+  pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1', spacing: '4' },
   dataCache: { cacheStrategy: 'alternate', downloadMode: 'on-demand' },
   debug: { showDevLog: false, showPerfPanel: false },
 };

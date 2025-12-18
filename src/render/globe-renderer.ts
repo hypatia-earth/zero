@@ -776,6 +776,16 @@ export class GlobeRenderer {
     return this.pressureLayer;
   }
 
+  /** Change pressure resolution live */
+  setPressureResolution(resolution: PressureResolution): void {
+    this.pressureLayer.setResolution(resolution);
+  }
+
+  /** Update level count (may resize vertex buffer) */
+  setPressureLevelCount(levelCount: number): void {
+    this.pressureLayer.setLevelCount(levelCount);
+  }
+
   /**
    * Upload pressure data to a raw slot and trigger regrid
    * @param data O1280 pressure data (Float32Array, ~6.6M points)
