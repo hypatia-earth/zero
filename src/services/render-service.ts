@@ -408,7 +408,7 @@ export class RenderService {
         break;
       case 'pressure':
         // Upload to raw slot and trigger regrid
-        this.renderer.uploadPressureDataToSlot(data, slotIndex);
+        this.renderer.uploadPressureDataToSlot(data, slotIndex, this.getMaxSlotsPerLayer());
         break;
       case 'rain':
       case 'wind':

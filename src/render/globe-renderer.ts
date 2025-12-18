@@ -63,7 +63,6 @@ export class GlobeRenderer {
   private humidityDataBuffer!: GPUBuffer;
   private windDataBuffer!: GPUBuffer;
   private pressureDataBuffer!: GPUBuffer;  // Pressure raw data (single buffer, slots at offsets)
-  private maxTempSlots!: number;
   private atmosphereLUTs!: AtmosphereLUTs;
   private useFloat16Luts = false;
   private format!: GPUTextureFormat;
@@ -128,14 +127,6 @@ export class GlobeRenderer {
         maxBufferSize: Math.min(adapterBufferLimit, cap),
       },
     });
-
-    // Cap slots to what GPU can handle
-    const effectiveLimit = Math.min(
-      this.device.limits.maxStorageBufferBindingSize,
-      this.device.limits.maxBufferSize
-    );
-    const maxSlotsFromGpu = Math.floor(effectiveLimit / BYTES_PER_TIMESTEP);
-    this.maxTempSlots = Math.min(requestedSlots, maxSlotsFromGpu);
 
     // Handle device loss
     this.device.lost.then((info) => {
@@ -831,20 +822,6 @@ export class GlobeRenderer {
     this.device.queue.writeBuffer(this.windDataBuffer, offset, data.buffer, data.byteOffset, data.byteLength);
   }
 
-  /**
-   * Get the maximum number of temp slots available
-   */
-  getMaxTempSlots(): number {
-    return this.maxTempSlots;
-  }
-
-  /**
-   * Set max slots (must be called before initialize)
-   */
-  setMaxTempSlots(slots: number): void {
-    this.maxTempSlots = slots;
-  }
-
   /** Get pressure layer for external control */
   getPressureLayer(): PressureLayer {
     return this.pressureLayer;
@@ -870,7 +847,7 @@ export class GlobeRenderer {
    * @param data O1280 pressure data (Float32Array, ~6.6M points)
    * @param slotIndex Which slot to upload to
    */
-  uploadPressureDataToSlot(data: Float32Array, slotIndex: number): void {
+  uploadPressureDataToSlot(data: Float32Array, slotIndex: number, maxSlots: number): void {
     // Upload to raw slot at offset (single buffer, slots at offsets)
     const byteOffset = slotIndex * BYTES_PER_TIMESTEP;
     this.device.queue.writeBuffer(
@@ -884,7 +861,7 @@ export class GlobeRenderer {
         gaussianLats: this.gaussianLatsBuffer,
         ringOffsets: this.ringOffsetsBuffer,
         pressureDataBuffer: this.pressureDataBuffer,
-        maxSlots: this.maxTempSlots,  // Same slot count as temp
+        maxSlots,
       });
     }
 
@@ -944,8 +921,8 @@ export class GlobeRenderer {
     // Generate synthetic O1280 pressure data
     const syntheticData = this.generateSyntheticO1280Pressure();
 
-    // Upload to slot 0 (triggers regrid)
-    this.uploadPressureDataToSlot(syntheticData, 0);
+    // Upload to slot 0 (triggers regrid) - use 4 slots for test mode
+    this.uploadPressureDataToSlot(syntheticData, 0, 4);
 
     // Run contour with slot0=slot1 (single mode, no interpolation)
     const testLevels = [976, 984, 992, 1000, 1008, 1016];
