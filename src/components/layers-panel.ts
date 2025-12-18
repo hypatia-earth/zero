@@ -21,7 +21,8 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
   return {
     view({ attrs }) {
       const { configService, optionsService } = attrs;
-      const layers = configService.getLayers();
+      const readyLayerIds = new Set(configService.getReadyLayers());
+      const layers = configService.getLayers().filter(l => readyLayerIds.has(l.id));
       const opts = optionsService.options.value;
 
       const isEnabled = (layerId: string): boolean => {

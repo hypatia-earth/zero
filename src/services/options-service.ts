@@ -20,6 +20,7 @@ import {
 } from '../schemas/options.schema';
 import { layerIds } from '../config/defaults';
 import type { TLayer } from '../config/types';
+import type { ConfigService } from './config-service';
 import { throttle } from '../utils/debounce';
 
 const DEBUG = false;
@@ -165,7 +166,7 @@ export class OptionsService {
   private urlSyncEnabled = false;
   private initialized = false;
 
-  constructor() {
+  constructor(private configService: ConfigService) {
     // Auto-merge when userOverrides change
     effect(() => {
       this.options.value = deepMerge(defaultOptions, this.userOverrides.value);
@@ -415,22 +416,17 @@ export class OptionsService {
       overrides.viewState = viewState;
     }
 
-    // Parse layers - explicit state when URL has any params
-    const hasAnyParams = params.toString().length > 0;
+    // Parse layers from URL, fall back to config defaults
     const layersStr = params.get('layers');
+    const enabledLayers = layersStr !== null
+      ? new Set(layersStr.split(',').filter(l => l.length > 0))
+      : new Set(this.configService.getDefaultLayers());
 
-    if (hasAnyParams) {
-      // Explicit state: disable all layers first, enable only what's listed
-      const enabledLayers = layersStr !== null
-        ? new Set(layersStr.split(',').filter(l => l.length > 0))
-        : new Set<string>();  // No layers param = no layers enabled
-
-      for (const layerId of layerIds) {
-        if (!overrides[layerId]) {
-          overrides[layerId] = {};
-        }
-        (overrides[layerId] as Record<string, unknown>).enabled = enabledLayers.has(layerId);
+    for (const layerId of layerIds) {
+      if (!overrides[layerId]) {
+        overrides[layerId] = {};
       }
+      (overrides[layerId] as Record<string, unknown>).enabled = enabledLayers.has(layerId);
     }
 
     return overrides as Partial<ZeroOptions>;

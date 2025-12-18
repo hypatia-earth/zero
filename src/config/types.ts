@@ -48,20 +48,8 @@ export const isWeatherTextureLayer = (layer: TWeatherLayer): layer is TWeatherTe
   (WEATHER_TEXTURE_LAYERS as readonly string[]).includes(layer);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Implementation status (what's currently working)
+// Runtime layer subsets
 // ─────────────────────────────────────────────────────────────────────────────
-
-/** Implemented weather texture layers (slot-based GPU loading) */
-export const IMPLEMENTED_TEXTURE_LAYERS: TWeatherTextureLayer[] = ['temp'];
-
-/** Implemented weather geometry layers (compute shader pipeline) */
-export const IMPLEMENTED_GEOMETRY_LAYERS: TWeatherGeometryLayer[] = ['pressure'];
-
-/** All implemented weather layers */
-export const IMPLEMENTED_WEATHER_LAYERS: TWeatherLayer[] = [
-  ...IMPLEMENTED_TEXTURE_LAYERS,
-  ...IMPLEMENTED_GEOMETRY_LAYERS,
-];
 
 /** Weather layers with timestep tracking (broader than GPU-loaded) */
 export const TRACKED_WEATHER_LAYERS: TWeatherLayer[] = ['temp', 'rain', 'wind', 'pressure'];
@@ -253,6 +241,9 @@ export interface ZeroConfig {
 
   /** Default active layers */
   defaultLayers: TLayer[];
+
+  /** Ready layers (fully implemented, shown in UI) */
+  readyLayers: TLayer[];
 
   /** Sun rendering settings */
   sun: SunConfig;

@@ -11,7 +11,7 @@
  */
 
 import { effect, signal } from '@preact/signals-core';
-import { isWeatherLayer, isWeatherTextureLayer, IMPLEMENTED_WEATHER_LAYERS, type TWeatherLayer, type TTimestep, type TimestepOrder, type TWeatherTextureLayer } from '../config/types';
+import { isWeatherLayer, isWeatherTextureLayer, type TLayer, type TWeatherLayer, type TTimestep, type TimestepOrder, type TWeatherTextureLayer } from '../config/types';
 import type { TimestepService } from './timestep-service';
 import type { RenderService } from './render-service';
 import type { QueueService } from './queue-service';
@@ -35,6 +35,8 @@ const P = (param: TWeatherLayer) => param.slice(0, 4).toUpperCase();
 export class SlotService {
   private paramSlots: Map<TWeatherLayer, ParamSlots> = new Map();
   private layerStores: Map<TWeatherLayer, LayerStore> = new Map();
+  private readyLayers: TLayer[] = [];
+  private readyWeatherLayers: TWeatherLayer[] = [];
   private timeslotsPerLayer: number = 8;
   private disposeEffect: (() => void) | null = null;
   private disposeResizeEffect: (() => void) | null = null;
@@ -58,13 +60,15 @@ export class SlotService {
     // All layers use per-slot buffers with rebinding - no binding size limit
     // Only limited by total VRAM (handled by OOM on allocation)
     this.timeslotsPerLayer = this.renderService.getMaxSlotsPerLayer();
-    console.log(`[Slot] timeslotsPerLayer: ${this.timeslotsPerLayer}`);
+    this.readyLayers = this.configService.getReadyLayers();
+    this.readyWeatherLayers = this.readyLayers.filter(isWeatherLayer);
+    console.log(`[Slot] timeslotsPerLayer: ${this.timeslotsPerLayer}, readyWeatherLayers: ${this.readyWeatherLayers.join(', ')}`);
 
     // Create LayerStores for weather layers with slab definitions
     this.initializeLayerStores();
 
     // Create ParamSlots for each slot-based layer
-    for (const param of IMPLEMENTED_WEATHER_LAYERS) {
+    for (const param of this.readyWeatherLayers) {
       this.paramSlots.set(param, createParamSlots(param, this.timeslotsPerLayer));
     }
 
@@ -73,7 +77,7 @@ export class SlotService {
     this.renderService.setPressureLerpFn((time) => this.getLerp('pressure', time));
 
     // Wire up data-ready functions for each slot-based param
-    for (const param of IMPLEMENTED_WEATHER_LAYERS) {
+    for (const param of this.readyWeatherLayers) {
       this.renderService.setDataReadyFn(param, () => this.getActiveTimesteps(param).length > 0);
     }
 
@@ -83,7 +87,7 @@ export class SlotService {
       const opts = this.optionsService.options.value;
       if (!this.initialized) return;
 
-      for (const param of IMPLEMENTED_WEATHER_LAYERS) {
+      for (const param of this.readyWeatherLayers) {
         if (!opts[param].enabled) continue;
 
         const ps = this.paramSlots.get(param)!;
@@ -99,7 +103,7 @@ export class SlotService {
     });
 
     // Subscribe: side effects (fetching) debounced - per param
-    for (const param of IMPLEMENTED_WEATHER_LAYERS) {
+    for (const param of this.readyWeatherLayers) {
       const ps = this.paramSlots.get(param)!;
       const debouncedFetch = debounce((w: WantedState) => this.fetchMissing(param, ps, w), 200);
       const unsubscribe = ps.wanted.subscribe(wanted => {
@@ -152,7 +156,7 @@ export class SlotService {
       }
 
       // Update ParamSlots capacity (recreate with new size)
-      for (const param of IMPLEMENTED_WEATHER_LAYERS) {
+      for (const param of this.readyWeatherLayers) {
         const oldPs = this.paramSlots.get(param);
         oldPs?.dispose();
         this.paramSlots.set(param, createParamSlots(param, newTimeslots));
@@ -421,7 +425,7 @@ export class SlotService {
     const time = this.optionsService.options.value.viewState.time;
     const opts = this.optionsService.options.value;
 
-    const enabledParams = IMPLEMENTED_WEATHER_LAYERS.filter(p => opts[p].enabled);
+    const enabledParams = this.readyWeatherLayers.filter(p => opts[p].enabled);
     if (enabledParams.length === 0) {
       this.initialized = true;
       console.log('[Slot] Initialized (no layers enabled)');
@@ -502,12 +506,10 @@ export class SlotService {
   /** Initialize LayerStores for weather layers with slab definitions */
   private initializeLayerStores(): void {
     const device = this.renderService.getDevice();
-    const layers = this.configService.getLayers();
 
-    for (const layer of layers) {
-      // Only create stores for weather layers with slab definitions
-      if (!layer.slabs || layer.slabs.length === 0) continue;
-      if (!isWeatherLayer(layer.id)) continue;
+    for (const param of this.readyWeatherLayers) {
+      const layer = this.configService.getLayer(param);
+      if (!layer?.slabs || layer.slabs.length === 0) continue;
 
       const store = new LayerStore(device, {
         layerId: layer.id,
@@ -516,8 +518,8 @@ export class SlotService {
       });
       store.initialize();
 
-      this.layerStores.set(layer.id, store);
-      console.log(`[Slot] Created LayerStore: ${layer.id} (${layer.slabs.length} slabs, ${this.timeslotsPerLayer} timeslots)`);
+      this.layerStores.set(param, store);
+      console.log(`[Slot] Created LayerStore: ${param} (${layer.slabs.length} slabs, ${this.timeslotsPerLayer} timeslots)`);
     }
   }
 

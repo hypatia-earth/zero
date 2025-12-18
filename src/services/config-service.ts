@@ -84,6 +84,10 @@ export class ConfigService {
     return this.config.defaultLayers;
   }
 
+  getReadyLayers(): TLayer[] {
+    return this.config.readyLayers;
+  }
+
   getDiscovery(): DiscoveryConfig {
     return this.config.discovery;
   }

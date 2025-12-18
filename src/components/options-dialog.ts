@@ -18,6 +18,7 @@ import {
 } from '../schemas/options.schema';
 import type { OptionsService } from '../services/options-service';
 import type { PaletteService } from '../services/palette-service';
+import type { ConfigService } from '../services/config-service';
 import type { DialogService } from '../services/dialog-service';
 import { clearCache } from '../services/sw-registration';
 import { RadioPaletteControl } from './radio-palette-control';
@@ -338,12 +339,13 @@ export interface OptionsDialogAttrs {
   optionsService: OptionsService;
   paletteService: PaletteService;
   dialogService: DialogService;
+  configService: ConfigService;
 }
 
 export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
   return {
     view({ attrs }) {
-      const { optionsService, paletteService, dialogService } = attrs;
+      const { optionsService, paletteService, dialogService, configService } = attrs;
 
     if (!optionsService.dialogOpen) return null;
 
@@ -353,12 +355,21 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
     const filter = optionsService.dialogFilter;
     const options = optionsService.options.value;
 
+    // Only show options for ready layers
+    const readyLayers = new Set<string>(configService.getReadyLayers());
+    const isReadyOption = (opt: FlatOption) => {
+      const layerId = opt.path.split('.')[0];
+      // Non-layer options (viewState, gpu, etc.) are always shown
+      // Layer options only shown if layer is ready
+      return !layerId || !layerLabels[layerId] || readyLayers.has(layerId);
+    };
+
     // Get options based on filter
     let filteredGroups: Record<string, FlatOption[]>;
 
     if (filter && filter !== 'global') {
       // Filter mode: show only options matching the filter
-      const filtered = getOptionsFiltered(filter);
+      const filtered = getOptionsFiltered(filter).filter(isReadyOption);
       filteredGroups = {};
       for (const opt of filtered) {
         const group = opt.meta.group;
@@ -367,7 +378,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
       }
     } else {
       // Global mode: show all options (respecting filter includes 'global')
-      const allOptions = getOptionsFiltered('global');
+      const allOptions = getOptionsFiltered('global').filter(isReadyOption);
       filteredGroups = {};
       for (const opt of allOptions) {
         const group = opt.meta.group;

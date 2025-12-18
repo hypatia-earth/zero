@@ -62,7 +62,7 @@ export const App: m.ClosureComponent = () => {
       // Initialize foundation services
       configService = new ConfigService();
       await configService.init();
-      optionsService = new OptionsService();
+      optionsService = new OptionsService(configService);
       omService = new OmService();
       paletteService = new PaletteService();
       dialogService = new DialogService();
@@ -257,7 +257,7 @@ export const App: m.ClosureComponent = () => {
 
       return [
         m(BootstrapModal),
-        m(OptionsDialog, { optionsService, paletteService, dialogService }),
+        m(OptionsDialog, { optionsService, paletteService, dialogService, configService }),
         m(InfoDialog, { infoService, dialogService }),
         m('.ui-container', [
           m(LogoPanel),
