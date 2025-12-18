@@ -72,7 +72,7 @@ export const isWeatherTextureLayer = (layer: TWeatherLayer): layer is TWeatherTe
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Weather layers cached by Service Worker */
-export const SW_CACHED_WEATHER_LAYERS: TWeatherLayer[] = ['temp', 'rain'];
+export const SW_CACHED_WEATHER_LAYERS: TWeatherLayer[] = [...WEATHER_LAYERS];
 
 export type TModel = 'ecmwf_ifs' | 'ecmwf_ifs025';
 

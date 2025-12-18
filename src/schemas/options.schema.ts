@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod';
+import type { TLayer } from '../config/types';
 
 // ============================================================
 // UI Metadata Types
@@ -20,7 +21,7 @@ type OptionImpact = 'uniform' | 'recreate';
 type PersistMode = 'url' | 'local';
 
 /** Filter determines which dialog entry points show this option */
-type OptionFilter = 'global' | 'earth' | 'sun' | 'grid' | 'temp' | 'rain' | 'wind' | 'clouds' | 'humidity' | 'pressure' | 'dataCache' | 'gpu' | 'viewState' | 'queue';
+type OptionFilter = TLayer | 'global' | 'dataCache' | 'gpu' | 'viewState' | 'queue';
 
 interface UIMetadata {
   label: string;

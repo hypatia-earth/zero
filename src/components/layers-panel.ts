@@ -7,7 +7,6 @@ import { GearIcon } from './gear-icon';
 import type { ConfigService } from '../services/config-service';
 import type { OptionsService } from '../services/options-service';
 import { LAYER_CATEGORIES, LAYER_CATEGORY_LABELS, type TLayer } from '../config/types';
-import type { OptionFilter } from '../schemas/options.schema';
 
 interface LayersPanelAttrs {
   configService: ConfigService;
@@ -35,7 +34,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
                 layer,
                 active: opts[layer.id].enabled,
                 onToggle: () => optionsService.update(draft => { draft[layer.id].enabled = !draft[layer.id].enabled; }),
-                onOptions: () => optionsService.openDialog(layer.id as OptionFilter),
+                onOptions: () => optionsService.openDialog(layer.id),
               })
             ),
           ]);

@@ -8,7 +8,7 @@ import { generateIsobarLevels } from '../render/pressure-layer';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { ZeroOptions } from '../schemas/options.schema';
-import type { TWeatherLayer, TWeatherTextureLayer } from '../config/types';
+import { DECORATION_LAYERS, WEATHER_LAYERS, type TLayer, type TWeatherLayer, type TWeatherTextureLayer } from '../config/types';
 import { getSunDirection } from '../utils/sun-position';
 import { createRingBuffer, type RingBuffer } from '../utils/ringbuffer';
 
@@ -31,17 +31,9 @@ export class RenderService {
 
   // Animated opacity state (lerps toward target each frame)
   private lastFrameTime = 0;
-  private animatedOpacity = {
-    sun: 0,
-    grid: 0,
-    earth: 0,
-    temp: 0,
-    rain: 0,
-    clouds: 0,
-    humidity: 0,
-    wind: 0,
-    pressure: 0,
-  };
+  private animatedOpacity: Record<TLayer, number> = Object.fromEntries(
+    [...DECORATION_LAYERS, ...WEATHER_LAYERS].map(layer => [layer, 0])
+  ) as Record<TLayer, number>;
 
   // Data-ready functions per param (provided by SlotService)
   private dataReadyFns = new Map<TWeatherLayer, () => boolean>();
@@ -289,21 +281,17 @@ export class RenderService {
     const factor = Math.min(1, dt * rate);
 
     // Compute targets: enabled && dataReady ? userOpacity : 0
-    // Temp uses lerp check + loadedPoints, other data layers use dataReadyFns
     const tempDataReady = rawLerp >= -2 && rawLerp !== -1 && this.tempLoadedPoints > 0;
-    const isReady = (param: TWeatherLayer) => this.dataReadyFns.get(param)?.() ?? false;
+    const isReady = (layer: TWeatherLayer) =>
+      layer === 'temp' ? tempDataReady : (this.dataReadyFns.get(layer)?.() ?? false);
 
-    const targets = {
-      sun: options.sun.enabled ? options.sun.opacity : 0,
-      grid: options.grid.enabled ? options.grid.opacity : 0,
-      earth: options.earth.enabled ? options.earth.opacity : 0,
-      temp: (options.temp.enabled && tempDataReady) ? options.temp.opacity : 0,
-      rain: (options.rain.enabled && isReady('rain')) ? options.rain.opacity : 0,
-      clouds: (options.clouds.enabled && isReady('clouds')) ? options.clouds.opacity : 0,
-      humidity: (options.humidity.enabled && isReady('humidity')) ? options.humidity.opacity : 0,
-      wind: (options.wind.enabled && isReady('wind')) ? options.wind.opacity : 0,
-      pressure: (options.pressure.enabled && isReady('pressure')) ? options.pressure.opacity : 0,
-    };
+    const targets = {} as Record<TLayer, number>;
+    for (const layer of DECORATION_LAYERS) {
+      targets[layer] = options[layer].enabled ? options[layer].opacity : 0;
+    }
+    for (const layer of WEATHER_LAYERS) {
+      targets[layer] = (options[layer].enabled && isReady(layer)) ? options[layer].opacity : 0;
+    }
 
     // Lerp each toward target (cast: Object.keys returns string[], we know the actual keys)
     for (const key of Object.keys(this.animatedOpacity) as (keyof typeof this.animatedOpacity)[]) {
