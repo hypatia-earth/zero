@@ -9,7 +9,7 @@
  */
 
 import { signal } from '@preact/signals-core';
-import { isWeatherLayer, type TWeatherLayer, type TTimestep, type TModel, type Timestep, type IDiscoveryService } from '../config/types';
+import { isWeatherLayer, type TWeatherLayer, type TTimestep, type TModel, type Timestep } from '../config/types';
 import type { ConfigService } from './config-service';
 import { parseTimestep, formatTimestep } from '../utils/timestep';
 import { sendSWMessage } from '../utils/sw-message';
@@ -53,7 +53,7 @@ const P = (param: TWeatherLayer) => param.slice(0, 4).toUpperCase();
 // TimestepService
 // ─────────────────────────────────────────────────────────────────────────────
 
-export class TimestepService implements IDiscoveryService {
+export class TimestepService {
   // Discovery data (cast: populated by constructor loop)
   private timestepsData = {} as Record<TModel, Timestep[]>;
   private timestepIndex = {} as Record<TModel, Map<TTimestep, number>>;
@@ -451,39 +451,11 @@ export class TimestepService implements IDiscoveryService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // State Queries
+  // Navigation
   // ─────────────────────────────────────────────────────────────────────────────
-
-  isAvailable(timestep: TTimestep): boolean {
-    return this.state.value.ecmwf.has(timestep);
-  }
-
-  isCached(param: TWeatherLayer, timestep: TTimestep): boolean {
-    return this.state.value.params.get(param)?.cache.has(timestep) ?? false;
-  }
-
-  isGpuLoaded(param: TWeatherLayer, timestep: TTimestep): boolean {
-    return this.state.value.params.get(param)?.gpu.has(timestep) ?? false;
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // IDiscoveryService Implementation
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  explore(): Promise<void> {
-    return this.initialize();
-  }
 
   toDate(ts: TTimestep): Date {
     return parseTimestep(ts);
-  }
-
-  toTimestep(date: Date): TTimestep {
-    return formatTimestep(date);
-  }
-
-  toKey(ts: TTimestep): string {
-    return parseTimestep(ts).toISOString();
   }
 
   next(ts: TTimestep, model?: TModel): TTimestep | null {
@@ -550,39 +522,20 @@ export class TimestepService implements IDiscoveryService {
     return data[data.length - 1]!.timestep;
   }
 
-  index(ts: TTimestep, model?: TModel): number {
-    const m = model ?? this.defaultModel;
-    const idx = this.timestepIndex[m].get(ts);
-    if (idx === undefined) throw new Error(`Unknown timestep: ${ts}`);
-    return idx;
-  }
-
-  contains(ts: TTimestep, model?: TModel): boolean {
-    const m = model ?? this.defaultModel;
-    return this.timestepIndex[m].has(ts);
-  }
-
   /** Get timestep if time exactly matches one, null otherwise */
   getExactTimestep(time: Date, model?: TModel): TTimestep | null {
-    const ts = this.toTimestep(time);
-    return this.contains(ts, model) ? ts : null;
+    const m = model ?? this.defaultModel;
+    const ts = formatTimestep(time);
+    return this.timestepIndex[m].has(ts) ? ts : null;
   }
 
   /** Get closest available timestep to given time */
   getClosestTimestep(time: Date, model?: TModel): Date {
     const [t0, t1] = this.adjacent(time, model);
-    const t0Date = this.toDate(t0);
-    const t1Date = this.toDate(t1);
+    const t0Date = parseTimestep(t0);
+    const t1Date = parseTimestep(t1);
     const d0 = Math.abs(time.getTime() - t0Date.getTime());
     const d1 = Math.abs(time.getTime() - t1Date.getTime());
     return d0 <= d1 ? t0Date : t1Date;
-  }
-
-  variables(model?: TModel): string[] {
-    return this.variablesData[model ?? this.defaultModel];
-  }
-
-  timesteps(model?: TModel): Timestep[] {
-    return this.timestepsData[model ?? this.defaultModel];
   }
 }

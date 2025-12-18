@@ -87,33 +87,6 @@ export interface Timestep {
   url: string;
 }
 
-/** DiscoveryService public API */
-export interface IDiscoveryService {
-  // Lifecycle
-  explore(): Promise<void>;
-
-  // Conversion
-  toDate(ts: TTimestep): Date;
-  toTimestep(date: Date): TTimestep;
-  toKey(ts: TTimestep): string;
-
-  // Navigation (from discovered list)
-  next(ts: TTimestep, model?: TModel): TTimestep | null;
-  prev(ts: TTimestep, model?: TModel): TTimestep | null;
-  adjacent(time: Date, model?: TModel): [TTimestep, TTimestep];
-
-  // Data access
-  url(ts: TTimestep, model?: TModel): string;
-  first(model?: TModel): TTimestep;
-  last(model?: TModel): TTimestep;
-  index(ts: TTimestep, model?: TModel): number;
-  contains(ts: TTimestep, model?: TModel): boolean;
-
-  // Collections
-  variables(model?: TModel): string[];
-  timesteps(model?: TModel): Timestep[];
-}
-
 /** File download order for QueueService */
 export interface FileOrder {
   url: string;
