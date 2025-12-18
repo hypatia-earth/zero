@@ -193,8 +193,9 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // WORKAROUND: 4-byte placeholder - replaced by LayerStore buffer via setTempDataBuffer()
-    // Must exist for initial bind group creation; replaced before render starts
+    // 4-byte placeholder: WebGPU bind groups require buffers at creation time.
+    // finalize() creates bind groups before SlotService/LayerStore exist.
+    // LayerStore replaces this via setTempDataBuffer() → recreateBindGroup().
     this.tempDataBuffer = this.device.createBuffer({
       size: 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
@@ -221,8 +222,8 @@ export class GlobeRenderer {
     });
     console.log(`[Globe] Weather buffers: rain/clouds/humidity/wind @ ${(layerBufferSize / 1024 / 1024).toFixed(1)} MB each`);
 
-    // WORKAROUND: 4-byte placeholder - replaced by LayerStore buffer via setPressureDataBuffer()
-    // Must exist for initial setup; replaced before render starts
+    // 4-byte placeholder: same reason as temp above.
+    // LayerStore replaces via setPressureDataBuffer().
     this.pressureDataBuffer = this.device.createBuffer({
       size: 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
