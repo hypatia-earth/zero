@@ -8,7 +8,9 @@
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "convert-luts": "node scripts/convert-luts-float16.js",
-    "deploy:zero": "cd ../server/scripts && ./build-zero.sh && ./deploy-zero.sh"
+    "deploy:zero": "cd ../server/scripts && ./build-zero.sh && ./deploy-zero.sh",
+    "wiki": "python3 scripts/publish-wiki.py",
+    "wiki:push": "python3 scripts/publish-wiki.py --push"
   },
   "dependencies": {
     "@preact/signals-core": "^1.5.0",
