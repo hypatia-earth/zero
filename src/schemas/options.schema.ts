@@ -130,7 +130,7 @@ export const optionsSchema = z.object({
   // ----------------------------------------------------------
   gpu: z.object({
     timeslotsPerLayer: opt(
-      z.enum(['4', '8', '16', '32', '64', '128', '256', '512']).default('8'),
+      z.enum(['4', '8', '16', '32', '64', '128', '256', '512']).default('4'),
       {
         label: 'Timeslots per layer',
         description: 'More timeslots = smoother time scrubbing, more GPU memory',
@@ -891,7 +891,7 @@ export const defaultOptions: ZeroOptions = {
     lon: 0,
     altitude: 14_000,  // km from surface
   },
-  gpu: { timeslotsPerLayer: '8' },
+  gpu: { timeslotsPerLayer: '4' },
   viewport: {
     physicsModel: 'inertia',
     mass: 10,

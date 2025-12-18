@@ -84,7 +84,9 @@ export class SlotService {
 
     // Create ParamSlots for each slot-based layer
     for (const param of SLOT_PARAMS) {
-      this.paramSlots.set(param, createParamSlots(param, this.maxSlotsPerParam));
+      // Per-slot layers (temp): higher max since not limited by binding size
+      const maxSlots = param === 'temp' ? 50 : this.maxSlotsPerParam;
+      this.paramSlots.set(param, createParamSlots(param, maxSlots));
     }
 
     // Wire up lerp calculations
@@ -563,20 +565,22 @@ export class SlotService {
       // Only create stores for layers with slab definitions
       if (!layer.slabs || layer.slabs.length === 0) continue;
 
-      // Temp uses per-slot buffers for rebinding (unlimited slots)
+      // Temp uses per-slot buffers for rebinding (no binding limit)
       const usePerSlotBuffers = layer.id === 'temp';
+      // Per-slot layers: limited by VRAM not binding size, use higher max
+      const maxTimeslots = usePerSlotBuffers ? 50 : this.maxSlotsPerParam;
 
       const store = new LayerStore(device, {
         layerId: layer.id,
         slabs: layer.slabs,
-        maxTimeslots: this.maxSlotsPerParam,
+        maxTimeslots,
         usePerSlotBuffers,
       });
       store.initialize();
 
       this.layerStores.set(layer.id as TParam, store);
       const mode = usePerSlotBuffers ? 'per-slot' : 'legacy';
-      console.log(`[Slot] Created LayerStore: ${layer.id} (${layer.slabs.length} slabs, ${this.maxSlotsPerParam} timeslots, ${mode})`);
+      console.log(`[Slot] Created LayerStore: ${layer.id} (${layer.slabs.length} slabs, ${maxTimeslots} timeslots, ${mode})`);
     }
 
     // Wire LayerStore buffers to GlobeRenderer

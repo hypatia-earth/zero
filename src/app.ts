@@ -73,7 +73,7 @@ export const App: m.ClosureComponent = () => {
       try {
         // Step 1: Capabilities
         BootstrapService.setStep('CAPABILITIES');
-        capabilitiesService = new CapabilitiesService(configService);
+        capabilitiesService = new CapabilitiesService();
         await capabilitiesService.init();
 
         // Step 2: Config

@@ -5,8 +5,6 @@
  * Adapter is discarded after check - RenderService requests its own.
  */
 
-import type { ConfigService } from './config-service';
-
 const DEBUG = true;
 
 export class CapabilitiesService {
@@ -18,7 +16,7 @@ export class CapabilitiesService {
   // For testing buffer allocation - set to small value (e.g., 50) to test without big downloads
   private readonly DEBUG_MAX_BUFFER_SIZE_MB: number | null = null;  // null = use real GPU limit
 
-  constructor(private configService: ConfigService) {}
+  constructor() {}
 
   /** Get effective max buffer size (respects debug override) */
   getEffectiveMaxBufferSize(): number {
@@ -47,9 +45,10 @@ export class CapabilitiesService {
       );
     }
 
-    // Check buffer limits
-    const gpuConfig = this.configService.getGpuConfig();
-    const minBufferMB = gpuConfig.slotSizeMB * gpuConfig.minSlotsPerLayer;
+    // Check buffer limits (minimum: 4 timeslots × 27 MB/slot = 108 MB)
+    const minTimeslots = 4;  // Lowest option in gpu.timeslotsPerLayer enum
+    const slotSizeMB = 27;   // ~26.4 MB per slot
+    const minBufferMB = slotSizeMB * minTimeslots;
     const minBufferBytes = minBufferMB * 1024 * 1024;
     const storageLimit = adapter.limits.maxStorageBufferBindingSize;
     const bufferLimit = adapter.limits.maxBufferSize;
