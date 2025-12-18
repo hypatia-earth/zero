@@ -6,8 +6,10 @@
  * - Layer-based SW caching via X-Layer header
  */
 
+import type { TWeatherLayer } from '../config/types';
+
 /** Layer identifier for SW caching */
-export type CacheLayer = 'temp' | 'wind' | 'rain' | 'pressure' | 'meta';
+export type CacheLayer = TWeatherLayer | 'meta';
 
 /**
  * Simple GET fetch, returns ArrayBuffer

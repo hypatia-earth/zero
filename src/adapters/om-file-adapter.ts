@@ -6,6 +6,15 @@
  */
 
 import { fetchSuffix, fetchRange, type CacheLayer } from '../utils/fetch';
+import { defaultConfig } from '../config/defaults';
+import type { TParam, TWeatherLayer } from '../config/types';
+
+// Build param -> layer lookup from config
+const PARAM_TO_LAYER: Record<TParam, TWeatherLayer> = Object.fromEntries(
+  defaultConfig.layers.flatMap(layer =>
+    layer.params?.map(param => [param, layer.id]) ?? []
+  )
+) as Record<TParam, TWeatherLayer>;
 
 // WASM module type - functions have underscore prefix
 interface OmWasm {
@@ -99,11 +108,7 @@ interface ChunkInfo {
 
 /** Map param name to cache layer */
 function paramToLayer(param: string): CacheLayer {
-  if (param.includes('temperature')) return 'temp';
-  if (param.includes('wind') || param.includes('u_component') || param.includes('v_component')) return 'wind';
-  if (param.includes('precipitation') || param.includes('rain')) return 'rain';
-  if (param.includes('pressure') || param.includes('msl')) return 'pressure';
-  return 'meta';
+  return PARAM_TO_LAYER[param as TParam] ?? 'meta';
 }
 
 export interface OmPreflightResult {

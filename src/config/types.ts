@@ -35,6 +35,26 @@ export type TWeatherLayer = TWeatherTextureLayer | TWeatherGeometryLayer;
 export const ALL_LAYERS = [...DECORATION_LAYERS, ...WEATHER_LAYERS] as const;
 export type TLayer = TDecorationLayer | TWeatherLayer;
 
+/** Layer categories */
+export const LAYER_CATEGORIES = ['base', 'weather', 'overlay'] as const;
+export type TLayerCategory = typeof LAYER_CATEGORIES[number];
+export const LAYER_CATEGORY_LABELS: Record<TLayerCategory, string> = {
+  base: 'Base',
+  weather: 'Weather',
+  overlay: 'Overlays',
+};
+
+/** ECMWF data parameters */
+export const ECMWF_PARAMS = [
+  'temperature_2m',
+  'precipitation', 'rain', 'total_precipitation',
+  'cloud_cover', 'total_cloud_cover',
+  'relative_humidity_2m',
+  'wind_speed_10m', 'u_component_of_wind', 'v_component_of_wind',
+  'pressure_msl', 'mean_sea_level_pressure',
+] as const;
+export type TParam = typeof ECMWF_PARAMS[number];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Type guards
 // ─────────────────────────────────────────────────────────────────────────────
@@ -160,9 +180,11 @@ export interface SlabConfig {
 
 export interface LayerConfig {
   id: TLayer;
-  label: string;
-  category: 'base' | 'weather' | 'overlay';
+  label: string;              // Full name (e.g., "Temperature")
+  buttonLabel: string;        // Short name for UI buttons (e.g., "Temp")
+  category: TLayerCategory;
   defaultEnabled: boolean;
+  params?: TParam[];             // ECMWF param names (weather layers)
   defaultSizeEstimate?: number;  // bytes per timestep (weather layers)
   slabs?: SlabConfig[];          // GPU buffer slabs (weather layers only)
 }
