@@ -66,13 +66,13 @@ export class SlotService {
     const maxBindingBytes = device.limits.maxStorageBufferBindingSize;
     const legacyMaxBytes = Math.min(maxBufferBytes, maxBindingBytes);  // Legacy layers need both
     const legacyMaxMB = Math.floor(legacyMaxBytes / 1024 / 1024);
-    const maxSlabMB = 26;  // Largest slab size (temp, pressure raw)
-    const maxSlotsLegacy = Math.floor(legacyMaxMB / maxSlabMB);
-    this.timeslotsPerLayer = Math.min(requestedSlots, maxSlotsLegacy);
+    const slabSizeMB = 26;  // Largest slab size (temp, pressure raw)
+    const legacySlotLimit = Math.floor(legacyMaxMB / slabSizeMB);
+    this.timeslotsPerLayer = Math.min(requestedSlots, legacySlotLimit);
 
     const bufferMB = Math.floor(maxBufferBytes / 1024 / 1024);
     const bindingMB = Math.floor(maxBindingBytes / 1024 / 1024);
-    console.log(`[Slot] GPU: bufferMB=${bufferMB}, bindingMB=${bindingMB}, legacyMax=${legacyMaxMB}MB (${maxSlotsLegacy} slots), requested=${requestedSlots}`);
+    console.log(`[Slot] GPU: bufferMB=${bufferMB}, bindingMB=${bindingMB}, legacyMax=${legacyMaxMB}MB (${legacySlotLimit} slots), requested=${requestedSlots}`);
     console.log(`[Slot] Per-slot layers (temp): rebind architecture, no binding limit`);
 
     if (this.timeslotsPerLayer < requestedSlots) {
@@ -133,11 +133,11 @@ export class SlotService {
     this.disposeResizeEffect = effect(() => {
       const requestedTimeslots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
       const device = this.renderService.getDevice();
-      const effectiveMaxBytes = Math.min(device.limits.maxBufferSize, device.limits.maxStorageBufferBindingSize);
-      const effectiveMaxMB = Math.floor(effectiveMaxBytes / 1024 / 1024);
-      const maxSlabMB = 26;
-      const maxFromGpu = Math.floor(effectiveMaxMB / maxSlabMB);
-      const newTimeslots = Math.min(requestedTimeslots, maxFromGpu);
+      const effectiveLimitBytes = Math.min(device.limits.maxBufferSize, device.limits.maxStorageBufferBindingSize);
+      const effectiveLimitMB = Math.floor(effectiveLimitBytes / 1024 / 1024);
+      const slabSizeMB = 26;
+      const gpuSlotLimit = Math.floor(effectiveLimitMB / slabSizeMB);
+      const newTimeslots = Math.min(requestedTimeslots, gpuSlotLimit);
 
       if (newTimeslots === lastTimeslots) return;
 

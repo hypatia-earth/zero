@@ -847,7 +847,7 @@ export class GlobeRenderer {
    * @param data O1280 pressure data (Float32Array, ~6.6M points)
    * @param slotIndex Which slot to upload to
    */
-  uploadPressureDataToSlot(data: Float32Array, slotIndex: number, maxSlots: number): void {
+  uploadPressureDataToSlot(data: Float32Array, slotIndex: number, timeslots: number): void {
     // Upload to raw slot at offset (single buffer, slots at offsets)
     const byteOffset = slotIndex * BYTES_PER_TIMESTEP;
     this.device.queue.writeBuffer(
@@ -861,7 +861,7 @@ export class GlobeRenderer {
         gaussianLats: this.gaussianLatsBuffer,
         ringOffsets: this.ringOffsetsBuffer,
         pressureDataBuffer: this.pressureDataBuffer,
-        maxSlots,
+        timeslots,
       });
     }
 

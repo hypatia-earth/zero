@@ -57,7 +57,7 @@ export class LayerStore {
       // No upfront allocation - unlimited slots (limited by VRAM only)
       console.log(`[Store] ${this.layerId} initialized (per-slot mode, max ${this.timeslotCount})`);
     } else {
-      // Legacy mode: create one buffer per slab type, sized for maxTimeslots
+      // Legacy mode: create one buffer per slab type, sized for all timeslots
       for (const slab of this.slabs) {
         const buffer = this.device.createBuffer({
           size: slab.sizeMB * 1024 * 1024 * this.timeslotCount,
