@@ -175,7 +175,7 @@ export interface ZeroConfig {
 
   /** GPU configuration */
   gpu: {
-    slotSizeMB: number;       // Size per timestep slot (~27 MB)
+    timeslotsPerLayer: number;   // Default timeslots per layer (4)
   };
 
   /** Camera settings */
