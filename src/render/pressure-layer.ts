@@ -12,10 +12,11 @@
  * - Day/night tinting, standard pressure highlight
  */
 
-import contourRenderCode from './shaders/contour-render.wgsl?raw';
-import regridCode from './shaders/regrid.wgsl?raw';
-import contourComputeCode from './shaders/contour-compute.wgsl?raw';
-import prefixSumCode from './shaders/prefix-sum.wgsl?raw';
+import pressRenderCode from './shaders/press-render.wgsl?raw';
+import pressRegridCode from './shaders/press-regrid.wgsl?raw';
+import pressContourCode from './shaders/press-contour.wgsl?raw';
+import pressPrefixSumCode from './shaders/press-prefix-sum.wgsl?raw';
+import pressSmoothCode from './shaders/press-smooth.wgsl?raw';
 
 /** Isobar configuration */
 export const ISOBAR_CONFIG = {
@@ -98,6 +99,13 @@ export class PressureLayer {
   private regridBindGroupLayout!: GPUBindGroupLayout;
   private contourBindGroupLayout!: GPUBindGroupLayout;
   private prefixSumBindGroupLayout!: GPUBindGroupLayout;
+  private smoothBindGroupLayout!: GPUBindGroupLayout;
+
+  // Smoothing pipeline and buffers
+  private smoothPipeline!: GPUComputePipeline;
+  private smoothUniformBuffer!: GPUBuffer;
+  private edgeToVertexBuffer!: GPUBuffer;      // Edge→vertex index mapping
+  private smoothedVertexBuffer!: GPUBuffer;    // Output of smoothing pass
 
   // Render pipeline
   private renderPipeline!: GPURenderPipeline;
@@ -155,6 +163,7 @@ export class PressureLayer {
         { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
         { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
         { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },  // pressureGrid1
+        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // edgeToVertex
       ],
     });
 
@@ -166,15 +175,25 @@ export class PressureLayer {
       ],
     });
 
+    // Smoothing bind group layout
+    this.smoothBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },  // input vertices
+        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },            // output vertices
+        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },  // edgeToVertex
+      ],
+    });
+
     // Regrid pipeline
-    const regridModule = this.device.createShaderModule({ code: regridCode });
+    const regridModule = this.device.createShaderModule({ code: pressRegridCode });
     this.regridPipeline = this.device.createComputePipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.regridBindGroupLayout] }),
       compute: { module: regridModule, entryPoint: 'main' },
     });
 
     // Contour compute pipelines
-    const contourModule = this.device.createShaderModule({ code: contourComputeCode });
+    const contourModule = this.device.createShaderModule({ code: pressContourCode });
     this.countPipeline = this.device.createComputePipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.contourBindGroupLayout] }),
       compute: { module: contourModule, entryPoint: 'countSegments' },
@@ -185,7 +204,7 @@ export class PressureLayer {
     });
 
     // Prefix sum pipelines
-    const prefixSumModule = this.device.createShaderModule({ code: prefixSumCode });
+    const prefixSumModule = this.device.createShaderModule({ code: pressPrefixSumCode });
     this.scanBlocksPipeline = this.device.createComputePipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.prefixSumBindGroupLayout] }),
       compute: { module: prefixSumModule, entryPoint: 'scanBlocks' },
@@ -193,6 +212,13 @@ export class PressureLayer {
     this.addBlockSumsPipeline = this.device.createComputePipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.prefixSumBindGroupLayout] }),
       compute: { module: prefixSumModule, entryPoint: 'addBlockSums' },
+    });
+
+    // Smoothing pipeline
+    const smoothModule = this.device.createShaderModule({ code: pressSmoothCode });
+    this.smoothPipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.smoothBindGroupLayout] }),
+      compute: { module: smoothModule, entryPoint: 'smoothEdges' },
     });
   }
 
@@ -242,6 +268,24 @@ export class PressureLayer {
       size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),  // vec4f per vertex
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
+
+    // Edge→vertex mapping buffer (4 edges per cell, i32 per edge)
+    this.edgeToVertexBuffer = this.device.createBuffer({
+      size: this.numCells * 4 * 4,  // numCells × 4 edges × 4 bytes
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Smoothed vertex buffer (same size as vertex buffer, for ping-pong)
+    this.smoothedVertexBuffer = this.device.createBuffer({
+      size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    });
+
+    // Smoothing uniform buffer (16 bytes: gridWidth, gridHeight, numCells, earthRadius)
+    this.smoothUniformBuffer = this.device.createBuffer({
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
   }
 
   private createRenderPipeline(): void {
@@ -254,7 +298,7 @@ export class PressureLayer {
     });
 
     // Render pipeline
-    const renderModule = this.device.createShaderModule({ code: contourRenderCode });
+    const renderModule = this.device.createShaderModule({ code: pressRenderCode });
     this.renderPipeline = this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.renderBindGroupLayout] }),
       vertex: { module: renderModule, entryPoint: 'vertexMain' },
@@ -363,6 +407,8 @@ export class PressureLayer {
     this.offsetsBuffer.destroy();
     this.blockSumsBuffer.destroy();
     this.vertexBuffer.destroy();
+    this.edgeToVertexBuffer.destroy();
+    this.smoothedVertexBuffer.destroy();
 
     // Recreate grid slot buffers
     const gridSlotSize = this.gridWidth * this.gridHeight * 4;
@@ -397,6 +443,16 @@ export class PressureLayer {
     this.vertexBuffer = this.device.createBuffer({
       size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Recreate smoothing buffers
+    this.edgeToVertexBuffer = this.device.createBuffer({
+      size: this.numCells * 4 * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.smoothedVertexBuffer = this.device.createBuffer({
+      size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
 
     // Recreate render bind group (references vertexBuffer)
@@ -543,6 +599,10 @@ export class PressureLayer {
     // _pad: vec2<u32> at offset 24-31
     this.device.queue.writeBuffer(this.contourUniformBuffer, 0, contourUniforms);
 
+    // Clear edge→vertex mapping (fill with -1)
+    const edgeClearData = new Int32Array(this.numCells * 4).fill(-1);
+    this.device.queue.writeBuffer(this.edgeToVertexBuffer, 0, edgeClearData);
+
     // Create contour bind group with both grid slots
     const contourBindGroup = this.device.createBindGroup({
       layout: this.contourBindGroupLayout,
@@ -553,6 +613,7 @@ export class PressureLayer {
         { binding: 3, resource: { buffer: this.offsetsBuffer } },
         { binding: 4, resource: { buffer: this.vertexBuffer } },
         { binding: 5, resource: { buffer: this.gridSlotBuffers[slot1]! } },
+        { binding: 6, resource: { buffer: this.edgeToVertexBuffer } },
       ],
     });
 
@@ -636,6 +697,72 @@ export class PressureLayer {
       Math.ceil((this.gridHeight - 1) / 8)
     );
     generatePass.end();
+  }
+
+  /**
+   * Run Chaikin smoothing passes on generated contour vertices
+   * @param commandEncoder GPU command encoder
+   * @param iterations Number of smoothing iterations (0-2)
+   * @param vertexOffset Base vertex index for current level
+   * @param maxVertices Max vertices for current level
+   */
+  runSmoothing(commandEncoder: GPUCommandEncoder, iterations: number, vertexOffset: number, maxVertices: number): void {
+    if (iterations <= 0 || !this.computeReady) return;
+
+    // Clear the smoothed buffer region to avoid stale data
+    const byteOffset = vertexOffset * 16;
+    const zeros = new Float32Array(maxVertices * 4);
+    this.device.queue.writeBuffer(this.smoothedVertexBuffer, byteOffset, zeros);
+
+    // Update smoothing uniforms
+    const smoothUniforms = new Uint32Array([
+      this.gridWidth,
+      this.gridHeight,
+      this.numCells,
+      0,  // earthRadius as u32 bits - will be overwritten
+    ]);
+    const smoothF32 = new Float32Array(smoothUniforms.buffer);
+    smoothF32[3] = EARTH_RADIUS;
+    this.device.queue.writeBuffer(this.smoothUniformBuffer, 0, smoothUniforms);
+
+    // Ping-pong between vertex buffer and smoothed buffer
+    let inputBuffer = this.vertexBuffer;
+    let outputBuffer = this.smoothedVertexBuffer;
+
+    for (let i = 0; i < iterations; i++) {
+      const smoothBindGroup = this.device.createBindGroup({
+        layout: this.smoothBindGroupLayout,
+        entries: [
+          { binding: 0, resource: { buffer: this.smoothUniformBuffer } },
+          { binding: 1, resource: { buffer: inputBuffer } },
+          { binding: 2, resource: { buffer: outputBuffer } },
+          { binding: 3, resource: { buffer: this.edgeToVertexBuffer } },
+        ],
+      });
+
+      const smoothPass = commandEncoder.beginComputePass();
+      smoothPass.setPipeline(this.smoothPipeline);
+      smoothPass.setBindGroup(0, smoothBindGroup);
+      smoothPass.dispatchWorkgroups(
+        Math.ceil(this.gridWidth / 8),
+        Math.ceil((this.gridHeight - 1) / 8)
+      );
+      smoothPass.end();
+
+      // Swap buffers for next iteration
+      [inputBuffer, outputBuffer] = [outputBuffer, inputBuffer];
+    }
+
+    // If odd iterations, copy current level's result back to vertexBuffer
+    if (iterations % 2 === 1) {
+      const byteOffset = vertexOffset * 16;  // vec4f = 16 bytes
+      const byteSize = maxVertices * 16;
+      commandEncoder.copyBufferToBuffer(
+        this.smoothedVertexBuffer, byteOffset,
+        this.vertexBuffer, byteOffset,
+        byteSize
+      );
+    }
   }
 
   /**
@@ -728,6 +855,11 @@ export class PressureLayer {
     this.segmentCountsBuffer?.destroy();
     this.offsetsBuffer?.destroy();
     this.blockSumsBuffer?.destroy();
+
+    // Smoothing buffers
+    this.smoothUniformBuffer?.destroy();
+    this.edgeToVertexBuffer?.destroy();
+    this.smoothedVertexBuffer?.destroy();
 
     // Render buffers
     this.renderUniformBuffer?.destroy();

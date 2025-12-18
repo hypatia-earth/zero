@@ -30,6 +30,7 @@ struct Uniforms {
 @group(0) @binding(3) var<storage, read> offsets: array<u32>;  // from prefix sum
 @group(0) @binding(4) var<storage, read_write> vertices: array<vec4<f32>>;
 @group(0) @binding(5) var<storage, read> pressureGrid1: array<f32>;  // Regridded data slot 1
+@group(0) @binding(6) var<storage, read_write> edgeToVertex: array<i32>;  // Edge→vertex index mapping for smoothing
 
 // Segment count per case (0-15)
 const SEGMENT_COUNT: array<u32, 16> = array<u32, 16>(
@@ -217,6 +218,9 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
   // Base index with level offset
   let baseIdx = uniforms.vertexOffset + offset * 2u;
 
+  // Edge index base for this cell (4 edges per cell)
+  let edgeIdxBase = cellIdx * 4u;
+
   // First line segment
   if (edges.x >= 0) {
     let p0 = interpolateEdge(edges.x, x, y, values, uniforms.isovalue);
@@ -227,6 +231,10 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
 
     vertices[baseIdx] = vec4<f32>(world0, 1.0);
     vertices[baseIdx + 1u] = vec4<f32>(world1, 1.0);
+
+    // Store edge→vertex mapping for smoothing
+    edgeToVertex[edgeIdxBase + u32(edges.x)] = i32(baseIdx);
+    edgeToVertex[edgeIdxBase + u32(edges.y)] = i32(baseIdx + 1u);
   }
 
   // Second line segment (saddle cases 5 and 10)
@@ -239,5 +247,9 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
 
     vertices[baseIdx + 2u] = vec4<f32>(world0, 1.0);
     vertices[baseIdx + 3u] = vec4<f32>(world1, 1.0);
+
+    // Store edge→vertex mapping for smoothing
+    edgeToVertex[edgeIdxBase + u32(edges.z)] = i32(baseIdx + 2u);
+    edgeToVertex[edgeIdxBase + u32(edges.w)] = i32(baseIdx + 3u);
   }
 }

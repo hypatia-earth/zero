@@ -102,6 +102,17 @@ export class RenderService {
         console.log(`[Render] Isobar spacing: ${newSpacing} hPa, ${this.isobarLevels.length} levels`);
       }
     });
+
+    // Listen for pressure smoothing changes (live update)
+    let lastSmoothing = this.optionsService.options.value.pressure.smoothing;
+    effect(() => {
+      const newSmoothing = this.optionsService.options.value.pressure.smoothing;
+      if (newSmoothing !== lastSmoothing) {
+        lastSmoothing = newSmoothing;
+        this.lastPressureLerp = -1;  // Force contour recompute on next frame
+        console.log(`[Render] Pressure smoothing: ${newSmoothing} iterations`);
+      }
+    });
   }
 
   getRenderer(): GlobeRenderer {
@@ -142,7 +153,8 @@ export class RenderService {
         const validLerp = pressureLerp >= 0 ? pressureLerp : (pressureLerp === -2 ? 0 : -1);
         if (validLerp >= 0 && Math.abs(validLerp - this.lastPressureLerp) > 0.005) {
           this.lastPressureLerp = validLerp;
-          renderer.runPressureContour(this.pressureSlot0, this.pressureSlot1, validLerp, this.isobarLevels);
+          const smoothingIterations = parseInt(options.pressure.smoothing, 10);
+          renderer.runPressureContour(this.pressureSlot0, this.pressureSlot1, validLerp, this.isobarLevels, smoothingIterations);
         }
       }
 

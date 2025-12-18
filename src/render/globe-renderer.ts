@@ -822,8 +822,9 @@ export class GlobeRenderer {
    * @param slot1 Second grid slot index (same as slot0 for single mode)
    * @param lerp Interpolation factor (0 = slot0, 1 = slot1)
    * @param levels Isobar levels to compute (hPa values)
+   * @param smoothingIterations Number of Chaikin smoothing passes (0-2)
    */
-  runPressureContour(slot0: number, slot1: number, lerp: number, levels: number[]): void {
+  runPressureContour(slot0: number, slot1: number, lerp: number, levels: number[], smoothingIterations = 0): void {
     if (!this.pressureLayer.isComputeReady()) {
       console.warn('[Globe] Pressure layer not ready');
       return;
@@ -846,6 +847,12 @@ export class GlobeRenderer {
       const commandEncoder = this.device.createCommandEncoder();
       const levelPa = levels[i]! * 100;  // Convert hPa to Pa
       this.pressureLayer.runContour(commandEncoder, slot0, slot1, lerp, levelPa, vertexOffset);
+
+      // Run smoothing passes if requested
+      if (smoothingIterations > 0) {
+        this.pressureLayer.runSmoothing(commandEncoder, smoothingIterations, vertexOffset, maxVerticesPerLevel);
+      }
+
       this.device.queue.submit([commandEncoder.finish()]);
       totalVertices += maxVerticesPerLevel;
     }
