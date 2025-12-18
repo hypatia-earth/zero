@@ -462,6 +462,13 @@ export class RenderService {
     this.renderer!.setTempDataBuffer(buffer);
   }
 
+  /**
+   * Set pressure data buffer from LayerStore (replaces internal buffer)
+   */
+  setPressureDataBuffer(buffer: GPUBuffer): void {
+    this.renderer!.setPressureDataBuffer(buffer);
+  }
+
   dispose(): void {
     this.stop();
     this.resizeObserver?.disconnect();

@@ -61,7 +61,7 @@ export class GlobeRenderer {
   private cloudsDataBuffer!: GPUBuffer;
   private humidityDataBuffer!: GPUBuffer;
   private windDataBuffer!: GPUBuffer;
-  private pressureDataBuffers: GPUBuffer[] = [];  // Pressure raw slots (O1280)
+  private pressureDataBuffer!: GPUBuffer;  // Pressure raw data (single buffer, slots at offsets)
   private maxTempSlots!: number;
   private atmosphereLUTs!: AtmosphereLUTs;
   private useFloat16Luts = false;
@@ -221,18 +221,12 @@ export class GlobeRenderer {
     });
     console.log(`[Globe] Weather buffers: rain/clouds/humidity/wind @ ${(layerBufferSize / 1024 / 1024).toFixed(1)} MB each`);
 
-    // WORKAROUND: Pressure uses array-of-buffers (different from LayerStore's single-buffer-with-offsets)
-    // PressureLayer expects GPUBuffer[] where each element is a timeslot
-    // TODO: Refactor to use LayerStore (requires PressureLayer to accept single buffer with offset access)
-    const pressureSlotSize = BYTES_PER_TIMESTEP;
-    for (let i = 0; i < this.maxTempSlots; i++) {
-      this.pressureDataBuffers.push(this.device.createBuffer({
-        size: pressureSlotSize,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-      }));
-    }
-    const pressureTotalMB = (pressureSlotSize * this.maxTempSlots / 1024 / 1024).toFixed(1);
-    console.log(`[Globe] PRES buffer: ${this.maxTempSlots} slots, ${pressureTotalMB} MB`);
+    // WORKAROUND: 4-byte placeholder - replaced by LayerStore buffer via setPressureDataBuffer()
+    // Must exist for initial setup; replaced before render starts
+    this.pressureDataBuffer = this.device.createBuffer({
+      size: 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
 
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
     this.fontAtlasTexture = this.device.createTexture({
@@ -755,6 +749,18 @@ export class GlobeRenderer {
     console.log('[Globe] Temp buffer set from LayerStore');
   }
 
+  /**
+   * Set external pressure data buffer (owned by LayerStore)
+   * Replaces internal placeholder; PressureLayer uses this via setExternalBuffers
+   */
+  setPressureDataBuffer(buffer: GPUBuffer, destroyOld = true): void {
+    if (destroyOld && this.pressureDataBuffer) {
+      this.pressureDataBuffer.destroy();
+    }
+    this.pressureDataBuffer = buffer;
+    console.log('[Globe] Pressure buffer set from LayerStore');
+  }
+
   uploadGaussianLUTs(lats: Float32Array, offsets: Uint32Array): void {
     this.device.queue.writeBuffer(this.gaussianLatsBuffer, 0, lats.buffer, lats.byteOffset, lats.byteLength);
     this.device.queue.writeBuffer(this.ringOffsetsBuffer, 0, offsets.buffer, offsets.byteOffset, offsets.byteLength);
@@ -865,14 +871,10 @@ export class GlobeRenderer {
    * @param slotIndex Which slot to upload to
    */
   uploadPressureDataToSlot(data: Float32Array, slotIndex: number): void {
-    if (slotIndex < 0 || slotIndex >= this.pressureDataBuffers.length) {
-      console.warn(`[Globe] Invalid pressure slot index: ${slotIndex}`);
-      return;
-    }
-
-    // Upload to raw slot
+    // Upload to raw slot at offset (single buffer, slots at offsets)
+    const byteOffset = slotIndex * BYTES_PER_TIMESTEP;
     this.device.queue.writeBuffer(
-      this.pressureDataBuffers[slotIndex]!, 0,
+      this.pressureDataBuffer, byteOffset,
       data.buffer, data.byteOffset, data.byteLength
     );
 
@@ -881,7 +883,8 @@ export class GlobeRenderer {
       this.pressureLayer.setExternalBuffers({
         gaussianLats: this.gaussianLatsBuffer,
         ringOffsets: this.ringOffsetsBuffer,
-        pressureDataSlots: this.pressureDataBuffers,
+        pressureDataBuffer: this.pressureDataBuffer,
+        maxSlots: this.maxTempSlots,  // Same slot count as temp
       });
     }
 
@@ -1006,7 +1009,7 @@ export class GlobeRenderer {
     this.basemapTexture?.destroy();
     this.gaussianLatsBuffer?.destroy();
     this.ringOffsetsBuffer?.destroy();
-    for (const buf of this.pressureDataBuffers) buf?.destroy();
+    this.pressureDataBuffer?.destroy();
     this.tempDataBuffer?.destroy();
     this.rainDataBuffer?.destroy();
     this.cloudsDataBuffer?.destroy();

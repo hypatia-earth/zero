@@ -57,7 +57,8 @@ interface PressureUniforms {
 export interface PressureExternalBuffers {
   gaussianLats: GPUBuffer;        // 2560 latitudes
   ringOffsets: GPUBuffer;         // 2560 ring offsets
-  pressureDataSlots: GPUBuffer[]; // O1280 raw data per slot
+  pressureDataBuffer: GPUBuffer;  // O1280 raw data (single buffer, slots at offsets)
+  maxSlots: number;               // Number of slots in buffer
 }
 
 // Constants
@@ -345,7 +346,7 @@ export class PressureLayer {
    */
   setExternalBuffers(buffers: PressureExternalBuffers): void {
     this.externalBuffers = buffers;
-    this.maxSlots = buffers.pressureDataSlots.length;
+    this.maxSlots = buffers.maxSlots;
 
     // Create grid slot buffers (regridded data per slot)
     const gridSlotSize = this.gridWidth * this.gridHeight * 4;  // f32 per cell
@@ -525,21 +526,21 @@ export class PressureLayer {
       return;
     }
 
-    // Update regrid uniforms
+    // Update regrid uniforms (inputSlot used for offset in single-buffer mode)
     const regridUniforms = new Uint32Array([
       this.gridWidth,
       this.gridHeight,
-      0,  // Not used for single slot regrid
+      slotIndex,  // Slot offset for single-buffer mode
       0,
     ]);
     this.device.queue.writeBuffer(this.regridUniformBuffer, 0, regridUniforms);
 
-    // Create regrid bind group for this slot
+    // Create regrid bind group for this slot (single buffer, slot offset in uniform)
     const regridBindGroup = this.device.createBindGroup({
       layout: this.regridBindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.regridUniformBuffer } },
-        { binding: 1, resource: { buffer: this.externalBuffers.pressureDataSlots[slotIndex]! } },
+        { binding: 1, resource: { buffer: this.externalBuffers.pressureDataBuffer } },
         { binding: 2, resource: { buffer: this.externalBuffers.gaussianLats } },
         { binding: 3, resource: { buffer: this.externalBuffers.ringOffsets } },
         { binding: 4, resource: { buffer: this.gridSlotBuffers[slotIndex]! } },

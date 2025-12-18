@@ -530,7 +530,16 @@ export class SlotService {
       }
     }
 
-    // TODO: Wire other layers (pressure, rain, wind) when implemented
+    // Pressure layer: 'raw' slab (first of 2)
+    const pressureStore = this.layerStores.get('pressure');
+    if (pressureStore) {
+      const buffers = pressureStore.getBuffers();
+      if (buffers.length > 0) {
+        this.renderService.setPressureDataBuffer(buffers[0]!);
+      }
+    }
+
+    // TODO: Wire other layers (rain, clouds, humidity, wind) when implemented
   }
 
   dispose(): void {
