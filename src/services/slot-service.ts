@@ -59,7 +59,24 @@ export class SlotService {
     private capabilitiesService: CapabilitiesService,
     private configService: ConfigService,
   ) {
-    this.maxSlotsPerParam = this.renderService.getMaxSlotsPerLayer();
+    // Get requested slots, but cap to what GPU device actually supports
+    // Note: adapter.limits != device.limits; device may get less than requested
+    // Must use min(maxBufferSize, maxStorageBufferBindingSize) since buffer must also be bindable
+    const requestedSlots = this.renderService.getMaxSlotsPerLayer();
+    const device = this.renderService.getDevice();
+    const maxBufferBytes = device.limits.maxBufferSize;
+    const maxBindingBytes = device.limits.maxStorageBufferBindingSize;
+    const effectiveMaxBytes = Math.min(maxBufferBytes, maxBindingBytes);
+    const effectiveMaxMB = Math.floor(effectiveMaxBytes / 1024 / 1024);
+    const maxSlabMB = 26;  // Largest slab size (temp, pressure raw)
+    const maxSlotsFromGpu = Math.floor(effectiveMaxMB / maxSlabMB);
+    this.maxSlotsPerParam = Math.min(requestedSlots, maxSlotsFromGpu);
+
+    console.log(`[Slot] GPU cap: requested=${requestedSlots}, bufferMB=${Math.floor(maxBufferBytes/1024/1024)}, bindingMB=${Math.floor(maxBindingBytes/1024/1024)}, effectiveMB=${effectiveMaxMB}, maxSlots=${maxSlotsFromGpu}, result=${this.maxSlotsPerParam}`);
+
+    if (this.maxSlotsPerParam < requestedSlots) {
+      console.warn(`[Slot] Capped timeslots: ${requestedSlots} → ${this.maxSlotsPerParam} (GPU limit: ${effectiveMaxMB} MB)`);
+    }
 
     // Create LayerStores for weather layers with slab definitions
     this.initializeLayerStores();
@@ -113,7 +130,14 @@ export class SlotService {
     // Effect: resize LayerStores when timeslotsPerLayer option changes
     let lastTimeslots = this.maxSlotsPerParam;
     this.disposeResizeEffect = effect(() => {
-      const newTimeslots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
+      const requestedTimeslots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
+      const device = this.renderService.getDevice();
+      const effectiveMaxBytes = Math.min(device.limits.maxBufferSize, device.limits.maxStorageBufferBindingSize);
+      const effectiveMaxMB = Math.floor(effectiveMaxBytes / 1024 / 1024);
+      const maxSlabMB = 26;
+      const maxFromGpu = Math.floor(effectiveMaxMB / maxSlabMB);
+      const newTimeslots = Math.min(requestedTimeslots, maxFromGpu);
+
       if (newTimeslots === lastTimeslots) return;
 
       console.log(`[Slot] Resizing stores: ${lastTimeslots} → ${newTimeslots} timeslots`);
