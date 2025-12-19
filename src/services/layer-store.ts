@@ -142,9 +142,9 @@ export class LayerStore {
     return this.timeslotCount;
   }
 
-  /** Get number of allocated timeslots */
+  /** Get number of allocated slot buffers */
   getAllocatedCount(): number {
-    return this.timeslots.size;
+    return this.slotBuffers.size;
   }
 
   /** Find furthest timeslot from reference time for eviction */

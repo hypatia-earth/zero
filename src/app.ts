@@ -260,7 +260,7 @@ export const App: m.ClosureComponent = () => {
           m(LogoPanel),
           m(LayersPanel, { configService, optionsService }),
           m(TimeCirclePanel, { optionsService }),
-          m(QueuePanel, { queueService, optionsService }),
+          m(QueuePanel, { queueService, optionsService, slotService }),
           m(TimeBarPanel, { optionsService, slotService, timestepService, configService }),
           m(FullscreenPanel),
           m(OptionsPanel, { optionsService, dialogService }),

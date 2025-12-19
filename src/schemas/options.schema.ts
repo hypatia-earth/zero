@@ -175,6 +175,17 @@ export const optionsSchema = z.object({
         impact: 'recreate',
       }
     ),
+    showGpuStats: opt(
+      z.boolean().default(false),
+      {
+        label: 'Show GPU stats',
+        description: 'Display GPU memory usage in download panel',
+        group: 'gpu',
+        filter: ['global', 'gpu', 'queue'],
+        order: 1,
+        control: 'toggle',
+      }
+    ),
   }),
 
   // ----------------------------------------------------------
@@ -916,7 +927,7 @@ export const defaultOptions: ZeroOptions = {
     altitude: 14_000,  // km from surface
   },
   interface: { autocloseModal: true },
-  gpu: { timeslotsPerLayer: '4' },
+  gpu: { timeslotsPerLayer: '4', showGpuStats: false },
   viewport: {
     physicsModel: 'inertia',
     mass: 10,

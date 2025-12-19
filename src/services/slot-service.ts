@@ -516,6 +516,33 @@ export class SlotService {
     return this.paramSlots.get(param)?.getActiveTimesteps() ?? [];
   }
 
+  /** Get GPU memory stats across all layer stores */
+  getMemoryStats(): {
+    allocatedMB: number;
+    capacityMB: number;
+    layers: Map<string, { allocatedMB: number; capacityMB: number }>;
+  } {
+    let totalAllocated = 0;
+    let totalCapacity = 0;
+    const layers = new Map<string, { allocatedMB: number; capacityMB: number }>();
+
+    for (const [param, store] of this.layerStores) {
+      const sizeMB = store.timeslotSizeMB;
+      const allocated = store.getAllocatedCount() * sizeMB;
+      const capacity = store.getTimeslotCount() * sizeMB;
+
+      totalAllocated += allocated;
+      totalCapacity += capacity;
+      layers.set(param, { allocatedMB: allocated, capacityMB: capacity });
+    }
+
+    return {
+      allocatedMB: totalAllocated,
+      capacityMB: totalCapacity,
+      layers,
+    };
+  }
+
   /** Initialize LayerStores for weather layers with slab definitions */
   private initializeLayerStores(): void {
     const device = this.renderService.getDevice();
