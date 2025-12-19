@@ -35,7 +35,7 @@ export interface GridLinesUniforms {
 
 // Constants
 const MAX_LINES = 80;  // max lines per axis (72 lon + margin)
-const ANIMATION_DURATION = 200;  // ms per birth/death cycle
+const ANIMATION_DURATION = 1000;  // ms per birth/death cycle
 
 // LoD levels from feature spec
 // zoomIn: altitude to transition TO this level (getting closer)
@@ -70,7 +70,7 @@ function generateLatLines(spacing: number): number[] {
 }
 
 export class GridAnimator {
-  private lodLevel = 4;  // Start at 15° spacing
+  private lodLevel = 0;
   private lonLines: LineState[] = [];
   private latLines: LineState[] = [];
   private animating = false;
@@ -86,8 +86,21 @@ export class GridAnimator {
     latCount: 0,
   };
 
-  constructor() {
+  constructor(initialAltitudeKm: number) {
+    // Find correct LoD for starting altitude
+    this.lodLevel = this.getLodForAltitude(initialAltitudeKm);
+    console.log(`GridAnimator init: altitude=${initialAltitudeKm}km, LoD=${this.lodLevel}`);
     this.initializeLines();
+  }
+
+  private getLodForAltitude(altitude: number): number {
+    // Find highest LoD level where altitude is below zoomIn threshold
+    for (let i = LOD_LEVELS.length - 1; i >= 0; i--) {
+      if (altitude < LOD_LEVELS[i]!.zoomIn) {
+        return i;
+      }
+    }
+    return 0;
   }
 
   private initializeLines(): void {
@@ -139,9 +152,19 @@ export class GridAnimator {
     if (this.animating) return;  // Don't change during animation
 
     const currentLevel = this.lodLevel;
+    const targetLevel = this.getLodForAltitude(altitude);
+
+    // Jump directly to correct level if more than 1 level off (e.g., camera moved dramatically)
+    if (Math.abs(targetLevel - currentLevel) > 1) {
+      console.log(`GridAnimator: LoD ${currentLevel} → ${targetLevel} (jump) at altitude=${altitude}km`);
+      this.lodLevel = targetLevel;
+      this.initializeLines();
+      return;
+    }
+
     let newLevel = currentLevel;
 
-    // Check zoom in (need more lines)
+    // Check zoom in (need more lines) - use hysteresis
     if (currentLevel < LOD_LEVELS.length - 1) {
       const nextLevel = LOD_LEVELS[currentLevel + 1]!;
       if (altitude < nextLevel.zoomIn) {
@@ -149,7 +172,7 @@ export class GridAnimator {
       }
     }
 
-    // Check zoom out (need fewer lines)
+    // Check zoom out (need fewer lines) - use hysteresis
     if (currentLevel > 0) {
       const thisLevel = LOD_LEVELS[currentLevel]!;
       if (altitude > thisLevel.zoomOut) {
@@ -158,6 +181,7 @@ export class GridAnimator {
     }
 
     if (newLevel !== currentLevel) {
+      console.log(`GridAnimator: LoD ${currentLevel} → ${newLevel} at altitude=${altitude}km`);
       this.startTransition(newLevel);
     }
   }
@@ -178,47 +202,108 @@ export class GridAnimator {
     this.transitionLines(this.latLines, targetLatPositions, false);
   }
 
+  /**
+   * Transition lines with outward/inward animation
+   * - Zoom in: existing lines move outward, new lines born from 0°
+   * - Zoom out: lines move inward, lines reaching 0° die
+   */
   private transitionLines(
     lines: LineState[],
     targetPositions: number[],
     isLon: boolean
   ): void {
-    const targetSet = new Set(targetPositions);
-    const currentSet = new Set(lines.map(l => l.targetDeg));
-    const newLines: LineState[] = [];
+    const result: LineState[] = [];
 
-    // Keep or mark for death existing lines
-    for (const line of lines) {
-      if (targetSet.has(line.targetDeg)) {
-        // Keep existing line
-        newLines.push(line);
-      } else {
-        // Mark for death - will slide toward 0°
-        line.isDying = true;
-        line.startDeg = line.currentDeg;
-        line.targetDeg = 0;
-        newLines.push(line);
-      }
+    // Convert to signed representation (-180 to 180) for easier logic
+    const toSigned = (deg: number) => deg > 180 ? deg - 360 : deg;
+    const toUnsigned = (deg: number) => deg < 0 ? deg + 360 : deg;
+
+    const oldSigned = lines.map(l => ({ line: l, signed: toSigned(l.targetDeg) }));
+    const newSigned = targetPositions.map(p => toSigned(p));
+
+    // Handle 0° specially - always stays if in both sets
+    const old0 = oldSigned.find(o => o.signed === 0);
+    const has0 = newSigned.includes(0);
+    if (old0 && has0) {
+      result.push(old0.line);
+    } else if (has0) {
+      // 0° born (appears instantly, no slide needed)
+      result.push({ targetDeg: 0, currentDeg: 0, startDeg: 0, opacity: 1, isNew: false, isDying: false });
     }
 
-    // Add new lines that don't exist yet (born from 0°)
-    for (const deg of targetPositions) {
-      if (!currentSet.has(deg)) {
-        newLines.push({
-          targetDeg: deg,
+    // Handle 180° specially
+    const old180 = oldSigned.find(o => Math.abs(o.signed) === 180);
+    const has180 = newSigned.some(p => Math.abs(p) === 180);
+    if (old180 && has180) {
+      result.push(old180.line);
+    } else if (has180) {
+      result.push({ targetDeg: 180, currentDeg: 180, startDeg: 180, opacity: 1, isNew: false, isDying: false });
+    }
+
+    // Process positive side (0 < deg < 180) - outward means toward 180
+    const oldPos = oldSigned.filter(o => o.signed > 0 && o.signed < 180).sort((a, b) => b.signed - a.signed);
+    const newPos = newSigned.filter(p => p > 0 && p < 180).sort((a, b) => b - a);
+    this.matchSide(oldPos.map(o => o.line), newPos.map(p => toUnsigned(p)), result, false);
+
+    // Process negative side (-180 < deg < 0) - outward means toward -180
+    const oldNeg = oldSigned.filter(o => o.signed < 0 && o.signed > -180).sort((a, b) => a.signed - b.signed);
+    const newNeg = newSigned.filter(p => p < 0 && p > -180).sort((a, b) => a - b);
+    this.matchSide(oldNeg.map(o => o.line), newNeg.map(p => toUnsigned(p)), result, false);
+
+    if (isLon) {
+      this.lonLines = result;
+    } else {
+      this.latLines = result;
+    }
+  }
+
+  /**
+   * Match old lines to new positions for one side of the globe
+   * Lines are sorted outermost-first
+   */
+  private matchSide(
+    oldLines: LineState[],
+    newPositions: number[],
+    result: LineState[],
+    isLat: boolean
+  ): void {
+    const maxLen = Math.max(oldLines.length, newPositions.length);
+
+    for (let i = 0; i < maxLen; i++) {
+      if (i < oldLines.length && i < newPositions.length) {
+        // Old line slides to new position (outward or inward)
+        const old = oldLines[i]!;
+        const newDeg = newPositions[i]!;
+        result.push({
+          targetDeg: newDeg,
+          currentDeg: old.currentDeg,
+          startDeg: old.currentDeg,
+          opacity: 1,
+          isNew: false,
+          isDying: false,
+        });
+      } else if (i < newPositions.length) {
+        // New line born from 0°
+        result.push({
+          targetDeg: newPositions[i]!,
           currentDeg: 0,
           startDeg: 0,
-          opacity: 0,
+          opacity: 1,
           isNew: true,
           isDying: false,
         });
+      } else {
+        // Old line dies toward 0°
+        const old = oldLines[i]!;
+        result.push({
+          targetDeg: 0,
+          currentDeg: old.currentDeg,
+          startDeg: old.currentDeg,
+          opacity: 1,
+          isNew: false,
+          isDying: true,
+        });
       }
-    }
-
-    if (isLon) {
-      this.lonLines = newLines;
-    } else {
-      this.latLines = newLines;
     }
   }
 
@@ -235,12 +320,16 @@ export class GridAnimator {
       if (line.isNew) {
         // Slide from 0° to target
         line.currentDeg = this.lerpAngle(0, line.targetDeg, eased, true);
-        line.opacity = Math.min(t * 2, 1);  // Fade in faster
+        line.opacity = 1;
         if (t < 1) allComplete = false;
       } else if (line.isDying) {
-        // Slide from saved start toward 0° and fade out
+        // Slide from saved start toward 0°
         line.currentDeg = this.lerpAngle(line.startDeg, 0, eased, true);
-        line.opacity = Math.max(1 - t * 2, 0);  // Fade out faster
+        line.opacity = 1;
+        if (t < 1) allComplete = false;
+      } else if (line.startDeg !== line.targetDeg) {
+        // Slide from start to target (redistribution)
+        line.currentDeg = this.lerpAngle(line.startDeg, line.targetDeg, eased, true);
         if (t < 1) allComplete = false;
       }
     }
@@ -249,12 +338,16 @@ export class GridAnimator {
     for (const line of this.latLines) {
       if (line.isNew) {
         line.currentDeg = this.lerp(0, line.targetDeg, eased);
-        line.opacity = Math.min(t * 2, 1);
+        line.opacity = 1;
         if (t < 1) allComplete = false;
       } else if (line.isDying) {
         // Slide from saved start toward 0°
         line.currentDeg = this.lerp(line.startDeg, 0, eased);
-        line.opacity = Math.max(1 - t * 2, 0);
+        line.opacity = 1;
+        if (t < 1) allComplete = false;
+      } else if (line.startDeg !== line.targetDeg) {
+        // Slide from start to target (redistribution)
+        line.currentDeg = this.lerp(line.startDeg, line.targetDeg, eased);
         if (t < 1) allComplete = false;
       }
     }
@@ -298,16 +391,11 @@ export class GridAnimator {
       }
     }
 
-    // Pack latitude lines
-    this.uniforms.latCount = this.latLines.length;
+    // Pack latitude lines (disabled for debugging)
+    this.uniforms.latCount = 0;
     for (let i = 0; i < MAX_LINES; i++) {
-      if (i < this.latLines.length) {
-        this.uniforms.latDegrees[i] = this.latLines[i]!.currentDeg;
-        this.uniforms.latOpacities[i] = this.latLines[i]!.opacity;
-      } else {
-        this.uniforms.latDegrees[i] = 0;
-        this.uniforms.latOpacities[i] = 0;
-      }
+      this.uniforms.latDegrees[i] = 0;
+      this.uniforms.latOpacities[i] = 0;
     }
   }
 

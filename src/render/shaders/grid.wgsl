@@ -90,12 +90,9 @@ fn blendGrid(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
 
   // Check longitude lines
   for (var i = 0u; i < min(gridLines.lonCount, GRID_MAX_LINES); i++) {
-    var lineDeg = getGridLonDeg(i);
+    let lineDeg = getGridLonDeg(i);
     let lineOpacity = getGridLonOpacity(i);
     if (lineOpacity < 0.01) { continue; }
-
-    // Normalize line position to [0, 360) in case animation overshoots
-    lineDeg = lineDeg - floor(lineDeg / 360.0) * 360.0;
 
     // Distance to this line (handling wraparound)
     var diff = abs(lonDeg - lineDeg);

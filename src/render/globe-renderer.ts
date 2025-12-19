@@ -229,8 +229,9 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Grid animator for LoD transitions
-    this.gridAnimator = new GridAnimator();
+    // Grid animator for LoD transitions (initialize at correct LoD for camera altitude)
+    const initialAltitudeKm = (this.camera.getState().distance - 1.0) * 6371;
+    this.gridAnimator = new GridAnimator(initialAltitudeKm);
 
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
     this.fontAtlasTexture = this.device.createTexture({
