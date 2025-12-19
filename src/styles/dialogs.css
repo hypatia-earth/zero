@@ -727,6 +727,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 2rem;
   padding: 16px 20px;
   border-bottom: 1px solid var(--color-border-light);
 }
@@ -736,13 +737,16 @@
   font-size: var(--font-size-lg);
   font-weight: 500;
   color: var(--color-text-primary);
+  white-space: nowrap;
 }
 
 .dialog.info .header .bar {
   display: flex;
   align-items: center;
-  justify-content: end;
+  justify-content: flex-end;
   gap: 4px;
+  width: auto;
+  flex-shrink: 0;
 }
 
 .dialog.info .close {
@@ -773,7 +777,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 20px 24px;
-  font-weight: 400;
+  font-weight: var(--font-weight-thin);
 }
 
 .dialog.info .content.markdown {
@@ -783,21 +787,21 @@
 /* Markdown typography */
 .dialog.info .content h1 {
   font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-regular);
   margin: 0 0 16px 0;
   color: var(--color-text-primary);
 }
 
 .dialog.info .content h2 {
   font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-regular);
   margin: 24px 0 12px 0;
   color: var(--color-text-primary);
 }
 
 .dialog.info .content h3 {
   font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-regular);
   margin: 20px 0 8px 0;
   color: var(--color-text-primary);
 }
@@ -829,7 +833,8 @@
 }
 
 .dialog.info .content a {
-  color: var(--color-primary);
+  color: var(--color-btn-primary);
+  font-weight: var(--font-weight-semibold);
   text-decoration: none;
 }
 
@@ -962,11 +967,16 @@
 .dialog .float-toggle {
   background: none;
   border: none;
-  color: white;
-  font-size: var(--font-size-base);
+  color: var(--color-glow);
+  font-size: var(--font-size-xl);
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
   opacity: 0.6;
   transition: opacity 0.15s, background 0.15s;
 }

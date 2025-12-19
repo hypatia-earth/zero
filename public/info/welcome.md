@@ -1,70 +1,79 @@
-# Welcome to Hypatia Zero
+**Contents:** [About](#about) · [Controls](#controls) · [Data](#data) · [Install](#install-as-app) · [Quirks](#quirks) · [How it's Made](#how-its-made)
 
-## Content 
+## About
 
-**Contents:** [Features](#features) · [Controls](#controls) · [Data Source](#data-source) · [Install as App](#install-as-app) · [Known Quirks](#known-quirks) · [About](#about)
+Hypatia Zero visualizes global weather in your browser using WebGPU.
 
-## Introdcution
+[ECMWF](https://www.ecmwf.int/) runs the world's most accurate weather model four times daily. Since [October 2025](https://www.ecmwf.int/en/about/media-centre/news/2025/ecmwf-makes-its-entire-real-time-catalogue-open-all), this data is [openly published](https://www.ecmwf.int/en/forecasts/datasets/open-data) under CC-BY-4.0. Zero downloads it directly into your browser—no backend, no accounts, just you and the atmosphere.
 
-Hypatia Zero is a WebGPU-powered weather visualization app.
+Scrub through 10 days of weather. Watch storms form and dissolve. Every minute interpolated, every layer rendered on the GPU.
 
-Since Oct 2025 the ECMWF[link] openly publishes/releaes the data of it's global weather and forecatsing model. The model runs 4 times a day and produces timtimestep data up to XX hours into the future. Open-meteo[link] offers XX modell weather params in near model resolution (around 10km) in a AWS S3 buckets with 7 days rentention. AWS sponsors the egress via its XXX project.
+### Layers
 
-Zero.hypatia.earth is the edge labor of hypatia.earth. It downloads ECMWF data directly into you browser cache und upload into your webGPI memory.
-
-Zero visuslizes this data as XXX timesteps and interpolates every minute in between. You time scrub to every moment in this 10? days period and animate seamlessly forward or backward in time. Currently suppport are Temperature at 2m, Wind at 10m, precipitataion rate, totla cloud caover and humidity as weather layer. Sun, Earth and grid layer help you to orientate.
-
-Zero uses no backend, hence the name and communicates directly with Open-Metao @ AWS only. 
-
-## Features
-
-- **Real-time weather data** from ECMWF
-- **Temperature**, precipitation, clouds, humidity, wind, and pressure layers
-- **Smooth globe navigation** with mouse and touch controls
-- **Time travel** through forecast data
+- **Temperature** at 2 meters
+- **Precipitation** rate
+- **Clouds** total cover
+- **Humidity** relative
+- **Wind** at 10 meters
+- **Pressure** at sea level
 
 ## Controls
 
 | Action | Mouse | Touch |
-|--------|-------|-------|app
-| Rotate | Drag | One finger drag |
-| Zoom | Scroll wheel | Pinch |
+|--------|-------|-------|
+| Rotate | Drag | One finger |
+| Zoom | Scroll | Pinch |
 | Time | Click timebar | Click timebar |
 
-## Data Source
+| Keyboard | Step |
+|----------|------|
+| Arrow | ±1 hour |
+| Shift + Arrow | ±10 min |
+| Alt + Arrow | ±24 hours |
+| Alt + Shift + Arrow | ±1 min |
+| F | Fullscreen |
 
-Weather data is provided by [Open-Meteo](https://open-meteo.com/) from ECMWF IFS model forecasts.
+## Data
+
+Weather data flows from [ECMWF](https://www.ecmwf.int/) via [Open-Meteo](https://open-meteo.com/), hosted on AWS S3. The [Open Data Sponsorship Program](https://registry.opendata.aws/) covers egress costs.
+
+Zero fetches data directly from AWS into your browser cache, then uploads it to GPU memory. No intermediary servers.
 
 ## Install as App
 
-For the best fullscreen experience, install Hypatia Zero as an app:
+For fullscreen experience, install as a Progressive Web App:
 
 | Platform | How |
 |----------|-----|
-| Chrome / Edge | Click install icon in address bar, or Menu → "Install Hypatia Zero" |
+| Chrome / Edge | Install icon in address bar, or Menu → "Install Hypatia Zero" |
 | Android | Menu → "Add to Home Screen" |
 | iOS Safari | Share → "Add to Home Screen" |
 
-## Known Quirks
+## Quirks
 
-- **Download ETA is approximate** - Caching, bandwidth fluctuations, and varying file sizes make precise estimates impossible.
+**Download ETA is approximate.** Caching, bandwidth, and file sizes vary. The estimate improves as downloads progress.
 
 ![Download indicator](info/download-eta.png)
 
-## Background (better section title here)
+## How it's Made
 
 Zero is a human/AI collaboration:
-- Idea 100 % human
-- Research 20% human
-- Top Level Architecture 99% human
-- Requirements management 95% human
-- Requirements definitions (the actual writing) 5% human
-- Development 0% human
 
- The human wants to thank Anthropic/Claude and Google/Gemini for peace- and fruitful collaboration
+| Aspect | Human |
+|--------|-------|
+| Idea | 100% |
+| Architecture | 99% |
+| Requirements | 95% |
+| Research | 20% |
+| Writing | 5% |
+| Code | 0% |
 
-## Credits
+Thanks to [Claude](https://claude.ai/) and [Gemini](https://gemini.google.com/) for peaceful collaboration.
 
-Built with WebGPU, TypeScript, and Mithril.js, zod, signals
+### Built With
 
----
+[WebGPU](https://www.w3.org/TR/webgpu/) · [TypeScript](https://www.typescriptlang.org/) · [Mithril.js](https://mithril.js.org/) · [Zod](https://zod.dev/) · [Preact Signals](https://preactjs.com/guide/v10/signals/) · [Immer](https://immerjs.github.io/immer/) · [Marked](https://marked.js.org/) · [Vite](https://vite.dev/)
+
+### Named After
+
+[Hypatia of Alexandria](https://en.wikipedia.org/wiki/Hypatia) — mathematician, astronomer, philosopher. Logo from [SNL](https://snl.no/Hypatia).

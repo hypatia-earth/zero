@@ -4,6 +4,7 @@
  * Arrow alone: ±1 hour (to full hour)
  * Shift+Arrow: ±10 minutes (to 10-min mark)
  * Alt+Arrow: ±24 hours
+ * Alt+Shift+Arrow: ±1 minute
  */
 
 import type { OptionsService } from './options-service';
@@ -32,7 +33,10 @@ export class KeyboardService {
     const currentTime = this.optionsService.options.value.viewState.time;
     let newTime: Date;
 
-    if (e.altKey) {
+    if (e.altKey && e.shiftKey) {
+      // Alt + Shift + Arrow: ±1 minute
+      newTime = this.addMinutes(currentTime, direction);
+    } else if (e.altKey) {
       // Alt + Arrow: ±24 hours (Ctrl/Cmd intercepted by browser)
       newTime = this.addDays(currentTime, direction);
     } else if (e.shiftKey) {
@@ -45,6 +49,12 @@ export class KeyboardService {
 
     this.optionsService.update(d => { d.viewState.time = newTime; });
   };
+
+  private addMinutes(date: Date, minutes: number): Date {
+    const result = new Date(date);
+    result.setUTCMinutes(result.getUTCMinutes() + minutes);
+    return result;
+  }
 
   private addDays(date: Date, days: number): Date {
     const result = new Date(date);

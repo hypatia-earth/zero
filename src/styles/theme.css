@@ -6,9 +6,17 @@
 @font-face {
   font-family: 'Inter';
   font-style: normal;
+  font-weight: 200;
+  font-display: swap;
+  src: url('/fonts/inter-extralight.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
   font-weight: 300;
   font-display: swap;
-  src: url('/fonts/inter-thin.woff2') format('woff2');
+  src: url('/fonts/inter-light.woff2') format('woff2');
 }
 
 @font-face {
@@ -30,7 +38,7 @@
 :root {
   /* Typography */
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-weight-thin: 300;
+  --font-weight-thin: 200;
   --font-weight-regular: 400;
   --font-weight-semibold: 600;
 

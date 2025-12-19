@@ -97,7 +97,7 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
           onmousedown: () => dialogService.bringToFront('info')
         }, [
           m('div.header', { onmousedown: onMouseDown }, [
-            m('h2', 'Information'),
+            m('h2', 'Welcome to Hypatia Zero'),
             m('div.bar', [
               isDesktop ? m('button.float-toggle', {
                 onclick: (e: Event) => {
@@ -122,6 +122,12 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
           m('div.footer', [
             m('span.version', `v${__APP_VERSION__} (${__APP_HASH__})`),
             m('div.actions', [
+              m('button.btn.btn-secondary', {
+                onclick: (e: MouseEvent) => {
+                  const content = (e.target as HTMLElement).closest('.window')?.querySelector('.content');
+                  content?.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }, 'Top'),
               m('button.btn.btn-secondary', {
                 onclick: () => {
                   resetDragState();

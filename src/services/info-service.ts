@@ -26,6 +26,13 @@ export class InfoService {
         heading({ text, depth }: { text: string; depth: number }) {
           const id = text.toLowerCase().replace(/[^\w]+/g, '-');
           return `<h${depth} id="${id}">${text}</h${depth}>\n`;
+        },
+        link({ href, text }: { href: string; text: string }) {
+          // External links open in new tab
+          if (href.startsWith('http://') || href.startsWith('https://')) {
+            return `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
+          }
+          return `<a href="${href}">${text}</a>`;
         }
       }
     });
