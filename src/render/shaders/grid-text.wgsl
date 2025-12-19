@@ -133,11 +133,11 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
   let latDeg = degrees(lat);
   let lonDeg = degrees(lon);
 
-  // Screen-space metrics
+  // Globe-space metrics (font size fixed on globe surface)
+  let fontSizeWorld = u.gridFontSize * 0.002;  // gridFontSize in globe units
   let dist = length(hitPoint - u.eyePosition);
   let worldUnitsPerPixel = (2.0 * u.tanFov * dist) / u.resolution.y;
-  let fontSizeWorld = u.gridFontSize * worldUnitsPerPixel * WORLD_SCALE;
-  let screenPxRange = u.gridFontSize / DISTANCE_RANGE;
+  let screenPxRange = (fontSizeWorld / worldUnitsPerPixel) / DISTANCE_RANGE;
 
   // Find nearest grid intersection
   let nearestLat = round(latDeg / GRID_SPACING) * GRID_SPACING;
