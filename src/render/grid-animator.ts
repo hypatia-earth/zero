@@ -417,7 +417,11 @@ export class GridAnimator {
     let diff = b - a;
     if (diff > 180) diff -= 360;
     if (diff < -180) diff += 360;
-    return a + diff * t;
+    let result = a + diff * t;
+    // Normalize to 0-360 range for shader
+    if (result < 0) result += 360;
+    if (result >= 360) result -= 360;
+    return result;
   }
 
   // Getters for debugging
