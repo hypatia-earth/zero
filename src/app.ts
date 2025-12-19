@@ -210,7 +210,7 @@ export const App: m.ClosureComponent = () => {
         BootstrapService.setStep('ACTIVATE');
         renderService.start();
         optionsService.enableUrlSync();
-        keyboardService = new KeyboardService(optionsService);
+        keyboardService = new KeyboardService(optionsService, timestepService);
         setupCameraControls(canvas, renderer.camera, optionsService, configService);
 
         // Wire up palette reactivity

@@ -1,17 +1,22 @@
 /**
  * KeyboardService - Time navigation with arrow keys
  *
- * Arrow alone: ±1 hour (to full hour)
+ * Arrow alone: snap to next/previous timestep
  * Shift+Arrow: ±10 minutes (to 10-min mark)
  * Alt+Arrow: ±24 hours
  * Alt+Shift+Arrow: ±1 minute
  */
 
 import type { OptionsService } from './options-service';
+import type { TimestepService } from './timestep-service';
+import { parseTimestep } from '../utils/timestep';
 import { toggleFullscreen } from '../components/fullscreen-panel';
 
 export class KeyboardService {
-  constructor(private optionsService: OptionsService) {
+  constructor(
+    private optionsService: OptionsService,
+    private timestepService: TimestepService,
+  ) {
     window.addEventListener('keydown', this.handleKeydown);
   }
 
@@ -43,8 +48,8 @@ export class KeyboardService {
       // Shift + Arrow: ±10 minutes (to 10-min mark)
       newTime = this.roundToTenMinutes(currentTime, direction);
     } else {
-      // Arrow alone: ±1 hour (to full hour)
-      newTime = this.roundToHour(currentTime, direction);
+      // Arrow alone: snap to next/previous timestep
+      newTime = this.snapToTimestep(currentTime, direction);
     }
 
     this.optionsService.update(d => { d.viewState.time = newTime; });
@@ -62,18 +67,23 @@ export class KeyboardService {
     return result;
   }
 
-  private roundToHour(date: Date, direction: 1 | -1): Date {
-    const result = new Date(date);
-    result.setUTCMinutes(0, 0, 0);
+  private snapToTimestep(date: Date, direction: 1 | -1): Date {
+    // adjacent returns [t0, t1] where t0 < time <= t1
+    // When exactly on timestep T, returns [T-1, T]
+    const [t0, t1] = this.timestepService.adjacent(date);
+    const t1Date = parseTimestep(t1);
+
     if (direction === 1) {
-      result.setUTCHours(result.getUTCHours() + 1);
-    } else {
-      // If already at full hour, go back one more
-      if (date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0) {
-        result.setUTCHours(result.getUTCHours() - 1);
+      // Forward: if on t1, get the one after
+      if (date.getTime() === t1Date.getTime()) {
+        const [, next] = this.timestepService.adjacent(new Date(t1Date.getTime() + 1));
+        return parseTimestep(next);
       }
+      return t1Date;
+    } else {
+      // Backward: go to t0
+      return parseTimestep(t0);
     }
-    return result;
   }
 
   private roundToTenMinutes(date: Date, direction: 1 | -1): Date {

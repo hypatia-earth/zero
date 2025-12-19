@@ -27,10 +27,10 @@ Scrub through 10 days of weather. Watch storms form and dissolve. Every minute i
 
 | Keyboard | Step |
 |----------|------|
-| Arrow | ±1 hour |
-| Shift + Arrow | ±10 min |
-| Alt + Arrow | ±24 hours |
-| Alt + Shift + Arrow | ±1 min |
+| ← / → | Previous/next timestep |
+| Shift + ← / → | ±10 min |
+| Alt + ← / → | ±24 hours |
+| Alt + Shift + ← / → | ±1 min |
 | F | Fullscreen |
 
 ## Data
@@ -54,6 +54,8 @@ For fullscreen experience, install as a Progressive Web App:
 **Download ETA is approximate.** Caching, bandwidth, and file sizes vary. The estimate improves as downloads progress.
 
 ![Download indicator](info/download-eta.png)
+
+**Interpolation artifacts.** When navigating with Shift/Alt modifiers, the time can land between timesteps. Zero interpolates between two data snapshots. This works well for slowly changing parameters like temperature. Fast-moving features (storm fronts, rain cells) may show ghosting or smearing, especially when timesteps are more than 1 hour apart. Use plain arrow keys to snap to exact timesteps and avoid artifacts.
 
 ## How it's Made
 
