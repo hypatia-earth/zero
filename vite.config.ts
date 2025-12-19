@@ -27,7 +27,7 @@ function cacheHeaders(): Plugin {
 /**
  * Vite plugin to process WGSL shaders with wgsl-plus
  * - Watches all *.wgsl files in shaders folder
- * - Runs wgsl-plus master.wgsl -o zero.wgsl on changes
+ * - Runs wgsl-plus master-main.wgsl -o zero-main.wgsl on changes
  * - Dev: link only, Prod: link + obfuscate
  */
 function wgslProcess(): Plugin {
@@ -35,8 +35,8 @@ function wgslProcess(): Plugin {
 
   // Shader builds: { master: output }
   const shaderBuilds = {
-    'master.wgsl': 'zero.wgsl',
-    'master-postprocess.wgsl': 'postprocess.wgsl',
+    'master-main.wgsl': 'zero-main.wgsl',
+    'master-post.wgsl': 'zero-post.wgsl',
   };
 
   function buildShaders(isProd: boolean) {

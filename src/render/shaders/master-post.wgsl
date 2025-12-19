@@ -5,7 +5,7 @@
 #entrypoint "fs_main"
 
 // Uniforms struct must be declared FIRST (before files that reference `u`)
-// Must match globe.wgsl exactly for shared uniform buffer
+// Must match main.wgsl exactly for shared uniform buffer
 struct Uniforms {
   viewProjInverse: mat4x4f,   // 64 bytes
   eyePosition: vec3f,         // 12 + 4 pad = 16 bytes
@@ -41,8 +41,8 @@ struct Uniforms {
   tempPaletteRange: vec2f,
 }
 
-#include "atmosphere.wgsl"
+#include "sun-atmo.wgsl"
 #include "common.wgsl"
 #include "sun.wgsl"
-#include "atmosphere-blend.wgsl"
-#include "atmosphere-postprocess.wgsl"
+#include "sun-blend.wgsl"
+#include "sun-post.wgsl"

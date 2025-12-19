@@ -3,8 +3,8 @@
  */
 
 import { Camera, type CameraConfig } from './camera';
-import shaderCode from './shaders/zero.wgsl?raw';
-import postprocessShaderCode from './shaders/postprocess.wgsl?raw';
+import shaderCode from './shaders/zero-main.wgsl?raw';
+import postprocessShaderCode from './shaders/zero-post.wgsl?raw';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 import { PressureLayer, type PressureResolution } from './pressure-layer';
 import type { TWeatherTextureLayer } from '../config/types';
