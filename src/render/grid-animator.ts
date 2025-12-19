@@ -41,13 +41,14 @@ const ANIMATION_DURATION = 1000;  // ms per birth/death cycle
 // zoomIn: altitude to transition TO this level (getting closer)
 // zoomOut: altitude to transition FROM this level back to previous (getting further)
 const LOD_LEVELS: LodLevel[] = [
-  { lonSpacing: 90, latSpacing: 90, zoomIn: Infinity, zoomOut: Infinity },  // LoD 0: can't zoom out
-  { lonSpacing: 60, latSpacing: 30, zoomIn: 23000, zoomOut: 27000 },        // 0→1: in<23k, out>27k
-  { lonSpacing: 45, latSpacing: 45, zoomIn: 13000, zoomOut: 17000 },        // 1→2: in<13k, out>17k
-  { lonSpacing: 30, latSpacing: 30, zoomIn: 7000, zoomOut: 9000 },          // 2→3: in<7k, out>9k
-  { lonSpacing: 15, latSpacing: 15, zoomIn: 3500, zoomOut: 4500 },          // 3→4: in<3.5k, out>4.5k
-  { lonSpacing: 10, latSpacing: 10, zoomIn: 1700, zoomOut: 2300 },          // 4→5: in<1.7k, out>2.3k
-  { lonSpacing: 5, latSpacing: 5, zoomIn: 700, zoomOut: 900 },              // 5→6: in<700, out>900
+  { lonSpacing: 90, latSpacing: 90, zoomIn: Infinity, zoomOut: Infinity },  // LoD 0: 4 lon, 3 lat
+  { lonSpacing: 60, latSpacing: 30, zoomIn: 23000, zoomOut: 27000 },        // LoD 1: 6 lon, 7 lat
+  { lonSpacing: 45, latSpacing: 30, zoomIn: 13000, zoomOut: 17000 },        // LoD 2: 8 lon, 7 lat
+  { lonSpacing: 30, latSpacing: 30, zoomIn: 7000, zoomOut: 9000 },          // LoD 3: 12 lon, 7 lat
+  { lonSpacing: 20, latSpacing: 20, zoomIn: 5000, zoomOut: 6000 },          // LoD 4: 18 lon, 9 lat
+  { lonSpacing: 15, latSpacing: 15, zoomIn: 3500, zoomOut: 4500 },          // LoD 5: 24 lon, 13 lat
+  { lonSpacing: 10, latSpacing: 10, zoomIn: 1700, zoomOut: 2300 },          // LoD 6: 36 lon, 19 lat
+  { lonSpacing: 5, latSpacing: 5, zoomIn: 700, zoomOut: 900 },              // LoD 7: 72 lon, 37 lat
 ];
 
 // Generate line positions for a given spacing

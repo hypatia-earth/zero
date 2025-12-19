@@ -46,6 +46,8 @@ export class RenderService {
   private passTimes: RingBuffer = createRingBuffer(60);
   private perfFrameElement: HTMLElement | null = null;
   private perfPassElement: HTMLElement | null = null;
+  private perfScreenElement: HTMLElement | null = null;
+  private perfGlobeElement: HTMLElement | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -181,7 +183,20 @@ export class RenderService {
       }
       if (this.perfPassElement && gpuTimeMs !== null) {
         this.passTimes.push(gpuTimeMs);
-        this.perfPassElement.textContent = ` · pass: ${this.passTimes.avg().toFixed(1)} ms`;
+        this.perfPassElement.textContent = `pass: ${this.passTimes.avg().toFixed(1)} ms`;
+      }
+      if (this.perfScreenElement) {
+        const w = this.canvas.clientWidth;
+        const h = this.canvas.clientHeight;
+        this.perfScreenElement.textContent = `screen: ${w}×${h}`;
+      }
+      if (this.perfGlobeElement) {
+        const distance = renderer.camera.getState().distance;
+        const tanFov = renderer.camera.getTanFov();
+        const fov = 2 * Math.atan(tanFov);
+        const heightCss = this.canvas.clientHeight;
+        const globeRadiusPx = Math.asin(1 / distance) * (heightCss / fov);
+        this.perfGlobeElement.textContent = `globe: ${Math.round(globeRadiusPx)} px`;
       }
     };
 
@@ -324,9 +339,16 @@ export class RenderService {
   /**
    * Set DOM elements for perf panel (updated directly in render loop)
    */
-  setPerfElements(frameEl: HTMLElement | null, passEl: HTMLElement | null): void {
+  setPerfElements(
+    frameEl: HTMLElement | null,
+    passEl: HTMLElement | null,
+    screenEl: HTMLElement | null,
+    globeEl: HTMLElement | null
+  ): void {
     this.perfFrameElement = frameEl;
     this.perfPassElement = passEl;
+    this.perfScreenElement = screenEl;
+    this.perfGlobeElement = globeEl;
   }
 
   /**

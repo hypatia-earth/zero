@@ -17,11 +17,13 @@ export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = (initialVnode) => {
     oncreate({ dom }) {
       const frameEl = dom.querySelector<HTMLElement>('.perf-frame');
       const passEl = dom.querySelector<HTMLElement>('.perf-pass');
-      initialVnode.attrs.renderService.setPerfElements(frameEl, passEl);
+      const screenEl = dom.querySelector<HTMLElement>('.perf-screen');
+      const globeEl = dom.querySelector<HTMLElement>('.perf-globe');
+      initialVnode.attrs.renderService.setPerfElements(frameEl, passEl, screenEl, globeEl);
     },
 
     onremove() {
-      initialVnode.attrs.renderService.setPerfElements(null, null);
+      initialVnode.attrs.renderService.setPerfElements(null, null, null, null);
     },
 
     view() {
@@ -29,8 +31,10 @@ export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = (initialVnode) => {
         m('button.control.pill', {
           title: 'Frame timing (60-frame avg)'
         }, [
-          m('span.perf-frame', 'frame: -- ms'),
-          m('span.perf-pass', '')  // GPU pass time (if timestamp queries available)
+          m('div', m('span.perf-frame', 'frame: -- ms')),
+          m('div', m('span.perf-pass', 'pass: -- ms')),
+          m('div', m('span.perf-screen', 'screen: --')),
+          m('div', m('span.perf-globe', 'globe: -- px'))
         ])
       ]);
     }
