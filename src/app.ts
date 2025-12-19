@@ -53,6 +53,9 @@ export const App: m.ClosureComponent = () => {
 
   return {
     async oninit() {
+      // Hide preload message now that app is taking over
+      document.getElementById('preload')?.classList.add('hidden');
+
       const canvas = document.getElementById('globe') as HTMLCanvasElement;
       if (!canvas) {
         BootstrapService.setError('Canvas element #globe not found');
