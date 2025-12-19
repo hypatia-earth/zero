@@ -21,7 +21,6 @@ const OFFSET_Y_NORTH: f32 = 0.5;      // Y shift for N hemisphere
 const OFFSET_Y_SOUTH: f32 = -1.0;     // Y shift for S hemisphere
 const CHAR_COUNT_OFFSET: f32 = 0.2;   // Extra offset for character count calc
 const TEXT_OPACITY: f32 = 0.9;        // Label opacity
-const GRID_SPACING: f32 = 15.0;       // Grid line spacing in degrees
 const WORLD_SCALE: f32 = 3.0;         // Font size world scale multiplier
 
 // Glyph atlas positions: vec4(x, y, width, height)
@@ -126,12 +125,56 @@ fn renderLonRow(
   return opacity;
 }
 
+// Find nearest line from gridLines uniform (uses helper functions from grid.wgsl)
+fn findNearestLon(lonDeg: f32) -> vec2<f32> {
+  var nearestDeg = 0.0;
+  var nearestDist = 999.0;
+  var nearestOpacity = 0.0;
+
+  for (var i = 0u; i < gridLines.lonCount; i++) {
+    let lineDeg = getGridLonDeg(i);
+    let opacity = getGridLonOpacity(i);
+    if (opacity < 0.01) { continue; }
+
+    var diff = abs(lonDeg - lineDeg);
+    if (diff > 180.0) { diff = 360.0 - diff; }
+
+    if (diff < nearestDist) {
+      nearestDist = diff;
+      nearestDeg = lineDeg;
+      nearestOpacity = opacity;
+    }
+  }
+  return vec2<f32>(nearestDeg, nearestOpacity);
+}
+
+fn findNearestLat(latDeg: f32) -> vec2<f32> {
+  var nearestDeg = 0.0;
+  var nearestDist = 999.0;
+  var nearestOpacity = 0.0;
+
+  for (var i = 0u; i < gridLines.latCount; i++) {
+    let lineDeg = getGridLatDeg(i);
+    let opacity = getGridLatOpacity(i);
+    if (opacity < 0.01) { continue; }
+
+    let diff = abs(latDeg - lineDeg);
+    if (diff < nearestDist) {
+      nearestDist = diff;
+      nearestDeg = lineDeg;
+      nearestOpacity = opacity;
+    }
+  }
+  return vec2<f32>(nearestDeg, nearestOpacity);
+}
+
 // Blend grid text labels onto surface
 fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
   if (u.gridOpacity < 0.01) { return color; }
 
   let latDeg = degrees(lat);
-  let lonDeg = degrees(lon);
+  var lonDeg = degrees(lon);
+  if (lonDeg < 0.0) { lonDeg += 360.0; }
 
   // Globe-space metrics (font size fixed on globe surface)
   let fontSizeWorld = u.gridFontSize * 0.002;  // gridFontSize in globe units
@@ -139,9 +182,12 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
   let worldUnitsPerPixel = (2.0 * u.tanFov * dist) / u.resolution.y;
   let screenPxRange = (fontSizeWorld / worldUnitsPerPixel) / DISTANCE_RANGE;
 
-  // Find nearest grid intersection
-  let nearestLat = round(latDeg / GRID_SPACING) * GRID_SPACING;
-  let nearestLon = round(lonDeg / GRID_SPACING) * GRID_SPACING;
+  // Find nearest grid intersection from animated line positions
+  let nearestLatInfo = findNearestLat(latDeg);
+  let nearestLonInfo = findNearestLon(lonDeg);
+  let nearestLat = nearestLatInfo.x;
+  let nearestLon = nearestLonInfo.x;
+  let labelOpacity = min(nearestLatInfo.y, nearestLonInfo.y);
 
   // Convert offset to glyph UV space
   let dLat = latDeg - nearestLat;
@@ -153,16 +199,21 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
     -(dLat * degToRad) / fontSizeWorld
   );
 
-  // Extract coordinate digits
-  let absLat = i32(abs(nearestLat));
-  let absLon = i32(abs(nearestLon));
+  // Extract coordinate digits (round to integers for label display)
+  let labelLat = i32(round(nearestLat));
+  let labelLon = i32(round(nearestLon));
+  // Convert lon from 0-360 to -180 to 180 for E/W display
+  var displayLon = labelLon;
+  if (displayLon > 180) { displayLon = displayLon - 360; }
+  let absLat = abs(labelLat);
+  let absLon = abs(displayLon);
   let latTens = absLat / 10;
   let latOnes = absLat % 10;
   let lonHundreds = absLon / 100;
   let lonTens = (absLon / 10) % 10;
   let lonOnes = absLon % 10;
-  let isNorth = nearestLat >= 0.0;
-  let isEast = nearestLon >= 0.0;
+  let isNorth = labelLat >= 0;
+  let isEast = displayLon >= 0;
 
   // Character counts for alignment
   let latCharCount = select(2.0, 3.0, latTens > 0);
@@ -188,9 +239,9 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
     opacity = max(opacity, renderLonRow(lonHundreds, lonTens, lonOnes, isEast, lonStartX, baseY + LINE_HEIGHT, screenPxRange));
   }
 
-  if (opacity < 0.01) {
+  if (opacity < 0.01 || labelOpacity < 0.01) {
     return color;
   }
 
-  return vec4f(mix(color.rgb, vec3f(1.0), opacity * TEXT_OPACITY * u.gridOpacity), color.a);
+  return vec4f(mix(color.rgb, vec3f(1.0), opacity * TEXT_OPACITY * u.gridOpacity * labelOpacity), color.a);
 }

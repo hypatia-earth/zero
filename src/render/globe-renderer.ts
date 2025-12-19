@@ -7,6 +7,7 @@ import shaderCode from './shaders/zero-main.wgsl?raw';
 import postprocessShaderCode from './shaders/zero-post.wgsl?raw';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 import { PressureLayer, type PressureResolution } from './pressure-layer';
+import { GridAnimator } from './grid-animator';
 import type { TWeatherTextureLayer } from '../config/types';
 
 export interface GlobeUniforms {
@@ -77,6 +78,9 @@ export class GlobeRenderer {
   private colorTexture!: GPUTexture;
   // Pressure contour layer
   private pressureLayer!: PressureLayer;
+  // Grid animation
+  private gridLinesBuffer!: GPUBuffer;
+  private gridAnimator!: GridAnimator;
   private postProcessPipeline!: GPURenderPipeline;
   private postProcessBindGroup!: GPUBindGroup;
   private postProcessBindGroupLayout!: GPUBindGroupLayout;
@@ -218,6 +222,16 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
+    // Grid lines buffer for animated LoD (vec4 packed: 20*4 arrays + counts)
+    // Size: 4 * 20 * 16 (80 floats as vec4s * 4 arrays) + 16 (counts + pad) = 1296
+    this.gridLinesBuffer = this.device.createBuffer({
+      size: 1296,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    // Grid animator for LoD transitions
+    this.gridAnimator = new GridAnimator();
+
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
     this.fontAtlasTexture = this.device.createTexture({
       size: [1, 1],
@@ -309,6 +323,8 @@ export class GlobeRenderer {
         // Logo texture for idle globe
         { binding: 19, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
         { binding: 20, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        // Grid lines for animated LoD
+        { binding: 21, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
       ],
     });
 
@@ -395,6 +411,7 @@ export class GlobeRenderer {
         { binding: 18, resource: { buffer: this.rainDataBuffer } },
         { binding: 19, resource: this.logoTexture.createView() },
         { binding: 20, resource: this.logoSampler },
+        { binding: 21, resource: { buffer: this.gridLinesBuffer } },
       ],
     });
 
@@ -543,6 +560,16 @@ export class GlobeRenderer {
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 
+    // Update grid animation based on camera altitude
+    // Convert camera distance (world units) to altitude (km)
+    const cameraDistance = Math.sqrt(
+      uniforms.eyePosition[0]! ** 2 +
+      uniforms.eyePosition[1]! ** 2 +
+      uniforms.eyePosition[2]! ** 2
+    );
+    const altitudeKm = (cameraDistance - 1.0) * 6371;  // Earth radius = 1 world unit = 6371 km
+    this.updateGridLines(altitudeKm, 16);  // Assume ~60fps = 16ms frame time
+
     // Update pressure layer based on opacity
     const pressureVisible = uniforms.pressureOpacity > 0.01;
     this.pressureLayer.setEnabled(pressureVisible);
@@ -563,6 +590,57 @@ export class GlobeRenderer {
         opacity: uniforms.pressureOpacity,
       }, false);
     }
+  }
+
+  /**
+   * Update grid line animation state and upload to GPU
+   * Buffer layout matches GridLines struct (vec4 packed arrays):
+   * - lonDegrees[20 vec4s] = 320 bytes
+   * - lonOpacities[20 vec4s] = 320 bytes
+   * - latDegrees[20 vec4s] = 320 bytes
+   * - latOpacities[20 vec4s] = 320 bytes
+   * - lonCount, latCount, pad = 16 bytes
+   * Total: 1296 bytes
+   */
+  private updateGridLines(altitudeKm: number, dtMs: number): void {
+    const gridData = this.gridAnimator.update(altitudeKm, dtMs);
+
+    const buffer = new ArrayBuffer(1296);
+    const view = new DataView(buffer);
+    let offset = 0;
+
+    // Longitude degrees (80 floats packed as 20 vec4s = 320 bytes)
+    for (let i = 0; i < 80; i++) {
+      view.setFloat32(offset, gridData.lonDegrees[i] ?? 0, true);
+      offset += 4;
+    }
+
+    // Longitude opacities (80 floats packed as 20 vec4s = 320 bytes)
+    for (let i = 0; i < 80; i++) {
+      view.setFloat32(offset, gridData.lonOpacities[i] ?? 0, true);
+      offset += 4;
+    }
+
+    // Latitude degrees (80 floats packed as 20 vec4s = 320 bytes)
+    for (let i = 0; i < 80; i++) {
+      view.setFloat32(offset, gridData.latDegrees[i] ?? 0, true);
+      offset += 4;
+    }
+
+    // Latitude opacities (80 floats packed as 20 vec4s = 320 bytes)
+    for (let i = 0; i < 80; i++) {
+      view.setFloat32(offset, gridData.latOpacities[i] ?? 0, true);
+      offset += 4;
+    }
+
+    // Counts (lonCount, latCount, pad, pad = 16 bytes)
+    view.setUint32(offset, gridData.lonCount, true);
+    offset += 4;
+    view.setUint32(offset, gridData.latCount, true);
+    offset += 4;
+    offset += 8;  // padding
+
+    this.device.queue.writeBuffer(this.gridLinesBuffer, 0, buffer);
   }
 
   render(): number | null {
@@ -760,6 +838,7 @@ export class GlobeRenderer {
         { binding: 18, resource: { buffer: this.rainDataBuffer } },
         { binding: 19, resource: this.logoTexture.createView() },
         { binding: 20, resource: this.logoSampler },
+        { binding: 21, resource: { buffer: this.gridLinesBuffer } },
       ],
     });
   }
