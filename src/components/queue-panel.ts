@@ -91,7 +91,9 @@ function formatStats(
   // GPU part (if enabled)
   if (gpuAllocated !== undefined && gpuCapacity !== undefined) {
     const pct = gpuCapacity > 0 ? Math.round((gpuAllocated / gpuCapacity) * 100) : 0;
-    const gpu = `↑ ${pct}%/${formatMB(gpuCapacity)}`;
+    const gpu = pct >= 100
+      ? `✓ ${formatMB(gpuCapacity)}`
+      : `↑ ${pct}%/${formatMB(gpuCapacity)}`;
     return `${download} ${gpu}`;
   }
 

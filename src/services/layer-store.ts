@@ -185,28 +185,35 @@ export class LayerStore {
 
   /**
    * Resize store capacity - may grow or shrink.
-   * Note: This destroys existing buffers and clears timeslots.
-   * Data will need to be refetched after resize.
+   * Growing: preserves existing buffers, adds new free indices.
+   * Shrinking: destroys all buffers (data refetch needed).
    */
   resize(newTimeslots: number): void {
     if (newTimeslots === this.timeslotCount) return;
 
     const oldCount = this.timeslotCount;
-    const evictedCount = this.timeslots.size;
 
-    // Destroy all slot buffers
-    for (const buffers of this.slotBuffers.values()) {
-      for (const buffer of buffers) {
-        buffer.destroy();
+    if (newTimeslots > oldCount) {
+      // Growing: preserve existing buffers, add new free indices
+      for (let i = oldCount; i < newTimeslots; i++) {
+        this.freeSlotIndices.push(i);
       }
+      this.timeslotCount = newTimeslots;
+      console.log(`[Store] ${this.layerId} grew: ${oldCount} → ${newTimeslots} slots (${this.slotBuffers.size} preserved)`);
+    } else {
+      // Shrinking: destroy all buffers (TODO: preserve closest to current time)
+      const evictedCount = this.slotBuffers.size;
+      for (const buffers of this.slotBuffers.values()) {
+        for (const buffer of buffers) {
+          buffer.destroy();
+        }
+      }
+      this.slotBuffers.clear();
+      this.timeslots.clear();
+      this.timeslotCount = newTimeslots;
+      this.freeSlotIndices = Array.from({ length: this.timeslotCount }, (_, i) => i);
+      console.log(`[Store] ${this.layerId} shrunk: ${oldCount} → ${newTimeslots} slots (${evictedCount} evicted)`);
     }
-    this.slotBuffers.clear();
-
-    this.timeslots.clear();
-    this.timeslotCount = newTimeslots;
-    this.freeSlotIndices = Array.from({ length: this.timeslotCount }, (_, i) => i);
-
-    console.log(`[Store] ${this.layerId} resized: ${oldCount} → ${newTimeslots} slots (${evictedCount} evicted)`);
   }
 
   /** Clean up GPU resources */

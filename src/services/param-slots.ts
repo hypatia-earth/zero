@@ -49,6 +49,9 @@ export interface ParamSlots {
   getActiveTimesteps(): TTimestep[];
   setActiveTimesteps(ts: TTimestep[]): void;
 
+  // Resize
+  grow(newTotal: number): void;
+
   // Cleanup
   dispose(): void;
 }
@@ -62,6 +65,7 @@ export function createParamSlots(param: string, timeslots: number): ParamSlots {
   const slots = new Map<TTimestep, Slot>();
   const loadingKeys = new Set<TTimestep>();
   let activeTimesteps: TTimestep[] = [];
+  let capacity = timeslots;
 
   const P = param.slice(0, 4).toUpperCase();
 
@@ -100,7 +104,7 @@ export function createParamSlots(param: string, timeslots: number): ParamSlots {
 
     markLoaded(timestep, slotIndex, loadedPoints) {
       slots.set(timestep, { timestep, slotIndex, loaded: true, loadedPoints });
-      console.log(`[Slot] ${P} loaded ${fmt(timestep)} → slot ${slotIndex} (${slots.size}/${timeslots})`);
+      console.log(`[Slot] ${P} loaded ${fmt(timestep)} → slot ${slotIndex} (${slots.size}/${capacity})`);
     },
 
     isLoading: (ts) => loadingKeys.has(ts),
@@ -117,6 +121,15 @@ export function createParamSlots(param: string, timeslots: number): ParamSlots {
 
     getActiveTimesteps: () => activeTimesteps,
     setActiveTimesteps: (ts) => { activeTimesteps = ts; },
+
+    grow(newTotal) {
+      if (newTotal <= capacity) return;
+      for (let i = capacity; i < newTotal; i++) {
+        freeIndices.push(i);
+      }
+      console.log(`[Slot] ${P} grew: ${capacity} → ${newTotal} slots (${slots.size} preserved)`);
+      capacity = newTotal;
+    },
 
     dispose() {
       slots.clear();

@@ -168,11 +168,18 @@ export class SlotService {
         return;
       }
 
-      // Update ParamSlots capacity (recreate with new size)
+      // Update ParamSlots capacity
+      const isGrowing = newTimeslots > lastTimeslots;
       for (const param of this.readyWeatherLayers) {
-        const oldPs = this.paramSlots.get(param);
-        oldPs?.dispose();
-        this.paramSlots.set(param, createParamSlots(param, newTimeslots));
+        if (isGrowing) {
+          // Growing: just add more free indices, preserve slots
+          this.paramSlots.get(param)?.grow(newTimeslots);
+        } else {
+          // Shrinking: recreate (TODO: preserve closest to current time)
+          const oldPs = this.paramSlots.get(param);
+          oldPs?.dispose();
+          this.paramSlots.set(param, createParamSlots(param, newTimeslots));
+        }
       }
 
       this.timeslotsPerLayer = newTimeslots;
