@@ -96,6 +96,20 @@ export const defaultConfig: ZeroConfig = {
     glowColor: [1.0, 0.6, 0.2],
   },
 
+  grid: {
+    labelMaxRadiusPx: 500,
+    lodLevels: [
+      { lonSpacing: 90, latSpacing: 90 },   // LoD 0: 4 lon, 3 lat
+      { lonSpacing: 60, latSpacing: 30 },   // LoD 1: 6 lon, 7 lat
+      { lonSpacing: 45, latSpacing: 30 },   // LoD 2: 8 lon, 7 lat
+      { lonSpacing: 30, latSpacing: 30 },   // LoD 3: 12 lon, 7 lat
+      { lonSpacing: 20, latSpacing: 20 },   // LoD 4: 18 lon, 9 lat
+      { lonSpacing: 15, latSpacing: 15 },   // LoD 5: 24 lon, 13 lat
+      { lonSpacing: 10, latSpacing: 10 },   // LoD 6: 36 lon, 19 lat
+      { lonSpacing: 5, latSpacing: 5 },     // LoD 7: 72 lon, 37 lat
+    ],
+  },
+
   render: {
     opacityAnimationMs: 100,  // Layer fade in/out duration
   },

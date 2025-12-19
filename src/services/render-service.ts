@@ -230,6 +230,7 @@ export class RenderService {
       gridEnabled: this.animatedOpacity.grid > 0.01,  // Animated boolean
       gridOpacity: this.animatedOpacity.grid,
       gridFontSize: this.optionsService.options.value.grid.fontSize,
+      gridLabelMaxRadius: this.configService.getConfig().grid.labelMaxRadiusPx,
     };
   }
 

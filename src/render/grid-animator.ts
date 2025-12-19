@@ -5,13 +5,8 @@
  * LoD level changes based on altitude with hysteresis.
  */
 
-// LoD level configuration
-interface LodLevel {
-  lonSpacing: number;   // degrees between longitude lines
-  latSpacing: number;   // degrees between latitude lines
-  zoomIn: number;       // altitude (km) to transition TO this level
-  zoomOut: number;      // altitude (km) to transition FROM this level
-}
+import { defaultConfig } from '../config/defaults';
+import type { GridLodLevel } from '../config/types';
 
 // Per-line animation state
 interface LineState {
@@ -37,18 +32,21 @@ export interface GridLinesUniforms {
 const MAX_LINES = 80;  // max lines per axis (72 lon + margin)
 const ANIMATION_DURATION = 1000;  // ms per birth/death cycle
 
-// LoD levels from feature spec
+// LoD levels from config
+const LOD_LEVELS: GridLodLevel[] = defaultConfig.grid.lodLevels;
+
+// Altitude thresholds for LoD transitions (km)
 // zoomIn: altitude to transition TO this level (getting closer)
-// zoomOut: altitude to transition FROM this level back to previous (getting further)
-const LOD_LEVELS: LodLevel[] = [
-  { lonSpacing: 90, latSpacing: 90, zoomIn: Infinity, zoomOut: Infinity },  // LoD 0: 4 lon, 3 lat
-  { lonSpacing: 60, latSpacing: 30, zoomIn: 23000, zoomOut: 27000 },        // LoD 1: 6 lon, 7 lat
-  { lonSpacing: 45, latSpacing: 30, zoomIn: 13000, zoomOut: 17000 },        // LoD 2: 8 lon, 7 lat
-  { lonSpacing: 30, latSpacing: 30, zoomIn: 7000, zoomOut: 9000 },          // LoD 3: 12 lon, 7 lat
-  { lonSpacing: 20, latSpacing: 20, zoomIn: 5000, zoomOut: 6000 },          // LoD 4: 18 lon, 9 lat
-  { lonSpacing: 15, latSpacing: 15, zoomIn: 3500, zoomOut: 4500 },          // LoD 5: 24 lon, 13 lat
-  { lonSpacing: 10, latSpacing: 10, zoomIn: 1700, zoomOut: 2300 },          // LoD 6: 36 lon, 19 lat
-  { lonSpacing: 5, latSpacing: 5, zoomIn: 700, zoomOut: 900 },              // LoD 7: 72 lon, 37 lat
+// zoomOut: altitude to transition FROM this level (getting further)
+const LOD_THRESHOLDS = [
+  { zoomIn: Infinity, zoomOut: Infinity },  // LoD 0
+  { zoomIn: 23000, zoomOut: 27000 },        // LoD 1
+  { zoomIn: 13000, zoomOut: 17000 },        // LoD 2
+  { zoomIn: 7000, zoomOut: 9000 },          // LoD 3
+  { zoomIn: 5000, zoomOut: 6000 },          // LoD 4
+  { zoomIn: 3500, zoomOut: 4500 },          // LoD 5
+  { zoomIn: 1700, zoomOut: 2300 },          // LoD 6
+  { zoomIn: 700, zoomOut: 900 },            // LoD 7
 ];
 
 // Generate line positions for a given spacing
@@ -96,8 +94,8 @@ export class GridAnimator {
 
   private getLodForAltitude(altitude: number): number {
     // Find highest LoD level where altitude is below zoomIn threshold
-    for (let i = LOD_LEVELS.length - 1; i >= 0; i--) {
-      if (altitude < LOD_LEVELS[i]!.zoomIn) {
+    for (let i = LOD_THRESHOLDS.length - 1; i >= 0; i--) {
+      if (altitude < LOD_THRESHOLDS[i]!.zoomIn) {
         return i;
       }
     }
@@ -166,17 +164,17 @@ export class GridAnimator {
     let newLevel = currentLevel;
 
     // Check zoom in (need more lines) - use hysteresis
-    if (currentLevel < LOD_LEVELS.length - 1) {
-      const nextLevel = LOD_LEVELS[currentLevel + 1]!;
-      if (altitude < nextLevel.zoomIn) {
+    if (currentLevel < LOD_THRESHOLDS.length - 1) {
+      const nextThreshold = LOD_THRESHOLDS[currentLevel + 1]!;
+      if (altitude < nextThreshold.zoomIn) {
         newLevel = currentLevel + 1;
       }
     }
 
     // Check zoom out (need fewer lines) - use hysteresis
     if (currentLevel > 0) {
-      const thisLevel = LOD_LEVELS[currentLevel]!;
-      if (altitude > thisLevel.zoomOut) {
+      const thisThreshold = LOD_THRESHOLDS[currentLevel]!;
+      if (altitude > thisThreshold.zoomOut) {
         newLevel = currentLevel - 1;
       }
     }

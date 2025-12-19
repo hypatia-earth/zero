@@ -25,6 +25,7 @@ export interface GlobeUniforms {
   gridEnabled: boolean;
   gridOpacity: number;
   gridFontSize: number;
+  gridLabelMaxRadius: number;
   earthOpacity: number;
   tempOpacity: number;
   rainOpacity: number;
@@ -543,10 +544,9 @@ export class GlobeRenderer {
     view.setUint32(offset, uniforms.tempSlot0, true); offset += 4;
     view.setUint32(offset, uniforms.tempSlot1, true); offset += 4;
     view.setFloat32(offset, uniforms.gridFontSize, true); offset += 4;
+    view.setFloat32(offset, uniforms.gridLabelMaxRadius, true); offset += 4;
 
-    // tempLoadedPad + extra padding for vec2f 8-byte alignment + tempPaletteRange
-    offset += 4; // tempLoadedPad
-    offset += 4; // extra padding for vec2f alignment
+    // tempPaletteRange (vec2f needs 8-byte alignment, we have it after 2x f32)
     view.setFloat32(offset, uniforms.tempPaletteRange[0]!, true); offset += 4;
     view.setFloat32(offset, uniforms.tempPaletteRange[1]!, true); offset += 4;
 

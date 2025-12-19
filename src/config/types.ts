@@ -182,6 +182,18 @@ export interface SunConfig {
   glowColor: [number, number, number];
 }
 
+export interface GridLodLevel {
+  lonSpacing: number;  // degrees between longitude lines
+  latSpacing: number;  // degrees between latitude lines
+}
+
+export interface GridConfig {
+  /** Max globe radius in CSS pixels before label font starts shrinking */
+  labelMaxRadiusPx: number;
+  /** LoD levels indexed by level number */
+  lodLevels: GridLodLevel[];
+}
+
 export interface AppConfig {
   /** Application name */
   name: string;
@@ -239,6 +251,9 @@ export interface ZeroConfig {
 
   /** Sun rendering settings */
   sun: SunConfig;
+
+  /** Grid layer settings */
+  grid: GridConfig;
 
   /** Render settings */
   render: {
