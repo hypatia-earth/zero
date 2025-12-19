@@ -97,6 +97,7 @@ export const defaultConfig: ZeroConfig = {
   },
 
   grid: {
+    opacity: 0.8,
     labelMaxRadiusPx: 500,
     lodLevels: [
       { lonSpacing: 90, latSpacing: 90 },   // LoD 0: 4 lon, 3 lat

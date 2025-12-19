@@ -188,6 +188,8 @@ export interface GridLodLevel {
 }
 
 export interface GridConfig {
+  /** Default opacity 0-1 */
+  opacity: number;
   /** Max globe radius in CSS pixels before label font starts shrinking */
   labelMaxRadiusPx: number;
   /** LoD levels indexed by level number */

@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import type { TLayer } from '../config/types';
+import { defaultConfig } from '../config/defaults';
 
 // ============================================================
 // UI Metadata Types
@@ -943,7 +944,7 @@ export const defaultOptions: ZeroOptions = {
   },
   earth: { enabled: true, opacity: 1, blend: 0 },
   sun: { enabled: true, opacity: 1 },
-  grid: { enabled: true, opacity: 0.8, fontSize: 8 },
+  grid: { enabled: true, opacity: defaultConfig.grid.opacity, fontSize: 8 },
   temp: { enabled: true, opacity: 0.6, palette: 'ESRI Temperature', resolution: 'full' },
   rain: { enabled: false, opacity: 1.0, resolution: 'full' },
   clouds: { enabled: false, opacity: 0.5, resolution: 'full' },
