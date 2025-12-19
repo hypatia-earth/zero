@@ -27,9 +27,17 @@ import { throttle } from '../utils/debounce';
 const DEBUG = false;
 
 const DB_NAME = 'hypatia-zero';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 const STORE_NAME = 'options';
 const OPTIONS_KEY = 'user-options';
+const USAGE_STORE = 'usage';
+const USAGE_KEY = 'stats';
+
+interface UsageStats {
+  visits: number;
+  firstVisit: string;  // ISO date
+  lastVisit: string;   // ISO date
+}
 
 // ============================================================
 // IndexedDB helpers
@@ -46,6 +54,9 @@ async function openDB(): Promise<{ db: IDBDatabase; isNewDB: boolean }> {
       const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME);
+      }
+      if (!db.objectStoreNames.contains(USAGE_STORE)) {
+        db.createObjectStore(USAGE_STORE);
       }
     };
   });
@@ -91,6 +102,48 @@ async function saveToDB(options: Partial<ZeroOptions>): Promise<void> {
   }
 }
 
+async function loadUsageStats(): Promise<UsageStats | null> {
+  try {
+    const { db } = await openDB();
+    // Guard for migration: store might not exist yet
+    if (!db.objectStoreNames.contains(USAGE_STORE)) {
+      db.close();
+      return null;
+    }
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(USAGE_STORE, 'readonly');
+      const store = tx.objectStore(USAGE_STORE);
+      const request = store.get(USAGE_KEY);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result ?? null);
+      tx.oncomplete = () => db.close();
+    });
+  } catch (err) {
+    console.warn('[Options] Usage stats load error:', err);
+    return null;
+  }
+}
+
+async function saveUsageStats(stats: UsageStats): Promise<void> {
+  try {
+    const { db } = await openDB();
+    // Guard for migration: store might not exist yet
+    if (!db.objectStoreNames.contains(USAGE_STORE)) {
+      db.close();
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(USAGE_STORE, 'readwrite');
+      const store = tx.objectStore(USAGE_STORE);
+      store.put(stats, USAGE_KEY);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) {
+    console.warn('[Options] Usage stats save error:', err);
+  }
+}
+
 // ============================================================
 // Path utilities
 // ============================================================
@@ -129,6 +182,10 @@ export class OptionsService {
   /** Dialog state */
   dialogOpen = false;
   dialogFilter: OptionFilter | undefined = undefined;
+
+  /** First time user detection */
+  isFirstTimeUser = false;
+  usageStats: UsageStats | null = null;
 
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
   private urlSyncEnabled = false;
@@ -181,6 +238,23 @@ export class OptionsService {
     }
 
     const { options: stored, isNewDB } = await loadFromDB();
+
+    // Track usage stats
+    const now = new Date().toISOString();
+    const existingStats = await loadUsageStats();
+    if (existingStats) {
+      this.usageStats = {
+        visits: existingStats.visits + 1,
+        firstVisit: existingStats.firstVisit,
+        lastVisit: now,
+      };
+      this.isFirstTimeUser = false;
+    } else {
+      this.usageStats = { visits: 1, firstVisit: now, lastVisit: now };
+      this.isFirstTimeUser = true;
+    }
+    await saveUsageStats(this.usageStats);
+    console.log(`[Options] Visit #${this.usageStats.visits}, first: ${this.isFirstTimeUser}`);
 
     if (isNewDB) {
       console.log('[Options] IndexedDB initialized');

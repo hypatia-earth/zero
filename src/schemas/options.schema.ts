@@ -26,7 +26,7 @@ type OptionFilter = TLayer | 'global' | 'dataCache' | 'gpu' | 'viewState' | 'que
 interface UIMetadata {
   label: string;
   description?: string;
-  group: 'regional' | 'download' | 'interaction' | 'layers' | 'gpu' | 'advanced' | 'viewState';
+  group: 'interface' | 'regional' | 'download' | 'interaction' | 'layers' | 'gpu' | 'advanced' | 'viewState';
   filter: OptionFilter | OptionFilter[];
   order: number;
   control: ControlType;
@@ -71,6 +71,12 @@ function opt<T extends z.ZodTypeAny>(schema: T, meta: OptionMeta): T & { _meta: 
 // ============================================================
 
 export const optionGroups = {
+  interface: {
+    id: 'interface',
+    label: 'Interface',
+    description: 'User interface behavior',
+    order: 0,
+  },
   regional: {
     id: 'regional',
     label: 'Regional',
@@ -124,6 +130,23 @@ export const optionsSchema = z.object({
     lat: z.number().min(-90).max(90),
     lon: z.number(),
     altitude: z.number().positive(),
+  }),
+
+  // ----------------------------------------------------------
+  // Interface Settings
+  // ----------------------------------------------------------
+  interface: z.object({
+    autocloseModal: opt(
+      z.boolean().default(true),
+      {
+        label: 'Auto-close startup modal',
+        description: 'Automatically close the loading modal when ready',
+        group: 'interface',
+        filter: 'global',
+        order: 0,
+        control: 'toggle',
+      }
+    ),
   }),
 
   // ----------------------------------------------------------
@@ -892,6 +915,7 @@ export const defaultOptions: ZeroOptions = {
     lon: 0,
     altitude: 14_000,  // km from surface
   },
+  interface: { autocloseModal: true },
   gpu: { timeslotsPerLayer: '4' },
   viewport: {
     physicsModel: 'inertia',

@@ -215,6 +215,7 @@ export const App: m.ClosureComponent = () => {
         // when pressure.enabled changes (same as temp)
 
         BootstrapService.complete();
+        canvas.classList.add('ready');
         console.log(`%c[ZERO] Bootstrap complete (${(performance.now() / 1000).toFixed(2)}s)`, 'color: darkgreen; font-weight: bold');
         m.redraw();
 
@@ -249,16 +250,13 @@ export const App: m.ClosureComponent = () => {
 
     view() {
       const bootstrapState = BootstrapService.state.value;
-
-      if (!bootstrapState.complete || bootstrapState.error) {
-        return m(BootstrapModal);
-      }
+      const ready = bootstrapState.complete && !bootstrapState.error;
 
       return [
-        m(BootstrapModal),
-        m(OptionsDialog, { optionsService, paletteService, dialogService, configService }),
-        m(InfoDialog, { infoService, dialogService }),
-        m('.ui-container', [
+        m(BootstrapModal, ready ? { optionsService } : {}),
+        ready && m(OptionsDialog, { optionsService, paletteService, dialogService, configService }),
+        ready && m(InfoDialog, { infoService, dialogService }),
+        ready && m('.ui-container', [
           m(LogoPanel),
           m(LayersPanel, { configService, optionsService }),
           m(TimeCirclePanel, { optionsService }),

@@ -252,148 +252,147 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     },
 
     view({ attrs }) {
-    const { optionsService, slotService, timestepService, configService } = attrs;
-    const readyWeatherLayers = configService.getReadyLayers().filter(isWeatherLayer);
-    const currentTime = optionsService.options.value.viewState.time;
-    const window = {
-      start: timestepService.toDate(timestepService.first()),
-      end: timestepService.toDate(timestepService.last()),
-    };
+      const { optionsService, slotService, timestepService, configService } = attrs;
+      const readyWeatherLayers = configService.getReadyLayers().filter(isWeatherLayer);
+      const currentTime = optionsService.options.value.viewState.time;
+      const window = {
+        start: timestepService.toDate(timestepService.first()),
+        end: timestepService.toDate(timestepService.last()),
+      };
 
-    const windowMs = window.end.getTime() - window.start.getTime();
-    const currentMs = currentTime.getTime() - window.start.getTime();
-    const progress = Math.max(0, Math.min(1, currentMs / windowMs));
+      const windowMs = window.end.getTime() - window.start.getTime();
+      const currentMs = currentTime.getTime() - window.start.getTime();
+      const progress = Math.max(0, Math.min(1, currentMs / windowMs));
 
-    /** Convert mouse x position to time using disk unwarp */
-    const mouseToTime = (e: MouseEvent): Date => {
-      const rect = canvasRef!.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;  // 0-1 screen position
-      const t = diskUnwarp(x);  // 0-1 linear time
-      return new Date(window.start.getTime() + t * windowMs);
-    };
+      /** Convert mouse x position to time using disk unwarp */
+      const mouseToTime = (e: MouseEvent): Date => {
+        const rect = canvasRef!.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;  // 0-1 screen position
+        const t = diskUnwarp(x);  // 0-1 linear time
+        return new Date(window.start.getTime() + t * windowMs);
+      };
 
-    const handleMouseDown = (e: MouseEvent) => {
-      isDragging = true;
-      const time = mouseToTime(e);
-      optionsService.update(d => { d.viewState.time = time; });
-    };
+      const handleMouseDown = (e: MouseEvent) => {
+        isDragging = true;
+        const time = mouseToTime(e);
+        optionsService.update(d => { d.viewState.time = time; });
+      };
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return;
-      const time = mouseToTime(e);
-      optionsService.update(d => { d.viewState.time = time; });
-    };
+      const handleMouseMove = (e: MouseEvent) => {
+        if (!isDragging) return;
+        const time = mouseToTime(e);
+        optionsService.update(d => { d.viewState.time = time; });
+      };
 
-    const handleMouseUp = () => {
-      isDragging = false;
-    };
+      const handleMouseUp = () => {
+        isDragging = false;
+      };
 
-    const handleMouseLeave = () => {
-      isDragging = false;
-    };
+      const handleMouseLeave = () => {
+        isDragging = false;
+      };
 
-    const formatDate = (date: Date) => {
-      return `${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
-    };
+      const formatDate = (date: Date) => {
+        return `${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
+      };
 
-    // Build ECMWF set (ISO strings for comparison)
-    const tsState = timestepService.state.value;
-    const ecmwfSet = new Set<string>();
-    for (const ts of tsState.ecmwf) {
-      ecmwfSet.add(timestepService.toDate(ts).toISOString());
-    }
-
-    // Build cached, GPU, and active maps per layer
-    const cachedMap = new Map<TWeatherLayer, Set<string>>();
-    const gpuMap = new Map<TWeatherLayer, Set<string>>();
-    const activeMap = new Map<TWeatherLayer, Set<string>>();
-
-    for (const layer of readyWeatherLayers) {
-      const paramState = tsState.params.get(layer);
-
-      // Cached in SW
-      const cachedSet = new Set<string>();
-      for (const ts of paramState!.cache) {
-        cachedSet.add(timestepService.toDate(ts).toISOString());
+      // Build ECMWF set (ISO strings for comparison)
+      const tsState = timestepService.state.value;
+      const ecmwfSet = new Set<string>();
+      for (const ts of tsState.ecmwf) {
+        ecmwfSet.add(timestepService.toDate(ts).toISOString());
       }
-      cachedMap.set(layer, cachedSet);
 
-      // GPU loaded (from timestepService state)
-      const gpuSet = new Set<string>();
-      for (const ts of paramState!.gpu) {
-        gpuSet.add(timestepService.toDate(ts).toISOString());
+      // Build cached, GPU, and active maps per layer
+      const cachedMap = new Map<TWeatherLayer, Set<string>>();
+      const gpuMap = new Map<TWeatherLayer, Set<string>>();
+      const activeMap = new Map<TWeatherLayer, Set<string>>();
+
+      for (const layer of readyWeatherLayers) {
+        const paramState = tsState.params.get(layer);
+
+        // Cached in SW
+        const cachedSet = new Set<string>();
+        for (const ts of paramState!.cache) {
+          cachedSet.add(timestepService.toDate(ts).toISOString());
+        }
+        cachedMap.set(layer, cachedSet);
+
+        // GPU loaded (from timestepService state)
+        const gpuSet = new Set<string>();
+        for (const ts of paramState!.gpu) {
+          gpuSet.add(timestepService.toDate(ts).toISOString());
+        }
+        gpuMap.set(layer, gpuSet);
+
+        // Active timesteps (0, 1, or 2)
+        const activeSet = new Set<string>();
+        for (const ts of slotService.getActiveTimesteps(layer)) {
+          activeSet.add(timestepService.toDate(ts).toISOString());
+        }
+        activeMap.set(layer, activeSet);
       }
-      gpuMap.set(layer, gpuSet);
 
-      // Active timesteps (0, 1, or 2)
-      const activeSet = new Set<string>();
-      for (const ts of slotService.getActiveTimesteps(layer)) {
-        activeSet.add(timestepService.toDate(ts).toISOString());
-      }
-      activeMap.set(layer, activeSet);
-    }
+      DEBUG && console.log(`[Timebar] ECMWF: ${ecmwfSet.size}, cache temp: ${cachedMap.get('temp')?.size}, GPU temp: ${gpuMap.get('temp')?.size}`);
 
-    DEBUG && console.log(`[Timebar] ECMWF: ${ecmwfSet.size}, cache temp: ${cachedMap.get('temp')?.size}, GPU temp: ${gpuMap.get('temp')?.size}`);
+      // Filter to only enabled weather layers
+      const opts = attrs.optionsService.options.value;
+      const activeWeatherLayers = readyWeatherLayers.filter(layer => opts[layer].enabled);
 
-    // Filter to only enabled weather layers
-    const opts = attrs.optionsService.options.value;
-    const activeWeatherLayers = readyWeatherLayers.filter(layer => opts[layer].enabled);
+      // Get camera position and sun state for brightness calculation
+      const viewState = opts.viewState;
+      const sunEnabled = opts.sun.enabled;
 
-    // Get camera position and sun state for brightness calculation
-    const viewState = opts.viewState;
-    const sunEnabled = opts.sun.enabled;
-
-    return m('.panel.timebar', [
-      m('.control.timeslider', { style: 'width: 100%; height: 42px; position: relative;' }, [
-        // Canvas for ticks and knob - acts as custom slider
-        m('canvas.time-ticks', {
-            style: 'width: 100%; height: 100%; cursor: pointer;',
-            onmousedown: handleMouseDown,
-            onmousemove: handleMouseMove,
-            onmouseup: handleMouseUp,
-            onmouseleave: handleMouseLeave,
-            oncreate: (vnode: m.VnodeDOM) => {
-              canvasRef = vnode.dom as HTMLCanvasElement;
-              drawTimebar(
-                canvasRef,
-                window,
-                activeWeatherLayers,
-                ecmwfSet,
-                cachedMap,
-                gpuMap,
-                activeMap,
-                new Date(),
-                progress,
-                viewState.lat,
-                viewState.lon,
-                sunEnabled
-              );
-            },
-            onupdate: (vnode: m.VnodeDOM) => {
-              canvasRef = vnode.dom as HTMLCanvasElement;
-              drawTimebar(
-                canvasRef,
-                window,
-                activeWeatherLayers,
-                ecmwfSet,
-                cachedMap,
-                gpuMap,
-                activeMap,
-                new Date(),
-                progress,
-                viewState.lat,
-                viewState.lon,
-                sunEnabled
-              );
-            },
-          }),
-      ]),
-      m('.timesteps', { style: 'display: flex; justify-content: space-between; width: 100%; padding: 0 24px; font-size: 12px; opacity: 0.6;' }, [
-        m('span', formatDate(window.start)),
-        m('span', 'NOW'),
-        m('span', formatDate(window.end)),
-      ]),
-    ]);
+      return m('.panel.timebar', [
+        m('.control.timeslider', [
+          // Canvas for ticks and knob - acts as custom slider
+          m('canvas.time-ticks', {
+              onmousedown: handleMouseDown,
+              onmousemove: handleMouseMove,
+              onmouseup: handleMouseUp,
+              onmouseleave: handleMouseLeave,
+              oncreate: (vnode: m.VnodeDOM) => {
+                canvasRef = vnode.dom as HTMLCanvasElement;
+                drawTimebar(
+                  canvasRef,
+                  window,
+                  activeWeatherLayers,
+                  ecmwfSet,
+                  cachedMap,
+                  gpuMap,
+                  activeMap,
+                  new Date(),
+                  progress,
+                  viewState.lat,
+                  viewState.lon,
+                  sunEnabled
+                );
+              },
+              onupdate: (vnode: m.VnodeDOM) => {
+                canvasRef = vnode.dom as HTMLCanvasElement;
+                drawTimebar(
+                  canvasRef,
+                  window,
+                  activeWeatherLayers,
+                  ecmwfSet,
+                  cachedMap,
+                  gpuMap,
+                  activeMap,
+                  new Date(),
+                  progress,
+                  viewState.lat,
+                  viewState.lon,
+                  sunEnabled
+                );
+              },
+            }),
+        ]),
+        m('.timesteps', [
+          m('span', formatDate(window.start)),
+          m('span', 'NOW'),
+          m('span', formatDate(window.end)),
+        ]),
+      ]);
     },
   };
 };

@@ -347,7 +347,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
     if (!optionsService.dialogOpen) return null;
 
     const isFloating = dialogService.isFloating('options');
-    const zIndex = dialogService.getZIndex('options');
+    const isTop = dialogService.isTop('options');
 
     const filter = optionsService.dialogFilter;
     const options = optionsService.options.value;
@@ -451,9 +451,9 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
       windowStyle.transform = `translate(${dragState.offsetX}px, ${dragState.offsetY}px)`;
     }
 
-    const dialogStyle = isFloating ? { zIndex: String(zIndex) } : {};
+    const floatingClass = isFloating ? (isTop ? 'floating top' : 'floating behind') : '';
 
-    return m('div.dialog.options', { class: isFloating ? 'floating' : '', style: dialogStyle }, [
+    return m('div.dialog.options', { class: floatingClass }, [
       m('div.backdrop', {
         onclick: () => {
           if (dialogService.shouldCloseOnBackdrop('options')) {

@@ -23,9 +23,8 @@
   left: var(--layout-margin-left);
 }
 
-.panel.logo .brand-logo {
-  width: var(--layout-logo-width);
-  height: auto;
+.panel.logo img {
+  height: 40px;
 }
 
 .panel.layers {
@@ -103,12 +102,25 @@
 }
 
 .timeslider {
-  pointer-events: auto;
+  width: 100%;
+  height: 42px;
   position: relative;
-  padding: 16px 24px;
+  pointer-events: auto;
+}
+
+.timeslider canvas {
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
 }
 
 .timesteps {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 24px;
+  font-size: 12px;
+  opacity: 0.6;
   pointer-events: auto;
   margin-top: 12px;
 }

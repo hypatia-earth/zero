@@ -15,9 +15,8 @@ export class DialogService {
   // Floating state (persists when dialog closes)
   private floatingDialogs = new Set<DialogId>();
 
-  // Z-index per dialog
-  private zIndexMap = new Map<DialogId, number>();
-  private zCounter = 100;
+  // Which floating dialog is on top
+  private topDialog: DialogId | null = null;
 
   // Desktop breakpoint from CSS
   readonly breakpointDesktop: number;
@@ -38,8 +37,8 @@ export class DialogService {
     return this.isDesktop && this.floatingDialogs.has(id);
   }
 
-  getZIndex(id: DialogId): number {
-    return this.zIndexMap.get(id) ?? this.zCounter;
+  isTop(id: DialogId): boolean {
+    return this.topDialog === id;
   }
 
   toggleFloating(id: DialogId): void {
@@ -52,9 +51,7 @@ export class DialogService {
   }
 
   bringToFront(id: DialogId): void {
-    this.zCounter++;
-    this.zIndexMap.set(id, this.zCounter);
-    console.log(`[Dialog] bringToFront: ${id} → z-index ${this.zCounter}`);
+    this.topDialog = id;
     m.redraw();
   }
 

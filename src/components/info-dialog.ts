@@ -36,7 +36,7 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
       if (!infoService.dialogOpen) return null;
 
       const isFloating = dialogService.isFloating('info');
-      const zIndex = dialogService.getZIndex('info');
+      const isTop = dialogService.isTop('info');
       const isDesktop = dialogService.isDesktop;
 
       // Drag handlers (desktop only)
@@ -80,9 +80,9 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
         windowStyle.transform = `translate(${dragState.offsetX}px, ${dragState.offsetY}px)`;
       }
 
-      const dialogStyle = isFloating ? { zIndex: String(zIndex) } : {};
+      const floatingClass = isFloating ? (isTop ? 'floating top' : 'floating behind') : '';
 
-      return m('div.dialog.info', { class: isFloating ? 'floating' : '', style: dialogStyle }, [
+      return m('div.dialog.info', { class: floatingClass }, [
         m('div.backdrop', {
           onclick: () => {
             if (dialogService.shouldCloseOnBackdrop('info')) {

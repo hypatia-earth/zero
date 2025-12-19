@@ -12,7 +12,6 @@ export const LogoPanel: m.ClosureComponent = () => {
           m('img', {
             src: '/zero.hypatia.earth-brand-white.svg',
             alt: 'Zero - hypatia.earth',
-            style: 'height: 40px;',
           }),
         ]),
       ]);
