@@ -122,7 +122,7 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
           m('div.footer', [
             m('span.version', `v${__APP_VERSION__} (${__APP_HASH__})`),
             m('div.actions', [
-              m('button.btn-close', {
+              m('button.btn.btn-secondary', {
                 onclick: () => {
                   resetDragState();
                   infoService.closeDialog();

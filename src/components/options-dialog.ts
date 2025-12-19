@@ -496,10 +496,10 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
           !filter || filter === 'global' ? m('div.danger-zone', { key: '_danger_zone' }, [
             m('h3', 'Danger Zone'),
             m('div.actions', [
-              m('button.btn-danger', {
+              m('button.btn.btn-danger', {
                 onclick: () => optionsService.reset()
               }, 'Reset All'),
-              m('button.btn-danger', {
+              m('button.btn.btn-danger', {
                 onclick: async () => {
                   await clearCache();
                   location.reload();
@@ -533,10 +533,10 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
         m('div.footer', [
           m('span.version', `v${__APP_VERSION__} (${__APP_HASH__})`),
           m('div.actions', [
-            filter && filter !== 'global' ? m('button.btn-reset', {
+            filter && filter !== 'global' ? m('button.btn.btn-danger', {
               onclick: () => optionsService.reset(filter)
             }, 'Reset Layer') : null,
-            m('button.btn-close', {
+            m('button.btn.btn-secondary', {
               onclick: () => {
                 resetDragState();
                 optionsService.closeDialog();

@@ -82,6 +82,12 @@
   --color-primary-border-selected: rgba(74, 158, 255, 0.4);
   --color-primary-border-focus: rgba(74, 158, 255, 0.5);
 
+  /* Button accent (sand) */
+  --color-btn-primary: #C9A96E;
+  --color-btn-secondary: #C9A96E;
+  --color-btn-secondary-bg: rgba(201, 169, 110, 0.2);
+  --color-btn-secondary-bg-hover: rgba(201, 169, 110, 0.3);
+
   /* Danger (red) */
   --color-danger-bg: rgba(255, 100, 100, 0.15);
   --color-danger-bg-hover: rgba(255, 100, 100, 0.25);
@@ -147,4 +153,61 @@
 .widget {
   position: relative;
   margin-bottom: 10px;
+}
+
+/* =============================================================================
+   Buttons
+   ============================================================================= */
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, filter 0.15s, transform 0.1s;
+  border: 1px solid transparent;
+}
+
+/* Primary - solid sand, prominent action */
+.btn-primary {
+  background: var(--color-btn-primary);
+  color: #2a2a2a;
+  border-color: var(--color-btn-primary);
+}
+
+@media (hover: hover) {
+  .btn-primary:hover {
+    filter: brightness(1.15);
+  }
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+/* Secondary - translucent sand, subtle action */
+.btn-secondary {
+  background: var(--color-btn-secondary-bg);
+  color: var(--color-btn-secondary);
+  border-color: var(--color-btn-secondary-bg-hover);
+}
+
+@media (hover: hover) {
+  .btn-secondary:hover {
+    background: var(--color-btn-secondary-bg-hover);
+  }
+}
+
+/* Danger - red, destructive action */
+.btn-danger {
+  background: var(--color-danger-bg);
+  color: #ff8888;
+  border-color: var(--color-danger-bg-active);
+}
+
+@media (hover: hover) {
+  .btn-danger:hover {
+    background: var(--color-danger-bg-hover);
+  }
 }

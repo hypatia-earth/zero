@@ -156,25 +156,9 @@
   text-align: center;
 }
 
-.dialog.bootstrap .start-button {
+.dialog.bootstrap .start .btn {
   padding: 12px 48px;
   font-size: var(--font-size-lg);
-  font-weight: 500;
-  background: var(--color-primary);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: filter 0.15s, transform 0.1s;
-}
-
-.dialog.bootstrap .start-button:hover {
-  filter: brightness(1.15);
-  transform: scale(1.02);
-}
-
-.dialog.bootstrap .start-button:active {
-  transform: scale(0.98);
 }
 
 /* Footer with version */
@@ -676,22 +660,6 @@
   gap: 12px;
 }
 
-.dialog.options .btn-danger {
-  background: transparent;
-  border: 1px solid var(--color-danger-border);
-  color: #ff8888;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-}
-
-@media (hover: hover) {
-  .dialog.options .btn-danger:hover {
-    background: var(--color-danger-bg-hover);
-  }
-}
-
 .dialog.options .footer {
   display: flex;
   align-items: center;
@@ -705,38 +673,8 @@
   gap: 12px;
 }
 
-.dialog.options .btn-reset {
-  background: var(--color-danger-bg);
-  border: 1px solid var(--color-danger-bg-active);
-  color: #ff8888;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-@media (hover: hover) {
-  .dialog.options .btn-reset:hover {
-    background: var(--color-danger-bg-hover);
-  }
-}
-
-.dialog.options .btn-close {
-  background: var(--color-primary-bg);
-  border: 1px solid var(--color-primary-bg-hover);
-  color: var(--color-primary);
+.dialog.options .footer .btn-secondary {
   padding: 8px 24px;
-  border-radius: 6px;
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-@media (hover: hover) {
-  .dialog.options .btn-close:hover {
-    background: var(--color-primary-bg-hover);
-  }
 }
 
 /* =============================================================================
@@ -995,21 +933,8 @@
   gap: 12px;
 }
 
-.dialog.info .btn-close {
-  background: var(--color-primary-bg);
-  border: 1px solid var(--color-primary-bg-hover);
-  color: var(--color-primary);
+.dialog.info .footer .btn-secondary {
   padding: 8px 24px;
-  border-radius: 6px;
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-@media (hover: hover) {
-  .dialog.info .btn-close:hover {
-    background: var(--color-primary-bg-hover);
-  }
 }
 
 /* =============================================================================

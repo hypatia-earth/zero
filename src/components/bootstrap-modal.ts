@@ -83,7 +83,7 @@ export const BootstrapModal: m.ClosureComponent<BootstrapModalAttrs> = () => {
             m('.detail', state.error),
           ]),
           showStartButton && m('.start', [
-            m('button.start-button', {
+            m('button.btn.btn-primary', {
               onclick: () => startFadeOut(),
             }, 'Start'),
           ]),
