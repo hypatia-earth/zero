@@ -212,6 +212,14 @@ export class GridAnimator {
     targetPositions: number[],
     isLon: boolean
   ): void {
+    if (isLon) {
+      this.transitionLonLines(lines, targetPositions);
+    } else {
+      this.transitionLatLines(lines, targetPositions);
+    }
+  }
+
+  private transitionLonLines(lines: LineState[], targetPositions: number[]): void {
     const result: LineState[] = [];
 
     // Convert to signed representation (-180 to 180) for easier logic
@@ -227,7 +235,6 @@ export class GridAnimator {
     if (old0 && has0) {
       result.push(old0.line);
     } else if (has0) {
-      // 0° born (appears instantly, no slide needed)
       result.push({ targetDeg: 0, currentDeg: 0, startDeg: 0, opacity: 1, isNew: false, isDying: false });
     }
 
@@ -243,18 +250,43 @@ export class GridAnimator {
     // Process positive side (0 < deg < 180) - outward means toward 180
     const oldPos = oldSigned.filter(o => o.signed > 0 && o.signed < 180).sort((a, b) => b.signed - a.signed);
     const newPos = newSigned.filter(p => p > 0 && p < 180).sort((a, b) => b - a);
-    this.matchSide(oldPos.map(o => o.line), newPos.map(p => toUnsigned(p)), result, false);
+    this.matchSide(oldPos.map(o => o.line), newPos.map(p => toUnsigned(p)), result);
 
     // Process negative side (-180 < deg < 0) - outward means toward -180
     const oldNeg = oldSigned.filter(o => o.signed < 0 && o.signed > -180).sort((a, b) => a.signed - b.signed);
     const newNeg = newSigned.filter(p => p < 0 && p > -180).sort((a, b) => a - b);
-    this.matchSide(oldNeg.map(o => o.line), newNeg.map(p => toUnsigned(p)), result, false);
+    this.matchSide(oldNeg.map(o => o.line), newNeg.map(p => toUnsigned(p)), result);
 
-    if (isLon) {
-      this.lonLines = result;
-    } else {
-      this.latLines = result;
+    this.lonLines = result;
+  }
+
+  private transitionLatLines(lines: LineState[], targetPositions: number[]): void {
+    const result: LineState[] = [];
+
+    // Lat lines are already -90 to 90, no conversion needed
+    const oldLines = lines.map(l => ({ line: l, deg: l.targetDeg }));
+    const newDegs = [...targetPositions];
+
+    // Handle 0° (equator) specially - always stays
+    const old0 = oldLines.find(o => o.deg === 0);
+    const has0 = newDegs.includes(0);
+    if (old0 && has0) {
+      result.push(old0.line);
+    } else if (has0) {
+      result.push({ targetDeg: 0, currentDeg: 0, startDeg: 0, opacity: 1, isNew: false, isDying: false });
     }
+
+    // Process north hemisphere (0 < lat <= 90) - outward means toward 90
+    const oldNorth = oldLines.filter(o => o.deg > 0).sort((a, b) => b.deg - a.deg);
+    const newNorth = newDegs.filter(p => p > 0).sort((a, b) => b - a);
+    this.matchSide(oldNorth.map(o => o.line), newNorth, result);
+
+    // Process south hemisphere (-90 <= lat < 0) - outward means toward -90
+    const oldSouth = oldLines.filter(o => o.deg < 0).sort((a, b) => a.deg - b.deg);
+    const newSouth = newDegs.filter(p => p < 0).sort((a, b) => a - b);
+    this.matchSide(oldSouth.map(o => o.line), newSouth, result);
+
+    this.latLines = result;
   }
 
   /**
@@ -264,8 +296,7 @@ export class GridAnimator {
   private matchSide(
     oldLines: LineState[],
     newPositions: number[],
-    result: LineState[],
-    isLat: boolean
+    result: LineState[]
   ): void {
     const maxLen = Math.max(oldLines.length, newPositions.length);
 
@@ -391,11 +422,16 @@ export class GridAnimator {
       }
     }
 
-    // Pack latitude lines (disabled for debugging)
-    this.uniforms.latCount = 0;
+    // Pack latitude lines
+    this.uniforms.latCount = this.latLines.length;
     for (let i = 0; i < MAX_LINES; i++) {
-      this.uniforms.latDegrees[i] = 0;
-      this.uniforms.latOpacities[i] = 0;
+      if (i < this.latLines.length) {
+        this.uniforms.latDegrees[i] = this.latLines[i]!.currentDeg;
+        this.uniforms.latOpacities[i] = this.latLines[i]!.opacity;
+      } else {
+        this.uniforms.latDegrees[i] = 0;
+        this.uniforms.latOpacities[i] = 0;
+      }
     }
   }
 
