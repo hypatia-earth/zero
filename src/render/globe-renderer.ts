@@ -70,6 +70,8 @@ export class GlobeRenderer {
   private fontAtlasSampler!: GPUSampler;
   private tempPaletteTexture!: GPUTexture;
   private tempPaletteSampler!: GPUSampler;
+  private logoTexture!: GPUTexture;
+  private logoSampler!: GPUSampler;
   private depthTexture!: GPUTexture;
   // Post-process pass for atmosphere
   private colorTexture!: GPUTexture;
@@ -239,6 +241,17 @@ export class GlobeRenderer {
       addressModeU: 'clamp-to-edge',
     });
 
+    // Placeholder logo (1x1, will be replaced by loadLogo)
+    this.logoTexture = this.device.createTexture({
+      size: [1, 1],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+    this.logoSampler = this.device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+    });
+
     // Offscreen textures for two-pass rendering (globe + post-process)
     const dpr = window.devicePixelRatio;
     const texWidth = Math.floor(this.canvas.clientWidth * dpr);
@@ -293,6 +306,9 @@ export class GlobeRenderer {
         { binding: 16, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // humidityData
         { binding: 17, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // windData
         { binding: 18, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // rainData
+        // Logo texture for idle globe
+        { binding: 19, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+        { binding: 20, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       ],
     });
 
@@ -377,6 +393,8 @@ export class GlobeRenderer {
         { binding: 16, resource: { buffer: this.humidityDataBuffer } },
         { binding: 17, resource: { buffer: this.windDataBuffer } },
         { binding: 18, resource: { buffer: this.rainDataBuffer } },
+        { binding: 19, resource: this.logoTexture.createView() },
+        { binding: 20, resource: this.logoSampler },
       ],
     });
 
@@ -697,6 +715,24 @@ export class GlobeRenderer {
     );
   }
 
+  /**
+   * Load logo texture for idle globe display
+   */
+  async loadLogo(imageBitmap: ImageBitmap): Promise<void> {
+    this.logoTexture.destroy();
+    this.logoTexture = this.device.createTexture({
+      size: [imageBitmap.width, imageBitmap.height],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
+    this.device.queue.copyExternalImageToTexture(
+      { source: imageBitmap },
+      { texture: this.logoTexture },
+      [imageBitmap.width, imageBitmap.height]
+    );
+  }
+
   /** Recreate main bind group (call after buffer/texture changes) */
   private recreateBindGroup(): void {
     const bindGroupLayout = this.pipeline.getBindGroupLayout(0);
@@ -722,6 +758,8 @@ export class GlobeRenderer {
         { binding: 16, resource: { buffer: this.humidityDataBuffer } },
         { binding: 17, resource: { buffer: this.windDataBuffer } },
         { binding: 18, resource: { buffer: this.rainDataBuffer } },
+        { binding: 19, resource: this.logoTexture.createView() },
+        { binding: 20, resource: this.logoSampler },
       ],
     });
   }

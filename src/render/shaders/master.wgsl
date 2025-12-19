@@ -7,6 +7,7 @@
 
 #include "atmosphere.wgsl"
 #include "common.wgsl"
+#include "logo.wgsl"
 #include "temperature.wgsl"
 #include "rain.wgsl"
 #include "basemap.wgsl"

@@ -105,8 +105,9 @@ export const App: m.ClosureComponent = () => {
         let fontBuffer: ArrayBuffer;
         let gaussianLatsBuffer: ArrayBuffer;
         let ringOffsetsBuffer: ArrayBuffer;
+        let logoBuffer: ArrayBuffer;
 
-        const TOTAL_FILES = 13;
+        const TOTAL_FILES = 14;
         await queueService.submitFileOrders(
           [
             // 0-2: Atmosphere LUTs
@@ -127,6 +128,8 @@ export const App: m.ClosureComponent = () => {
             // 11-12: Gaussian grid LUTs
             { url: '/om1280/gaussian-lats.bin', size: 10240 },
             { url: '/om1280/ring-offsets.bin', size: 10240 },
+            // 13: Logo for idle globe
+            { url: '/images/hypatia.png', size: 240500 },
           ],
           async (i, buffer) => {
             if (i < 3) lutBuffers.push(buffer);
@@ -135,6 +138,7 @@ export const App: m.ClosureComponent = () => {
             else if (i === 10) fontBuffer = buffer;
             else if (i === 11) gaussianLatsBuffer = buffer;
             else if (i === 12) ringOffsetsBuffer = buffer;
+            else if (i === 13) logoBuffer = buffer;
             await BootstrapService.updateProgress(`Loading assets ${i + 1}/${TOTAL_FILES}...`, 15 + (i / TOTAL_FILES) * 5);
           }
         );
@@ -145,6 +149,7 @@ export const App: m.ClosureComponent = () => {
         );
         await initOmWasm(wasmBuffer!);
         const fontAtlas = await createImageBitmap(new Blob([fontBuffer!], { type: 'image/png' }));
+        const logoImage = await createImageBitmap(new Blob([logoBuffer!], { type: 'image/png' }));
         const gaussianLats = new Float32Array(gaussianLatsBuffer!);
         const ringOffsets = new Uint32Array(ringOffsetsBuffer!);
 
@@ -169,6 +174,9 @@ export const App: m.ClosureComponent = () => {
 
         // 5d. Font atlas
         await renderer.loadFontAtlas(fontAtlas);
+
+        // 5d2. Logo for idle globe
+        await renderer.loadLogo(logoImage);
 
         // 5e. Load palettes
         await paletteService.loadPalettes('temp');

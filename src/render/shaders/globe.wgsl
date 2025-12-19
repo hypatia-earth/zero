@@ -69,6 +69,9 @@ struct Uniforms {
 @group(0) @binding(16) var<storage, read> humidityData: array<f32>;
 @group(0) @binding(17) var<storage, read> windData: array<f32>;
 @group(0) @binding(18) var<storage, read> rainData: array<f32>;
+// Logo texture for idle globe display
+@group(0) @binding(19) var logoTexture: texture_2d<f32>;
+@group(0) @binding(20) var logoSampler: sampler;
 
 // Fullscreen triangle vertex shader
 @vertex
@@ -128,7 +131,8 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
 
   // Layer compositing (back to front)
   // Atmosphere applied in post-process pass
-  var color = vec4f(0.1, 0.1, 0.15, 1.0); // Base dark color
+  var color = vec4f(0.086, 0.086, 0.086, 1.0); // Base dark color (#161616)
+  color = blendLogo(color, fragPos.xy);   // Logo sprite when idle
   color = blendBasemap(color, hit.point);
   color = blendTemp(color, lat, lon);
   color = blendRain(color, lat, lon);
