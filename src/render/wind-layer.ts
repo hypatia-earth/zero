@@ -66,8 +66,8 @@ export class WindLayer {
   private enabled = false;
   private randomSeed = Math.random();
 
-  // Compute caching: only recompute when interpolation changes
-  private lastComputedInterp = -999;  // Force initial compute
+  // Compute caching: only recompute when time changes (minute precision)
+  private lastComputedMinute = -1;  // Force initial compute
   private needsCompute = true;
 
   constructor(device: GPUDevice, format: GPUTextureFormat, lineCount = 8192) {
@@ -275,17 +275,24 @@ export class WindLayer {
     this.device.queue.writeBuffer(this.computeUniformBuffer, 0, uniformData);
   }
 
+  // Pending minute for next compute (set by setInterpFactor, used by runCompute)
+  private pendingMinute = -1;
+
   /**
-   * Set interpolation factor between timesteps (0 = t0, 1 = t1)
-   * Only marks for recompute if factor changes significantly
+   * Set interpolation factor and current time
+   * Recomputes when time changes by 1 minute (time snaps to exact minutes)
    */
-  setInterpFactor(factor: number): void {
-    const newFactor = Math.max(0, Math.min(1, factor));
-    // Only recompute if factor changed by more than threshold (~1 minute at 3h timesteps)
-    if (Math.abs(newFactor - this.lastComputedInterp) > 0.005) {
-      this.needsCompute = true;
+  setInterpFactor(factor: number, time?: Date): void {
+    this.interpFactor = Math.max(0, Math.min(1, factor));
+
+    // Compare minute-precision timestamps to trigger recompute
+    if (time) {
+      const currentMinute = Math.floor(time.getTime() / 60000);
+      if (currentMinute !== this.lastComputedMinute) {
+        this.needsCompute = true;
+        this.pendingMinute = currentMinute;
+      }
     }
-    this.interpFactor = newFactor;
   }
 
   getInterpFactor(): number {
@@ -382,7 +389,7 @@ export class WindLayer {
     computePass.end();
 
     // Mark as computed
-    this.lastComputedInterp = this.interpFactor;
+    this.lastComputedMinute = this.pendingMinute;
     this.needsCompute = false;
     return true;
   }

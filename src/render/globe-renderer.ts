@@ -39,6 +39,7 @@ export interface GlobeUniforms {
   windOpacity: number;
   windLerp: number;
   windAnimSpeed: number;  // updates per second
+  windTime: Date;         // current view time for compute caching
   pressureOpacity: number;
   tempDataReady: boolean;
   rainDataReady: boolean;
@@ -596,8 +597,8 @@ export class GlobeRenderer {
       }
       this.lastAnimTime = now;
 
-      // Update interpolation factor from time lerp
-      this.windLayer.setInterpFactor(uniforms.windLerp);
+      // Update interpolation factor from time lerp (pass time for minute-based caching)
+      this.windLayer.setInterpFactor(uniforms.windLerp, uniforms.windTime);
 
       // Show backface when no texture layers are visible (transparent globe)
       const textureOpacity = uniforms.earthOpacity + uniforms.tempOpacity +
