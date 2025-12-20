@@ -17,6 +17,8 @@ interface WindUniforms {
   viewProj: Float32Array;
   eyePosition: [number, number, number];
   opacity: number;
+  animPhase: number;    // 0-1 animation phase
+  snakeLength: number;  // fraction of line visible (0-1)
 }
 
 export class WindLayer {
@@ -225,9 +227,10 @@ export class WindLayer {
   }
 
   private createRenderBuffers(): void {
-    // Render uniform buffer (viewProj + eyePos + opacity)
+    // Render uniform buffer (viewProj + eyePos + opacity + animPhase + snakeLength + pad)
+    // mat4(64) + vec3(12) + f32(4) + f32(4) + f32(4) + vec2(8) = 96 bytes
     this.renderUniformBuffer = this.device.createBuffer({
-      size: 96,  // mat4 + vec3 + pad + f32 + pad
+      size: 96,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -286,6 +289,11 @@ export class WindLayer {
     floatView.set(uniforms.eyePosition, 16);
     // opacity (1 float) - packs with eyePosition as vec4
     floatView[19] = uniforms.opacity;
+    // animPhase (1 float)
+    floatView[20] = uniforms.animPhase;
+    // snakeLength (1 float)
+    floatView[21] = uniforms.snakeLength;
+    // padding (2 floats) at 22, 23
 
     this.device.queue.writeBuffer(this.renderUniformBuffer, 0, uniformData);
   }

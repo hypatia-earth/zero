@@ -101,6 +101,12 @@ export class GlobeRenderer {
   private currentEarthOpacity = 0;
   private currentTempOpacity = 0;
 
+  // Wind animation state
+  private windAnimPhase = 0;
+  private windSnakeLength = 0.25;  // 25% of line visible
+  private windAnimSpeed = 0.3;     // Cycles per second
+  private lastAnimTime = 0;
+
   // GPU timing
   private gpuTimestamp: GpuTimestamp | null = null;
 
@@ -575,6 +581,14 @@ export class GlobeRenderer {
     this.windLayer.setEnabled(windVisible);
 
     if (windVisible) {
+      // Advance snake animation phase
+      const now = performance.now() / 1000;
+      if (this.lastAnimTime > 0) {
+        const dt = now - this.lastAnimTime;
+        this.windAnimPhase = (this.windAnimPhase + dt * this.windAnimSpeed) % 1;
+      }
+      this.lastAnimTime = now;
+
       this.windLayer.updateUniforms({
         viewProj: this.camera.getViewProj(),
         eyePosition: [
@@ -583,6 +597,8 @@ export class GlobeRenderer {
           uniforms.eyePosition[2]!,
         ],
         opacity: uniforms.windOpacity,
+        animPhase: this.windAnimPhase,
+        snakeLength: this.windSnakeLength,
       });
     }
   }
