@@ -16,10 +16,10 @@ struct LinePoint {
 
 @group(0) @binding(0) var<uniform> uniforms: ComputeUniforms;
 @group(0) @binding(1) var<storage, read> seeds: array<vec4<f32>>;
-@group(0) @binding(2) var<storage, read> windU0: array<f32>;   // t0 U component
-@group(0) @binding(3) var<storage, read> windV0: array<f32>;   // t0 V component
-@group(0) @binding(4) var<storage, read> windU1: array<f32>;   // t1 U component
-@group(0) @binding(5) var<storage, read> windV1: array<f32>;   // t1 V component
+@group(0) @binding(2) var<storage, read> windU0: array<f32>;  // t0 U component (m/s, eastward)
+@group(0) @binding(3) var<storage, read> windV0: array<f32>;  // t0 V component (m/s, northward)
+@group(0) @binding(4) var<storage, read> windU1: array<f32>;  // t1 U component
+@group(0) @binding(5) var<storage, read> windV1: array<f32>;  // t1 V component
 @group(0) @binding(6) var<storage, read> gaussianLats: array<f32>;
 @group(0) @binding(7) var<storage, read> ringOffsets: array<u32>;
 @group(0) @binding(8) var<storage, read_write> linePoints: array<LinePoint>;
@@ -61,12 +61,14 @@ fn sampleO1280(lat: f32, lon: f32) -> vec2f {
 
   let cell = ringOffsets[ring] + lonIdx;
 
-  // Sample both timesteps
-  let uv0 = vec2f(windU0[cell], windV0[cell]);
-  let uv1 = vec2f(windU1[cell], windV1[cell]);
+  // Sample U/V directly from data
+  let u0 = windU0[cell];
+  let v0 = windV0[cell];
+  let u1 = windU1[cell];
+  let v1 = windV1[cell];
 
   // Interpolate between timesteps
-  return mix(uv0, uv1, uniforms.interpFactor);
+  return mix(vec2f(u0, v0), vec2f(u1, v1), uniforms.interpFactor);
 }
 
 // Rodrigues rotation: rotate point 'pos' around 'axis' by 'angle'

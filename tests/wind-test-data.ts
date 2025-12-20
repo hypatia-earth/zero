@@ -19,8 +19,8 @@ export interface HurricaneConfig {
 }
 
 export interface WindData {
-  u: Float32Array;  // eastward wind (m/s)
-  v: Float32Array;  // northward wind (m/s)
+  u: Float32Array;  // U component (m/s, eastward positive)
+  v: Float32Array;  // V component (m/s, northward positive)
 }
 
 export interface HurricaneTimesteps {
@@ -78,7 +78,7 @@ function getBaseWind(latDeg: number, lonDeg: number): { u: number; v: number } {
  * - Decay beyond maxWindRadius
  *
  * @param config Hurricane configuration
- * @returns { u, v } wind components on O1280 grid
+ * @returns { u, v } wind components
  */
 function generateHurricaneWind(config: HurricaneConfig): WindData {
   const u = new Float32Array(POINTS_PER_TIMESTEP);
@@ -152,6 +152,7 @@ function generateHurricaneWind(config: HurricaneConfig): WindData {
         windV = windV * (1 - blendFactor) + hurricaneV * blendFactor;
       }
 
+      // Store U/V directly
       u[idx] = windU;
       v[idx] = windV;
       idx++;
