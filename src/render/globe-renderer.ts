@@ -7,6 +7,7 @@ import shaderCode from './shaders/zero-main.wgsl?raw';
 import postprocessShaderCode from './shaders/zero-post.wgsl?raw';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 import { PressureLayer, type PressureResolution } from './pressure-layer';
+import { WindLayer } from './wind-layer';
 import { GridAnimator, GRID_BUFFER_SIZE } from './grid-animator';
 import { U, UNIFORM_BUFFER_SIZE } from './globe-uniforms';
 import { GpuTimestamp } from './gpu-timestamp';
@@ -82,6 +83,8 @@ export class GlobeRenderer {
   private colorTexture!: GPUTexture;
   // Pressure contour layer
   private pressureLayer!: PressureLayer;
+  // Wind layer
+  private windLayer!: WindLayer;
   // Grid animation
   private gridLinesBuffer!: GPUBuffer;
   private gridAnimator!: GridAnimator;
@@ -348,6 +351,9 @@ export class GlobeRenderer {
     // Initialize pressure layer with configured resolution
     this.pressureLayer = new PressureLayer(this.device, this.format, pressureResolution);
 
+    // Initialize wind layer
+    this.windLayer = new WindLayer(this.device, this.format);
+
     this.resize();
   }
 
@@ -563,6 +569,22 @@ export class GlobeRenderer {
         opacity: uniforms.pressureOpacity,
       }, false);
     }
+
+    // Update wind layer based on opacity
+    const windVisible = uniforms.windOpacity > 0.01;
+    this.windLayer.setEnabled(windVisible);
+
+    if (windVisible) {
+      this.windLayer.updateUniforms({
+        viewProj: this.camera.getViewProj(),
+        eyePosition: [
+          uniforms.eyePosition[0]!,
+          uniforms.eyePosition[1]!,
+          uniforms.eyePosition[2]!,
+        ],
+        opacity: uniforms.windOpacity,
+      });
+    }
   }
 
   render(): number | null {
@@ -597,9 +619,12 @@ export class GlobeRenderer {
     globePass.draw(3);
     globePass.end();
 
-    // PASS 2: Geometry layers (pressure contours, etc.)
+    // PASS 2: Geometry layers (pressure contours, wind, etc.)
     // Renders to same color/depth textures, depth-tested against globe
-    if (this.pressureLayer.isEnabled() && this.pressureLayer.getVertexCount() > 0) {
+    const hasPressure = this.pressureLayer.isEnabled() && this.pressureLayer.getVertexCount() > 0;
+    const hasWind = this.windLayer.isEnabled();
+
+    if (hasPressure || hasWind) {
       // Use depth test only when earth or temp layers are visible
       const useGlobeDepth = this.currentEarthOpacity > 0.01 || this.currentTempOpacity > 0.01;
 
@@ -617,7 +642,14 @@ export class GlobeRenderer {
         },
       });
 
-      this.pressureLayer.render(geometryPass);
+      if (hasPressure) {
+        this.pressureLayer.render(geometryPass);
+      }
+
+      if (hasWind) {
+        this.windLayer.render(geometryPass);
+      }
+
       geometryPass.end();
     }
 
@@ -948,6 +980,7 @@ export class GlobeRenderer {
     this.depthTexture?.destroy();
     this.colorTexture?.destroy();
     this.pressureLayer?.dispose();
+    this.windLayer?.dispose();
     this.gpuTimestamp?.dispose();
   }
 }
