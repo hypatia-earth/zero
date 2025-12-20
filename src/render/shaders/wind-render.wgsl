@@ -19,6 +19,11 @@ struct VertexOutput {
   @location(1) speed: f32,
 }
 
+struct FragmentOutput {
+  @location(0) color: vec4<f32>,
+  @builtin(frag_depth) depth: f32,
+}
+
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var<storage, read> linePoints: array<LinePoint>;
 
@@ -27,9 +32,16 @@ fn vertexMain(
   @builtin(vertex_index) vertexIdx: u32,
   @builtin(instance_index) instanceIdx: u32
 ) -> VertexOutput {
-  // Each instance is a line, vertexIdx is position within line
+  // Using line-list: each segment needs 2 vertices (start, end)
+  // vertexIdx 0,1 → segment 0 (points 0,1)
+  // vertexIdx 2,3 → segment 1 (points 1,2)
+  // etc.
   let segmentsPerLine = 32u;
-  let pointIdx = instanceIdx * segmentsPerLine + vertexIdx;
+  let segmentIdx = vertexIdx / 2u;      // Which segment within this line
+  let isEnd = vertexIdx % 2u;           // 0 = start vertex, 1 = end vertex
+  let pointInLine = segmentIdx + isEnd; // Point index within line
+
+  let pointIdx = instanceIdx * segmentsPerLine + pointInLine;
   let point = linePoints[pointIdx];
 
   var out: VertexOutput;
@@ -40,6 +52,13 @@ fn vertexMain(
 }
 
 @fragment
-fn fragmentMain(in: VertexOutput) -> @location(0) vec4<f32> {
-  return vec4<f32>(1.0, 1.0, 1.0, uniforms.opacity);
+fn fragmentMain(in: VertexOutput) -> FragmentOutput {
+  // Linear depth with offset to render slightly in front of globe surface
+  let hitT = length(in.worldPos - uniforms.eyePosition);
+  let cameraDistance = length(uniforms.eyePosition);
+  let linearDepth = clamp(hitT / (cameraDistance * 2.0), 0.0, 1.0);
+
+  // Offset depth slightly toward camera to avoid z-fighting with globe
+  let depthOffset = 0.0001;
+  return FragmentOutput(vec4<f32>(1.0, 1.0, 1.0, uniforms.opacity), linearDepth - depthOffset);
 }

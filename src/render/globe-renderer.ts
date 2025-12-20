@@ -351,8 +351,8 @@ export class GlobeRenderer {
     // Initialize pressure layer with configured resolution
     this.pressureLayer = new PressureLayer(this.device, this.format, pressureResolution);
 
-    // Initialize wind layer
-    this.windLayer = new WindLayer(this.device, this.format);
+    // Initialize wind layer (2K lines for debugging)
+    this.windLayer = new WindLayer(this.device, this.format, 2048);
 
     this.resize();
   }

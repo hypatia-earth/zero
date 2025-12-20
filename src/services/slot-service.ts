@@ -101,9 +101,9 @@ export class SlotService {
     this.initializeLayerStores();
 
     // Create ParamSlots for each slot-based layer
+    // slabsCount = number of data fetches (from PARAM_MAP), NOT GPU buffer count
     for (const param of this.readyWeatherLayers) {
-      const layer = this.configService.getLayer(param);
-      const slabsCount = layer?.slabs?.length ?? 1;
+      const slabsCount = PARAM_MAP[param]?.length ?? 1;
       this.paramSlots.set(param, createParamSlots(param, this.timeslotsPerLayer, slabsCount));
     }
 
@@ -213,8 +213,7 @@ export class SlotService {
           // Shrinking: recreate (TODO: preserve closest to current time)
           const oldPs = this.paramSlots.get(param);
           oldPs?.dispose();
-          const layer = this.configService.getLayer(param);
-          const slabsCount = layer?.slabs?.length ?? 1;
+          const slabsCount = PARAM_MAP[param]?.length ?? 1;
           this.paramSlots.set(param, createParamSlots(param, newTimeslots, slabsCount));
         }
       }
@@ -431,8 +430,7 @@ export class SlotService {
 
             // For single-slab layers: markLoaded immediately
             // For multi-slab layers: markLoaded creates slot, then markSlabLoaded per slab
-            const layer = this.configService.getLayer(param);
-            const slabsCount = layer?.slabs?.length ?? 1;
+            const slabsCount = PARAM_MAP[param]?.length ?? 1;
 
             if (slabsCount === 1) {
               // Single-slab: existing behavior
@@ -561,8 +559,7 @@ export class SlotService {
 
             // For single-slab layers: markLoaded immediately
             // For multi-slab layers: markLoaded creates slot, then markSlabLoaded per slab
-            const layer = this.configService.getLayer(order.param);
-            const slabsCount = layer?.slabs?.length ?? 1;
+            const slabsCount = PARAM_MAP[order.param]?.length ?? 1;
 
             if (slabsCount === 1) {
               ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
