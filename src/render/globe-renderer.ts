@@ -118,7 +118,7 @@ export class GlobeRenderer {
     this.camera = new Camera({ lat: 30, lon: 0, distance: 3 }, cameraConfig);
   }
 
-  async initialize(requestedSlots: number, pressureResolution: PressureResolution = 2): Promise<void> {
+  async initialize(requestedSlots: number, pressureResolution: PressureResolution = 2, windLineCount = 8192): Promise<void> {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) throw new Error('No WebGPU adapter found');
 
@@ -362,7 +362,7 @@ export class GlobeRenderer {
     this.pressureLayer = new PressureLayer(this.device, this.format, pressureResolution);
 
     // Initialize wind layer (2K lines for debugging)
-    this.windLayer = new WindLayer(this.device, this.format, 2048);
+    this.windLayer = new WindLayer(this.device, this.format, windLineCount);
 
     this.resize();
   }

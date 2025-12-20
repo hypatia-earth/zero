@@ -9,7 +9,7 @@ struct Uniforms {
   animPhase: f32,      // 0-1 animation phase
   snakeLength: f32,    // fraction of line visible (0-1)
   lineWidth: f32,      // world units (~0.003 = 20km)
-  _pad: f32,
+  randomSeed: f32,     // random offset for phase distribution
 }
 
 struct LinePoint {
@@ -31,6 +31,15 @@ struct FragmentOutput {
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var<storage, read> linePoints: array<LinePoint>;
+
+// Pseudo-random hash for per-line phase offset
+fn hash(n: u32) -> f32 {
+  var x = n;
+  x = ((x >> 16u) ^ x) * 0x45d9f3bu;
+  x = ((x >> 16u) ^ x) * 0x45d9f3bu;
+  x = (x >> 16u) ^ x;
+  return f32(x) / 4294967295.0;
+}
 
 @vertex
 fn vertexMain(
@@ -81,8 +90,8 @@ fn vertexMain(
     default: { worldPos = p0.position; }
   }
 
-  // Snake animation: phase offset per line
-  let phaseOffset = fract(f32(instanceIdx) * 0.618033988749);
+  // Snake animation: pseudo-random phase offset per line
+  let phaseOffset = hash(instanceIdx + u32(uniforms.randomSeed * 1000000.0));
   let linePhase = fract(uniforms.animPhase + phaseOffset);
   let headPos = linePhase;
   let snakeLen = uniforms.snakeLength;
@@ -109,17 +118,23 @@ fn vertexMain(
   return out;
 }
 
-// Speed-to-color mapping (dark red → bright red)
+// Speed-to-color mapping based on Beaufort scale hazard thresholds
+// White (0-17 m/s) → gradient to red (17-26 m/s) → full red (26+ m/s)
 fn speedToColor(speed: f32) -> vec3<f32> {
-  // Normalize speed: 0-40 m/s range (hurricane force ~33 m/s)
-  let t = clamp(speed / 40.0, 0.0, 1.0);
+  let safeThreshold = 17.0;   // Beaufort 8: gale, walking difficult
+  let dangerThreshold = 26.0; // Beaufort 10: storm, trees uprooted
 
-  // Shades of red: dark (0.3, 0.05, 0.05) → bright (1.0, 0.3, 0.2)
-  return vec3<f32>(
-    0.3 + t * 0.7,   // R: 0.3 → 1.0
-    0.05 + t * 0.25, // G: 0.05 → 0.3
-    0.05 + t * 0.15  // B: 0.05 → 0.2
-  );
+  if (speed < safeThreshold) {
+    // Safe: white
+    return vec3<f32>(1.0, 1.0, 1.0);
+  } else if (speed < dangerThreshold) {
+    // Hazardous: white → red gradient
+    let t = (speed - safeThreshold) / (dangerThreshold - safeThreshold);
+    return vec3<f32>(1.0, 1.0 - t * 0.8, 1.0 - t * 0.9);
+  } else {
+    // Dangerous: full red
+    return vec3<f32>(1.0, 0.2, 0.1);
+  }
 }
 
 @fragment

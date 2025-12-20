@@ -1,6 +1,6 @@
 <!-- Style guide: /docs/zero/zero--styles.md -->
 
-**Contents:** [About](#about) · [Controls](#controls) · [Data](#data) · [Install](#install-as-app) · [Tips](#tips) · [Quirks](#quirks) · [How it's Made](#how-its-made)
+**Contents:** [About](#about) · [Hazardous Weather](#hazardous-weather) · [Controls](#controls) · [Data](#data) · [Install](#install-as-app) · [Tips](#tips) · [Quirks](#quirks) · [How it's Made](#how-its-made)
 
 ## About
 
@@ -20,6 +20,21 @@ Scrub through 10 days of weather. Watch storms form and dissolve. Every minute i
 - **Humidity** relative
 - **Wind** at 10 meters
 - **Pressure** at sea level
+
+## Hazardous Weather
+
+### Wind
+
+Wind speed visualization uses [Beaufort Scale](https://en.wikipedia.org/wiki/Beaufort_scale) thresholds adopted by [WMO](https://severeweather.wmo.int/). Lines are white below 17 m/s and turn increasingly red as wind becomes hazardous.
+
+| Force | Speed | Effect | Color |
+|-------|-------|--------|-------|
+| 0-7 | 0-17 m/s | Safe to moderate | White |
+| 8 (Gale) | 17-20 m/s | Walking difficult | Light red |
+| 9 (Strong Gale) | 20-24 m/s | Structural damage | Red |
+| 10+ (Storm) | 24+ m/s | Trees uprooted, danger | Full red |
+
+Sources: [NWS Wind Warnings](https://www.weather.gov/safety/wind-ww) · [Beaufort Scale](https://en.wikipedia.org/wiki/Beaufort_scale)
 
 ## Controls
 

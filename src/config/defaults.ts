@@ -118,6 +118,7 @@ export const defaultConfig: ZeroConfig = {
     lineWidth: 0.002,     // screen-space width factor
     segmentsPerLine: 32,  // trace steps per wind line
     stepFactor: 0.005,    // wind speed to arc distance scale
+    seedCount: 8192,      // default line count
   },
 
   render: {

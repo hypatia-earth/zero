@@ -642,7 +642,7 @@ export const optionsSchema = z.object({
       }
     ),
     seedCount: opt(
-      z.enum(['8192', '16384', '32768']).default('8192'),
+      z.union([z.literal(8192), z.literal(16384), z.literal(32768), z.literal(49152), z.literal(65536)]).default(defaultConfig.wind.seedCount),
       {
         label: 'Wind line count',
         description: 'Number of animated wind lines (affects performance)',
@@ -651,9 +651,11 @@ export const optionsSchema = z.object({
         order: 14,
         control: 'radio',
         options: [
-          { value: '8192', label: '8K' },
-          { value: '16384', label: '16K' },
-          { value: '32768', label: '32K' },
+          { value: 8192, label: '8K' },
+          { value: 16384, label: '16K' },
+          { value: 32768, label: '32K' },
+          { value: 49152, label: '48K' },
+          { value: 65536, label: '64K' },
         ],
       }
     ),
@@ -869,7 +871,7 @@ export const defaultOptions: ZeroOptions = {
   rain: { enabled: false, opacity: 1.0 },
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },
-  wind: { enabled: false, seedCount: '8192', opacity: defaultConfig.wind.opacity, speed: defaultConfig.wind.animSpeed },
+  wind: { enabled: false, seedCount: defaultConfig.wind.seedCount, opacity: defaultConfig.wind.opacity, speed: defaultConfig.wind.animSpeed },
   pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1', spacing: '4' },
   dataCache: { cacheStrategy: 'alternate', downloadMode: 'on-demand' },
   debug: { showDevLog: false, showPerfPanel: false },

@@ -63,6 +63,7 @@ export class WindLayer {
 
   // State
   private enabled = false;
+  private randomSeed = Math.random();
 
   constructor(device: GPUDevice, format: GPUTextureFormat, lineCount = 8192) {
     this.device = device;
@@ -339,7 +340,8 @@ export class WindLayer {
     floatView[21] = uniforms.snakeLength;
     // lineWidth (1 float)
     floatView[22] = uniforms.lineWidth;
-    // padding (1 float) at 23
+    // randomSeed (1 float)
+    floatView[23] = this.randomSeed;
 
     this.device.queue.writeBuffer(this.renderUniformBuffer, 0, uniformData);
   }
@@ -390,6 +392,7 @@ export class WindLayer {
 
     console.log(`[Wind] Changing line count: ${this.seedCount} → ${lineCount}`);
     this.seedCount = lineCount;
+    this.randomSeed = Math.random();  // Scramble phase offsets
 
     // Destroy old buffers
     this.seedBuffer.destroy();

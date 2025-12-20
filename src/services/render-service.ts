@@ -80,7 +80,10 @@ export class RenderService {
     const resolutionMap = { '1': 1, '2': 2 } as const;
     const pressureResolution = resolutionMap[this.optionsService.options.value.pressure.resolution];
 
-    await this.renderer.initialize(timeslotsPerLayer, pressureResolution);
+    // Get wind line count from options
+    const windLineCount = this.optionsService.options.value.wind.seedCount;
+
+    await this.renderer.initialize(timeslotsPerLayer, pressureResolution, windLineCount);
 
     // Upload pre-computed Gaussian LUTs (O1280 grid)
     this.renderer.uploadGaussianLUTs(gaussianLats, ringOffsets);
@@ -121,6 +124,16 @@ export class RenderService {
         lastSmoothing = newSmoothing;
         this.lastPressureLerp = -1;  // Force contour recompute on next frame
         console.log(`[Render] Pressure smoothing: ${newSmoothing} iterations`);
+      }
+    });
+
+    // Listen for wind line count changes (live update)
+    let lastLineCount = this.optionsService.options.value.wind.seedCount;
+    effect(() => {
+      const newLineCount = this.optionsService.options.value.wind.seedCount;
+      if (newLineCount !== lastLineCount) {
+        lastLineCount = newLineCount;
+        this.renderer?.getWindLayer().setLineCount(newLineCount);
       }
     });
   }
