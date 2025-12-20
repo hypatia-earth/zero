@@ -599,6 +599,11 @@ export class GlobeRenderer {
       // Update interpolation factor from time lerp
       this.windLayer.setInterpFactor(uniforms.windLerp);
 
+      // Show backface when no texture layers are visible (transparent globe)
+      const textureOpacity = uniforms.earthOpacity + uniforms.tempOpacity +
+        uniforms.rainOpacity + uniforms.cloudsOpacity + uniforms.humidityOpacity;
+      const showBackface = textureOpacity < 0.01 ? 1.0 : 0.0;
+
       this.windLayer.updateUniforms({
         viewProj: this.camera.getViewProj(),
         eyePosition: [
@@ -610,6 +615,7 @@ export class GlobeRenderer {
         animPhase: this.windAnimPhase,
         snakeLength: this.windSnakeLength,
         lineWidth: this.windLineWidth,
+        showBackface,
       });
     }
   }

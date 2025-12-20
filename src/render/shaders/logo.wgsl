@@ -2,7 +2,8 @@
 
 fn blendLogo(color: vec4f, fragPos: vec2f) -> vec4f {
   // Calculate total layer opacity to determine logo visibility
-  let totalOpacity = u.earthOpacity + u.tempOpacity + u.rainOpacity + u.gridOpacity;
+  let totalOpacity = u.earthOpacity + u.tempOpacity + u.rainOpacity + u.cloudsOpacity +
+                     u.humidityOpacity + u.windOpacity + u.gridOpacity;
 
   // Logo fades out as layers fade in
   let logoOpacity = 1.0 - clamp(totalOpacity * 2.0, 0.0, 1.0);

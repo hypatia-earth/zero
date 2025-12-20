@@ -10,6 +10,7 @@ struct Uniforms {
   snakeLength: f32,    // fraction of line visible (0-1)
   lineWidth: f32,      // world units (~0.003 = 20km)
   randomSeed: f32,     // random offset for phase distribution
+  showBackface: f32,   // 1.0 = show full geometry (no texture layers visible)
 }
 
 struct LinePoint {
@@ -142,6 +143,20 @@ fn fragmentMain(in: VertexOutput) -> FragmentOutput {
   // Discard invisible segments
   if (in.alpha < 0.01) {
     discard;
+  }
+
+  // Perspective-correct backface culling: discard points behind sphere limb
+  // Skip culling when no texture layers visible (showBackface = 1.0)
+  if (uniforms.showBackface < 0.5) {
+    // For unit sphere, tangent plane at silhouette satisfies dot(P, E) = 1
+    // Threshold scales with camera distance to handle quad expansion
+    // TODO: adjust forbidden zone here
+    let camDist = length(uniforms.eyePosition);
+    let threshold = 1.0 + 0.06 * camDist;
+    let sphereTest = normalize(in.worldPos);
+    if (dot(sphereTest, uniforms.eyePosition) < threshold) {
+      discard;
+    }
   }
 
   // Linear depth with offset to render slightly in front of globe surface

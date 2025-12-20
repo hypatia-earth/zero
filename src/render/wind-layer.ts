@@ -21,6 +21,7 @@ interface WindUniforms {
   animPhase: number;    // 0-1 animation phase
   snakeLength: number;  // fraction of line visible (0-1)
   lineWidth: number;    // screen-space width factor
+  showBackface: number; // 1.0 when no texture layers visible (show full geometry)
 }
 
 export class WindLayer {
@@ -233,10 +234,10 @@ export class WindLayer {
   }
 
   private createRenderBuffers(): void {
-    // Render uniform buffer (viewProj + eyePos + opacity + animPhase + snakeLength + pad)
-    // mat4(64) + vec3(12) + f32(4) + f32(4) + f32(4) + vec2(8) = 96 bytes
+    // Render uniform buffer (viewProj + eyePos + opacity + animPhase + snakeLength + lineWidth + randomSeed + showBackface)
+    // mat4(64) + vec3(12) + f32(4) + f32×5(20) + pad(12) = 112 bytes
     this.renderUniformBuffer = this.device.createBuffer({
-      size: 96,
+      size: 112,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -325,7 +326,7 @@ export class WindLayer {
    * Update render uniforms
    */
   updateUniforms(uniforms: WindUniforms): void {
-    const uniformData = new ArrayBuffer(96);
+    const uniformData = new ArrayBuffer(112);  // 28 floats (96 + 16 for alignment)
     const floatView = new Float32Array(uniformData);
 
     // viewProj (16 floats)
@@ -342,6 +343,8 @@ export class WindLayer {
     floatView[22] = uniforms.lineWidth;
     // randomSeed (1 float)
     floatView[23] = this.randomSeed;
+    // showBackface (1 float)
+    floatView[24] = uniforms.showBackface;
 
     this.device.queue.writeBuffer(this.renderUniformBuffer, 0, uniformData);
   }
