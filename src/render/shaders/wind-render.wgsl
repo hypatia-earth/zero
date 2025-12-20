@@ -51,14 +51,37 @@ fn vertexMain(
   return out;
 }
 
+// Speed-to-color mapping (blue → cyan → green → yellow → red)
+fn speedToColor(speed: f32) -> vec3<f32> {
+  // Normalize speed: 0-40 m/s range (hurricane force ~33 m/s)
+  let t = clamp(speed / 40.0, 0.0, 1.0);
+
+  // 5-stop color ramp
+  if (t < 0.25) {
+    let s = t / 0.25;
+    return mix(vec3<f32>(0.2, 0.4, 1.0), vec3<f32>(0.2, 0.8, 1.0), s);  // blue → cyan
+  } else if (t < 0.5) {
+    let s = (t - 0.25) / 0.25;
+    return mix(vec3<f32>(0.2, 0.8, 1.0), vec3<f32>(0.2, 1.0, 0.4), s);  // cyan → green
+  } else if (t < 0.75) {
+    let s = (t - 0.5) / 0.25;
+    return mix(vec3<f32>(0.2, 1.0, 0.4), vec3<f32>(1.0, 1.0, 0.2), s);  // green → yellow
+  } else {
+    let s = (t - 0.75) / 0.25;
+    return mix(vec3<f32>(1.0, 1.0, 0.2), vec3<f32>(1.0, 0.3, 0.2), s);  // yellow → red
+  }
+}
+
 @fragment
 fn fragmentMain(in: VertexOutput) -> FragmentOutput {
   // Linear depth with offset to render slightly in front of globe surface
   let hitT = length(in.worldPos - uniforms.eyePosition);
   let cameraDistance = length(uniforms.eyePosition);
   let linearDepth = clamp(hitT / (cameraDistance * 2.0), 0.0, 1.0);
-
-  // Offset depth slightly toward camera to avoid z-fighting with globe
   let depthOffset = 0.0001;
-  return FragmentOutput(vec4<f32>(1.0, 1.0, 1.0, uniforms.opacity), linearDepth - depthOffset);
+
+  // Color based on wind speed
+  let color = speedToColor(in.speed);
+
+  return FragmentOutput(vec4<f32>(color, uniforms.opacity), linearDepth - depthOffset);
 }

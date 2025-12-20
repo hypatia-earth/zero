@@ -39,11 +39,16 @@ export class WindLayer {
   private seedBuffer!: GPUBuffer;
   private seedCount: number;
 
-  // Wind data buffers (O1280 hurricane test data)
-  private windUBuffer!: GPUBuffer;
-  private windVBuffer!: GPUBuffer;
+  // Wind data buffers (O1280 hurricane test data - two timesteps)
+  private windU0Buffer!: GPUBuffer;
+  private windV0Buffer!: GPUBuffer;
+  private windU1Buffer!: GPUBuffer;
+  private windV1Buffer!: GPUBuffer;
   private gaussianLatsBuffer!: GPUBuffer;
   private ringOffsetsBuffer!: GPUBuffer;
+
+  // Interpolation state
+  private interpFactor = 0;
 
   // Line points buffer (compute output, render input)
   private linePointsBuffer!: GPUBuffer;
@@ -64,7 +69,7 @@ export class WindLayer {
   }
 
   private createComputePipeline(): void {
-    // Compute bind group layout (uniforms + seeds + windU + windV + gaussianLats + ringOffsets + linePoints)
+    // Compute bind group layout: uniforms, seeds, windU0, windV0, windU1, windV1, gaussianLats, ringOffsets, linePoints
     this.computeBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
@@ -73,7 +78,9 @@ export class WindLayer {
         { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
         { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
         { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
       ],
     });
 
@@ -111,22 +118,35 @@ export class WindLayer {
     });
     this.device.queue.writeBuffer(this.seedBuffer, 0, seedPositions.buffer, seedPositions.byteOffset, seedPositions.byteLength);
 
-    // Generate hurricane test data (t0)
+    // Generate hurricane test data (t0 and t1)
     const hurricaneData = generateHurricaneTestData();
-    console.log(`[Wind] Hurricane data: ${hurricaneData.t0.u.length} points`);
+    console.log(`[Wind] Hurricane data: ${hurricaneData.t0.u.length} points × 2 timesteps`);
 
-    // Create wind U/V buffers
-    this.windUBuffer = this.device.createBuffer({
+    // Create wind U/V buffers for t0
+    this.windU0Buffer = this.device.createBuffer({
       size: hurricaneData.t0.u.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(this.windUBuffer, 0, hurricaneData.t0.u.buffer, hurricaneData.t0.u.byteOffset, hurricaneData.t0.u.byteLength);
+    this.device.queue.writeBuffer(this.windU0Buffer, 0, hurricaneData.t0.u.buffer, hurricaneData.t0.u.byteOffset, hurricaneData.t0.u.byteLength);
 
-    this.windVBuffer = this.device.createBuffer({
+    this.windV0Buffer = this.device.createBuffer({
       size: hurricaneData.t0.v.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(this.windVBuffer, 0, hurricaneData.t0.v.buffer, hurricaneData.t0.v.byteOffset, hurricaneData.t0.v.byteLength);
+    this.device.queue.writeBuffer(this.windV0Buffer, 0, hurricaneData.t0.v.buffer, hurricaneData.t0.v.byteOffset, hurricaneData.t0.v.byteLength);
+
+    // Create wind U/V buffers for t1
+    this.windU1Buffer = this.device.createBuffer({
+      size: hurricaneData.t1.u.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.device.queue.writeBuffer(this.windU1Buffer, 0, hurricaneData.t1.u.buffer, hurricaneData.t1.u.byteOffset, hurricaneData.t1.u.byteLength);
+
+    this.windV1Buffer = this.device.createBuffer({
+      size: hurricaneData.t1.v.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.device.queue.writeBuffer(this.windV1Buffer, 0, hurricaneData.t1.v.buffer, hurricaneData.t1.v.byteOffset, hurricaneData.t1.v.byteLength);
 
     // Generate Gaussian grid LUTs
     const luts = generateGaussianLUTs(1280);
@@ -154,11 +174,13 @@ export class WindLayer {
       entries: [
         { binding: 0, resource: { buffer: this.computeUniformBuffer } },
         { binding: 1, resource: { buffer: this.seedBuffer } },
-        { binding: 2, resource: { buffer: this.windUBuffer } },
-        { binding: 3, resource: { buffer: this.windVBuffer } },
-        { binding: 4, resource: { buffer: this.gaussianLatsBuffer } },
-        { binding: 5, resource: { buffer: this.ringOffsetsBuffer } },
-        { binding: 6, resource: { buffer: this.linePointsBuffer } },
+        { binding: 2, resource: { buffer: this.windU0Buffer } },
+        { binding: 3, resource: { buffer: this.windV0Buffer } },
+        { binding: 4, resource: { buffer: this.windU1Buffer } },
+        { binding: 5, resource: { buffer: this.windV1Buffer } },
+        { binding: 6, resource: { buffer: this.gaussianLatsBuffer } },
+        { binding: 7, resource: { buffer: this.ringOffsetsBuffer } },
+        { binding: 8, resource: { buffer: this.linePointsBuffer } },
       ],
     });
   }
@@ -233,10 +255,22 @@ export class WindLayer {
     uintView[1] = this.segmentsPerLine;
     // stepFactor (f32)
     floatView[2] = stepFactor;
-    // _pad (u32)
-    uintView[3] = 0;
+    // interpFactor (f32)
+    floatView[3] = this.interpFactor;
 
     this.device.queue.writeBuffer(this.computeUniformBuffer, 0, uniformData);
+  }
+
+  /**
+   * Set interpolation factor between timesteps (0 = t0, 1 = t1)
+   */
+  setInterpFactor(factor: number): void {
+    this.interpFactor = Math.max(0, Math.min(1, factor));
+    this.updateComputeUniforms(0.005);
+  }
+
+  getInterpFactor(): number {
+    return this.interpFactor;
   }
 
   /**
@@ -333,11 +367,13 @@ export class WindLayer {
       entries: [
         { binding: 0, resource: { buffer: this.computeUniformBuffer } },
         { binding: 1, resource: { buffer: this.seedBuffer } },
-        { binding: 2, resource: { buffer: this.windUBuffer } },
-        { binding: 3, resource: { buffer: this.windVBuffer } },
-        { binding: 4, resource: { buffer: this.gaussianLatsBuffer } },
-        { binding: 5, resource: { buffer: this.ringOffsetsBuffer } },
-        { binding: 6, resource: { buffer: this.linePointsBuffer } },
+        { binding: 2, resource: { buffer: this.windU0Buffer } },
+        { binding: 3, resource: { buffer: this.windV0Buffer } },
+        { binding: 4, resource: { buffer: this.windU1Buffer } },
+        { binding: 5, resource: { buffer: this.windV1Buffer } },
+        { binding: 6, resource: { buffer: this.gaussianLatsBuffer } },
+        { binding: 7, resource: { buffer: this.ringOffsetsBuffer } },
+        { binding: 8, resource: { buffer: this.linePointsBuffer } },
       ],
     });
 
@@ -359,8 +395,10 @@ export class WindLayer {
     this.computeUniformBuffer?.destroy();
     this.renderUniformBuffer?.destroy();
     this.seedBuffer?.destroy();
-    this.windUBuffer?.destroy();
-    this.windVBuffer?.destroy();
+    this.windU0Buffer?.destroy();
+    this.windV0Buffer?.destroy();
+    this.windU1Buffer?.destroy();
+    this.windV1Buffer?.destroy();
     this.gaussianLatsBuffer?.destroy();
     this.ringOffsetsBuffer?.destroy();
     this.linePointsBuffer?.destroy();

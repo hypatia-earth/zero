@@ -249,6 +249,7 @@ export const App: m.ClosureComponent = () => {
             slotService,
             keyboardService,
             paletteService,
+            renderer: renderService.getRenderer(),
           };
         }
 

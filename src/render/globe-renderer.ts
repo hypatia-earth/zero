@@ -887,6 +887,11 @@ export class GlobeRenderer {
     return this.pressureLayer;
   }
 
+  /** Get wind layer for external control */
+  getWindLayer(): WindLayer {
+    return this.windLayer;
+  }
+
   /** Get GPU device for external buffer creation */
   getDevice(): GPUDevice {
     return this.device;

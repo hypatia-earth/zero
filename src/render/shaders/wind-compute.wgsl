@@ -6,7 +6,7 @@ struct ComputeUniforms {
   lineCount: u32,
   segments: u32,
   stepFactor: f32,
-  _pad: u32,
+  interpFactor: f32,  // 0.0 = t0, 1.0 = t1
 }
 
 struct LinePoint {
@@ -16,11 +16,13 @@ struct LinePoint {
 
 @group(0) @binding(0) var<uniform> uniforms: ComputeUniforms;
 @group(0) @binding(1) var<storage, read> seeds: array<vec4<f32>>;
-@group(0) @binding(2) var<storage, read> windU: array<f32>;
-@group(0) @binding(3) var<storage, read> windV: array<f32>;
-@group(0) @binding(4) var<storage, read> gaussianLats: array<f32>;
-@group(0) @binding(5) var<storage, read> ringOffsets: array<u32>;
-@group(0) @binding(6) var<storage, read_write> linePoints: array<LinePoint>;
+@group(0) @binding(2) var<storage, read> windU0: array<f32>;   // t0 U component
+@group(0) @binding(3) var<storage, read> windV0: array<f32>;   // t0 V component
+@group(0) @binding(4) var<storage, read> windU1: array<f32>;   // t1 U component
+@group(0) @binding(5) var<storage, read> windV1: array<f32>;   // t1 V component
+@group(0) @binding(6) var<storage, read> gaussianLats: array<f32>;
+@group(0) @binding(7) var<storage, read> ringOffsets: array<u32>;
+@group(0) @binding(8) var<storage, read_write> linePoints: array<LinePoint>;
 
 const PI: f32 = 3.14159265359;
 const TWO_PI: f32 = 6.28318530718;
@@ -47,7 +49,7 @@ fn findRing(lat: f32) -> u32 {
   return lo;
 }
 
-// Sample O1280 grid at lat/lon (radians)
+// Sample O1280 grid at lat/lon (radians) with timestep interpolation
 fn sampleO1280(lat: f32, lon: f32) -> vec2f {
   let ring = findRing(lat);
   let ringFromPole = select(ring + 1u, 2560u - ring, ring >= 1280u);
@@ -58,7 +60,13 @@ fn sampleO1280(lat: f32, lon: f32) -> vec2f {
   let lonIdx = u32(floor(lonNorm / TWO_PI * f32(nPoints))) % nPoints;
 
   let cell = ringOffsets[ring] + lonIdx;
-  return vec2f(windU[cell], windV[cell]);
+
+  // Sample both timesteps
+  let uv0 = vec2f(windU0[cell], windV0[cell]);
+  let uv1 = vec2f(windU1[cell], windV1[cell]);
+
+  // Interpolate between timesteps
+  return mix(uv0, uv1, uniforms.interpFactor);
 }
 
 // Rodrigues rotation: rotate point 'pos' around 'axis' by 'angle'
