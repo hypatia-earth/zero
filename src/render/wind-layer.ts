@@ -1,14 +1,14 @@
 /**
  * WindLayer - GPU-based wind vector field rendering
  *
- * T1: Minimal scaffolding - renders white quad to verify toggle/opacity
+ * T2: Seed Points - Fibonacci sphere distribution visible as dots
  * Future phases will add:
- * - T2: Compute pipeline for particle simulation
  * - T3: Wind data upload and integration
- * - T4: Particle rendering with trails
+ * - T4: Particle simulation and trails
  */
 
 import windRenderCode from './shaders/wind-render.wgsl?raw';
+import { generateFibonacciSphere } from '../utils/fibonacci-sphere';
 
 interface WindUniforms {
   viewProj: Float32Array;
@@ -26,43 +26,38 @@ export class WindLayer {
   private renderBindGroup!: GPUBindGroup;
   private renderBindGroupLayout!: GPUBindGroupLayout;
 
-  // Vertex buffer (simple quad for now)
-  private vertexBuffer!: GPUBuffer;
+  // Seed buffer (Fibonacci sphere positions)
+  private seedBuffer!: GPUBuffer;
+  private seedCount: number;
 
   // State
   private enabled = false;
 
-  constructor(device: GPUDevice, format: GPUTextureFormat) {
+  constructor(device: GPUDevice, format: GPUTextureFormat, lineCount = 8192) {
     this.device = device;
     this.format = format;
+    this.seedCount = lineCount;
 
     this.createRenderPipeline();
     this.createRenderBuffers();
   }
 
   private createRenderPipeline(): void {
-    // Render bind group layout (uniforms only for T1)
+    // Render bind group layout (uniforms + seed buffer)
     this.renderBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
       ],
     });
 
-    // Render pipeline
+    // Render pipeline for point primitives
     const renderModule = this.device.createShaderModule({ code: windRenderCode });
     this.renderPipeline = this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.renderBindGroupLayout] }),
       vertex: {
         module: renderModule,
         entryPoint: 'vertexMain',
-        buffers: [{
-          arrayStride: 8,  // 2 floats per vertex
-          attributes: [{
-            shaderLocation: 0,
-            offset: 0,
-            format: 'float32x2',
-          }],
-        }],
       },
       fragment: {
         module: renderModule,
@@ -75,10 +70,12 @@ export class WindLayer {
           },
         }],
       },
-      primitive: { topology: 'triangle-list' },
+      primitive: {
+        topology: 'point-list',
+      },
       depthStencil: {
         format: 'depth32float',
-        depthWriteEnabled: false,  // Don't write depth for particles
+        depthWriteEnabled: true,
         depthCompare: 'less-equal',  // Depth test against globe
       },
     });
@@ -91,30 +88,21 @@ export class WindLayer {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Simple fullscreen quad vertices (2 triangles)
-    // Positions in normalized device coordinates (NDC)
-    const quadVertices = new Float32Array([
-      // Triangle 1
-      -1, -1,
-       1, -1,
-       1,  1,
-      // Triangle 2
-      -1, -1,
-       1,  1,
-      -1,  1,
-    ]);
+    // Generate Fibonacci sphere seed positions
+    const seedPositions = generateFibonacciSphere(this.seedCount);
 
-    this.vertexBuffer = this.device.createBuffer({
-      size: quadVertices.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    this.seedBuffer = this.device.createBuffer({
+      size: seedPositions.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(this.vertexBuffer, 0, quadVertices);
+    this.device.queue.writeBuffer(this.seedBuffer, 0, seedPositions.buffer, seedPositions.byteOffset, seedPositions.byteLength);
 
     // Create bind group
     this.renderBindGroup = this.device.createBindGroup({
       layout: this.renderBindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.renderUniformBuffer } },
+        { binding: 1, resource: { buffer: this.seedBuffer } },
       ],
     });
   }
@@ -137,15 +125,14 @@ export class WindLayer {
   }
 
   /**
-   * Render wind layer (T1: simple white quad)
+   * Render wind layer (T2: Fibonacci sphere seed points)
    */
   render(renderPass: GPURenderPassEncoder): void {
     if (!this.enabled) return;
 
     renderPass.setPipeline(this.renderPipeline);
     renderPass.setBindGroup(0, this.renderBindGroup);
-    renderPass.setVertexBuffer(0, this.vertexBuffer);
-    renderPass.draw(6);  // 2 triangles = 6 vertices
+    renderPass.draw(this.seedCount);  // Draw seed points
   }
 
   setEnabled(enabled: boolean): void {
@@ -156,8 +143,45 @@ export class WindLayer {
     return this.enabled;
   }
 
+  /**
+   * Change line count (resizes seed buffer)
+   * @param lineCount Number of seed points (8K, 16K, 32K)
+   */
+  setLineCount(lineCount: number): void {
+    if (lineCount === this.seedCount) return;
+
+    console.log(`[Wind] Changing line count: ${this.seedCount} → ${lineCount}`);
+    this.seedCount = lineCount;
+
+    // Destroy old seed buffer
+    this.seedBuffer.destroy();
+
+    // Generate new seed positions
+    const seedPositions = generateFibonacciSphere(this.seedCount);
+
+    // Create new seed buffer
+    this.seedBuffer = this.device.createBuffer({
+      size: seedPositions.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.device.queue.writeBuffer(this.seedBuffer, 0, seedPositions.buffer, seedPositions.byteOffset, seedPositions.byteLength);
+
+    // Recreate bind group with new seed buffer
+    this.renderBindGroup = this.device.createBindGroup({
+      layout: this.renderBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.renderUniformBuffer } },
+        { binding: 1, resource: { buffer: this.seedBuffer } },
+      ],
+    });
+  }
+
+  getLineCount(): number {
+    return this.seedCount;
+  }
+
   dispose(): void {
     this.renderUniformBuffer?.destroy();
-    this.vertexBuffer?.destroy();
+    this.seedBuffer?.destroy();
   }
 }
