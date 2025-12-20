@@ -199,10 +199,10 @@ export class WindLayer {
 
     // viewProj (16 floats)
     floatView.set(uniforms.viewProj, 0);
-    // eyePosition (3 floats + 1 pad)
+    // eyePosition (3 floats)
     floatView.set(uniforms.eyePosition, 16);
-    // opacity (1 float)
-    floatView[20] = uniforms.opacity;
+    // opacity (1 float) - packs with eyePosition as vec4
+    floatView[19] = uniforms.opacity;
 
     this.device.queue.writeBuffer(this.renderUniformBuffer, 0, uniformData);
   }
