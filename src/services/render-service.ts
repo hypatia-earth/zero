@@ -30,6 +30,9 @@ export class RenderService {
   private lastPressureLerp = -1;  // For change detection
   private isobarLevels: number[] = generateIsobarLevels(4);  // Default spacing
 
+  // Wind layer state
+  private windLerpFn: ((time: Date) => number) | null = null;
+
   // Animated opacity state (lerps toward target each frame)
   private lastFrameTime = 0;
   private animatedOpacity: Record<TLayer, number> = Object.fromEntries(
@@ -279,9 +282,12 @@ export class RenderService {
   }
 
   private getWindUniforms() {
+    const time = this.optionsService.options.value.viewState.time;
+    const rawLerp = this.windLerpFn?.(time) ?? -1;
     return {
       windOpacity: this.animatedOpacity.wind,
-      windDataReady: false,
+      windDataReady: rawLerp >= -2 && rawLerp !== -1,
+      windLerp: rawLerp === -1 ? 0 : (rawLerp === -2 ? 0 : rawLerp),
     };
   }
 
@@ -383,6 +389,13 @@ export class RenderService {
   }
 
   /**
+   * Set the function to calculate wind lerp (from SlotService)
+   */
+  setWindLerpFn(fn: (time: Date) => number): void {
+    this.windLerpFn = fn;
+  }
+
+  /**
    * Set data-ready function for a param (from SlotService)
    * Returns true when param has loaded data for current time
    */
@@ -472,6 +485,13 @@ export class RenderService {
    */
   setTextureLayerBuffers(param: TWeatherTextureLayer, buffer0: GPUBuffer, buffer1: GPUBuffer): void {
     this.renderer!.setTextureLayerBuffers(param, buffer0, buffer1);
+  }
+
+  /**
+   * Set wind layer buffers (U0, V0, U1, V1 for two timesteps)
+   */
+  setWindLayerBuffers(u0: GPUBuffer, v0: GPUBuffer, u1: GPUBuffer, v1: GPUBuffer): void {
+    this.renderer!.setWindLayerBuffers(u0, v0, u1, v1);
   }
 
   /**

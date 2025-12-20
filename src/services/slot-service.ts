@@ -110,6 +110,7 @@ export class SlotService {
     // Wire up lerp calculations
     this.renderService.setTempLerpFn((time) => this.getLerp('temp', time));
     this.renderService.setPressureLerpFn((time) => this.getLerp('pressure', time));
+    this.renderService.setWindLerpFn((time) => this.getLerp('wind', time));
 
     // Wire up pressure resolution change callback (re-regrid slots with raw data)
     this.renderService.setPressureResolutionChangeFn((slotsNeedingRegrid) => {
@@ -260,6 +261,8 @@ export class SlotService {
         // Rebind buffers for texture layers (per-slot mode)
         if (isWeatherTextureLayer(param)) {
           this.rebindTextureLayerBuffers(param, slot.slotIndex, slot.slotIndex);
+        } else if (param === 'wind') {
+          this.rebindWindLayerBuffers(slot.slotIndex, slot.slotIndex);
         }
 
         this.renderService.activateSlots(param, slot.slotIndex, slot.slotIndex, slot.loadedPoints);
@@ -284,6 +287,8 @@ export class SlotService {
         // Rebind buffers for texture layers (per-slot mode)
         if (isWeatherTextureLayer(param)) {
           this.rebindTextureLayerBuffers(param, slot0.slotIndex, slot1.slotIndex);
+        } else if (param === 'wind') {
+          this.rebindWindLayerBuffers(slot0.slotIndex, slot1.slotIndex);
         }
 
         this.renderService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, Math.min(slot0.loadedPoints, slot1.loadedPoints));
@@ -307,6 +312,24 @@ export class SlotService {
       this.renderService.setTextureLayerBuffers(param, buffer0, buffer1);
     } else {
       console.warn(`[Slot] Missing ${param} buffer: slot0=${!!buffer0} slot1=${!!buffer1}`);
+    }
+  }
+
+  /** Rebind wind layer buffers (U0, V0, U1, V1) to renderer */
+  private rebindWindLayerBuffers(slotIndex0: number, slotIndex1: number): void {
+    const store = this.layerStores.get('wind');
+    if (!store) return;
+
+    // Wind has 2 slabs: U (index 0) and V (index 1)
+    const u0 = store.getSlotBuffer(slotIndex0, 0);
+    const v0 = store.getSlotBuffer(slotIndex0, 1);
+    const u1 = store.getSlotBuffer(slotIndex1, 0);
+    const v1 = store.getSlotBuffer(slotIndex1, 1);
+
+    if (u0 && v0 && u1 && v1) {
+      this.renderService.setWindLayerBuffers(u0, v0, u1, v1);
+    } else {
+      console.warn(`[Slot] Missing wind buffers: U0=${!!u0} V0=${!!v0} U1=${!!u1} V1=${!!v1}`);
     }
   }
 

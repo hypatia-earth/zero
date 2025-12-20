@@ -53,6 +53,9 @@ export class WindLayer {
   // Interpolation state
   private interpFactor = 0;
 
+  // External buffer mode (don't destroy buffers - owned by LayerStore)
+  private useExternalBuffers = false;
+
   // Line points buffer (compute output, render input)
   private linePointsBuffer!: GPUBuffer;
   private segmentsPerLine = 32;
@@ -278,6 +281,45 @@ export class WindLayer {
   }
 
   /**
+   * Set external buffers from LayerStore (live data mode)
+   * Replaces test data buffers and recreates compute bind group
+   */
+  setExternalBuffers(
+    u0: GPUBuffer, v0: GPUBuffer,
+    u1: GPUBuffer, v1: GPUBuffer,
+    gaussianLats: GPUBuffer, ringOffsets: GPUBuffer
+  ): void {
+    // Store references (don't destroy - owned by LayerStore)
+    this.windU0Buffer = u0;
+    this.windV0Buffer = v0;
+    this.windU1Buffer = u1;
+    this.windV1Buffer = v1;
+    this.gaussianLatsBuffer = gaussianLats;
+    this.ringOffsetsBuffer = ringOffsets;
+
+    // Mark as using external buffers (don't destroy in dispose)
+    this.useExternalBuffers = true;
+
+    // Recreate compute bind group with new buffers
+    this.computeBindGroup = this.device.createBindGroup({
+      layout: this.computeBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.computeUniformBuffer } },
+        { binding: 1, resource: { buffer: this.seedBuffer } },
+        { binding: 2, resource: { buffer: this.windU0Buffer } },
+        { binding: 3, resource: { buffer: this.windV0Buffer } },
+        { binding: 4, resource: { buffer: this.windU1Buffer } },
+        { binding: 5, resource: { buffer: this.windV1Buffer } },
+        { binding: 6, resource: { buffer: this.gaussianLatsBuffer } },
+        { binding: 7, resource: { buffer: this.ringOffsetsBuffer } },
+        { binding: 8, resource: { buffer: this.linePointsBuffer } },
+      ],
+    });
+
+    console.log('[Wind] External buffers set (live data mode)');
+  }
+
+  /**
    * Update render uniforms
    */
   updateUniforms(uniforms: WindUniforms): void {
@@ -406,12 +448,16 @@ export class WindLayer {
     this.computeUniformBuffer?.destroy();
     this.renderUniformBuffer?.destroy();
     this.seedBuffer?.destroy();
-    this.windU0Buffer?.destroy();
-    this.windV0Buffer?.destroy();
-    this.windU1Buffer?.destroy();
-    this.windV1Buffer?.destroy();
-    this.gaussianLatsBuffer?.destroy();
-    this.ringOffsetsBuffer?.destroy();
     this.linePointsBuffer?.destroy();
+
+    // Only destroy wind buffers if we own them (not in external buffer mode)
+    if (!this.useExternalBuffers) {
+      this.windU0Buffer?.destroy();
+      this.windV0Buffer?.destroy();
+      this.windU1Buffer?.destroy();
+      this.windV1Buffer?.destroy();
+      this.gaussianLatsBuffer?.destroy();
+      this.ringOffsetsBuffer?.destroy();
+    }
   }
 }

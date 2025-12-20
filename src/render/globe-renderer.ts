@@ -36,6 +36,7 @@ export interface GlobeUniforms {
   cloudsOpacity: number;
   humidityOpacity: number;
   windOpacity: number;
+  windLerp: number;
   pressureOpacity: number;
   tempDataReady: boolean;
   rainDataReady: boolean;
@@ -577,8 +578,9 @@ export class GlobeRenderer {
       }, false);
     }
 
-    // Update wind layer based on opacity
-    const windVisible = uniforms.windOpacity > 0.01;
+    // Update wind layer based on opacity AND data readiness
+    // Don't run compute/render if buffers might be invalid
+    const windVisible = uniforms.windOpacity > 0.01 && uniforms.windDataReady;
     this.windLayer.setEnabled(windVisible);
 
     if (windVisible) {
@@ -589,6 +591,9 @@ export class GlobeRenderer {
         this.windAnimPhase = (this.windAnimPhase + dt * this.windAnimSpeed) % 1;
       }
       this.lastAnimTime = now;
+
+      // Update interpolation factor from time lerp
+      this.windLayer.setInterpFactor(uniforms.windLerp);
 
       this.windLayer.updateUniforms({
         viewProj: this.camera.getViewProj(),
@@ -814,6 +819,14 @@ export class GlobeRenderer {
         return;
     }
     this.recreateBindGroup();
+  }
+
+  /**
+   * Set wind layer buffers from LayerStore (U0, V0, U1, V1)
+   * Called when active slots change
+   */
+  setWindLayerBuffers(u0: GPUBuffer, v0: GPUBuffer, u1: GPUBuffer, v1: GPUBuffer): void {
+    this.windLayer.setExternalBuffers(u0, v0, u1, v1, this.gaussianLatsBuffer, this.ringOffsetsBuffer);
   }
 
   /**
