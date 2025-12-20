@@ -145,7 +145,12 @@ fn computeMain(@builtin(global_invocation_id) id: vec3<u32>) {
     // Rotation axis: perpendicular to position and wind direction
     let axis = normalize(cross(pos, windDir));
 
+    // Scale step by wind speed: faster wind = longer step
+    // Normalize to ~40 m/s max, with minimum step for calm areas
+    let speedFactor = max(0.1, speed / 40.0);
+    let dynamicStep = stepSize * speedFactor;
+
     // Rotate position along sphere surface
-    pos = normalize(rodrigues(pos, axis, stepSize));
+    pos = normalize(rodrigues(pos, axis, dynamicStep));
   }
 }

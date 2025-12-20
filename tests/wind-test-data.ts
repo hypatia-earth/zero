@@ -1,6 +1,10 @@
 /**
- * Synthetic O1280 hurricane U/V wind data generator for testing
- * Generates realistic hurricane wind field with cyclonic rotation
+ * Synthetic O1280 wind data generator for testing
+ * Generates wind field with multiple zones:
+ * - Hurricane (cyclonic rotation)
+ * - Calm zone (doldrums)
+ * - Slow wind (trade winds)
+ * - Fast wind (jet stream)
  */
 
 const POINTS_PER_TIMESTEP = 6_599_680;
@@ -25,10 +29,50 @@ export interface HurricaneTimesteps {
 }
 
 /**
- * Generate synthetic O1280 wind data for a hurricane
+ * Base wind field with distinct zones for T6 snake animation testing
+ * - Doldrums (0-10°N, Pacific): ~0 m/s
+ * - Trade winds (10-30°N): ~8 m/s easterly
+ * - Westerlies (30-60°N): ~15 m/s westerly
+ * - Jet stream (40-50°N, Atlantic): ~40 m/s westerly
+ */
+function getBaseWind(latDeg: number, lonDeg: number): { u: number; v: number } {
+  // Normalize longitude to 0-360
+  let lon = lonDeg;
+  if (lon < 0) lon += 360;
+
+  // Doldrums: Equatorial Pacific (0-10°N, 150°W-90°W = 210-270°E)
+  if (latDeg >= -5 && latDeg <= 10 && lon >= 180 && lon <= 280) {
+    return { u: 0, v: 0 };  // Calm
+  }
+
+  // Trade winds: 10-30° both hemispheres (easterly)
+  if (Math.abs(latDeg) >= 10 && Math.abs(latDeg) <= 30) {
+    const sign = latDeg > 0 ? -1 : 1;  // NE trades in NH, SE trades in SH
+    return { u: -8, v: sign * 3 };  // ~8 m/s from east
+  }
+
+  // Jet stream: 40-50°N over Atlantic (30°W-10°E = 330-10°E)
+  if (latDeg >= 35 && latDeg <= 55 && (lon >= 300 || lon <= 30)) {
+    // Strong westerly jet
+    const jetCore = 1 - Math.abs(latDeg - 45) / 10;  // Peak at 45°N
+    return { u: 40 * jetCore, v: 0 };  // Up to 40 m/s
+  }
+
+  // Westerlies: 30-60° both hemispheres
+  if (Math.abs(latDeg) >= 30 && Math.abs(latDeg) <= 60) {
+    return { u: 12, v: 0 };  // ~12 m/s from west
+  }
+
+  // Default: light variable winds
+  return { u: 2, v: 1 };
+}
+
+/**
+ * Generate synthetic O1280 wind data with base wind field + hurricane
  *
  * Wind model:
- * - Cyclonic rotation (counterclockwise in NH, clockwise in SH)
+ * - Base wind field (doldrums, trades, westerlies, jet stream)
+ * - Hurricane overlay with cyclonic rotation
  * - Calm eye (r < eyeRadius)
  * - Peak winds at maxWindRadius (Rankine vortex)
  * - Decay beyond maxWindRadius
@@ -44,6 +88,7 @@ function generateHurricaneWind(config: HurricaneConfig): WindData {
   const hurricaneLon = config.lon * Math.PI / 180;
   const eyeRadiusRad = config.eyeRadius / EARTH_RADIUS_KM;
   const maxWindRadiusRad = config.maxWindRadius / EARTH_RADIUS_KM;
+  const influenceRadiusRad = maxWindRadiusRad * 3;  // Hurricane influence extends 3x max wind radius
 
   // Coriolis sign: positive in NH (counterclockwise), negative in SH
   const coriolisSign = config.lat >= 0 ? 1 : -1;
@@ -58,6 +103,12 @@ function generateHurricaneWind(config: HurricaneConfig): WindData {
 
     for (let i = 0; i < nPoints; i++) {
       const lon = (i / nPoints) * 2 * Math.PI;
+      const lonDeg = (lon * 180 / Math.PI);
+
+      // Start with base wind field
+      const base = getBaseWind(latDeg, lonDeg);
+      let windU = base.u;
+      let windV = base.v;
 
       // Great circle distance from hurricane center
       const dLon = lon - hurricaneLon;
@@ -65,37 +116,44 @@ function generateHurricaneWind(config: HurricaneConfig): WindData {
                    Math.cos(hurricaneLat) * Math.cos(lat) * Math.cos(dLon);
       const dist = Math.acos(Math.max(-1, Math.min(1, cosD)));
 
-      // Bearing from hurricane center to this point
-      const y = Math.sin(dLon) * Math.cos(lat);
-      const x = Math.cos(hurricaneLat) * Math.sin(lat) -
-                Math.sin(hurricaneLat) * Math.cos(lat) * Math.cos(dLon);
-      const bearing = Math.atan2(y, x);
+      // Add hurricane wind if within influence radius
+      if (dist < influenceRadiusRad) {
+        // Bearing from hurricane center to this point
+        const y = Math.sin(dLon) * Math.cos(lat);
+        const x = Math.cos(hurricaneLat) * Math.sin(lat) -
+                  Math.sin(hurricaneLat) * Math.cos(lat) * Math.cos(dLon);
+        const bearing = Math.atan2(y, x);
 
-      // Wind speed as function of distance (Rankine vortex model)
-      let windSpeed = 0;
+        // Wind speed as function of distance (Rankine vortex model)
+        let windSpeed = 0;
 
-      if (dist < eyeRadiusRad) {
-        // Inside eye: calm center with linear increase to eye wall
-        windSpeed = config.maxWindSpeed * (dist / eyeRadiusRad) * 0.3;
-      } else if (dist < maxWindRadiusRad) {
-        // Eye wall to max wind radius: linear increase
-        const t = (dist - eyeRadiusRad) / (maxWindRadiusRad - eyeRadiusRad);
-        windSpeed = config.maxWindSpeed * (0.3 + 0.7 * t);
-      } else {
-        // Beyond max wind radius: decay as 1/r
-        windSpeed = config.maxWindSpeed * (maxWindRadiusRad / dist);
+        if (dist < eyeRadiusRad) {
+          // Inside eye: calm center with linear increase to eye wall
+          windSpeed = config.maxWindSpeed * (dist / eyeRadiusRad) * 0.3;
+        } else if (dist < maxWindRadiusRad) {
+          // Eye wall to max wind radius: linear increase
+          const t = (dist - eyeRadiusRad) / (maxWindRadiusRad - eyeRadiusRad);
+          windSpeed = config.maxWindSpeed * (0.3 + 0.7 * t);
+        } else {
+          // Beyond max wind radius: decay as 1/r
+          windSpeed = config.maxWindSpeed * (maxWindRadiusRad / dist);
+        }
+
+        // Blend factor: hurricane dominates near center, fades at edge
+        const blendFactor = 1 - Math.pow(dist / influenceRadiusRad, 2);
+
+        // Tangential wind direction (perpendicular to radial direction)
+        const windBearing = bearing + coriolisSign * Math.PI / 2;
+
+        // Blend hurricane wind with base wind
+        const hurricaneU = windSpeed * Math.sin(windBearing);
+        const hurricaneV = windSpeed * Math.cos(windBearing);
+        windU = windU * (1 - blendFactor) + hurricaneU * blendFactor;
+        windV = windV * (1 - blendFactor) + hurricaneV * blendFactor;
       }
 
-      // Tangential wind direction (perpendicular to radial direction)
-      // Add 90° (π/2) for counterclockwise in NH, subtract for clockwise in SH
-      const windBearing = bearing + coriolisSign * Math.PI / 2;
-
-      // Convert polar wind (speed, direction) to U/V components
-      // U: eastward wind (positive = east, negative = west)
-      // V: northward wind (positive = north, negative = south)
-      u[idx] = windSpeed * Math.sin(windBearing);
-      v[idx] = windSpeed * Math.cos(windBearing);
-
+      u[idx] = windU;
+      v[idx] = windV;
       idx++;
     }
   }

@@ -51,25 +51,17 @@ fn vertexMain(
   return out;
 }
 
-// Speed-to-color mapping (blue → cyan → green → yellow → red)
+// Speed-to-color mapping (dark red → bright red)
 fn speedToColor(speed: f32) -> vec3<f32> {
   // Normalize speed: 0-40 m/s range (hurricane force ~33 m/s)
   let t = clamp(speed / 40.0, 0.0, 1.0);
 
-  // 5-stop color ramp
-  if (t < 0.25) {
-    let s = t / 0.25;
-    return mix(vec3<f32>(0.2, 0.4, 1.0), vec3<f32>(0.2, 0.8, 1.0), s);  // blue → cyan
-  } else if (t < 0.5) {
-    let s = (t - 0.25) / 0.25;
-    return mix(vec3<f32>(0.2, 0.8, 1.0), vec3<f32>(0.2, 1.0, 0.4), s);  // cyan → green
-  } else if (t < 0.75) {
-    let s = (t - 0.5) / 0.25;
-    return mix(vec3<f32>(0.2, 1.0, 0.4), vec3<f32>(1.0, 1.0, 0.2), s);  // green → yellow
-  } else {
-    let s = (t - 0.75) / 0.25;
-    return mix(vec3<f32>(1.0, 1.0, 0.2), vec3<f32>(1.0, 0.3, 0.2), s);  // yellow → red
-  }
+  // Shades of red: dark (0.3, 0.05, 0.05) → bright (1.0, 0.3, 0.2)
+  return vec3<f32>(
+    0.3 + t * 0.7,   // R: 0.3 → 1.0
+    0.05 + t * 0.25, // G: 0.05 → 0.3
+    0.05 + t * 0.15  // B: 0.05 → 0.2
+  );
 }
 
 @fragment
