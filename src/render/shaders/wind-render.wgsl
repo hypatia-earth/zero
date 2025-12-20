@@ -148,11 +148,10 @@ fn fragmentMain(in: VertexOutput) -> FragmentOutput {
   // Perspective-correct backface culling: discard points behind sphere limb
   // Skip culling when no texture layers visible (showBackface = 1.0)
   if (uniforms.showBackface < 0.5) {
-    // For unit sphere, tangent plane at silhouette satisfies dot(P, E) = 1
-    // Threshold scales with camera distance to handle quad expansion
-    // TODO: adjust forbidden zone here
+    // For unit sphere, tangent threshold is exactly 1.0: dot(T, E) = 1
+    // Margin scales with lineWidth * camDist (quad expansion in world space)
     let camDist = length(uniforms.eyePosition);
-    let threshold = 1.0 + 0.06 * camDist;
+    let threshold = 1.0 + uniforms.lineWidth * camDist * camDist * 18.0;
     let sphereTest = normalize(in.worldPos);
     if (dot(sphereTest, uniforms.eyePosition) < threshold) {
       discard;
