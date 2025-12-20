@@ -5,6 +5,7 @@
 import { effect } from '@preact/signals-core';
 import { GlobeRenderer } from '../render/globe-renderer';
 import { generateIsobarLevels } from '../render/pressure-layer';
+import { validateGlobeUniforms } from '../render/globe-uniforms';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { ZeroOptions } from '../schemas/options.schema';
@@ -63,6 +64,9 @@ export class RenderService {
   }
 
   async initialize(gaussianLats: Float32Array, ringOffsets: Uint32Array): Promise<void> {
+    // Validate uniform layout at startup
+    validateGlobeUniforms();
+
     const cameraConfig = this.configService.getCameraConfig();
     this.renderer = new GlobeRenderer(this.canvas, cameraConfig);
 

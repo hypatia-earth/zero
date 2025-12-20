@@ -88,8 +88,6 @@ export class PaletteService {
     });
 
     this.layerPalettes.value = new Map(current);
-
-    console.log(`[Palette] Loaded ${palettes.length} palette(s) for '${layer}'`);
     return palettes;
   }
 

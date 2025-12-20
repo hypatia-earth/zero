@@ -8,6 +8,7 @@ import postprocessShaderCode from './shaders/zero-post.wgsl?raw';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 import { PressureLayer, type PressureResolution } from './pressure-layer';
 import { GridAnimator } from './grid-animator';
+import { U, UNIFORM_BUFFER_SIZE } from './globe-uniforms';
 import type { TWeatherTextureLayer } from '../config/types';
 
 export interface GlobeUniforms {
@@ -88,7 +89,7 @@ export class GlobeRenderer {
   private colorSampler!: GPUSampler;
 
   readonly camera: Camera;
-  private uniformData = new ArrayBuffer(384);  // Includes padding for vec2f alignment + weather layers
+  private uniformData = new ArrayBuffer(UNIFORM_BUFFER_SIZE);
   private uniformView = new DataView(this.uniformData);
 
   // Track layer opacities for depth test decision
@@ -139,7 +140,6 @@ export class GlobeRenderer {
     this.device.lost.then((info) => {
       console.error('[Globe] WebGPU device lost:', info.message, info.reason);
     });
-    console.log('[Globe] Device ready, waiting for queue...');
 
     // Wait for device to be fully ready
     await this.device.queue.onSubmittedWorkDone();
@@ -163,9 +163,6 @@ export class GlobeRenderer {
         this.device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
         this.device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
       ];
-      console.log('[Globe] Timestamp queries enabled (timestampWrites)');
-    } else {
-      console.log('[Globe] Timestamp queries not available');
     }
 
     this.uniformBuffer = this.device.createBuffer({
@@ -366,7 +363,6 @@ export class GlobeRenderer {
 
     // Initialize pressure layer with configured resolution
     this.pressureLayer = new PressureLayer(this.device, this.format, pressureResolution);
-    console.log(`[Globe] Pressure resolution: ${pressureResolution}°`);
 
     this.resize();
   }
@@ -475,90 +471,81 @@ export class GlobeRenderer {
 
   updateUniforms(uniforms: GlobeUniforms): void {
     const view = this.uniformView;
-    let offset = 0;
+    const O = U; // Offsets from layout
 
-    // mat4 viewProjInverse (64 bytes)
+    // mat4 viewProjInverse
     for (let i = 0; i < 16; i++) {
-      view.setFloat32(offset, uniforms.viewProjInverse[i]!, true);
-      offset += 4;
+      view.setFloat32(O.viewProjInverse + i * 4, uniforms.viewProjInverse[i]!, true);
     }
 
-    // vec3 eyePosition + padding (16 bytes)
-    view.setFloat32(offset, uniforms.eyePosition[0]!, true); offset += 4;
-    view.setFloat32(offset, uniforms.eyePosition[1]!, true); offset += 4;
-    view.setFloat32(offset, uniforms.eyePosition[2]!, true); offset += 4;
-    offset += 4;
+    // vec3 eyePosition
+    view.setFloat32(O.eyePosition, uniforms.eyePosition[0]!, true);
+    view.setFloat32(O.eyePosition + 4, uniforms.eyePosition[1]!, true);
+    view.setFloat32(O.eyePosition + 8, uniforms.eyePosition[2]!, true);
 
-    // vec2 resolution + tanFov + padding (16 bytes)
-    view.setFloat32(offset, uniforms.resolution[0]!, true); offset += 4;
-    view.setFloat32(offset, uniforms.resolution[1]!, true); offset += 4;
-    view.setFloat32(offset, uniforms.tanFov, true); offset += 4;
-    offset += 4; // padding
+    // vec2 resolution + tanFov
+    view.setFloat32(O.resolution, uniforms.resolution[0]!, true);
+    view.setFloat32(O.resolution + 4, uniforms.resolution[1]!, true);
+    view.setFloat32(O.tanFov, uniforms.tanFov, true);
 
-    // time, sunOpacity + padding to align sunDirection to 16 bytes
-    view.setFloat32(offset, uniforms.time, true); offset += 4;
-    view.setFloat32(offset, uniforms.sunOpacity, true); offset += 4;
-    offset += 8; // padding for vec3f alignment
+    // time, sunOpacity
+    view.setFloat32(O.time, uniforms.time, true);
+    view.setFloat32(O.sunOpacity, uniforms.sunOpacity, true);
 
-    // vec3 sunDirection + padding (16 bytes)
-    view.setFloat32(offset, uniforms.sunDirection[0]!, true); offset += 4;
-    view.setFloat32(offset, uniforms.sunDirection[1]!, true); offset += 4;
-    view.setFloat32(offset, uniforms.sunDirection[2]!, true); offset += 4;
-    offset += 4;
+    // vec3 sunDirection
+    view.setFloat32(O.sunDirection, uniforms.sunDirection[0]!, true);
+    view.setFloat32(O.sunDirection + 4, uniforms.sunDirection[1]!, true);
+    view.setFloat32(O.sunDirection + 8, uniforms.sunDirection[2]!, true);
 
-    // sunCoreRadius, sunGlowRadius + padding (16 bytes)
-    view.setFloat32(offset, uniforms.sunCoreRadius, true); offset += 4;
-    view.setFloat32(offset, uniforms.sunGlowRadius, true); offset += 4;
-    offset += 8; // padding
+    // sunCoreRadius, sunGlowRadius
+    view.setFloat32(O.sunCoreRadius, uniforms.sunCoreRadius, true);
+    view.setFloat32(O.sunGlowRadius, uniforms.sunGlowRadius, true);
 
-    // vec3 sunCoreColor + padding (16 bytes)
-    view.setFloat32(offset, uniforms.sunCoreColor[0]!, true); offset += 4;
-    view.setFloat32(offset, uniforms.sunCoreColor[1]!, true); offset += 4;
-    view.setFloat32(offset, uniforms.sunCoreColor[2]!, true); offset += 4;
-    offset += 4;
+    // vec3 sunCoreColor
+    view.setFloat32(O.sunCoreColor, uniforms.sunCoreColor[0]!, true);
+    view.setFloat32(O.sunCoreColor + 4, uniforms.sunCoreColor[1]!, true);
+    view.setFloat32(O.sunCoreColor + 8, uniforms.sunCoreColor[2]!, true);
 
-    // vec3 sunGlowColor + padding (16 bytes)
-    view.setFloat32(offset, uniforms.sunGlowColor[0]!, true); offset += 4;
-    view.setFloat32(offset, uniforms.sunGlowColor[1]!, true); offset += 4;
-    view.setFloat32(offset, uniforms.sunGlowColor[2]!, true); offset += 4;
-    offset += 4;
+    // vec3 sunGlowColor
+    view.setFloat32(O.sunGlowColor, uniforms.sunGlowColor[0]!, true);
+    view.setFloat32(O.sunGlowColor + 4, uniforms.sunGlowColor[1]!, true);
+    view.setFloat32(O.sunGlowColor + 8, uniforms.sunGlowColor[2]!, true);
 
-    // gridEnabled, gridOpacity, earthOpacity, tempOpacity
-    view.setUint32(offset, uniforms.gridEnabled ? 1 : 0, true); offset += 4;
-    view.setFloat32(offset, uniforms.gridOpacity, true); offset += 4;
-    view.setFloat32(offset, uniforms.earthOpacity, true); offset += 4;
-    view.setFloat32(offset, uniforms.tempOpacity, true); offset += 4;
+    // Layer controls
+    view.setUint32(O.gridEnabled, uniforms.gridEnabled ? 1 : 0, true);
+    view.setFloat32(O.gridOpacity, uniforms.gridOpacity, true);
+    view.setFloat32(O.earthOpacity, uniforms.earthOpacity, true);
+    view.setFloat32(O.tempOpacity, uniforms.tempOpacity, true);
 
     // Track for depth test decision in render()
     this.currentEarthOpacity = uniforms.earthOpacity;
     this.currentTempOpacity = uniforms.tempOpacity;
 
-    // rainOpacity, tempDataReady, rainDataReady, tempLerp
-    view.setFloat32(offset, uniforms.rainOpacity, true); offset += 4;
-    view.setUint32(offset, uniforms.tempDataReady ? 1 : 0, true); offset += 4;
-    view.setUint32(offset, uniforms.rainDataReady ? 1 : 0, true); offset += 4;
-    view.setFloat32(offset, uniforms.tempLerp, true); offset += 4;
+    view.setFloat32(O.rainOpacity, uniforms.rainOpacity, true);
+    view.setUint32(O.tempDataReady, uniforms.tempDataReady ? 1 : 0, true);
+    view.setUint32(O.rainDataReady, uniforms.rainDataReady ? 1 : 0, true);
+    view.setFloat32(O.tempLerp, uniforms.tempLerp, true);
 
-    // tempLoadedPoints, tempSlot0, tempSlot1, gridFontSize (16 bytes)
-    view.setUint32(offset, uniforms.tempLoadedPoints, true); offset += 4;
-    view.setUint32(offset, uniforms.tempSlot0, true); offset += 4;
-    view.setUint32(offset, uniforms.tempSlot1, true); offset += 4;
-    view.setFloat32(offset, uniforms.gridFontSize, true); offset += 4;
-    view.setFloat32(offset, uniforms.gridLabelMaxRadius, true); offset += 4;
-    offset += 4; // padding for vec2f 8-byte alignment
+    // Temp layer slots
+    view.setUint32(O.tempLoadedPoints, uniforms.tempLoadedPoints, true);
+    view.setUint32(O.tempSlot0, uniforms.tempSlot0, true);
+    view.setUint32(O.tempSlot1, uniforms.tempSlot1, true);
 
-    // tempPaletteRange (vec2f needs 8-byte alignment)
-    view.setFloat32(offset, uniforms.tempPaletteRange[0]!, true); offset += 4;
-    view.setFloat32(offset, uniforms.tempPaletteRange[1]!, true); offset += 4;
+    // Grid settings
+    view.setFloat32(O.gridFontSize, uniforms.gridFontSize, true);
+    view.setFloat32(O.gridLabelMaxRadius, uniforms.gridLabelMaxRadius, true);
 
-    // Additional weather layer opacities (32 bytes)
-    view.setFloat32(offset, uniforms.cloudsOpacity, true); offset += 4;
-    view.setFloat32(offset, uniforms.humidityOpacity, true); offset += 4;
-    view.setFloat32(offset, uniforms.windOpacity, true); offset += 4;
-    view.setUint32(offset, uniforms.cloudsDataReady ? 1 : 0, true); offset += 4;
-    view.setUint32(offset, uniforms.humidityDataReady ? 1 : 0, true); offset += 4;
-    view.setUint32(offset, uniforms.windDataReady ? 1 : 0, true); offset += 4;
-    offset += 8; // weatherPad (vec2f)
+    // vec2 tempPaletteRange (alignment handled by layout)
+    view.setFloat32(O.tempPaletteRange, uniforms.tempPaletteRange[0]!, true);
+    view.setFloat32(O.tempPaletteRange + 4, uniforms.tempPaletteRange[1]!, true);
+
+    // Additional weather layers
+    view.setFloat32(O.cloudsOpacity, uniforms.cloudsOpacity, true);
+    view.setFloat32(O.humidityOpacity, uniforms.humidityOpacity, true);
+    view.setFloat32(O.windOpacity, uniforms.windOpacity, true);
+    view.setUint32(O.cloudsDataReady, uniforms.cloudsDataReady ? 1 : 0, true);
+    view.setUint32(O.humidityDataReady, uniforms.humidityDataReady ? 1 : 0, true);
+    view.setUint32(O.windDataReady, uniforms.windDataReady ? 1 : 0, true);
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 

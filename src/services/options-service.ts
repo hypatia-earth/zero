@@ -232,12 +232,12 @@ export class OptionsService {
    */
   async load(): Promise<void> {
     // Request persistent storage
+    let storageGranted = false;
     if (navigator.storage?.persist) {
-      const granted = await navigator.storage.persist();
-      console.log(`[Options] Persistent storage: ${granted ? 'granted' : 'denied'}`);
+      storageGranted = await navigator.storage.persist();
     }
 
-    const { options: stored, isNewDB } = await loadFromDB();
+    const { options: stored } = await loadFromDB();
 
     // Track usage stats
     const now = new Date().toISOString();
@@ -254,25 +254,22 @@ export class OptionsService {
       this.isFirstTimeUser = true;
     }
     await saveUsageStats(this.usageStats);
-    console.log(`[Options] Visit #${this.usageStats.visits}, first: ${this.isFirstTimeUser}`);
-
-    if (isNewDB) {
-      console.log('[Options] IndexedDB initialized');
-    }
 
     // Merge: defaults < IndexedDB < URL
     let merged = defaultOptions;
+    let overrideCount = 0;
 
     if (stored) {
       const result = optionsSchema.partial().safeParse(stored);
       if (result.success) {
         merged = deepMerge(merged, result.data as Partial<ZeroOptions>);
-        const count = Object.keys(result.data).length;
-        console.log(`[Options] Loaded ${count} override(s) from IndexedDB`);
+        overrideCount = Object.keys(result.data).length;
       }
-    } else {
-      console.log('[Options] No stored options, using defaults');
     }
+
+    // Single log line
+    const idb = storageGranted ? 'granted' : 'denied';
+    console.log(`[Options] IDB ${idb}, V #${this.usageStats.visits}, ${overrideCount} Overrides`);
 
     // Apply URL overrides (takes precedence)
     const urlOverrides = this.readUrlOptions();

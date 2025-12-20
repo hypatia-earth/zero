@@ -52,7 +52,6 @@ export class InfoService {
       const html = await marked.parse(markdown);
       this.cache.set(page, html);
     }
-    console.log(`[Info] Preloaded ${INFO_PAGES.length} page(s)`);
   }
 
   openDialog(page = 'welcome'): void {

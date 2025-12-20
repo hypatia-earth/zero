@@ -123,7 +123,7 @@ export class TimestepService {
     const ts = this.timestepsData[config.default];
     const vars = this.variablesData[config.default];
     const fmt = (t: TTimestep) => t.slice(5, 13); // "MM-DDTHH"
-    console.log(`[Timestep] ${config.default}: ${vars.length} V, ${ts.length} TS, ${fmt(ts[0]!.timestep)} - ${fmt(ts[ts.length - 1]!.timestep)}`);
+    console.log(`[Timestep] ${vars.length} V, ${ts.length} TS, ${fmt(ts[0]!.timestep)} - ${fmt(ts[ts.length - 1]!.timestep)}`);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────

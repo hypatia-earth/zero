@@ -48,7 +48,6 @@ export class LayerStore {
   initialize(): void {
     // Per-slot mode: buffers created on demand in allocateTimeslot()
     this.freeSlotIndices = Array.from({ length: this.timeslotCount }, (_, i) => i);
-    console.log(`[Store] ${this.layerId} initialized (${this.timeslotCount} slots, ${this.timeslotSizeMB} MB/slot)`);
   }
 
   /** Allocate a timeslot for the given timestep */

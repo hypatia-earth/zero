@@ -73,12 +73,14 @@ export async function registerServiceWorker(): Promise<void> {
 async function logCachedTimesteps(): Promise<void> {
   try {
     const stats = await sendSWMessage<CacheStats>({ type: 'GET_CACHE_STATS' });
+    const codes: Record<string, string> = { temp: 'temp', rain: 'rain', clouds: 'clou', humidity: 'humi', pressure: 'pres', wind: 'wind' };
     const parts = SW_CACHED_WEATHER_LAYERS
       .map(layer => {
         const layerStats = stats.layers[layer];
-        return layerStats ? `${layer}: ${layerStats.entries}` : `${layer}: 0`;
+        const code = codes[layer] ?? layer.slice(0, 4);
+        return `${code}: ${layerStats?.entries ?? 0}`;
       });
-    console.log(`[SW] Registered! Cached: ${parts.join(', ')}`);
+    console.log(`[SW] Reg OK, C: ${parts.join(', ')}`);
   } catch {
     console.log('[SW] Registered (no cache stats yet)');
   }

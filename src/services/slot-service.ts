@@ -269,7 +269,6 @@ export class SlotService {
 
     if (buffer0 && buffer1) {
       this.renderService.setTextureLayerBuffers(param, buffer0, buffer1);
-      console.log(`[Slot] ${param} buffers rebound: slots ${slotIndex0}, ${slotIndex1}`);
     } else {
       console.warn(`[Slot] Missing ${param} buffer: slot0=${!!buffer0} slot1=${!!buffer1}`);
     }
@@ -553,6 +552,7 @@ export class SlotService {
   /** Initialize LayerStores for weather layers with slab definitions */
   private initializeLayerStores(): void {
     const device = this.renderService.getDevice();
+    const summary: string[] = [];
 
     for (const param of this.readyWeatherLayers) {
       const layer = this.configService.getLayer(param);
@@ -566,7 +566,11 @@ export class SlotService {
       store.initialize();
 
       this.layerStores.set(param, store);
-      console.log(`[Slot] Created LayerStore: ${param} (${layer.slabs.length} slabs, ${this.timeslotsPerLayer} timeslots)`);
+      summary.push(`${param.slice(0, 4)}: ${layer.slabs.length}×${this.timeslotsPerLayer}`);
+    }
+
+    if (summary.length > 0) {
+      console.log(`[Slot] Stores: ${summary.join(', ')}`);
     }
   }
 
