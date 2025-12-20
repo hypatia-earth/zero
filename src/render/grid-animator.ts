@@ -31,6 +31,7 @@ export interface GridLinesUniforms {
 // Constants
 const MAX_LINES = 80;  // max lines per axis (72 lon + margin)
 const ANIMATION_DURATION = 1000;  // ms per birth/death cycle
+export const GRID_BUFFER_SIZE = 1296;  // bytes for GPU buffer
 
 // LoD levels from config
 const LOD_LEVELS: GridLodLevel[] = defaultConfig.grid.lodLevels;
@@ -463,4 +464,47 @@ export class GridAnimator {
   get currentLod(): number { return this.lodLevel; }
   get isAnimating(): boolean { return this.animating; }
 
+  /**
+   * Pack grid lines directly to GPU buffer format
+   * Layout: 20 vec4s each for lonDeg, lonOpacity, latDeg, latOpacity + counts
+   */
+  packToBuffer(altitude: number, dt: number): ArrayBuffer {
+    this.checkLodTransition(altitude);
+    if (this.animating) this.updateAnimation(dt);
+
+    const buffer = new ArrayBuffer(GRID_BUFFER_SIZE);
+    const view = new DataView(buffer);
+    let offset = 0;
+
+    // Longitude degrees (80 floats = 320 bytes)
+    for (let i = 0; i < MAX_LINES; i++) {
+      view.setFloat32(offset, this.lonLines[i]?.currentDeg ?? 0, true);
+      offset += 4;
+    }
+
+    // Longitude opacities (80 floats = 320 bytes)
+    for (let i = 0; i < MAX_LINES; i++) {
+      view.setFloat32(offset, this.lonLines[i]?.opacity ?? 0, true);
+      offset += 4;
+    }
+
+    // Latitude degrees (80 floats = 320 bytes)
+    for (let i = 0; i < MAX_LINES; i++) {
+      view.setFloat32(offset, this.latLines[i]?.currentDeg ?? 0, true);
+      offset += 4;
+    }
+
+    // Latitude opacities (80 floats = 320 bytes)
+    for (let i = 0; i < MAX_LINES; i++) {
+      view.setFloat32(offset, this.latLines[i]?.opacity ?? 0, true);
+      offset += 4;
+    }
+
+    // Counts (16 bytes: lonCount, latCount, pad, pad)
+    view.setUint32(offset, this.lonLines.length, true);
+    view.setUint32(offset + 4, this.latLines.length, true);
+
+    return buffer;
+  }
 }
+

@@ -7,9 +7,11 @@ import shaderCode from './shaders/zero-main.wgsl?raw';
 import postprocessShaderCode from './shaders/zero-post.wgsl?raw';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 import { PressureLayer, type PressureResolution } from './pressure-layer';
-import { GridAnimator } from './grid-animator';
+import { GridAnimator, GRID_BUFFER_SIZE } from './grid-animator';
 import { U, UNIFORM_BUFFER_SIZE } from './globe-uniforms';
+import { GpuTimestamp } from './gpu-timestamp';
 import type { TWeatherTextureLayer } from '../config/types';
+import { generateSyntheticO1280Pressure } from '../utils/synthetic-pressure';
 
 export interface GlobeUniforms {
   viewProjInverse: Float32Array;
@@ -94,15 +96,10 @@ export class GlobeRenderer {
 
   // Track layer opacities for depth test decision
   private currentEarthOpacity = 0;
-
-  // Timestamp queries for GPU timing
-  private hasTimestampQuery = false;
-  private timestampQuerySet: GPUQuerySet | null = null;
-  private timestampBuffer: GPUBuffer | null = null;
-  private timestampReadBuffers: [GPUBuffer, GPUBuffer] | null = null;
-  private timestampPending: [boolean, boolean] = [false, false];  // Per-buffer pending state
-  private lastGpuTimeMs: number | null = null;
   private currentTempOpacity = 0;
+
+  // GPU timing
+  private gpuTimestamp: GpuTimestamp | null = null;
 
   constructor(private canvas: HTMLCanvasElement, cameraConfig?: CameraConfig) {
     this.camera = new Camera({ lat: 30, lon: 0, distance: 3 }, cameraConfig);
@@ -122,11 +119,11 @@ export class GlobeRenderer {
     this.useFloat16Luts = !hasFloat32Filterable;
 
     // Check for timestamp-query support
-    this.hasTimestampQuery = adapter.features.has('timestamp-query');
+    const hasTimestampQuery = GpuTimestamp.isSupported(adapter);
 
     const requiredFeatures: GPUFeatureName[] = [];
     if (hasFloat32Filterable) requiredFeatures.push('float32-filterable');
-    if (this.hasTimestampQuery) requiredFeatures.push('timestamp-query');
+    if (hasTimestampQuery) requiredFeatures.push('timestamp-query');
 
     this.device = await adapter.requestDevice({
       requiredFeatures,
@@ -148,21 +145,9 @@ export class GlobeRenderer {
     this.format = navigator.gpu.getPreferredCanvasFormat();
     this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied' });
 
-    // Create timestamp query resources if supported (using timestampWrites, spec-compliant)
-    if (this.hasTimestampQuery) {
-      this.timestampQuerySet = this.device.createQuerySet({
-        type: 'timestamp',
-        count: 2,  // beginning and end of pass
-      });
-      this.timestampBuffer = this.device.createBuffer({
-        size: 16,  // 2 × BigInt64
-        usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
-      });
-      // Double-buffer read buffers to avoid race between GPU copy and CPU read
-      this.timestampReadBuffers = [
-        this.device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
-        this.device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
-      ];
+    // Create GPU timestamp helper if supported
+    if (hasTimestampQuery) {
+      this.gpuTimestamp = new GpuTimestamp(this.device);
     }
 
     this.uniformBuffer = this.device.createBuffer({
@@ -220,10 +205,9 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Grid lines buffer for animated LoD (vec4 packed: 20*4 arrays + counts)
-    // Size: 4 * 20 * 16 (80 floats as vec4s * 4 arrays) + 16 (counts + pad) = 1296
+    // Grid lines buffer for animated LoD
     this.gridLinesBuffer = this.device.createBuffer({
-      size: 1296,
+      size: GRID_BUFFER_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -550,14 +534,14 @@ export class GlobeRenderer {
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 
     // Update grid animation based on camera altitude
-    // Convert camera distance (world units) to altitude (km)
     const cameraDistance = Math.sqrt(
       uniforms.eyePosition[0]! ** 2 +
       uniforms.eyePosition[1]! ** 2 +
       uniforms.eyePosition[2]! ** 2
     );
-    const altitudeKm = (cameraDistance - 1.0) * 6371;  // Earth radius = 1 world unit = 6371 km
-    this.updateGridLines(altitudeKm, 16);  // Assume ~60fps = 16ms frame time
+    const altitudeKm = (cameraDistance - 1.0) * 6371;
+    const gridBuffer = this.gridAnimator.packToBuffer(altitudeKm, 16);
+    this.device.queue.writeBuffer(this.gridLinesBuffer, 0, gridBuffer);
 
     // Update pressure layer based on opacity
     const pressureVisible = uniforms.pressureOpacity > 0.01;
@@ -581,57 +565,6 @@ export class GlobeRenderer {
     }
   }
 
-  /**
-   * Update grid line animation state and upload to GPU
-   * Buffer layout matches GridLines struct (vec4 packed arrays):
-   * - lonDegrees[20 vec4s] = 320 bytes
-   * - lonOpacities[20 vec4s] = 320 bytes
-   * - latDegrees[20 vec4s] = 320 bytes
-   * - latOpacities[20 vec4s] = 320 bytes
-   * - lonCount, latCount, pad = 16 bytes
-   * Total: 1296 bytes
-   */
-  private updateGridLines(altitudeKm: number, dtMs: number): void {
-    const gridData = this.gridAnimator.update(altitudeKm, dtMs);
-
-    const buffer = new ArrayBuffer(1296);
-    const view = new DataView(buffer);
-    let offset = 0;
-
-    // Longitude degrees (80 floats packed as 20 vec4s = 320 bytes)
-    for (let i = 0; i < 80; i++) {
-      view.setFloat32(offset, gridData.lonDegrees[i] ?? 0, true);
-      offset += 4;
-    }
-
-    // Longitude opacities (80 floats packed as 20 vec4s = 320 bytes)
-    for (let i = 0; i < 80; i++) {
-      view.setFloat32(offset, gridData.lonOpacities[i] ?? 0, true);
-      offset += 4;
-    }
-
-    // Latitude degrees (80 floats packed as 20 vec4s = 320 bytes)
-    for (let i = 0; i < 80; i++) {
-      view.setFloat32(offset, gridData.latDegrees[i] ?? 0, true);
-      offset += 4;
-    }
-
-    // Latitude opacities (80 floats packed as 20 vec4s = 320 bytes)
-    for (let i = 0; i < 80; i++) {
-      view.setFloat32(offset, gridData.latOpacities[i] ?? 0, true);
-      offset += 4;
-    }
-
-    // Counts (lonCount, latCount, pad, pad = 16 bytes)
-    view.setUint32(offset, gridData.lonCount, true);
-    offset += 4;
-    view.setUint32(offset, gridData.latCount, true);
-    offset += 4;
-    offset += 8;  // padding
-
-    this.device.queue.writeBuffer(this.gridLinesBuffer, 0, buffer);
-  }
-
   render(): number | null {
     const commandEncoder = this.device.createCommandEncoder();
 
@@ -653,12 +586,8 @@ export class GlobeRenderer {
     };
 
     // Add timestampWrites if supported
-    if (this.hasTimestampQuery && this.timestampQuerySet) {
-      globePassDescriptor.timestampWrites = {
-        querySet: this.timestampQuerySet,
-        beginningOfPassWriteIndex: 0,
-        endOfPassWriteIndex: 1,
-      };
+    if (this.gpuTimestamp) {
+      globePassDescriptor.timestampWrites = this.gpuTimestamp.getTimestampWrites();
     }
 
     const globePass = commandEncoder.beginRenderPass(globePassDescriptor);
@@ -708,38 +637,19 @@ export class GlobeRenderer {
     postProcessPass.draw(3);
     postProcessPass.end();
 
-    // Resolve and copy timestamp queries (double-buffered: use whichever buffer is free)
-    const hasTimestamp = this.hasTimestampQuery && this.timestampQuerySet &&
-      this.timestampBuffer && this.timestampReadBuffers;
-    // Find a free buffer (not pending mapAsync)
-    const freeIdx: -1 | 0 | 1 = hasTimestamp ? (this.timestampPending[0] ? (this.timestampPending[1] ? -1 : 1) : 0) : -1;
-
-    if (freeIdx === 0 || freeIdx === 1) {
-      const idx = freeIdx;  // Capture narrowed type for closure
-      const readBuffer = this.timestampReadBuffers![idx];
-      commandEncoder.resolveQuerySet(this.timestampQuerySet!, 0, 2, this.timestampBuffer!, 0);
-      commandEncoder.copyBufferToBuffer(this.timestampBuffer!, 0, readBuffer, 0, 16);
-
-      this.device.queue.submit([commandEncoder.finish()]);
-
-      // Start async readback for GPU timing
-      this.timestampPending[idx] = true;
-      readBuffer.mapAsync(GPUMapMode.READ).then(() => {
-        const data = readBuffer.getMappedRange();
-        const times = new BigUint64Array(data);
-        const t0 = times[0]!, t1 = times[1]!;
-        const durationNs = t1 > t0 ? Number(t1 - t0) : Number(t0 - t1);
-        this.lastGpuTimeMs = durationNs / 1_000_000;
-        readBuffer.unmap();
-        this.timestampPending[idx] = false;
-      }).catch(() => {
-        this.timestampPending[idx] = false;
-      });
-    } else {
-      this.device.queue.submit([commandEncoder.finish()]);
+    // Encode timestamp resolve commands BEFORE submit
+    if (this.gpuTimestamp) {
+      this.gpuTimestamp.encodeResolve(commandEncoder);
     }
 
-    return this.lastGpuTimeMs;
+    this.device.queue.submit([commandEncoder.finish()]);
+
+    // Start async readback AFTER submit (critical ordering)
+    if (this.gpuTimestamp) {
+      this.gpuTimestamp.startReadback();
+    }
+
+    return this.gpuTimestamp?.getLastTimeMs() ?? null;
   }
 
   async loadBasemap(faces: ImageBitmap[]): Promise<void> {
@@ -1002,13 +912,10 @@ export class GlobeRenderer {
 
   /**
    * Initialize pressure layer with synthetic O1280 data for testing
-   * Generates lat-based pressure gradient: high at equator, low at poles
    */
   initSyntheticPressure(): void {
-    // Generate synthetic O1280 pressure data
-    const syntheticData = this.generateSyntheticO1280Pressure();
+    const syntheticData = generateSyntheticO1280Pressure();
 
-    // Create temporary buffer and upload synthetic data
     const syntheticBuffer = this.device.createBuffer({
       size: BYTES_PER_TIMESTEP,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
@@ -1016,67 +923,13 @@ export class GlobeRenderer {
     });
     this.device.queue.writeBuffer(syntheticBuffer, 0, syntheticData.buffer, syntheticData.byteOffset, syntheticData.byteLength);
 
-    // Trigger regrid with the synthetic buffer
     this.triggerPressureRegrid(0, syntheticBuffer);
 
-    // Run contour with slot0=slot1 (single mode, no interpolation)
     const testLevels = [976, 984, 992, 1000, 1008, 1016];
     this.runPressureContour(0, 0, 0, testLevels);
 
     this.pressureLayer.setEnabled(true);
     console.log(`[Globe] Synthetic pressure: ${testLevels.length} levels`);
-
-    // Note: syntheticBuffer is kept alive for re-regrid on resolution change
-    // In production, LayerStore manages buffer lifecycle
-  }
-
-  /**
-   * Generate synthetic O1280 pressure data
-   * Base gradient + cyclone over Germany (51°N, 10°E)
-   */
-  private generateSyntheticO1280Pressure(): Float32Array {
-    const data = new Float32Array(POINTS_PER_TIMESTEP);
-
-    // Cyclone center - Germany (51°N, 10°E)
-    // Formula: cycloneLon = (90 - targetLon) for O1280 grid offset
-    const targetLat = 51, targetLon = 10;
-    const cycloneLat = targetLat * Math.PI / 180;
-    const cycloneLon = (90 - targetLon) * Math.PI / 180;
-    const cycloneDepth = 40;  // hPa drop at center
-    const cycloneRadius = 15 * Math.PI / 180;  // ~15° radius (~1500km)
-
-    // O1280: 2560 rings, variable points per ring
-    let idx = 0;
-    for (let ring = 0; ring < 2560; ring++) {
-      // Latitude: 90° at ring 0, -90° at ring 2559
-      const latDeg = 90 - (ring + 0.5) * 180 / 2560;
-      const lat = latDeg * Math.PI / 180;
-
-      // Points in this ring
-      const ringFromPole = ring < 1280 ? ring + 1 : 2560 - ring;
-      const nPoints = 4 * ringFromPole + 16;
-
-      for (let i = 0; i < nPoints; i++) {
-        // Longitude for this point (O1280 starts at 0°)
-        const lon = (i / nPoints) * 2 * Math.PI;  // 0 to 2π
-
-        // Base pressure: higher at equator, lower at poles
-        const basePressure = 1010 + 10 * Math.cos(Math.abs(lat));
-
-        // Distance from cyclone center (great circle)
-        const dLon = lon - cycloneLon;
-        const cosD = Math.sin(cycloneLat) * Math.sin(lat) +
-                     Math.cos(cycloneLat) * Math.cos(lat) * Math.cos(dLon);
-        const dist = Math.acos(Math.max(-1, Math.min(1, cosD)));
-
-        // Gaussian pressure drop for cyclone
-        const cycloneEffect = cycloneDepth * Math.exp(-(dist * dist) / (2 * cycloneRadius * cycloneRadius));
-
-        data[idx++] = basePressure - cycloneEffect;
-      }
-    }
-
-    return data;
   }
 
   dispose(): void {
@@ -1095,5 +948,6 @@ export class GlobeRenderer {
     this.depthTexture?.destroy();
     this.colorTexture?.destroy();
     this.pressureLayer?.dispose();
+    this.gpuTimestamp?.dispose();
   }
 }
