@@ -176,13 +176,8 @@ export class QueueService implements IQueueService {
       this.currentlyFetching = next.order;
       this.currentAbortController = new AbortController();
 
-      // Map layer to Open-Meteo parameter name
-      // TODO: wind needs expansion to fetch u/v components separately
-      const paramMap: Record<string, string> = {
-        temp: 'temperature_2m',
-        pressure: 'pressure_msl',
-      };
-      const omParam = paramMap[next.order.param] ?? next.order.param;
+      // Use the omParam from the order (already mapped during order creation)
+      const omParam = next.order.omParam;
 
       try {
         await this.omService.fetch(

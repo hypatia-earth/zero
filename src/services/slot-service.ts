@@ -31,6 +31,39 @@ const fmt = (ts: TTimestep) => ts.slice(5, 13);
 /** 4-letter uppercase param code for logs */
 const P = (param: TWeatherLayer) => param.slice(0, 4).toUpperCase();
 
+/** Map layer to Open-Meteo parameter names */
+const PARAM_MAP: Record<string, string[]> = {
+  temp: ['temperature_2m'],
+  pressure: ['pressure_msl'],
+  wind: ['u_component_of_wind', 'v_component_of_wind'],
+  rain: ['precipitation'],
+  clouds: ['cloud_cover'],
+  humidity: ['relative_humidity_2m'],
+};
+
+/**
+ * Expand a single timestep order into per-slab orders.
+ * For wind layer: creates 2 orders (U and V components).
+ * For other layers: creates 1 order (slab 0).
+ */
+function expandOrder(
+  url: string,
+  param: TWeatherLayer,
+  timestep: TTimestep,
+  sizeEstimate: number
+): TimestepOrder[] {
+  const omParams = PARAM_MAP[param] ?? [param];
+
+  return omParams.map((omParam, slabIndex) => ({
+    url,
+    param,
+    timestep,
+    sizeEstimate: omParams.length > 1 ? sizeEstimate / omParams.length : sizeEstimate,
+    slabIndex,
+    omParam,
+  }));
+}
+
 
 export class SlotService {
   private paramSlots: Map<TWeatherLayer, ParamSlots> = new Map();
@@ -69,7 +102,9 @@ export class SlotService {
 
     // Create ParamSlots for each slot-based layer
     for (const param of this.readyWeatherLayers) {
-      this.paramSlots.set(param, createParamSlots(param, this.timeslotsPerLayer));
+      const layer = this.configService.getLayer(param);
+      const slabsCount = layer?.slabs?.length ?? 1;
+      this.paramSlots.set(param, createParamSlots(param, this.timeslotsPerLayer, slabsCount));
     }
 
     // Wire up lerp calculations
@@ -178,7 +213,9 @@ export class SlotService {
           // Shrinking: recreate (TODO: preserve closest to current time)
           const oldPs = this.paramSlots.get(param);
           oldPs?.dispose();
-          this.paramSlots.set(param, createParamSlots(param, newTimeslots));
+          const layer = this.configService.getLayer(param);
+          const slabsCount = layer?.slabs?.length ?? 1;
+          this.paramSlots.set(param, createParamSlots(param, newTimeslots, slabsCount));
         }
       }
 
@@ -275,14 +312,14 @@ export class SlotService {
   }
 
   /** Upload data to slot via LayerStore */
-  private uploadData(param: TWeatherLayer, data: Float32Array, slotIndex: number): void {
+  private uploadData(param: TWeatherLayer, data: Float32Array, slotIndex: number, slabIndex: number = 0): void {
     const store = this.layerStores.get(param);
     if (!store) return;
 
-    store.writeToSlab(0, slotIndex, data);  // slab 0 for single-slab layers
+    store.writeToSlab(slabIndex, slotIndex, data);
 
     // Pressure needs regrid after upload (pass the per-slot buffer)
-    if (param === 'pressure') {
+    if (param === 'pressure' && slabIndex === 0) {
       const buffer = store.getSlotBuffer(slotIndex, 0);
       if (buffer) {
         this.renderService.triggerPressureRegrid(slotIndex, buffer);
@@ -308,12 +345,14 @@ export class SlotService {
 
     // Build orders: new loads + already-loading priority (to prevent abort)
     const allOrderTimesteps = [...orderedToLoad, ...priorityAlreadyLoading];
-    const orders: TimestepOrder[] = allOrderTimesteps.map(timestep => ({
-      url: this.timestepService.url(timestep),
-      param,
-      timestep,
-      sizeEstimate: this.timestepService.getSize(param, timestep),
-    }));
+    const orders: TimestepOrder[] = allOrderTimesteps.flatMap(timestep =>
+      expandOrder(
+        this.timestepService.url(timestep),
+        param,
+        timestep,
+        this.timestepService.getSize(param, timestep)
+      )
+    );
 
     ps.setLoading(orderedToLoad);  // Only mark new ones as loading
     console.log(`[Slot] ${P(param)} fetching ${orderedToLoad.length} timesteps (${priorityAlreadyLoading.length} priority in-flight)`);
@@ -386,9 +425,34 @@ export class SlotService {
             }
             // Ensure buffer exists for this slot
             this.layerStores.get(param)?.ensureSlotBuffers(result.slotIndex);
-            this.uploadData(param, slice.data, result.slotIndex);
-            ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
-            this.timestepService.setGpuLoaded(param, order.timestep);
+
+            // Upload to the slab specified in the order
+            this.uploadData(param, slice.data, result.slotIndex, order.slabIndex);
+
+            // For single-slab layers: markLoaded immediately
+            // For multi-slab layers: markLoaded creates slot, then markSlabLoaded per slab
+            const layer = this.configService.getLayer(param);
+            const slabsCount = layer?.slabs?.length ?? 1;
+
+            if (slabsCount === 1) {
+              // Single-slab: existing behavior
+              ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
+              this.timestepService.setGpuLoaded(param, order.timestep);
+            } else {
+              // Multi-slab: track per-slab loading
+              const slot = ps.getSlot(order.timestep);
+              if (!slot) {
+                // First slab: create slot (not loaded yet)
+                ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
+              }
+              ps.markSlabLoaded(order.timestep, order.slabIndex);
+
+              // Check if all slabs are now loaded
+              if (ps.areAllSlabsLoaded(result.slotIndex)) {
+                this.timestepService.setGpuLoaded(param, order.timestep);
+              }
+            }
+
             this.timestepService.refreshCacheState(param);
             this.slotsVersion.value++;
             DEBUG_MONKEY && console.log(`[Monkey] ${P(param)} loaded ${fmt(order.timestep)} → slot ${result.slotIndex}, calling updateShaderIfReady`);
@@ -464,12 +528,13 @@ export class SlotService {
 
       for (const ts of wanted.priority) {
         ps.setLoading([ts]);
-        allOrders.push({
-          url: this.timestepService.url(ts),
+        const expanded = expandOrder(
+          this.timestepService.url(ts),
           param,
-          timestep: ts,
-          sizeEstimate: this.timestepService.getSize(param, ts),
-        });
+          ts,
+          this.timestepService.getSize(param, ts)
+        );
+        allOrders.push(...expanded);
       }
     }
 
@@ -490,9 +555,28 @@ export class SlotService {
           if (result) {
             // Ensure buffer exists for this slot
             this.layerStores.get(order.param)?.ensureSlotBuffers(result.slotIndex);
-            this.uploadData(order.param, slice.data, result.slotIndex);
-            ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
-            this.timestepService.setGpuLoaded(order.param, order.timestep);
+
+            // Upload to the slab specified in the order
+            this.uploadData(order.param, slice.data, result.slotIndex, order.slabIndex);
+
+            // For single-slab layers: markLoaded immediately
+            // For multi-slab layers: markLoaded creates slot, then markSlabLoaded per slab
+            const layer = this.configService.getLayer(order.param);
+            const slabsCount = layer?.slabs?.length ?? 1;
+
+            if (slabsCount === 1) {
+              ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
+              this.timestepService.setGpuLoaded(order.param, order.timestep);
+            } else {
+              const slot = ps.getSlot(order.timestep);
+              if (!slot) {
+                ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
+              }
+              ps.markSlabLoaded(order.timestep, order.slabIndex);
+              if (ps.areAllSlabsLoaded(result.slotIndex)) {
+                this.timestepService.setGpuLoaded(order.param, order.timestep);
+              }
+            }
           }
 
           completed++;

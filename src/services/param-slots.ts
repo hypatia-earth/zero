@@ -21,6 +21,7 @@ export interface Slot {
   slotIndex: number;
   loaded: boolean;
   loadedPoints: number;
+  slabsCount?: number;      // Total slabs expected (undefined = single-slab param)
 }
 
 export interface ParamSlots {
@@ -35,6 +36,10 @@ export interface ParamSlots {
 
   // Slot state
   markLoaded(timestep: TTimestep, slotIndex: number, loadedPoints: number): void;
+
+  // Slab tracking (for multi-param layers like wind with U+V)
+  markSlabLoaded(timestep: TTimestep, slabIndex: number): void;
+  areAllSlabsLoaded(slotIndex: number): boolean;
 
   // Loading tracking
   isLoading(timestep: TTimestep): boolean;
@@ -59,11 +64,12 @@ export interface ParamSlots {
 /** Short timestep format for logs: "MM-DDTHH" */
 const fmt = (ts: TTimestep) => ts.slice(5, 13);
 
-export function createParamSlots(param: string, timeslots: number): ParamSlots {
+export function createParamSlots(param: string, timeslots: number, slabsCount?: number): ParamSlots {
   const freeIndices = Array.from({ length: timeslots }, (_, i) => i);
   const wanted = signal<WantedState | null>(null);
   const slots = new Map<TTimestep, Slot>();
   const loadingKeys = new Set<TTimestep>();
+  const slabsLoaded = new Map<number, Set<number>>();  // slotIndex → Set<slabIndex>
   let activeTimesteps: TTimestep[] = [];
   let capacity = timeslots;
 
@@ -99,12 +105,56 @@ export function createParamSlots(param: string, timeslots: number): ParamSlots {
       const [evictTs, evictSlot] = candidates[0]!;
       console.log(`[Slot] ${P} evict ${fmt(evictTs)} for ${fmt(timestep)}`);
       slots.delete(evictTs);
+      slabsLoaded.delete(evictSlot.slotIndex);  // Clear slab tracking for evicted slot
       return { slotIndex: evictSlot.slotIndex, evicted: evictTs, evictedSlotIndex: evictSlot.slotIndex };
     },
 
     markLoaded(timestep, slotIndex, loadedPoints) {
-      slots.set(timestep, { timestep, slotIndex, loaded: true, loadedPoints });
-      console.log(`[Slot] ${P} loaded ${fmt(timestep)} → slot ${slotIndex} (${slots.size}/${capacity})`);
+      // For single-slab layers (slabsCount undefined or 1): mark loaded immediately
+      // For multi-slab layers: create slot but don't mark loaded until all slabs complete
+      const isMultiSlab = slabsCount !== undefined && slabsCount > 1;
+      const slot: Slot = {
+        timestep,
+        slotIndex,
+        loaded: !isMultiSlab,  // Only true for single-slab layers
+        loadedPoints
+      };
+      if (slabsCount !== undefined) slot.slabsCount = slabsCount;
+      slots.set(timestep, slot);
+
+      if (isMultiSlab) {
+        console.log(`[Slot] ${P} allocated ${fmt(timestep)} → slot ${slotIndex} (waiting for ${slabsCount} slabs)`);
+      } else {
+        console.log(`[Slot] ${P} loaded ${fmt(timestep)} → slot ${slotIndex} (${slots.size}/${capacity})`);
+      }
+    },
+
+    markSlabLoaded(timestep, slabIndex) {
+      const slot = slots.get(timestep);
+      if (!slot) {
+        console.warn(`[Slot] ${P} markSlabLoaded called for unknown timestep ${fmt(timestep)}`);
+        return;
+      }
+
+      if (!slabsLoaded.has(slot.slotIndex)) {
+        slabsLoaded.set(slot.slotIndex, new Set());
+      }
+      slabsLoaded.get(slot.slotIndex)!.add(slabIndex);
+
+      const loadedCount = slabsLoaded.get(slot.slotIndex)!.size;
+      console.log(`[Slot] ${P} slab ${slabIndex} loaded for ${fmt(timestep)} → slot ${slot.slotIndex} (${loadedCount}/${slabsCount})`);
+
+      // Check if all slabs are now loaded
+      if (slabsCount !== undefined && loadedCount === slabsCount) {
+        slot.loaded = true;
+        console.log(`[Slot] ${P} ALL slabs loaded for ${fmt(timestep)} → slot ${slot.slotIndex} (${slots.size}/${capacity})`);
+      }
+    },
+
+    areAllSlabsLoaded(slotIndex) {
+      if (slabsCount === undefined) return true;  // Single-slab params always ready
+      const loaded = slabsLoaded.get(slotIndex);
+      return loaded !== undefined && loaded.size === slabsCount;
     },
 
     isLoading: (ts) => loadingKeys.has(ts),
@@ -134,6 +184,7 @@ export function createParamSlots(param: string, timeslots: number): ParamSlots {
     dispose() {
       slots.clear();
       loadingKeys.clear();
+      slabsLoaded.clear();
       freeIndices.length = 0;
       activeTimesteps = [];
     },

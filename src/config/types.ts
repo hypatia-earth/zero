@@ -118,6 +118,8 @@ export interface TimestepOrder {
   param: TWeatherLayer;
   timestep: TTimestep;
   sizeEstimate: number;  // Estimated bytes (NaN = use default)
+  slabIndex: number;     // Which slab to upload to (0 for single-slab layers)
+  omParam: string;       // Open-Meteo parameter name to fetch
 }
 
 /** OmService preflight result */
