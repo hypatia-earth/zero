@@ -170,7 +170,7 @@ export class RenderService {
       this.lastFrameTime = now;
       this.updateAnimatedOpacities(options, rawLerp, dt);
 
-      // Recompute pressure contours when time changes (minute precision)
+      // Recompute pressure contours when time changes by at least 1 minute
       if (options.pressure.enabled && this.pressureLerpFn) {
         const pressureLerp = this.pressureLerpFn(time);
         const validLerp = pressureLerp >= 0 ? pressureLerp : (pressureLerp === -2 ? 0 : -1);

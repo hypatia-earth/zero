@@ -280,7 +280,7 @@ export class WindLayer {
 
   /**
    * Set interpolation factor and current time
-   * Recomputes when time changes by 1 minute (time snaps to exact minutes)
+   * Recomputes when time changes by at least 1 minute
    */
   setInterpFactor(factor: number, time?: Date): void {
     this.interpFactor = Math.max(0, Math.min(1, factor));
