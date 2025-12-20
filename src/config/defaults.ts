@@ -87,7 +87,7 @@ export const defaultConfig: ZeroConfig = {
 
   defaultLayers: ['earth', 'sun', 'temp'],
 
-  readyLayers: ['earth', 'sun', 'grid', 'temp', 'pressure'],
+  readyLayers: ['earth', 'sun', 'grid', 'temp', 'pressure', 'wind'],
 
   sun: {
     coreRadius: 0.015,

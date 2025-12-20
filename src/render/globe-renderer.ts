@@ -619,10 +619,15 @@ export class GlobeRenderer {
     globePass.draw(3);
     globePass.end();
 
+    // COMPUTE PASS: Wind line tracing (runs before geometry rendering)
+    const hasWind = this.windLayer.isEnabled();
+    if (hasWind) {
+      this.windLayer.runCompute(commandEncoder);
+    }
+
     // PASS 2: Geometry layers (pressure contours, wind, etc.)
     // Renders to same color/depth textures, depth-tested against globe
     const hasPressure = this.pressureLayer.isEnabled() && this.pressureLayer.getVertexCount() > 0;
-    const hasWind = this.windLayer.isEnabled();
 
     if (hasPressure || hasWind) {
       // Use depth test only when earth or temp layers are visible
