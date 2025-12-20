@@ -12,6 +12,7 @@ import windComputeCode from './shaders/wind-compute.wgsl?raw';
 import { generateFibonacciSphere } from '../utils/fibonacci-sphere';
 import { generateHurricaneTestData } from '../../tests/wind-test-data';
 import { generateGaussianLUTs } from './gaussian-grid';
+import { defaultConfig } from '../config/defaults';
 
 interface WindUniforms {
   viewProj: Float32Array;
@@ -58,7 +59,7 @@ export class WindLayer {
 
   // Line points buffer (compute output, render input)
   private linePointsBuffer!: GPUBuffer;
-  private segmentsPerLine = 32;
+  private segmentsPerLine = defaultConfig.wind.segmentsPerLine;
 
   // State
   private enabled = false;
@@ -172,7 +173,7 @@ export class WindLayer {
     this.device.queue.writeBuffer(this.ringOffsetsBuffer, 0, luts.offsets.buffer, luts.offsets.byteOffset, luts.offsets.byteLength);
 
     // Initialize compute uniforms (smaller stepFactor = smoother lines)
-    this.updateComputeUniforms(0.005);
+    this.updateComputeUniforms(defaultConfig.wind.stepFactor);
 
     // Create compute bind group
     this.computeBindGroup = this.device.createBindGroup({
@@ -273,7 +274,7 @@ export class WindLayer {
    */
   setInterpFactor(factor: number): void {
     this.interpFactor = Math.max(0, Math.min(1, factor));
-    this.updateComputeUniforms(0.005);
+    this.updateComputeUniforms(defaultConfig.wind.stepFactor);
   }
 
   getInterpFactor(): number {
@@ -412,7 +413,7 @@ export class WindLayer {
     });
 
     // Update compute uniforms with new line count
-    this.updateComputeUniforms(0.005);
+    this.updateComputeUniforms(defaultConfig.wind.stepFactor);
 
     // Recreate compute bind group
     this.computeBindGroup = this.device.createBindGroup({

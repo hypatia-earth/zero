@@ -527,22 +527,6 @@ export const optionsSchema = z.object({
         options: [],
       }
     ),
-    resolution: opt(
-      z.enum(['full', 'half']).default('full'),
-      {
-        label: 'Resolution',
-        description: 'Higher resolution = more detail, but less timesteps are GPU cached',
-        group: 'layers',
-        filter: ['global', 'temp'],
-        order: 10.5,
-        control: 'radio',
-        options: [
-          { value: 'full', label: 'Full' },
-          { value: 'half', label: 'Half' },
-        ],
-        impact: 'recreate',
-      }
-    ),
   }),
 
   // ----------------------------------------------------------
@@ -573,22 +557,6 @@ export const optionsSchema = z.object({
         min: 0.05,
         max: 1,
         step: 0.05,
-      }
-    ),
-    resolution: opt(
-      z.enum(['full', 'half']).default('full'),
-      {
-        label: 'Resolution',
-        description: 'Higher resolution = more detail, but less timesteps are GPU cached',
-        group: 'layers',
-        filter: ['global', 'rain'],
-        order: 11.5,
-        control: 'radio',
-        options: [
-          { value: 'full', label: 'Full' },
-          { value: 'half', label: 'Half' },
-        ],
-        impact: 'recreate',
       }
     ),
   }),
@@ -623,22 +591,6 @@ export const optionsSchema = z.object({
         step: 0.05,
       }
     ),
-    resolution: opt(
-      z.enum(['full', 'half']).default('full'),
-      {
-        label: 'Resolution',
-        description: 'Higher resolution = more detail, but less timesteps are GPU cached',
-        group: 'layers',
-        filter: ['global', 'clouds'],
-        order: 12.5,
-        control: 'radio',
-        options: [
-          { value: 'full', label: 'Full' },
-          { value: 'half', label: 'Half' },
-        ],
-        impact: 'recreate',
-      }
-    ),
   }),
 
   // ----------------------------------------------------------
@@ -669,22 +621,6 @@ export const optionsSchema = z.object({
         min: 0.05,
         max: 1,
         step: 0.05,
-      }
-    ),
-    resolution: opt(
-      z.enum(['full', 'half']).default('full'),
-      {
-        label: 'Resolution',
-        description: 'Higher resolution = more detail, but less timesteps are GPU cached',
-        group: 'layers',
-        filter: ['global', 'humidity'],
-        order: 13.5,
-        control: 'radio',
-        options: [
-          { value: 'full', label: 'Full' },
-          { value: 'half', label: 'Half' },
-        ],
-        impact: 'recreate',
       }
     ),
   }),
@@ -722,7 +658,7 @@ export const optionsSchema = z.object({
       }
     ),
     opacity: opt(
-      z.number().min(0.05).max(1).default(0.6),
+      z.number().min(0.05).max(1).default(defaultConfig.wind.opacity),
       {
         label: 'Wind opacity',
         description: 'Transparency of wind lines',
@@ -736,33 +672,17 @@ export const optionsSchema = z.object({
       }
     ),
     speed: opt(
-      z.number().min(5).max(50).default(20),
+      z.number().min(2).max(20).default(defaultConfig.wind.animSpeed),
       {
         label: 'Animation speed',
-        description: 'Speed of wind line animation',
+        description: 'Speed of wind line animation (updates per second)',
         group: 'layers',
         filter: ['global', 'wind'],
         order: 16,
         control: 'slider',
-        min: 5,
-        max: 50,
-        step: 5,
-      }
-    ),
-    resolution: opt(
-      z.enum(['full', 'half']).default('full'),
-      {
-        label: 'Resolution',
-        description: 'Higher resolution = more detail, but less timesteps are GPU cached',
-        group: 'layers',
-        filter: ['global', 'wind'],
-        order: 16.5,
-        control: 'radio',
-        options: [
-          { value: 'full', label: 'Full' },
-          { value: 'half', label: 'Half' },
-        ],
-        impact: 'recreate',
+        min: 2,
+        max: 20,
+        step: 1,
       }
     ),
   }),
@@ -945,11 +865,11 @@ export const defaultOptions: ZeroOptions = {
   earth: { enabled: true, opacity: 1, blend: 0 },
   sun: { enabled: true, opacity: 1 },
   grid: { enabled: true, opacity: defaultConfig.grid.opacity, fontSize: 8 },
-  temp: { enabled: true, opacity: 0.6, palette: 'ESRI Temperature', resolution: 'full' },
-  rain: { enabled: false, opacity: 1.0, resolution: 'full' },
-  clouds: { enabled: false, opacity: 0.5, resolution: 'full' },
-  humidity: { enabled: false, opacity: 0.6, resolution: 'full' },
-  wind: { enabled: false, seedCount: '8192', opacity: 0.6, speed: 20, resolution: 'full' },
+  temp: { enabled: true, opacity: 0.6, palette: 'ESRI Temperature' },
+  rain: { enabled: false, opacity: 1.0 },
+  clouds: { enabled: false, opacity: 0.5 },
+  humidity: { enabled: false, opacity: 0.6 },
+  wind: { enabled: false, seedCount: '8192', opacity: defaultConfig.wind.opacity, speed: defaultConfig.wind.animSpeed },
   pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1', spacing: '4' },
   dataCache: { cacheStrategy: 'alternate', downloadMode: 'on-demand' },
   debug: { showDevLog: false, showPerfPanel: false },

@@ -198,6 +198,21 @@ export interface GridConfig {
   lodLevels: GridLodLevel[];
 }
 
+export interface WindConfig {
+  /** Default opacity 0-1 */
+  opacity: number;
+  /** Animation speed in updates/sec (1 update = 1 segment forward) */
+  animSpeed: number;
+  /** Fraction of line visible (0-1) */
+  snakeLength: number;
+  /** Screen-space line width factor */
+  lineWidth: number;
+  /** Trace steps per wind line */
+  segmentsPerLine: number;
+  /** Wind speed to arc distance scale */
+  stepFactor: number;
+}
+
 export interface AppConfig {
   /** Application name */
   name: string;
@@ -258,6 +273,9 @@ export interface ZeroConfig {
 
   /** Grid layer settings */
   grid: GridConfig;
+
+  /** Wind layer settings */
+  wind: WindConfig;
 
   /** Render settings */
   render: {

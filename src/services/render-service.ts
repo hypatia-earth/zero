@@ -288,6 +288,7 @@ export class RenderService {
       windOpacity: this.animatedOpacity.wind,
       windDataReady: rawLerp >= -2 && rawLerp !== -1,
       windLerp: rawLerp === -1 ? 0 : (rawLerp === -2 ? 0 : rawLerp),
+      windAnimSpeed: this.optionsService.options.value.wind.speed,
     };
   }
 

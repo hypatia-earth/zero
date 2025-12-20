@@ -12,6 +12,7 @@ import { GridAnimator, GRID_BUFFER_SIZE } from './grid-animator';
 import { U, UNIFORM_BUFFER_SIZE } from './globe-uniforms';
 import { GpuTimestamp } from './gpu-timestamp';
 import type { TWeatherTextureLayer } from '../config/types';
+import { defaultConfig } from '../config/defaults';
 import { generateSyntheticO1280Pressure } from '../utils/synthetic-pressure';
 
 export interface GlobeUniforms {
@@ -37,6 +38,7 @@ export interface GlobeUniforms {
   humidityOpacity: number;
   windOpacity: number;
   windLerp: number;
+  windAnimSpeed: number;  // updates per second
   pressureOpacity: number;
   tempDataReady: boolean;
   rainDataReady: boolean;
@@ -104,9 +106,9 @@ export class GlobeRenderer {
 
   // Wind animation state
   private windAnimPhase = 0;
-  private windSnakeLength = 0.25;  // 25% of line visible
-  private windAnimSpeed = 0.3;     // Cycles per second
-  private windLineWidth = 0.002;   // Screen-space width factor
+  private windSnakeLength = defaultConfig.wind.snakeLength;
+  private windLineWidth = defaultConfig.wind.lineWidth;
+  private windSegments = defaultConfig.wind.segmentsPerLine;
   private lastAnimTime = 0;
 
   // GPU timing
@@ -585,10 +587,12 @@ export class GlobeRenderer {
 
     if (windVisible) {
       // Advance snake animation phase
+      // Convert updates/sec to cycles/sec: cycles = updates / segments
+      const cyclesPerSec = uniforms.windAnimSpeed / this.windSegments;
       const now = performance.now() / 1000;
       if (this.lastAnimTime > 0) {
         const dt = now - this.lastAnimTime;
-        this.windAnimPhase = (this.windAnimPhase + dt * this.windAnimSpeed) % 1;
+        this.windAnimPhase = (this.windAnimPhase + dt * cyclesPerSec) % 1;
       }
       this.lastAnimTime = now;
 
