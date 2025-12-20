@@ -27,7 +27,7 @@ export class RenderService {
   private pressureSlot0 = 0;
   private pressureSlot1 = 0;
   private pressureLerpFn: ((time: Date) => number) | null = null;
-  private lastPressureLerp = -1;  // For change detection
+  private lastPressureMinute = -1;  // For minute-based change detection
   private isobarLevels: number[] = generateIsobarLevels(4);  // Default spacing
 
   // Wind layer state
@@ -95,7 +95,7 @@ export class RenderService {
       if (newResolution !== lastResolution) {
         lastResolution = newResolution;
         const slotsNeedingRegrid = this.renderer?.setPressureResolution(newResolution) ?? [];
-        this.lastPressureLerp = -1;  // Force contour recompute on next frame
+        this.lastPressureMinute = -1;  // Force contour recompute on next frame
         if (slotsNeedingRegrid.length > 0) {
           this.onPressureResolutionChange?.(slotsNeedingRegrid);
         }
@@ -111,7 +111,7 @@ export class RenderService {
         lastSpacing = newSpacing;
         this.isobarLevels = generateIsobarLevels(newSpacing);
         this.renderer?.setPressureLevelCount(this.isobarLevels.length);
-        this.lastPressureLerp = -1;  // Force contour recompute on next frame
+        this.lastPressureMinute = -1;  // Force contour recompute on next frame
         console.log(`[Render] Isobar spacing: ${newSpacing} hPa, ${this.isobarLevels.length} levels`);
       }
     });
@@ -122,7 +122,7 @@ export class RenderService {
       const newSmoothing = this.optionsService.options.value.pressure.smoothing;
       if (newSmoothing !== lastSmoothing) {
         lastSmoothing = newSmoothing;
-        this.lastPressureLerp = -1;  // Force contour recompute on next frame
+        this.lastPressureMinute = -1;  // Force contour recompute on next frame
         console.log(`[Render] Pressure smoothing: ${newSmoothing} iterations`);
       }
     });
@@ -170,12 +170,13 @@ export class RenderService {
       this.lastFrameTime = now;
       this.updateAnimatedOpacities(options, rawLerp, dt);
 
-      // Recompute pressure contours when lerp changes (threshold 0.005 ≈ 1 min at 3h timesteps)
+      // Recompute pressure contours when time changes (minute precision)
       if (options.pressure.enabled && this.pressureLerpFn) {
         const pressureLerp = this.pressureLerpFn(time);
         const validLerp = pressureLerp >= 0 ? pressureLerp : (pressureLerp === -2 ? 0 : -1);
-        if (validLerp >= 0 && Math.abs(validLerp - this.lastPressureLerp) > 0.005) {
-          this.lastPressureLerp = validLerp;
+        const currentMinute = Math.floor(time.getTime() / 60000);
+        if (validLerp >= 0 && currentMinute !== this.lastPressureMinute) {
+          this.lastPressureMinute = currentMinute;
           const smoothingIterations = parseInt(options.pressure.smoothing, 10);
           renderer.runPressureContour(this.pressureSlot0, this.pressureSlot1, validLerp, this.isobarLevels, smoothingIterations);
         }
@@ -471,7 +472,7 @@ export class RenderService {
         // Store slots for render loop interpolation
         this.pressureSlot0 = slot0;
         this.pressureSlot1 = slot1;
-        this.lastPressureLerp = -1;  // Force recompute on next frame
+        this.lastPressureMinute = -1;  // Force recompute on next frame
         break;
       case 'rain':
       case 'wind':
