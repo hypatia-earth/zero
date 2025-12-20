@@ -145,8 +145,8 @@ export class WindLayer {
       },
       depthStencil: {
         format: 'depth32float',
-        depthWriteEnabled: true,
-        depthCompare: 'less-equal',  // Depth test against globe
+        depthWriteEnabled: false,
+        depthCompare: 'always',  // TODO: fix depth test to match globe
       },
     });
   }
@@ -230,12 +230,8 @@ export class WindLayer {
     renderPass.setPipeline(this.renderPipeline);
     renderPass.setBindGroup(0, this.renderBindGroup);
 
-    // For line-strip topology, we need to draw each line separately
-    // Each line has segmentsPerLine points
-    for (let i = 0; i < this.seedCount; i++) {
-      const firstVertex = i * this.segmentsPerLine;
-      renderPass.draw(this.segmentsPerLine, 1, firstVertex, 0);
-    }
+    // Instanced draw: 32 vertices per instance, 8192 instances (one per line)
+    renderPass.draw(this.segmentsPerLine, this.seedCount, 0, 0);
   }
 
   setEnabled(enabled: boolean): void {

@@ -50,7 +50,7 @@ export const ECMWF_PARAMS = [
   'precipitation', 'rain', 'total_precipitation',
   'cloud_cover', 'total_cloud_cover',
   'relative_humidity_2m',
-  'wind_speed_10m', 'u_component_of_wind', 'v_component_of_wind',
+  'wind_u_component_200m', 'wind_v_component_200m',
   'pressure_msl', 'mean_sea_level_pressure',
 ] as const;
 export type TParam = typeof ECMWF_PARAMS[number];

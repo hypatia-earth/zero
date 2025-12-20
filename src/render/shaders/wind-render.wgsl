@@ -19,17 +19,18 @@ struct VertexOutput {
   @location(1) speed: f32,
 }
 
-struct FragmentOutput {
-  @location(0) color: vec4<f32>,
-  @builtin(frag_depth) depth: f32,
-}
-
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var<storage, read> linePoints: array<LinePoint>;
 
 @vertex
-fn vertexMain(@builtin(vertex_index) idx: u32) -> VertexOutput {
-  let point = linePoints[idx];
+fn vertexMain(
+  @builtin(vertex_index) vertexIdx: u32,
+  @builtin(instance_index) instanceIdx: u32
+) -> VertexOutput {
+  // Each instance is a line, vertexIdx is position within line
+  let segmentsPerLine = 32u;
+  let pointIdx = instanceIdx * segmentsPerLine + vertexIdx;
+  let point = linePoints[pointIdx];
 
   var out: VertexOutput;
   out.position = uniforms.viewProj * vec4<f32>(point.position, 1.0);
@@ -39,15 +40,6 @@ fn vertexMain(@builtin(vertex_index) idx: u32) -> VertexOutput {
 }
 
 @fragment
-fn fragmentMain(in: VertexOutput) -> FragmentOutput {
-  // Color based on wind speed (white for test wind)
-  let color = vec3<f32>(1.0, 1.0, 1.0);
-  let alpha = uniforms.opacity;
-
-  // Compute linear depth matching globe shader
-  let hitT = length(in.worldPos - uniforms.eyePosition);
-  let cameraDistance = length(uniforms.eyePosition);
-  let linearDepth = clamp(hitT / (cameraDistance * 2.0), 0.0, 1.0);
-
-  return FragmentOutput(vec4<f32>(color, alpha), linearDepth);
+fn fragmentMain(in: VertexOutput) -> @location(0) vec4<f32> {
+  return vec4<f32>(1.0, 1.0, 1.0, uniforms.opacity);
 }

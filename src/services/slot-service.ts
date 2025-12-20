@@ -35,7 +35,7 @@ const P = (param: TWeatherLayer) => param.slice(0, 4).toUpperCase();
 const PARAM_MAP: Record<string, string[]> = {
   temp: ['temperature_2m'],
   pressure: ['pressure_msl'],
-  wind: ['u_component_of_wind', 'v_component_of_wind'],
+  wind: ['wind_u_component_200m', 'wind_v_component_200m'],
   rain: ['precipitation'],
   clouds: ['cloud_cover'],
   humidity: ['relative_humidity_2m'],
