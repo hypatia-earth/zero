@@ -1,6 +1,10 @@
-**Contents:** [About](#about) · [Controls](#controls) · [Data](#data) · [Install](#install-as-app) · [Quirks](#quirks) · [How it's Made](#how-its-made)
+<!-- Style guide: /docs/zero/zero--styles.md -->
+
+**Contents:** [About](#about) · [Controls](#controls) · [Data](#data) · [Install](#install-as-app) · [Tips](#tips) · [Quirks](#quirks) · [How it's Made](#how-its-made)
 
 ## About
+
+**Zero democratizes access to the world's best weather data.**
 
 Hypatia Zero visualizes global weather in your browser using WebGPU.
 
@@ -48,6 +52,10 @@ For fullscreen experience, install as a Progressive Web App:
 | Chrome / Edge | Install icon in address bar, or Menu → "Install Hypatia Zero" |
 | Android | Menu → "Add to Home Screen" |
 | iOS Safari | Share → "Add to Home Screen" |
+
+## Tips
+
+**Not all combinations work equally well.** Basemaps and weather layers use different color palettes. Some combinations provide better contrast than others. Experiment with basemap and palette settings to find what works best for the data you're viewing.
 
 ## Quirks
 

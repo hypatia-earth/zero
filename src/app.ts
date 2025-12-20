@@ -115,12 +115,12 @@ export const App: m.ClosureComponent = () => {
             { url: `/atmosphere/scattering${suffix}.dat`, size: f16 ? 8388608 : 16777216 },
             { url: `/atmosphere/irradiance${suffix}.dat`, size: f16 ? 8192 : 16384 },
             // 3-8: Basemap faces
-            { url: '/images/basemaps/rtopo2/px.png', size: 111244 },
-            { url: '/images/basemaps/rtopo2/nx.png', size: 78946 },
-            { url: '/images/basemaps/rtopo2/py.png', size: 215476 },
-            { url: '/images/basemaps/rtopo2/ny.png', size: 292274 },
-            { url: '/images/basemaps/rtopo2/pz.png', size: 85084 },
-            { url: '/images/basemaps/rtopo2/nz.png', size: 59133 },
+            { url: '/images/basemaps/ghs-pop/4096/px.png', size: 2149455 },
+            { url: '/images/basemaps/ghs-pop/4096/nx.png', size: 1975592 },
+            { url: '/images/basemaps/ghs-pop/4096/py.png', size: 2337011 },
+            { url: '/images/basemaps/ghs-pop/4096/ny.png', size: 88036 },
+            { url: '/images/basemaps/ghs-pop/4096/pz.png', size: 2427476 },
+            { url: '/images/basemaps/ghs-pop/4096/nz.png', size: 400639 },
             // 9: WASM decoder
             { url: '/om-decoder.wasm', size: 2107564 },
             // 10: Font atlas
