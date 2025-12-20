@@ -19,6 +19,7 @@ interface WindUniforms {
   opacity: number;
   animPhase: number;    // 0-1 animation phase
   snakeLength: number;  // fraction of line visible (0-1)
+  lineWidth: number;    // screen-space width factor
 }
 
 export class WindLayer {
@@ -216,7 +217,7 @@ export class WindLayer {
         }],
       },
       primitive: {
-        topology: 'line-list',
+        topology: 'triangle-list',
       },
       depthStencil: {
         format: 'depth32float',
@@ -293,7 +294,9 @@ export class WindLayer {
     floatView[20] = uniforms.animPhase;
     // snakeLength (1 float)
     floatView[21] = uniforms.snakeLength;
-    // padding (2 floats) at 22, 23
+    // lineWidth (1 float)
+    floatView[22] = uniforms.lineWidth;
+    // padding (1 float) at 23
 
     this.device.queue.writeBuffer(this.renderUniformBuffer, 0, uniformData);
   }
@@ -321,9 +324,9 @@ export class WindLayer {
     renderPass.setPipeline(this.renderPipeline);
     renderPass.setBindGroup(0, this.renderBindGroup);
 
-    // Line-list: (segments-1) × 2 vertices per instance for 31 line segments
-    // 32 points → 31 segments → 62 vertices per instance
-    const verticesPerInstance = (this.segmentsPerLine - 1) * 2;
+    // Triangle-list: (segments-1) × 6 vertices per instance for 31 quad segments
+    // 32 points → 31 segments → 186 vertices per instance (6 per quad)
+    const verticesPerInstance = (this.segmentsPerLine - 1) * 6;
     renderPass.draw(verticesPerInstance, this.seedCount, 0, 0);
   }
 

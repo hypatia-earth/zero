@@ -105,6 +105,7 @@ export class GlobeRenderer {
   private windAnimPhase = 0;
   private windSnakeLength = 0.25;  // 25% of line visible
   private windAnimSpeed = 0.3;     // Cycles per second
+  private windLineWidth = 0.002;   // Screen-space width factor
   private lastAnimTime = 0;
 
   // GPU timing
@@ -599,6 +600,7 @@ export class GlobeRenderer {
         opacity: uniforms.windOpacity,
         animPhase: this.windAnimPhase,
         snakeLength: this.windSnakeLength,
+        lineWidth: this.windLineWidth,
       });
     }
   }
