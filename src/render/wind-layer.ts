@@ -66,6 +66,10 @@ export class WindLayer {
   private enabled = false;
   private randomSeed = Math.random();
 
+  // Compute caching: only recompute when interpolation changes
+  private lastComputedInterp = -999;  // Force initial compute
+  private needsCompute = true;
+
   constructor(device: GPUDevice, format: GPUTextureFormat, lineCount = 8192) {
     this.device = device;
     this.format = format;
@@ -273,10 +277,15 @@ export class WindLayer {
 
   /**
    * Set interpolation factor between timesteps (0 = t0, 1 = t1)
+   * Only marks for recompute if factor changes significantly
    */
   setInterpFactor(factor: number): void {
-    this.interpFactor = Math.max(0, Math.min(1, factor));
-    this.updateComputeUniforms(defaultConfig.wind.stepFactor);
+    const newFactor = Math.max(0, Math.min(1, factor));
+    // Only recompute if factor changed by more than threshold (~1 minute at 3h timesteps)
+    if (Math.abs(newFactor - this.lastComputedInterp) > 0.005) {
+      this.needsCompute = true;
+    }
+    this.interpFactor = newFactor;
   }
 
   getInterpFactor(): number {
@@ -302,6 +311,7 @@ export class WindLayer {
 
     // Mark as using external buffers (don't destroy in dispose)
     this.useExternalBuffers = true;
+    this.needsCompute = true;  // Force recompute with new data
 
     // Recreate compute bind group with new buffers
     this.computeBindGroup = this.device.createBindGroup({
@@ -350,9 +360,18 @@ export class WindLayer {
   }
 
   /**
-   * Run compute pass to trace wind lines
+   * Run compute pass to trace wind lines (only if needed)
+   * Returns true if compute was actually run
    */
-  runCompute(commandEncoder: GPUCommandEncoder): void {
+  runCompute(commandEncoder: GPUCommandEncoder): boolean {
+    // Skip if no recompute needed (interpolation unchanged)
+    if (!this.needsCompute) {
+      return false;
+    }
+
+    // Update uniforms with current interpolation factor
+    this.updateComputeUniforms(defaultConfig.wind.stepFactor);
+
     const computePass = commandEncoder.beginComputePass();
     computePass.setPipeline(this.computePipeline);
     computePass.setBindGroup(0, this.computeBindGroup);
@@ -361,6 +380,11 @@ export class WindLayer {
     const workgroups = Math.ceil(this.seedCount / 64);
     computePass.dispatchWorkgroups(workgroups);
     computePass.end();
+
+    // Mark as computed
+    this.lastComputedInterp = this.interpFactor;
+    this.needsCompute = false;
+    return true;
   }
 
   /**
@@ -396,6 +420,7 @@ export class WindLayer {
     console.log(`[Wind] Changing line count: ${this.seedCount} → ${lineCount}`);
     this.seedCount = lineCount;
     this.randomSeed = Math.random();  // Scramble phase offsets
+    this.needsCompute = true;  // Force recompute with new line count
 
     // Destroy old buffers
     this.seedBuffer.destroy();
