@@ -167,7 +167,6 @@ export interface LayerConfig {
   label: string;              // Full name (e.g., "Temperature")
   buttonLabel: string;        // Short name for UI buttons (e.g., "Temp")
   category: TLayerCategory;
-  defaultEnabled: boolean;
   params?: TParam[];             // ECMWF param names (weather layers)
   defaultSizeEstimate?: number;  // bytes per timestep (weather layers)
   slabs?: SlabConfig[];          // GPU buffer slabs (weather layers only)
