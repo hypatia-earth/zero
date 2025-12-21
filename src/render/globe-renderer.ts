@@ -975,14 +975,15 @@ export class GlobeRenderer {
     }
 
     const maxVerticesPerLevel = 63724;
-    let totalVertices = 0;
 
-    // Clear vertex buffer to remove stale geometry
-    this.pressureLayer.clearVertexBuffer();
+    // Batch all levels into a single command encoder to reduce GPU submit overhead
+    const commandEncoder = this.device.createCommandEncoder();
+
+    // Clear vertex buffer using GPU-side clearBuffer (no CPU→GPU transfer)
+    this.pressureLayer.clearVertexBuffer(commandEncoder);
 
     for (let i = 0; i < levels.length; i++) {
       const vertexOffset = i * maxVerticesPerLevel;
-      const commandEncoder = this.device.createCommandEncoder();
       const levelPa = levels[i]! * 100;  // Convert hPa to Pa
       this.pressureLayer.runContour(commandEncoder, slot0, slot1, lerp, levelPa, vertexOffset);
 
@@ -990,12 +991,11 @@ export class GlobeRenderer {
       if (smoothingIterations > 0) {
         this.pressureLayer.runSmoothing(commandEncoder, smoothingIterations, vertexOffset, maxVerticesPerLevel);
       }
-
-      this.device.queue.submit([commandEncoder.finish()]);
-      totalVertices += maxVerticesPerLevel;
     }
 
-    this.pressureLayer.setVertexCount(totalVertices);
+    // Single GPU submit for all levels
+    this.device.queue.submit([commandEncoder.finish()]);
+    this.pressureLayer.setVertexCount(levels.length * maxVerticesPerLevel);
   }
 
   /**

@@ -121,6 +121,9 @@ export class PressureLayer {
   private computeReady = false;
   private currentLevelCount = 21;  // Default for 4 hPa spacing
 
+  // Cached array for edge clearing (reused to avoid allocation per frame)
+  private edgeClearData: Int32Array | null = null;
+
   constructor(
     device: GPUDevice,
     format: GPUTextureFormat,
@@ -613,9 +616,12 @@ export class PressureLayer {
     // _pad: vec2<u32> at offset 24-31
     this.device.queue.writeBuffer(this.contourUniformBuffer, 0, contourUniforms);
 
-    // Clear edge→vertex mapping (fill with -1)
-    const edgeClearData = new Int32Array(this.numCells * 4).fill(-1);
-    this.device.queue.writeBuffer(this.edgeToVertexBuffer, 0, edgeClearData);
+    // Clear edge→vertex mapping using cached buffer (avoid allocation per frame)
+    const requiredSize = this.numCells * 4;
+    if (!this.edgeClearData || this.edgeClearData.length !== requiredSize) {
+      this.edgeClearData = new Int32Array(requiredSize).fill(-1);
+    }
+    this.device.queue.writeBuffer(this.edgeToVertexBuffer, 0, this.edgeClearData as Int32Array<ArrayBuffer>);
 
     // Create contour bind group with both grid slots
     const contourBindGroup = this.device.createBindGroup({
@@ -723,10 +729,10 @@ export class PressureLayer {
   runSmoothing(commandEncoder: GPUCommandEncoder, iterations: number, vertexOffset: number, maxVertices: number): void {
     if (iterations <= 0 || !this.computeReady) return;
 
-    // Clear the smoothed buffer region to avoid stale data
+    // Clear the smoothed buffer region using GPU-side clearBuffer
     const byteOffset = vertexOffset * 16;
-    const zeros = new Float32Array(maxVertices * 4);
-    this.device.queue.writeBuffer(this.smoothedVertexBuffer, byteOffset, zeros);
+    const byteSize = maxVertices * 16;  // vec4f = 16 bytes per vertex
+    commandEncoder.clearBuffer(this.smoothedVertexBuffer, byteOffset, byteSize);
 
     // Update smoothing uniforms
     const smoothUniforms = new Uint32Array([
@@ -818,16 +824,14 @@ export class PressureLayer {
   }
 
   /**
-   * Clear vertex buffer to remove stale geometry
+   * Clear vertex buffer using GPU-side clearBuffer (fast, no CPU→GPU transfer)
    * Called before recomputing contours
    */
-  clearVertexBuffer(): void {
-    // Write zeros to the entire vertex buffer
+  clearVertexBuffer(commandEncoder: GPUCommandEncoder): void {
     const maxSegmentsPerLevel = this.numCells * 2;
     const maxVerticesPerLevel = maxSegmentsPerLevel * 2;
-    const bufferSize = maxVerticesPerLevel * this.currentLevelCount * 16;  // vec4f per vertex
-    const zeros = new Float32Array(bufferSize / 4);
-    this.device.queue.writeBuffer(this.vertexBuffer, 0, zeros);
+    const byteSize = maxVerticesPerLevel * this.currentLevelCount * 16;  // vec4f = 16 bytes
+    commandEncoder.clearBuffer(this.vertexBuffer, 0, byteSize);
   }
 
   /**
