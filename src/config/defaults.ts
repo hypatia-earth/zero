@@ -115,7 +115,7 @@ export const defaultConfig: ZeroConfig = {
 
   wind: {
     opacity: 0.8,
-    animSpeed: 10,        // updates per second (1 update = 1 segment forward)
+    animSpeed: 30,        // updates per second (1 update = 1 segment forward)
     snakeLength: 0.25,    // fraction of line visible (0-1)
     lineWidth: 0.002,     // screen-space width factor
     segmentsPerLine: 32,  // trace steps per wind line

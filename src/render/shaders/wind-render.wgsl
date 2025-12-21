@@ -121,20 +121,24 @@ fn vertexMain(
 
 // Speed-to-color mapping based on Beaufort scale hazard thresholds
 // White (0-17 m/s) → gradient to red (17-26 m/s) → full red (26+ m/s)
-fn speedToColor(speed: f32) -> vec3<f32> {
+// Alpha ramps from 0% at 0 m/s to 100% at 17 m/s
+fn speedToColor(speed: f32) -> vec4<f32> {
   let safeThreshold = 17.0;   // Beaufort 8: gale, walking difficult
   let dangerThreshold = 26.0; // Beaufort 10: storm, trees uprooted
 
+  // Alpha: 60% at 0 m/s → 100% at 17 m/s
+  let alpha = 0.6 + 0.4 * clamp(speed / safeThreshold, 0.0, 1.0);
+
   if (speed < safeThreshold) {
-    // Safe: white
-    return vec3<f32>(1.0, 1.0, 1.0);
+    // Safe: white with speed-based alpha
+    return vec4<f32>(1.0, 1.0, 1.0, alpha);
   } else if (speed < dangerThreshold) {
     // Hazardous: white → red gradient
     let t = (speed - safeThreshold) / (dangerThreshold - safeThreshold);
-    return vec3<f32>(1.0, 1.0 - t * 0.8, 1.0 - t * 0.9);
+    return vec4<f32>(1.0, 1.0 - t * 0.8, 1.0 - t * 0.9, 1.0);
   } else {
     // Dangerous: full red
-    return vec3<f32>(1.0, 0.2, 0.1);
+    return vec4<f32>(1.0, 0.2, 0.1, 1.0);
   }
 }
 
@@ -164,9 +168,9 @@ fn fragmentMain(in: VertexOutput) -> FragmentOutput {
   let linearDepth = clamp(hitT / (cameraDistance * 2.0), 0.0, 1.0);
   let depthOffset = 0.0001;
 
-  // Color based on wind speed, alpha from snake animation
-  let color = speedToColor(in.speed);
-  let finalAlpha = uniforms.opacity * in.alpha;
+  // Color and speed-based alpha from palette, combined with snake animation alpha
+  let colorAlpha = speedToColor(in.speed);
+  let finalAlpha = uniforms.opacity * in.alpha * colorAlpha.a;
 
-  return FragmentOutput(vec4<f32>(color, finalAlpha), linearDepth - depthOffset);
+  return FragmentOutput(vec4<f32>(colorAlpha.rgb, finalAlpha), linearDepth - depthOffset);
 }

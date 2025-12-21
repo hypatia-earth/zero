@@ -676,7 +676,7 @@ export const optionsSchema = z.object({
       }
     ),
     speed: opt(
-      z.number().min(2).max(20).default(defaultConfig.wind.animSpeed),
+      z.number().min(10).max(60).default(defaultConfig.wind.animSpeed),
       {
         label: 'Animation speed',
         description: 'Speed of wind line animation (updates per second)',
@@ -684,9 +684,9 @@ export const optionsSchema = z.object({
         filter: ['global', 'wind'],
         order: 16,
         control: 'slider',
-        min: 2,
-        max: 20,
-        step: 1,
+        min: 10,
+        max: 60,
+        step: 10,
       }
     ),
   }),

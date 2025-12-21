@@ -21,38 +21,32 @@ interface ColorStop {
 }
 
 const WIND_SPEED_STOPS: ColorStop[] = [
-  // 0 m/s - White (calm)
-  { speed: 0, r: 245, g: 245, b: 245, a: 255 },
+  // 0 m/s - White (calm) - 0% alpha
+  { speed: 0, r: 245, g: 245, b: 245, a: 0 },
 
-  // 5 m/s - Light blue (light breeze)
-  { speed: 5, r: 200, g: 230, b: 255, a: 255 },
+  // 6 m/s - Light blue (light breeze) - 35% alpha
+  { speed: 6, r: 200, g: 230, b: 255, a: 89 },
 
-  // 10 m/s - Cyan (fresh breeze)
-  { speed: 10, r: 100, g: 220, b: 255, a: 255 },
+  // 11 m/s - Cyan (fresh breeze) - 65% alpha
+  { speed: 11, r: 100, g: 220, b: 255, a: 166 },
 
-  // 15 m/s - Light green (strong breeze)
-  { speed: 15, r: 120, g: 240, b: 120, a: 255 },
+  // 17 m/s - Light red (gale threshold) - 100% alpha
+  { speed: 17, r: 255, g: 180, b: 180, a: 255 },
 
-  // 20 m/s - Yellow-green (near gale)
-  { speed: 20, r: 200, g: 255, b: 100, a: 255 },
+  // 20 m/s - Red (strong gale)
+  { speed: 20, r: 255, g: 100, b: 100, a: 255 },
 
-  // 25 m/s - Yellow (gale)
-  { speed: 25, r: 255, g: 255, b: 80, a: 255 },
+  // 24 m/s - Deep red (storm)
+  { speed: 24, r: 230, g: 50, b: 50, a: 255 },
 
-  // 30 m/s - Orange (strong gale/storm)
-  { speed: 30, r: 255, g: 180, b: 60, a: 255 },
+  // 30 m/s - Darker red (violent storm)
+  { speed: 30, r: 200, g: 30, b: 30, a: 255 },
 
-  // 35 m/s - Red-orange (violent storm)
-  { speed: 35, r: 255, g: 100, b: 50, a: 255 },
+  // 40 m/s - Dark red (hurricane force)
+  { speed: 40, r: 170, g: 0, b: 20, a: 255 },
 
-  // 40 m/s - Red (hurricane force)
-  { speed: 40, r: 230, g: 40, b: 40, a: 255 },
-
-  // 50 m/s - Deep red (violent hurricane)
-  { speed: 50, r: 180, g: 0, b: 20, a: 255 },
-
-  // 60+ m/s - Magenta (extreme)
-  { speed: 60, r: 200, g: 0, b: 100, a: 255 },
+  // 50+ m/s - Deep red/maroon (extreme)
+  { speed: 50, r: 140, g: 0, b: 30, a: 255 },
 ];
 
 const MAX_SPEED = 50; // m/s - maximum speed for normalization
