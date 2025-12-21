@@ -423,6 +423,10 @@ export class TimestepService {
   /** Refresh cache state for a param from SW */
   async refreshCacheState(param: TWeatherLayer): Promise<void> {
     const { cache, sizes } = await this.querySWCache(param);
+
+    // Don't wipe cache state if SW query failed or returned empty
+    if (cache.size === 0) return;
+
     const current = this.state.value;
     const paramState = current.params.get(param);
     if (!paramState) return;
