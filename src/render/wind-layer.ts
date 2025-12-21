@@ -133,8 +133,8 @@ export class WindLayer {
     this.device.queue.writeBuffer(this.seedBuffer, 0, seedPositions.buffer, seedPositions.byteOffset, seedPositions.byteLength);
 
     // Generate hurricane test data (t0 and t1)
+    // TODO: Replace with real wind data from slots
     const hurricaneData = generateHurricaneTestData();
-    console.log(`[Wind] Hurricane data: ${hurricaneData.t0.u.length} points × 2 timesteps`);
 
     // Create wind U/V buffers for t0
     this.windU0Buffer = this.device.createBuffer({
@@ -164,7 +164,6 @@ export class WindLayer {
 
     // Generate Gaussian grid LUTs
     const luts = generateGaussianLUTs(1280);
-    console.log(`[Wind] Gaussian LUTs: ${luts.lats.length} rings, ${luts.totalPoints} points`);
 
     // Create Gaussian grid buffers
     this.gaussianLatsBuffer = this.device.createBuffer({

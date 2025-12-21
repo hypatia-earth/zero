@@ -89,7 +89,6 @@ export class GridAnimator {
   constructor(initialAltitudeKm: number) {
     // Find correct LoD for starting altitude
     this.lodLevel = this.getLodForAltitude(initialAltitudeKm);
-    console.log(`GridAnimator init: altitude=${initialAltitudeKm}km, LoD=${this.lodLevel}`);
     this.initializeLines();
   }
 
