@@ -30,7 +30,7 @@ export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = (initialVnode) => {
     },
 
     view({ attrs }) {
-      const slots = attrs.optionsService.options.value.gpu.timeslotsPerLayer;
+      const opts = attrs.optionsService.options.value.gpu;
       return m('div.perf.panel.grid', [
         m('button.control.pill', {
           title: 'Frame timing (60-frame avg)'
@@ -46,7 +46,9 @@ export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = (initialVnode) => {
           m('span.label', 'globe'),
           m('span.perf-globe', '—'),
           m('span.label', 'slots'),
-          m('span', slots),
+          m('span', opts.timeslotsPerLayer),
+          m('span.label', 'pool'),
+          m('span', opts.workerPoolSize),
         ])
       ]);
     }

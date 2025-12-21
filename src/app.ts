@@ -158,6 +158,11 @@ export const App: m.ClosureComponent = () => {
           basemapBuffers.map(buf => createImageBitmap(new Blob([buf], { type: 'image/png' })))
         );
         await initOmWasm(wasmBuffer!);
+
+        // Initialize worker pool for parallel decompression
+        const poolSize = parseInt(optionsService.options.value.gpu.workerPoolSize, 10);
+        await omService.initWorkerPool(wasmBuffer!, poolSize);
+
         const fontAtlas = await createImageBitmap(new Blob([fontBuffer!], { type: 'image/png' }));
         const logoImage = await createImageBitmap(new Blob([logoBuffer!], { type: 'image/png' }));
         const gaussianLats = new Float32Array(gaussianLatsBuffer!);
