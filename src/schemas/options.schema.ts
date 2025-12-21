@@ -27,7 +27,7 @@ type OptionFilter = TLayer | 'global' | 'dataCache' | 'gpu' | 'viewState' | 'que
 interface UIMetadata {
   label: string;
   description?: string;
-  group: 'interface' | 'regional' | 'download' | 'environmental' | 'interaction' | 'layers' | 'gpu' | 'advanced' | 'viewState';
+  group: 'interface' | 'regional' | 'download' | 'environmental' | 'interaction' | 'layers' | 'gpu' | 'advanced' | 'viewState' | 'performance';
   filter: OptionFilter | OptionFilter[];
   order: number;
   control: ControlType;
@@ -89,6 +89,12 @@ export const optionGroups = {
     label: 'Download',
     description: 'Data loading and caching',
     order: 2,
+  },
+  performance: {
+    id: 'performance',
+    label: 'Performance',
+    description: 'Loading strategy and GPU memory',
+    order: 2.3,
   },
   environmental: {
     id: 'environmental',
@@ -165,9 +171,9 @@ export const optionsSchema = z.object({
       {
         label: 'Timeslots per layer',
         description: 'More timeslots = smoother time scrubbing, more GPU memory',
-        group: 'gpu',
+        group: 'performance',
         filter: ['global', 'gpu', 'queue'],
-        order: 0,
+        order: 2,
         control: 'select',
         options: [
           { value: '2', label: '2 (54 MB) - Stress test', localhostOnly: true },
@@ -189,10 +195,28 @@ export const optionsSchema = z.object({
       {
         label: 'Show GPU stats',
         description: 'Display GPU memory usage in download panel',
-        group: 'gpu',
+        group: 'performance',
         filter: ['global', 'gpu', 'queue'],
-        order: 1,
+        order: 3,
         control: 'toggle',
+      }
+    ),
+    workerPoolSize: opt(
+      z.enum(['1', '2', '3', '4']).default('2'),
+      {
+        label: 'Decoder threads',
+        description: 'Parallel WASM decoders for faster loading (requires reload)',
+        group: 'performance',
+        filter: ['global', 'gpu', 'queue'],
+        order: 4,
+        control: 'radio',
+        options: [
+          { value: '1', label: '1' },
+          { value: '2', label: '2' },
+          { value: '3', label: '3' },
+          { value: '4', label: '4' },
+        ],
+        impact: 'recreate',
       }
     ),
   }),
@@ -787,7 +811,7 @@ export const optionsSchema = z.object({
       {
         label: 'Strategy',
         description: 'How to prioritize and order loading timesteps',
-        group: 'download',
+        group: 'performance',
         filter: ['global', 'dataCache', 'queue'],
         order: 0,
         control: 'radio',
@@ -802,7 +826,7 @@ export const optionsSchema = z.object({
       {
         label: 'Mode',
         description: 'When to fetch data files',
-        group: 'download',
+        group: 'performance',
         filter: ['global', 'dataCache', 'queue'],
         order: 1,
         control: 'radio',
@@ -869,7 +893,7 @@ export const defaultOptions: ZeroOptions = {
     altitude: 14_000,  // km from surface
   },
   interface: { autocloseModal: true },
-  gpu: { timeslotsPerLayer: '4', showGpuStats: false },
+  gpu: { timeslotsPerLayer: '4', showGpuStats: false, workerPoolSize: '2' },
   viewport: {
     physicsModel: 'inertia',
     mass: 10,
