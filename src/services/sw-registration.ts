@@ -51,7 +51,18 @@ export async function registerServiceWorker(): Promise<void> {
         new Promise<void>(resolve => setTimeout(() => { timedOut = true; resolve(); }, 2000)),
       ]);
       if (timedOut) {
-        console.warn('[SW] Timeout waiting for controller, continuing without SW');
+        // Try explicit claim via message
+        try {
+          await sendSWMessage({ type: 'CLAIM' });
+          await new Promise(r => setTimeout(r, 100));
+          if (navigator.serviceWorker.controller) {
+            console.log('[SW] Claimed after explicit request');
+          } else {
+            console.warn('[SW] Still no controller after CLAIM request');
+          }
+        } catch {
+          console.warn('[SW] Timeout waiting for controller, continuing without SW');
+        }
       }
     }
 

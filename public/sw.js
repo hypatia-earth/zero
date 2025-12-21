@@ -165,6 +165,13 @@ async function handleRangeRequest(request, url, rangeHeader, layer) {
 self.addEventListener('message', async (event) => {
   const { type } = event.data;
 
+  // Force claim control of all clients
+  if (type === 'CLAIM') {
+    await self.clients.claim();
+    event.ports[0].postMessage({ success: true });
+    return;
+  }
+
   if (type === 'CLEAR_CACHE') {
     // Clear all layer caches
     const keys = await caches.keys();
