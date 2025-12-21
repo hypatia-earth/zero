@@ -400,8 +400,8 @@ export class TimestepService {
           }
         }
       }
-    } catch {
-      // SW not available or error - return empty
+    } catch (err) {
+      console.warn(`[Timestep] SW cache query failed for ${param}:`, err);
     }
 
     return { cache, sizes };
