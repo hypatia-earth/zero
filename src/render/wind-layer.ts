@@ -13,6 +13,7 @@ import { generateFibonacciSphere } from '../utils/fibonacci-sphere';
 import { generateHurricaneTestData } from '../../tests/wind-test-data';
 import { generateGaussianLUTs } from './gaussian-grid';
 import { defaultConfig } from '../config/defaults';
+import type { LayerState } from '../config/types';
 
 interface WindUniforms {
   viewProj: Float32Array;
@@ -66,8 +67,8 @@ export class WindLayer {
   private enabled = false;
   private randomSeed = Math.random();
 
-  // Compute caching: only recompute when time changes (minute precision)
-  private lastComputedMinute = -1;  // Force initial compute
+  // Compute caching: only recompute when state changes
+  private lastState: LayerState | null = null;
   private needsCompute = true;
 
   constructor(device: GPUDevice, format: GPUTextureFormat, lineCount = 8192) {
@@ -275,23 +276,21 @@ export class WindLayer {
     this.device.queue.writeBuffer(this.computeUniformBuffer, 0, uniformData);
   }
 
-  // Pending minute for next compute (set by setInterpFactor, used by runCompute)
-  private pendingMinute = -1;
-
   /**
-   * Set interpolation factor and current time
-   * Recomputes when time changes by at least 1 minute
+   * Set layer state - triggers compute when state changes significantly
+   * Compares mode and time (minute precision) to avoid unnecessary recomputes
    */
-  setInterpFactor(factor: number, time?: Date): void {
-    this.interpFactor = Math.max(0, Math.min(1, factor));
+  setState(state: LayerState): void {
+    this.interpFactor = state.mode === 'pair' ? state.lerp : 0;
 
-    // Compare minute-precision timestamps to trigger recompute
-    if (time) {
-      const currentMinute = Math.floor(time.getTime() / 60000);
-      if (currentMinute !== this.lastComputedMinute) {
-        this.needsCompute = true;
-        this.pendingMinute = currentMinute;
-      }
+    // Check if state changed enough to require recompute
+    const needsRecompute = !this.lastState
+      || state.mode !== this.lastState.mode
+      || Math.floor(state.time.getTime() / 60000) !== Math.floor(this.lastState.time.getTime() / 60000);
+
+    if (needsRecompute) {
+      this.needsCompute = true;
+      this.lastState = state;
     }
   }
 
@@ -371,7 +370,7 @@ export class WindLayer {
    * Returns true if compute was actually run
    */
   runCompute(commandEncoder: GPUCommandEncoder): boolean {
-    // Skip if no recompute needed (interpolation unchanged)
+    // Skip if no recompute needed (state unchanged)
     if (!this.needsCompute) {
       return false;
     }
@@ -389,7 +388,6 @@ export class WindLayer {
     computePass.end();
 
     // Mark as computed
-    this.lastComputedMinute = this.pendingMinute;
     this.needsCompute = false;
     return true;
   }

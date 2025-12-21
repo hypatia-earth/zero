@@ -11,7 +11,7 @@ import { WindLayer } from './wind-layer';
 import { GridAnimator, GRID_BUFFER_SIZE } from './grid-animator';
 import { U, UNIFORM_BUFFER_SIZE } from './globe-uniforms';
 import { GpuTimestamp } from './gpu-timestamp';
-import type { TWeatherTextureLayer } from '../config/types';
+import type { TWeatherTextureLayer, LayerState } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import { generateSyntheticO1280Pressure } from '../utils/synthetic-pressure';
 
@@ -39,7 +39,7 @@ export interface GlobeUniforms {
   windOpacity: number;
   windLerp: number;
   windAnimSpeed: number;  // updates per second
-  windTime: Date;         // current view time for compute caching
+  windState: LayerState;  // full state for compute caching
   pressureOpacity: number;
   tempDataReady: boolean;
   rainDataReady: boolean;
@@ -597,8 +597,8 @@ export class GlobeRenderer {
       }
       this.lastAnimTime = now;
 
-      // Update interpolation factor from time lerp (pass time for minute-based caching)
-      this.windLayer.setInterpFactor(uniforms.windLerp, uniforms.windTime);
+      // Update layer state (triggers compute when state changes)
+      this.windLayer.setState(uniforms.windState);
 
       // Show backface when no texture layers are visible (transparent globe)
       const textureOpacity = uniforms.earthOpacity + uniforms.tempOpacity +

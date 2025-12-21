@@ -9,7 +9,7 @@ import { validateGlobeUniforms } from '../render/globe-uniforms';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { ZeroOptions } from '../schemas/options.schema';
-import { DECORATION_LAYERS, WEATHER_LAYERS, type TLayer, type TWeatherLayer, type TWeatherTextureLayer } from '../config/types';
+import { DECORATION_LAYERS, WEATHER_LAYERS, type TLayer, type TWeatherLayer, type TWeatherTextureLayer, type LayerState } from '../config/types';
 import { getSunDirection } from '../utils/sun-position';
 import { createRingBuffer, type RingBuffer } from '../utils/ringbuffer';
 
@@ -20,18 +20,18 @@ export class RenderService {
   private tempLoadedPoints = 0;
   private tempSlot0 = 0;  // Current active slot indices
   private tempSlot1 = 1;
-  private tempLerpFn: ((time: Date) => number) | null = null;
+  private tempStateFn: ((time: Date) => LayerState) | null = null;
   private tempPaletteRange: Float32Array = new Float32Array([-40, 50]); // Default range
 
   // Pressure contour state
   private pressureSlot0 = 0;
   private pressureSlot1 = 0;
-  private pressureLerpFn: ((time: Date) => number) | null = null;
+  private pressureStateFn: ((time: Date) => LayerState) | null = null;
   private lastPressureMinute = -1;  // For minute-based change detection
   private isobarLevels: number[] = generateIsobarLevels(4);  // Default spacing
 
   // Wind layer state
-  private windLerpFn: ((time: Date) => number) | null = null;
+  private windStateFn: ((time: Date) => LayerState) | null = null;
 
   // Animated opacity state (lerps toward target each frame)
   private lastFrameTime = 0;
@@ -162,23 +162,26 @@ export class RenderService {
 
       const options = this.optionsService.options.value;
       const time = options.viewState.time;
-      const rawLerp = this.tempLerpFn ? this.tempLerpFn(time) : -1;
+      const loadingState: LayerState = { mode: 'loading', lerp: 0, time };
+
+      // Get layer states
+      const tempState = this.tempStateFn?.(time) ?? loadingState;
+      const pressureState = this.pressureStateFn?.(time) ?? loadingState;
+      const windState = this.windStateFn?.(time) ?? loadingState;
 
       // Update animated opacities
       const now = performance.now() / 1000;
       const dt = this.lastFrameTime ? now - this.lastFrameTime : 0;
       this.lastFrameTime = now;
-      this.updateAnimatedOpacities(options, rawLerp, dt);
+      this.updateAnimatedOpacities(options, tempState, dt);
 
       // Recompute pressure contours when time changes by at least 1 minute
-      if (options.pressure.enabled && this.pressureLerpFn) {
-        const pressureLerp = this.pressureLerpFn(time);
-        const validLerp = pressureLerp >= 0 ? pressureLerp : (pressureLerp === -2 ? 0 : -1);
+      if (options.pressure.enabled && pressureState.mode !== 'loading') {
         const currentMinute = Math.floor(time.getTime() / 60000);
-        if (validLerp >= 0 && currentMinute !== this.lastPressureMinute) {
+        if (currentMinute !== this.lastPressureMinute) {
           this.lastPressureMinute = currentMinute;
           const smoothingIterations = parseInt(options.pressure.smoothing, 10);
-          renderer.runPressureContour(this.pressureSlot0, this.pressureSlot1, validLerp, this.isobarLevels, smoothingIterations);
+          renderer.runPressureContour(this.pressureSlot0, this.pressureSlot1, pressureState.lerp, this.isobarLevels, smoothingIterations);
         }
       }
 
@@ -187,11 +190,11 @@ export class RenderService {
         ...this.getSunUniforms(time),
         ...this.getGridUniforms(),
         ...this.getLayerUniforms(),
-        ...this.getTempUniforms(rawLerp),
+        ...this.getTempUniforms(tempState),
         ...this.getRainUniforms(),
         ...this.getCloudsUniforms(),
         ...this.getHumidityUniforms(),
-        ...this.getWindUniforms(),
+        ...this.getWindUniforms(windState),
         ...this.getPressureUniforms(),
       });
 
@@ -261,12 +264,12 @@ export class RenderService {
     };
   }
 
-  private getTempUniforms(rawLerp: number) {
-    const tempDataValid = rawLerp >= -2 && rawLerp !== -1 && this.tempLoadedPoints > 0;
+  private getTempUniforms(state: LayerState) {
+    const tempDataReady = state.mode !== 'loading' && this.tempLoadedPoints > 0;
     return {
       tempOpacity: this.animatedOpacity.temp,
-      tempDataReady: tempDataValid,
-      tempLerp: rawLerp === -1 ? 0 : rawLerp,  // -2 = single slot mode (no interpolation)
+      tempDataReady,
+      tempLerp: state.mode === 'single' ? -2 : state.lerp,  // -2 = single slot mode (no interpolation)
       tempLoadedPoints: this.tempLoadedPoints,
       tempSlot0: this.tempSlot0,
       tempSlot1: this.tempSlot1,
@@ -295,15 +298,13 @@ export class RenderService {
     };
   }
 
-  private getWindUniforms() {
-    const time = this.optionsService.options.value.viewState.time;
-    const rawLerp = this.windLerpFn?.(time) ?? -1;
+  private getWindUniforms(state: LayerState) {
     return {
       windOpacity: this.animatedOpacity.wind,
-      windDataReady: rawLerp >= -2 && rawLerp !== -1,
-      windLerp: rawLerp === -1 ? 0 : (rawLerp === -2 ? 0 : rawLerp),
+      windDataReady: state.mode !== 'loading',
+      windLerp: state.mode === 'single' ? 0 : state.lerp,
       windAnimSpeed: this.optionsService.options.value.wind.speed,
-      windTime: time,  // Pass view time for minute-based compute caching
+      windState: state,  // Pass full state for compute caching
     };
   }
 
@@ -317,13 +318,13 @@ export class RenderService {
    * Update animated opacities toward targets (called each frame)
    * Uses exponential decay for smooth ~100ms transitions
    */
-  private updateAnimatedOpacities(options: ZeroOptions, rawLerp: number, dt: number): void {
+  private updateAnimatedOpacities(options: ZeroOptions, tempState: LayerState, dt: number): void {
     const animMs = this.configService.getConfig().render.opacityAnimationMs;
     const rate = 1000 / animMs;  // Convert ms to rate (e.g., 100ms → 10/s)
     const factor = Math.min(1, dt * rate);
 
     // Compute targets: enabled && dataReady ? userOpacity : 0
-    const tempDataReady = rawLerp >= -2 && rawLerp !== -1 && this.tempLoadedPoints > 0;
+    const tempDataReady = tempState.mode !== 'loading' && this.tempLoadedPoints > 0;
     const isReady = (layer: TWeatherLayer) =>
       layer === 'temp' ? tempDataReady : (this.dataReadyFns.get(layer)?.() ?? false);
 
@@ -391,24 +392,24 @@ export class RenderService {
   }
 
   /**
-   * Set the function to calculate temp lerp (from SlotService)
+   * Set the function to get temp layer state (from SlotService)
    */
-  setTempLerpFn(fn: (time: Date) => number): void {
-    this.tempLerpFn = fn;
+  setTempStateFn(fn: (time: Date) => LayerState): void {
+    this.tempStateFn = fn;
   }
 
   /**
-   * Set the function to calculate pressure lerp (from SlotService)
+   * Set the function to get pressure layer state (from SlotService)
    */
-  setPressureLerpFn(fn: (time: Date) => number): void {
-    this.pressureLerpFn = fn;
+  setPressureStateFn(fn: (time: Date) => LayerState): void {
+    this.pressureStateFn = fn;
   }
 
   /**
-   * Set the function to calculate wind lerp (from SlotService)
+   * Set the function to get wind layer state (from SlotService)
    */
-  setWindLerpFn(fn: (time: Date) => number): void {
-    this.windLerpFn = fn;
+  setWindStateFn(fn: (time: Date) => LayerState): void {
+    this.windStateFn = fn;
   }
 
   /**

@@ -87,6 +87,15 @@ export interface Timestep {
   url: string;
 }
 
+/** Layer data state for interpolation */
+export type TLayerMode = 'loading' | 'single' | 'pair';
+
+export interface LayerState {
+  mode: TLayerMode;
+  lerp: number;      // 0-1 interpolation factor (only valid in 'pair' mode)
+  time: Date;        // current view time
+}
+
 /** File download order for QueueService */
 export interface FileOrder {
   url: string;
