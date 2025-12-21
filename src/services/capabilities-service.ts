@@ -12,6 +12,7 @@ export class CapabilitiesService {
   timestamp_query = false;
   msaa_8x = false;
   maxBufferSizeMB = 0;
+  minUniformBufferOffsetAlignment = 256;  // Safe default, updated in init()
 
   // For testing buffer allocation - set to small value (e.g., 50) to test without big downloads
   private readonly DEBUG_MAX_BUFFER_SIZE_MB: number | null = null;  // null = use real GPU limit
@@ -67,6 +68,7 @@ export class CapabilitiesService {
 
     this.float32_filterable = adapter.features.has('float32-filterable');
     this.timestamp_query = adapter.features.has('timestamp-query');
+    this.minUniformBufferOffsetAlignment = adapter.limits.minUniformBufferOffsetAlignment;
 
     // MSAA 8x detection removed - WebGPU logs errors even with try/catch
     // Feature deferred anyway (see zero-feat-gpu-budget.md MSAA section)
