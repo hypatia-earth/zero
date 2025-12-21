@@ -620,7 +620,6 @@ export class PressureLayer {
 
     this.gridSlotReady[slotIndex] = true;
     this.hasRawData[slotIndex] = true;
-    console.log(`[Pressure] Regrid slot ${slotIndex} → ${this.gridWidth}×${this.gridHeight}`);
   }
 
   /**
