@@ -322,11 +322,26 @@ export class OptionsService {
     const changes: string[] = [];
     const vs = this.options.value.viewState;
 
+    // If no URL time param and saved time is stale (>12h from now), reset to now
+    // This prevents loading old cached timeline position on return visits
+    const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000; // 12 hours
+    const hasUrlTime = params.has('dt');
+    const now = new Date();
+    const timeDiff = Math.abs(vs.time.getTime() - now.getTime());
+
+    let timeToSnap = vs.time;
+    if (!hasUrlTime && timeDiff > STALE_THRESHOLD_MS) {
+      timeToSnap = now;
+      changes.push(`time=${vs.time.toISOString().slice(0, 13)}→now`);
+    }
+
     // Snap time to closest available timestep
-    const snappedTime = getClosestTimestep(vs.time);
+    const snappedTime = getClosestTimestep(timeToSnap);
     if (snappedTime.getTime() !== vs.time.getTime()) {
       this.update(o => { o.viewState.time = snappedTime; });
-      changes.push(`time=${vs.time.toISOString().slice(0, 13)}→${snappedTime.toISOString().slice(0, 13)}`);
+      if (!changes.some(c => c.startsWith('time='))) {
+        changes.push(`time=${vs.time.toISOString().slice(0, 13)}→${snappedTime.toISOString().slice(0, 13)}`);
+      }
     }
 
     // Lat/lon: log if defaulted or clamped
