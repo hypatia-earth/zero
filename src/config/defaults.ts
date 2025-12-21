@@ -124,6 +124,7 @@ export const defaultConfig: ZeroConfig = {
   },
 
   render: {
-    opacityAnimationMs: 100,  // Layer fade in/out duration
+    opacityAnimationMs: 500,  // Layer fade in/out duration
+    logoEnabled: false,       // Show logo when all layers off
   },
 };

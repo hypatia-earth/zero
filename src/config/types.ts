@@ -291,5 +291,6 @@ export interface ZeroConfig {
   /** Render settings */
   render: {
     opacityAnimationMs: number;  // Layer fade in/out duration
+    logoEnabled: boolean;        // Show logo when all layers off
   };
 }

@@ -31,6 +31,7 @@ export class RenderService {
 
   // Wind layer state
   private windStateFn: ((time: Date) => LayerState) | null = null;
+  private windHasData = false;  // Set when wind buffers are loaded
 
   // Other weather layer states (rain, clouds, humidity)
   private rainStateFn: ((time: Date) => LayerState) | null = null;
@@ -319,7 +320,8 @@ export class RenderService {
   private getWindUniforms(state: LayerState) {
     return {
       windOpacity: this.animatedOpacity.wind,
-      windDataReady: state.mode !== 'loading',
+      // windDataReady = buffers exist (not whether time matches - opacity handles that)
+      windDataReady: this.windHasData,
       windLerp: state.mode === 'single' ? 0 : state.lerp,
       windAnimSpeed: this.optionsService.options.value.wind.speed,
       windState: state,  // Pass full state for compute caching
@@ -333,8 +335,10 @@ export class RenderService {
   }
 
   private getLogoUniforms() {
-    // Logo only visible when ALL layers are completely off
-    // Hard cutoff: any layer opacity > 0.01 hides logo
+    // Logo only visible when enabled and ALL layers are completely off
+    if (!this.configService.getConfig().render.logoEnabled) {
+      return { logoOpacity: 0 };
+    }
     const totalOpacity = Object.values(this.animatedOpacity).reduce((sum, v) => sum + v, 0);
     return {
       logoOpacity: totalOpacity < 0.01 ? 1 : Math.max(0, 1 - totalOpacity * 10),
@@ -543,6 +547,7 @@ export class RenderService {
    */
   setWindLayerBuffers(u0: GPUBuffer, v0: GPUBuffer, u1: GPUBuffer, v1: GPUBuffer): void {
     this.renderer!.setWindLayerBuffers(u0, v0, u1, v1);
+    this.windHasData = true;
   }
 
   /**
