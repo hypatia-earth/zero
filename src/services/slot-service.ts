@@ -24,7 +24,6 @@ import { debounce } from '../utils/debounce';
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
 
 const DEBUG = false;
-const DEBUG_MONKEY = false;
 
 /** Short timestep format for logs: "MM-DDTHH" */
 const fmt = (ts: TTimestep) => ts.slice(5, 13);
@@ -269,7 +268,6 @@ export class SlotService {
         this.renderService.activateSlots(param, slot.slotIndex, slot.slotIndex, slot.loadedPoints);
         console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
       } else {
-        DEBUG_MONKEY && console.log(`[Monkey] ${pcode} CANNOT activate single ${fmt(ts)}: slot=${!!slot} loaded=${slot?.loaded}`);
         ps.setActiveTimesteps([]);
       }
     } else {
@@ -290,7 +288,6 @@ export class SlotService {
         this.renderService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, Math.min(slot0.loadedPoints, slot1.loadedPoints));
         console.log(`[Slot] ${pcode} activated: ${fmt(t0)} → ${fmt(t1)}`);
       } else {
-        DEBUG_MONKEY && console.log(`[Monkey] ${pcode} CANNOT activate pair ${fmt(t0)}→${fmt(t1)}: slot0=${!!slot0}/${slot0?.loaded} slot1=${!!slot1}/${slot1?.loaded}`);
         ps.setActiveTimesteps([]);
       }
     }
@@ -417,8 +414,6 @@ export class SlotService {
         if (slice.done) {
           // Skip if timestep no longer wanted
           if (!ps.wanted.value?.window.includes(order.timestep)) {
-            // SUSPECT 2: Old data skipped - is new data being fetched?
-            DEBUG_MONKEY && console.log(`[Monkey] ${P(param)} SKIP ${fmt(order.timestep)} - not in window [${ps.wanted.value?.window.slice(0, 3).map(fmt).join(', ')}...]`);
             ps.clearLoading(order.timestep);
             return;
           }
@@ -477,11 +472,9 @@ export class SlotService {
 
             this.timestepService.refreshCacheState(param);
             this.slotsVersion.value++;
-            DEBUG_MONKEY && console.log(`[Monkey] ${P(param)} loaded ${fmt(order.timestep)} → slot ${result.slotIndex}, calling updateShaderIfReady`);
             this.updateShaderIfReady(param, ps);
           } else {
-            // SUSPECT 1: allocateSlot returned null - data lost!
-            console.warn(`[Monkey] ${P(param)} ALLOCATION FAILED for ${fmt(order.timestep)} - all slots loading?`);
+            console.warn(`[Slot] ${P(param)} allocation failed for ${fmt(order.timestep)}`);
           }
 
           ps.clearLoading(order.timestep);
@@ -498,11 +491,7 @@ export class SlotService {
   /** Update shader when a slot finishes loading */
   private updateShaderIfReady(param: TWeatherLayer, ps: ParamSlots): void {
     const wanted = ps.wanted.value;
-    if (!wanted) {
-      DEBUG_MONKEY && console.warn(`[Monkey] ${P(param)} updateShaderIfReady: wanted is NULL!`);
-      return;
-    }
-    DEBUG_MONKEY && console.log(`[Monkey] ${P(param)} updateShaderIfReady: wanted=${wanted.mode} [${wanted.priority.map(fmt).join(', ')}]`);
+    if (!wanted) return;
     this.activateIfReady(param, ps, wanted);
   }
 
