@@ -539,6 +539,9 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
             filter && filter !== 'global' ? m('button.btn.btn-danger', {
               onclick: () => optionsService.reset(filter)
             }, 'Reset Layer') : null,
+            optionsService.needsReload.value ? m('button.btn.btn-secondary', {
+              onclick: () => location.reload()
+            }, 'Reload') : null,
             m('button.btn.btn-secondary', {
               onclick: () => {
                 resetDragState();

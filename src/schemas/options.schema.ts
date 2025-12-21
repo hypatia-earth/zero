@@ -202,19 +202,21 @@ export const optionsSchema = z.object({
       }
     ),
     workerPoolSize: opt(
-      z.enum(['1', '2', '3', '4']).default('2'),
+      z.enum(['1', '2', '4', '6', '8', '12']).default('2'),
       {
         label: 'Decoder threads',
         description: 'Parallel WASM decoders for faster loading (requires reload)',
         group: 'performance',
         filter: ['global', 'gpu', 'queue'],
         order: 4,
-        control: 'radio',
+        control: 'select',
         options: [
-          { value: '1', label: '1' },
+          { value: '1', label: '1 (single)' },
           { value: '2', label: '2' },
-          { value: '3', label: '3' },
           { value: '4', label: '4' },
+          { value: '6', label: '6' },
+          { value: '8', label: '8' },
+          { value: '12', label: '12' },
         ],
         impact: 'recreate',
       }

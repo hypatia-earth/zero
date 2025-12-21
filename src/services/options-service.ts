@@ -15,6 +15,7 @@ import m from 'mithril';
 import {
   optionsSchema,
   defaultOptions,
+  extractOptionsMeta,
   type ZeroOptions,
   type OptionFilter,
 } from '../schemas/options.schema';
@@ -179,6 +180,12 @@ export class OptionsService {
   /** Layers currently loading (e.g., after resolution switch) */
   readonly loadingLayers = signal<Set<string>>(new Set());
 
+  /** Options with impact='recreate' have changed - needs page reload */
+  readonly needsReload = signal(false);
+
+  /** Initial values of recreate-impact options (captured at init) */
+  private recreateInitialValues: Record<string, unknown> = {};
+
   /** Dialog state */
   dialogOpen = false;
   dialogFilter: OptionFilter | undefined = undefined;
@@ -279,6 +286,31 @@ export class OptionsService {
 
     this.userOverrides.value = this.extractOverrides(merged);
     this.initialized = true;
+
+    // Capture initial values of recreate-impact options
+    this.captureRecreateInitialValues();
+  }
+
+  /** Capture initial values of options with impact='recreate' */
+  private captureRecreateInitialValues(): void {
+    const meta = extractOptionsMeta();
+    for (const opt of meta) {
+      if (opt.meta.impact === 'recreate') {
+        this.recreateInitialValues[opt.path] = getByPath(this.options.value, opt.path);
+      }
+    }
+  }
+
+  /** Check if any recreate-impact option has changed from initial value */
+  private checkNeedsReload(): void {
+    for (const [path, initialValue] of Object.entries(this.recreateInitialValues)) {
+      const currentValue = getByPath(this.options.value, path);
+      if (currentValue !== initialValue) {
+        this.needsReload.value = true;
+        return;
+      }
+    }
+    this.needsReload.value = false;
   }
 
   /**
@@ -335,6 +367,7 @@ export class OptionsService {
     const newOverrides = this.extractOverrides(updated);
     this.logChange(oldOverrides, newOverrides);
     this.userOverrides.value = newOverrides;
+    this.checkNeedsReload();
   }
 
   private logChange(oldOverrides: Partial<ZeroOptions>, newOverrides: Partial<ZeroOptions>): void {
