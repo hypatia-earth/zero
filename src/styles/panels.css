@@ -70,9 +70,22 @@
   right: 20px;
 }
 
-.panel.perf .perf-frame,
-.panel.perf .perf-pass {
+/* Grid layout for label/value panels */
+.panel.grid .control {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 8px;
   font-family: monospace;
+}
+
+.panel.grid .label {
+  text-align: right;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.panel.grid span:not(.label) {
+  text-align: left;
 }
 
 .panel.about img {

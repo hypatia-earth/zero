@@ -15,26 +15,33 @@ export interface PerfPanelAttrs {
 export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = (initialVnode) => {
   return {
     oncreate({ dom }) {
+      const fpsEl = dom.querySelector<HTMLElement>('.perf-fps');
       const frameEl = dom.querySelector<HTMLElement>('.perf-frame');
       const passEl = dom.querySelector<HTMLElement>('.perf-pass');
       const screenEl = dom.querySelector<HTMLElement>('.perf-screen');
       const globeEl = dom.querySelector<HTMLElement>('.perf-globe');
-      initialVnode.attrs.renderService.setPerfElements(frameEl, passEl, screenEl, globeEl);
+      initialVnode.attrs.renderService.setPerfElements(fpsEl, frameEl, passEl, screenEl, globeEl);
     },
 
     onremove() {
-      initialVnode.attrs.renderService.setPerfElements(null, null, null, null);
+      initialVnode.attrs.renderService.setPerfElements(null, null, null, null, null);
     },
 
     view() {
-      return m('div.perf.panel', [
+      return m('div.perf.panel.grid', [
         m('button.control.pill', {
           title: 'Frame timing (60-frame avg)'
         }, [
-          m('div', m('span.perf-frame', 'frame: -- ms')),
-          m('div', m('span.perf-pass', 'pass: -- ms')),
-          m('div', m('span.perf-screen', 'screen: --')),
-          m('div', m('span.perf-globe', 'globe: -- px'))
+          m('span.label', 'fps'),
+          m('span.perf-fps', '—'),
+          m('span.label', 'frame'),
+          m('span.perf-frame', '—'),
+          m('span.label', 'pass'),
+          m('span.perf-pass', '—'),
+          m('span.label', 'screen'),
+          m('span.perf-screen', '—'),
+          m('span.label', 'globe'),
+          m('span.perf-globe', '—'),
         ])
       ]);
     }

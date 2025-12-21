@@ -50,6 +50,8 @@ export class RenderService {
   // Frame timing (60-frame rolling average)
   private frameTimes: RingBuffer = createRingBuffer(60);
   private passTimes: RingBuffer = createRingBuffer(60);
+  private frameIntervals: RingBuffer = createRingBuffer(60);
+  private perfFpsElement: HTMLElement | null = null;
   private perfFrameElement: HTMLElement | null = null;
   private perfPassElement: HTMLElement | null = null;
   private perfScreenElement: HTMLElement | null = null;
@@ -180,9 +182,10 @@ export class RenderService {
       const cloudsState = this.cloudsStateFn?.(time) ?? loadingState;
       const humidityState = this.humidityStateFn?.(time) ?? loadingState;
 
-      // Update animated opacities
+      // Update animated opacities and track frame intervals for FPS
       const now = performance.now() / 1000;
       const dt = this.lastFrameTime ? now - this.lastFrameTime : 0;
+      if (dt > 0) this.frameIntervals.push(dt * 1000);
       this.lastFrameTime = now;
       this.updateAnimatedOpacities(options, {
         temp: tempState, pressure: pressureState, wind: windState,
@@ -218,17 +221,21 @@ export class RenderService {
       this.frameTimes.push(performance.now() - tFrame);
 
       // Update perf panel DOM directly (no mithril redraw)
+      if (this.perfFpsElement && this.frameIntervals.avg() > 0) {
+        const fps = 1000 / this.frameIntervals.avg();
+        this.perfFpsElement.textContent = `${fps.toFixed(0)}`;
+      }
       if (this.perfFrameElement) {
-        this.perfFrameElement.textContent = `frame: ${this.frameTimes.avg().toFixed(1)} ms`;
+        this.perfFrameElement.textContent = `${this.frameTimes.avg().toFixed(1)} ms`;
       }
       if (this.perfPassElement && gpuTimeMs !== null) {
         this.passTimes.push(gpuTimeMs);
-        this.perfPassElement.textContent = `pass: ${this.passTimes.avg().toFixed(1)} ms`;
+        this.perfPassElement.textContent = `${this.passTimes.avg().toFixed(1)} ms`;
       }
       if (this.perfScreenElement) {
         const w = this.canvas.clientWidth;
         const h = this.canvas.clientHeight;
-        this.perfScreenElement.textContent = `screen: ${w}×${h}`;
+        this.perfScreenElement.textContent = `${w}×${h}`;
       }
       if (this.perfGlobeElement) {
         const distance = renderer.camera.getState().distance;
@@ -236,7 +243,7 @@ export class RenderService {
         const fov = 2 * Math.atan(tanFov);
         const heightCss = this.canvas.clientHeight;
         const globeRadiusPx = Math.asin(1 / distance) * (heightCss / fov);
-        this.perfGlobeElement.textContent = `globe: ${Math.round(globeRadiusPx)} px`;
+        this.perfGlobeElement.textContent = `${Math.round(globeRadiusPx)} px`;
       }
     };
 
@@ -406,11 +413,13 @@ export class RenderService {
    * Set DOM elements for perf panel (updated directly in render loop)
    */
   setPerfElements(
+    fpsEl: HTMLElement | null,
     frameEl: HTMLElement | null,
     passEl: HTMLElement | null,
     screenEl: HTMLElement | null,
     globeEl: HTMLElement | null
   ): void {
+    this.perfFpsElement = fpsEl;
     this.perfFrameElement = frameEl;
     this.perfPassElement = passEl;
     this.perfScreenElement = screenEl;
