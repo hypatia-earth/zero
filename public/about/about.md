@@ -10,7 +10,7 @@ Hypatia Zero visualizes global weather in your browser using WebGPU.
 
 [ECMWF](https://www.ecmwf.int/) runs the world's most accurate weather model four times daily. Since [October 2025](https://www.ecmwf.int/en/about/media-centre/news/2025/ecmwf-makes-its-entire-real-time-catalogue-open-all), this data is [openly published](https://www.ecmwf.int/en/forecasts/datasets/open-data) under CC-BY-4.0. Zero downloads it directly into your browser—no backend, no accounts, just you and the atmosphere.
 
-Scrub through 10 days of weather. Watch storms form and dissolve. Every minute interpolated, every layer rendered on the GPU.
+Scrub through up to 2 weeks of weather. Watch storms form and dissolve. Every minute interpolated, every layer rendered on the GPU.
 
 ### Layers
 
@@ -54,9 +54,24 @@ Sources: [NWS Wind Warnings](https://www.weather.gov/safety/wind-ww) · [Beaufor
 
 ## Data
 
-Weather data flows from [ECMWF](https://www.ecmwf.int/) via [Open-Meteo](https://open-meteo.com/), hosted on AWS S3. The [Open Data Sponsorship Program](https://registry.opendata.aws/) covers egress costs.
+Zero fetches weather data directly from AWS S3 into your browser cache, then uploads to GPU memory. No intermediary servers.
 
-Zero fetches data directly from AWS into your browser cache, then uploads it to GPU memory. No intermediary servers.
+### Source
+
+[ECMWF](https://www.ecmwf.int/) runs the Integrated Forecasting System (IFS) four times daily at 9 km resolution. Since [October 2025](https://openmeteo.substack.com/p/ecmwf-transitions-to-open-data), this data is openly published under CC-BY-4.0.
+
+[Open-Meteo](https://open-meteo.com/) mirrors ECMWF data to AWS S3 (`s3://openmeteo`, `us-west-2`), funded by the [AWS Open Data Sponsorship Program](https://aws.amazon.com/opendata/open-data-sponsorship-program/). See [AWS Registry](https://registry.opendata.aws/open-meteo/).
+
+### Data Window
+
+| Aspect | Value |
+|--------|-------|
+| Past (analysis) | up to 7 days |
+| Future (forecast) | up to 16 days |
+| Resolution | 1-hourly (0-90h), 3-hourly (90-144h), 6-hourly (144h+) |
+| Updates | 4 times daily |
+
+Sources: [Open-Meteo AWS open-data](https://github.com/open-meteo/open-data) · [ECMWF Open Data](https://www.ecmwf.int/en/forecasts/datasets/open-data)
 
 ## Install as App
 
@@ -76,7 +91,7 @@ For fullscreen experience, install as a Progressive Web App:
 
 **Download ETA is approximate.** Caching, bandwidth, and file sizes vary. The estimate improves as downloads progress.
 
-![Download indicator](info/download-eta.png)
+![Download indicator](about/download-eta.png)
 
 **Interpolation artifacts.** When navigating with Shift/Alt modifiers, the time can land between timesteps. Zero interpolates between two data snapshots. This works well for slowly changing parameters like temperature. Fast-moving features (storm fronts, rain cells) may show ghosting or smearing, especially when timesteps are more than 1 hour apart. Use plain arrow keys to snap to exact timesteps and avoid artifacts.
 

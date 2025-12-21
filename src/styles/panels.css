@@ -60,7 +60,7 @@
   right: 20px;
 }
 
-.panel.info {
+.panel.about {
   top: calc(20px + var(--layout-timecircle-size) + 55px + 44px + 10px + 44px + 10px);
   right: 20px;
 }
@@ -75,7 +75,7 @@
   font-family: monospace;
 }
 
-.panel.info img {
+.panel.about img {
   width: 24px;
   height: 24px;
   filter: brightness(0) saturate(100%) invert(100%);

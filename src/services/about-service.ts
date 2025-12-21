@@ -1,16 +1,16 @@
 /**
- * InfoService - Manages info dialog state and markdown content
+ * AboutService - Manages about dialog state and markdown content
  */
 
 import m from 'mithril';
 import { marked } from 'marked';
 
-/** Known info pages - must exist at bootstrap */
-const INFO_PAGES = ['welcome'] as const;
+/** Known about pages - must exist at bootstrap */
+const ABOUT_PAGES = ['about'] as const;
 
-export class InfoService {
+export class AboutService {
   dialogOpen = false;
-  currentPage = 'welcome';
+  currentPage = 'about';
   content = '';
   error: string | null = null;
 
@@ -43,10 +43,10 @@ export class InfoService {
    * @throws Error if any page is missing
    */
   async init(): Promise<void> {
-    for (const page of INFO_PAGES) {
-      const response = await fetch(`info/${page}.md`);
+    for (const page of ABOUT_PAGES) {
+      const response = await fetch(`about/${page}.md`);
       if (!response.ok) {
-        throw new Error(`[Info] Missing info page: ${page}.md`);
+        throw new Error(`[About] Missing page: ${page}.md`);
       }
       const markdown = await response.text();
       const html = await marked.parse(markdown);
@@ -54,7 +54,7 @@ export class InfoService {
     }
   }
 
-  openDialog(page = 'welcome'): void {
+  openDialog(page = 'about'): void {
     this.dialogOpen = true;
     this.currentPage = page;
     this.error = null;

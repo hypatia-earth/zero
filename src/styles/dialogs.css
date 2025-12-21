@@ -681,11 +681,11 @@
    Info Dialog - Markdown content modal
    ============================================================================= */
 
-.dialog.info .backdrop {
+.dialog.about .backdrop {
   animation: fadeIn 0.15s ease-out;
 }
 
-.dialog.info .window {
+.dialog.about .window {
   width: 90%;
   max-width: 560px;
   animation: scaleIn 0.15s ease-out;
@@ -694,15 +694,15 @@
 /* Draggable header on desktop */
 /* Should align with --breakpoint-desktop in layout.css */
 @media (min-width: 640px) {
-  .dialog.info .header {
+  .dialog.about .header {
     cursor: move;
     user-select: none;
   }
-  .dialog.info .header h2,
-  .dialog.info .header button {
+  .dialog.about .header h2,
+  .dialog.about .header button {
     cursor: default;
   }
-  .dialog.info .window.dragging {
+  .dialog.about .window.dragging {
     transition: none;
   }
 }
@@ -710,10 +710,10 @@
 /* Mobile: slide up from bottom */
 /* Should align with --breakpoint-desktop in layout.css */
 @media (max-width: 639px) {
-  .dialog.info {
+  .dialog.about {
     align-items: flex-end;
   }
-  .dialog.info .window {
+  .dialog.about .window {
     width: 100%;
     max-width: 100%;
     max-height: 85vh;
@@ -723,7 +723,7 @@
 }
 
 /* Header */
-.dialog.info .header {
+.dialog.about .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -732,7 +732,7 @@
   border-bottom: 1px solid var(--color-border-light);
 }
 
-.dialog.info .header h2 {
+.dialog.about .header h2 {
   margin: 0;
   font-size: var(--font-size-lg);
   font-weight: 500;
@@ -740,7 +740,7 @@
   white-space: nowrap;
 }
 
-.dialog.info .header .bar {
+.dialog.about .header .bar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -749,7 +749,7 @@
   flex-shrink: 0;
 }
 
-.dialog.info .close {
+.dialog.about .close {
   background: none;
   border: none;
   color: var(--color-glow);
@@ -766,83 +766,83 @@
 }
 
 @media (hover: hover) {
-  .dialog.info .close:hover {
+  .dialog.about .close:hover {
     background: var(--color-surface);
     color: var(--color-text-primary);
   }
 }
 
 /* Content */
-.dialog.info .content {
+.dialog.about .content {
   flex: 1;
   overflow-y: auto;
   padding: 20px 24px;
   font-weight: var(--font-weight-thin);
 }
 
-.dialog.info .content.markdown {
+.dialog.about .content.markdown {
   line-height: 1.6;
 }
 
 /* Markdown typography */
-.dialog.info .content h1 {
+.dialog.about .content h1 {
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-regular);
   margin: 0 0 16px 0;
   color: var(--color-text-primary);
 }
 
-.dialog.info .content h2 {
+.dialog.about .content h2 {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-regular);
   margin: 24px 0 12px 0;
   color: var(--color-text-primary);
 }
 
-.dialog.info .content h3 {
+.dialog.about .content h3 {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-regular);
   margin: 20px 0 8px 0;
   color: var(--color-text-primary);
 }
 
-.dialog.info .content p {
+.dialog.about .content p {
   margin: 0 0 12px 0;
   color: var(--color-text-secondary);
 }
 
-.dialog.info .content ul,
-.dialog.info .content ol {
+.dialog.about .content ul,
+.dialog.about .content ol {
   margin: 0 0 12px 0;
   padding-left: 24px;
   color: var(--color-text-secondary);
 }
 
-.dialog.info .content li {
+.dialog.about .content li {
   margin-bottom: 4px;
 }
 
-.dialog.info .content strong {
+.dialog.about .content strong {
   color: var(--color-text-primary);
   font-weight: 600;
 }
 
-.dialog.info .content em {
+.dialog.about .content em {
   font-style: italic;
   color: var(--color-text-muted);
 }
 
-.dialog.info .content a {
+.dialog.about .content a {
   color: var(--color-btn-primary);
   font-weight: var(--font-weight-semibold);
   text-decoration: none;
 }
 
-.dialog.info .content a:hover {
+.dialog.about .content a:hover {
   text-decoration: underline;
 }
 
-.dialog.info .content code {
+.dialog.about .content code {
   background: var(--color-surface);
   padding: 2px 6px;
   border-radius: 4px;
@@ -850,7 +850,7 @@
   font-family: monospace;
 }
 
-.dialog.info .content pre {
+.dialog.about .content pre {
   background: var(--color-surface);
   padding: 12px 16px;
   border-radius: 6px;
@@ -858,74 +858,74 @@
   margin: 0 0 12px 0;
 }
 
-.dialog.info .content pre code {
+.dialog.about .content pre code {
   background: none;
   padding: 0;
 }
 
-.dialog.info .content blockquote {
+.dialog.about .content blockquote {
   border-left: 3px solid var(--color-primary);
   margin: 0 0 12px 0;
   padding-left: 16px;
   color: var(--color-text-muted);
 }
 
-.dialog.info .content hr {
+.dialog.about .content hr {
   border: none;
   border-top: 1px solid var(--color-border-light);
   margin: 24px 0;
 }
 
-.dialog.info .content table {
+.dialog.about .content table {
   width: 100%;
   border-collapse: collapse;
   margin: 0 0 12px 0;
   font-size: var(--font-size-sm);
 }
 
-.dialog.info .content th,
-.dialog.info .content td {
+.dialog.about .content th,
+.dialog.about .content td {
   padding: 8px 12px;
   text-align: left;
   border-bottom: 1px solid var(--color-border-light);
 }
 
-.dialog.info .content th {
+.dialog.about .content th {
   color: var(--color-text-primary);
   font-weight: 600;
 }
 
-.dialog.info .content td {
+.dialog.about .content td {
   color: var(--color-text-secondary);
 }
 
-.dialog.info .content img {
+.dialog.about .content img {
   max-width: 100%;
   height: auto;
   border-radius: 6px;
   margin: 8px 0;
 }
 
-.dialog.info .content video {
+.dialog.about .content video {
   max-width: 100%;
   border-radius: 6px;
   margin: 8px 0;
 }
 
 /* Loading/Error states */
-.dialog.info .loading,
-.dialog.info .error {
+.dialog.about .loading,
+.dialog.about .error {
   padding: 40px;
   text-align: center;
   color: var(--color-text-muted);
 }
 
-.dialog.info .error {
+.dialog.about .error {
   color: var(--color-danger);
 }
 
 /* Footer */
-.dialog.info .footer {
+.dialog.about .footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -933,12 +933,12 @@
   border-top: 1px solid var(--color-border-light);
 }
 
-.dialog.info .footer .actions {
+.dialog.about .footer .actions {
   display: flex;
   gap: 12px;
 }
 
-.dialog.info .footer .btn-secondary {
+.dialog.about .footer .btn-secondary {
   padding: 8px 24px;
 }
 

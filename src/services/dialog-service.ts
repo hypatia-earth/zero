@@ -1,7 +1,7 @@
 /**
  * DialogService - Floating mode and z-index management for dialogs
  *
- * Individual services (OptionsService, InfoService) manage their own open/close state.
+ * Individual services (OptionsService, AboutService) manage their own open/close state.
  * DialogService adds:
  * - Floating mode (desktop only) - keeps dialog open on backdrop click
  * - Z-index stacking - clicked dialog goes on top
@@ -9,7 +9,7 @@
 
 import m from 'mithril';
 
-export type DialogId = 'options' | 'info';
+export type DialogId = 'options' | 'about';
 
 export class DialogService {
   // Floating state (persists when dialog closes)

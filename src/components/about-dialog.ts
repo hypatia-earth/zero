@@ -1,5 +1,5 @@
 /**
- * InfoDialog - Modal for displaying markdown content
+ * AboutDialog - Modal for displaying markdown content
  *
  * Same layout as OptionsDialog:
  * - Modal centered on desktop, slide-up on mobile
@@ -7,7 +7,7 @@
  */
 
 import m from 'mithril';
-import type { InfoService } from '../services/info-service';
+import type { AboutService } from '../services/about-service';
 import type { DialogService } from '../services/dialog-service';
 
 // Drag state (persists across redraws)
@@ -23,25 +23,25 @@ function resetDragState(): void {
   dragState = { isDragging: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 };
 }
 
-export interface InfoDialogAttrs {
-  infoService: InfoService;
+export interface AboutDialogAttrs {
+  aboutService: AboutService;
   dialogService: DialogService;
 }
 
-export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
+export const AboutDialog: m.ClosureComponent<AboutDialogAttrs> = () => {
   return {
     view({ attrs }) {
-      const { infoService, dialogService } = attrs;
+      const { aboutService, dialogService } = attrs;
 
-      if (!infoService.dialogOpen) return null;
+      if (!aboutService.dialogOpen) return null;
 
-      const isFloating = dialogService.isFloating('info');
-      const isTop = dialogService.isTop('info');
+      const isFloating = dialogService.isFloating('about');
+      const isTop = dialogService.isTop('about');
       const isDesktop = dialogService.isDesktop;
 
       // Drag handlers (desktop only)
       const onMouseDown = (e: MouseEvent) => {
-        dialogService.bringToFront('info');
+        dialogService.bringToFront('about');
         if (!isDesktop) return;
         dragState.isDragging = true;
         dragState.startX = e.clientX - dragState.offsetX;
@@ -49,7 +49,7 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
 
         const onMouseMove = (e: MouseEvent) => {
           if (!dragState.isDragging) return;
-          const win = document.querySelector<HTMLElement>('.dialog.info .window');
+          const win = document.querySelector<HTMLElement>('.dialog.about .window');
           if (!win) return;
           // Get base rect without current transform
           const baseX = (window.innerWidth - win.offsetWidth) / 2;
@@ -82,42 +82,42 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
 
       const floatingClass = isFloating ? (isTop ? 'floating top' : 'floating behind') : '';
 
-      return m('div.dialog.info', { class: floatingClass }, [
+      return m('div.dialog.about', { class: floatingClass }, [
         m('div.backdrop', {
           onclick: () => {
-            if (dialogService.shouldCloseOnBackdrop('info')) {
+            if (dialogService.shouldCloseOnBackdrop('about')) {
               resetDragState();
-              infoService.closeDialog();
+              aboutService.closeDialog();
             }
           }
         }),
         m('div.window', {
           class: dragState.isDragging ? 'dragging' : '',
           style: windowStyle,
-          onmousedown: () => dialogService.bringToFront('info')
+          onmousedown: () => dialogService.bringToFront('about')
         }, [
           m('div.header', { onmousedown: onMouseDown }, [
-            m('h2', 'Welcome to Hypatia Zero'),
+            m('h2', 'About Hypatia Zero'),
             m('div.bar', [
               isDesktop ? m('button.float-toggle', {
                 onclick: (e: Event) => {
                   e.stopPropagation();
-                  dialogService.toggleFloating('info');
+                  dialogService.toggleFloating('about');
                 },
                 title: isFloating ? 'Disable floating' : 'Keep floating'
               }, isFloating ? '◎' : '○') : null,
               m('button.close', {
                 onclick: () => {
                   resetDragState();
-                  infoService.closeDialog();
+                  aboutService.closeDialog();
                 }
               }, '×')
             ])
           ]),
           m('div.content.markdown', [
-            infoService.error
-              ? m('div.error', infoService.error)
-              : m.trust(infoService.content)
+            aboutService.error
+              ? m('div.error', aboutService.error)
+              : m.trust(aboutService.content)
           ]),
           m('div.footer', [
             m('span.version', `v${__APP_VERSION__} (${__APP_HASH__})`),
@@ -131,7 +131,7 @@ export const InfoDialog: m.ClosureComponent<InfoDialogAttrs> = () => {
               m('button.btn.btn-secondary', {
                 onclick: () => {
                   resetDragState();
-                  infoService.closeDialog();
+                  aboutService.closeDialog();
                 }
               }, 'Close')
             ])

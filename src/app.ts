@@ -25,9 +25,9 @@ import { initOmWasm } from './adapters/om-file-adapter';
 import { BootstrapModal } from './components/bootstrap-modal';
 import { OptionsDialog } from './components/options-dialog';
 import { DialogService } from './services/dialog-service';
-import { InfoService } from './services/info-service';
-import { InfoPanel } from './components/info-panel';
-import { InfoDialog } from './components/info-dialog';
+import { AboutService } from './services/about-service';
+import { AboutPanel } from './components/about-panel';
+import { AboutDialog } from './components/about-dialog';
 import { LayersPanel } from './components/layers-panel';
 import { TimeCirclePanel } from './components/timecircle-panel';
 import { QueuePanel } from './components/queue-panel';
@@ -50,7 +50,7 @@ export const App: m.ClosureComponent = () => {
   let keyboardService: KeyboardService;
   let paletteService: PaletteService;
   let dialogService: DialogService;
-  let infoService: InfoService;
+  let aboutService: AboutService;
   let themeService: ThemeService;
 
   return {
@@ -71,10 +71,10 @@ export const App: m.ClosureComponent = () => {
       omService = new OmService();
       paletteService = new PaletteService();
       dialogService = new DialogService();
-      infoService = new InfoService();
+      aboutService = new AboutService();
       themeService = new ThemeService();
       themeService.init();
-      await infoService.init();  // TODO: Should get its own step
+      await aboutService.init();  // TODO: Should get its own step
 
       m.redraw();
 
@@ -278,7 +278,7 @@ export const App: m.ClosureComponent = () => {
         m(BootstrapModal, ready ? { optionsService } : {}),
         ...(ready ? [
           m(OptionsDialog, { optionsService, paletteService, dialogService, configService }),
-          m(InfoDialog, { infoService, dialogService }),
+          m(AboutDialog, { aboutService, dialogService }),
           m('.ui-container', [
             m(LogoPanel),
             m(LayersPanel, { configService, optionsService }),
@@ -287,7 +287,7 @@ export const App: m.ClosureComponent = () => {
             m(TimeBarPanel, { optionsService, slotService, timestepService, configService, themeService }),
             m(FullscreenPanel),
             m(OptionsPanel, { optionsService, dialogService }),
-            m(InfoPanel, { infoService, dialogService }),
+            m(AboutPanel, { aboutService, dialogService }),
             optionsService.options.value.debug.showPerfPanel && m(PerfPanel, { renderService }),
           ]),
         ] : []),
