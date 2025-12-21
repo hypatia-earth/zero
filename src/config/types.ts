@@ -36,12 +36,12 @@ export const ALL_LAYERS = [...DECORATION_LAYERS, ...WEATHER_LAYERS] as const;
 export type TLayer = TDecorationLayer | TWeatherLayer;
 
 /** Layer categories */
-export const LAYER_CATEGORIES = ['base', 'weather', 'overlay'] as const;
+export const LAYER_CATEGORIES = ['celestial', 'weather', 'reference'] as const;
 export type TLayerCategory = typeof LAYER_CATEGORIES[number];
 export const LAYER_CATEGORY_LABELS: Record<TLayerCategory, string> = {
-  base: 'Base',
+  celestial: 'Celestial',
   weather: 'Weather',
-  overlay: 'Overlays',
+  reference: 'Reference',
 };
 
 /** ECMWF data parameters */

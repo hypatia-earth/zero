@@ -44,9 +44,9 @@ export const defaultConfig: ZeroConfig = {
   },
 
   layers: [
-    { id: 'earth', label: 'Earth', buttonLabel: 'Earth', category: 'base' },
-    { id: 'sun', label: 'Sun', buttonLabel: 'Sun', category: 'overlay' },
-    { id: 'grid', label: 'Grid', buttonLabel: 'Grid', category: 'overlay' },
+    { id: 'earth', label: 'Earth', buttonLabel: 'Earth', category: 'celestial' },
+    { id: 'sun', label: 'Sun', buttonLabel: 'Sun', category: 'celestial' },
+    { id: 'grid', label: 'Grid', buttonLabel: 'Grid', category: 'reference' },
     {
       id: 'temp', label: 'Temperature', buttonLabel: 'Temp', category: 'weather',
       params: ['temperature_2m'],

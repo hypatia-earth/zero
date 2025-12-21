@@ -64,10 +64,14 @@
   fill: white;
 }
 
-/* Active state - indicator colors */
+/* Active state - indicator colors from theme */
 .layer.widget.active { border-left-color: rgba(255, 255, 255, 0.6); }
-.layer.widget.active.temp { border-left-color: var(--color-layer-temp); }
-.layer.widget.active.rain { border-left-color: var(--color-layer-rain); }
 .layer.widget.active.earth { border-left-color: var(--color-layer-earth); }
 .layer.widget.active.sun { border-left-color: var(--color-layer-sun); }
-.layer.widget.active.graticule { border-left-color: var(--color-layer-graticule); }
+.layer.widget.active.grid { border-left-color: var(--color-layer-graticule); }
+.layer.widget.active.temp { border-left-color: var(--color-layer-temp); }
+.layer.widget.active.rain { border-left-color: var(--color-layer-rain); }
+.layer.widget.active.clouds { border-left-color: var(--color-layer-clouds); }
+.layer.widget.active.humidity { border-left-color: var(--color-layer-humidity); }
+.layer.widget.active.wind { border-left-color: var(--color-layer-wind); }
+.layer.widget.active.pressure { border-left-color: var(--color-layer-pressure); }
