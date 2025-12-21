@@ -118,13 +118,27 @@
   --color-layer-wind: oklch(70% 0.18 170);      /* teal */
   --color-layer-pressure: oklch(70% 0.18 320);  /* magenta */
   --color-layer-humidity: oklch(70% 0.18 100);  /* yellow-green */
-  --color-layer-clouds: #ffffff;                 /* white */
+  --color-layer-clouds: oklch(90% 0.00 0);      /* near-white */
   --color-layer-waves: oklch(70% 0.18 210);     /* cyan */
   --color-layer-earth: oklch(65% 0.12 250);
   --color-layer-sun: #feca57;
   --color-layer-graticule: #ffffff;
   --color-layer-text: #ffffff;
   --color-layer-debug: #ffffff;
+
+  /* Layer dim colors - 50% lightness/chroma for cached state */
+  --color-layer-temp-dim: oklch(35% 0.09 30);
+  --color-layer-rain-dim: oklch(35% 0.09 250);
+  --color-layer-wind-dim: oklch(35% 0.09 170);
+  --color-layer-pressure-dim: oklch(35% 0.09 320);
+  --color-layer-humidity-dim: oklch(35% 0.09 100);
+  --color-layer-clouds-dim: oklch(45% 0.00 0);
+  --color-layer-waves-dim: oklch(35% 0.09 210);
+
+  /* Timebar UI colors */
+  --color-timebar-ecmwf: oklch(40% 0.00 0);     /* grey: available */
+  --color-timebar-active: oklch(75% 0.20 145);  /* green: interpolated */
+  --color-timebar-now: rgba(255, 255, 255, 0.7);
 }
 
 /* Bar helper - flexbox row */

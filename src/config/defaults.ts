@@ -74,7 +74,7 @@ export const defaultConfig: ZeroConfig = {
     {
       id: 'wind', label: 'Wind', buttonLabel: 'Wind', category: 'weather',
       params: ['wind_u_component_10m', 'wind_v_component_10m'],
-      defaultSizeEstimate: 16_000_000,
+      defaultSizeEstimate: 8_200_000,
       slabs: [{ name: 'u', sizeMB: 26 }, { name: 'v', sizeMB: 26 }],
     },
     {

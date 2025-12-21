@@ -109,20 +109,29 @@
 }
 
 .timeslider canvas {
-  width: 100%;
-  height: 100%;
+  /* override controls.css positioning - canvas needs explicit width */
+  left: 21px;
+  width: calc(100% - 42px);
   cursor: pointer;
 }
 
 .timesteps {
+  position: relative;
   display: flex;
   justify-content: space-between;
   width: 100%;
-  padding: 0 24px;
   font-size: 12px;
   opacity: 0.6;
   pointer-events: auto;
   margin-top: 12px;
+}
+
+.timesteps .start { margin-left: 24px; }
+.timesteps .end { margin-right: 24px; }
+
+.timesteps .now {
+  position: absolute;
+  transform: translateX(-50%);
 }
 
 /* Re-enable pointer events on nested elements */

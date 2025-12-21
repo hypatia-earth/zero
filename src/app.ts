@@ -19,6 +19,7 @@ import { TimestepService } from './services/timestep-service';
 import { SlotService } from './services/slot-service';
 import { RenderService } from './services/render-service';
 import { PaletteService } from './services/palette-service';
+import { ThemeService } from './services/theme-service';
 import { setupCameraControls } from './services/camera-controls';
 import { initOmWasm } from './adapters/om-file-adapter';
 import { BootstrapModal } from './components/bootstrap-modal';
@@ -50,6 +51,7 @@ export const App: m.ClosureComponent = () => {
   let paletteService: PaletteService;
   let dialogService: DialogService;
   let infoService: InfoService;
+  let themeService: ThemeService;
 
   return {
     async oninit() {
@@ -70,6 +72,8 @@ export const App: m.ClosureComponent = () => {
       paletteService = new PaletteService();
       dialogService = new DialogService();
       infoService = new InfoService();
+      themeService = new ThemeService();
+      themeService.init();
       await infoService.init();  // TODO: Should get its own step
 
       m.redraw();
@@ -272,19 +276,21 @@ export const App: m.ClosureComponent = () => {
 
       return [
         m(BootstrapModal, ready ? { optionsService } : {}),
-        ready && m(OptionsDialog, { optionsService, paletteService, dialogService, configService }),
-        ready && m(InfoDialog, { infoService, dialogService }),
-        ready && m('.ui-container', [
-          m(LogoPanel),
-          m(LayersPanel, { configService, optionsService }),
-          m(TimeCirclePanel, { optionsService }),
-          m(QueuePanel, { queueService, optionsService, slotService }),
-          m(TimeBarPanel, { optionsService, slotService, timestepService, configService }),
-          m(FullscreenPanel),
-          m(OptionsPanel, { optionsService, dialogService }),
-          m(InfoPanel, { infoService, dialogService }),
-          optionsService.options.value.debug.showPerfPanel && m(PerfPanel, { renderService }),
-        ]),
+        ...(ready ? [
+          m(OptionsDialog, { optionsService, paletteService, dialogService, configService }),
+          m(InfoDialog, { infoService, dialogService }),
+          m('.ui-container', [
+            m(LogoPanel),
+            m(LayersPanel, { configService, optionsService }),
+            m(TimeCirclePanel, { optionsService }),
+            m(QueuePanel, { queueService, optionsService, slotService }),
+            m(TimeBarPanel, { optionsService, slotService, timestepService, configService, themeService }),
+            m(FullscreenPanel),
+            m(OptionsPanel, { optionsService, dialogService }),
+            m(InfoPanel, { infoService, dialogService }),
+            optionsService.options.value.debug.showPerfPanel && m(PerfPanel, { renderService }),
+          ]),
+        ] : []),
       ];
     },
   };

@@ -15,29 +15,15 @@ import type { SlotService } from '../services/slot-service';
 import type { TimestepService } from '../services/timestep-service';
 import type { OptionsService } from '../services/options-service';
 import type { ConfigService } from '../services/config-service';
+import type { ThemeService, LayerColors, TimebarColors } from '../services/theme-service';
 import { getSunDirection } from '../utils/sun-position';
 
 const DEBUG = false;
 
-/** Layer colors (full brightness for GPU, 50% for cached) */
-const LAYER_COLORS: Record<TWeatherLayer, { gpu: string; cached: string }> = {
-  temp: { gpu: '#ff6b35', cached: '#803518' },      // Orange
-  rain: { gpu: '#4a90d9', cached: '#25486c' },      // Blue
-  clouds: { gpu: '#aaaaaa', cached: '#555555' },    // Grey
-  humidity: { gpu: '#00bfff', cached: '#006080' },  // Cyan
-  wind: { gpu: '#00ff00', cached: '#008000' },      // Green
-  pressure: { gpu: '#ff00ff', cached: '#800080' },  // Magenta
-};
-
-/** Tick colors */
-const COLOR_ECMWF = '#444';     // Grey: available at ECMWF
-const COLOR_ACTIVE = '#0f0';    // Green: interpolated pair
-const COLOR_NOW = 'rgba(255,255,255,0.7)';  // Now marker
-
 /** Tick dimensions */
 const TICK_WIDTH = 2;
 const TICK_HEIGHT_RATIO = 0.9;  // 90% of row height
-const NOW_MARKER_WIDTH = 3;
+const NOW_MARKER_WIDTH = 1;
 
 /** Knob dimensions */
 const KNOB_COLOR = 'rgba(255,255,255,0.9)';
@@ -88,6 +74,7 @@ interface TimeBarPanelAttrs {
   slotService: SlotService;
   timestepService: TimestepService;
   configService: ConfigService;
+  themeService: ThemeService;
 }
 
 
@@ -104,7 +91,9 @@ function drawTimebar(
   currentProgress: number,  // 0-1 linear progress
   cameraLat: number,
   cameraLon: number,
-  sunEnabled: boolean
+  sunEnabled: boolean,
+  layerColors: Record<TWeatherLayer, LayerColors>,
+  timebarColors: TimebarColors
 ): void {
   if (ecmwfSet.size === 0) {
     throw new Error('[Timebar] ecmwfSet is empty - timestepService.state.ecmwf has no data');
@@ -156,7 +145,7 @@ function drawTimebar(
         ctx.globalAlpha = brightness;
       }
 
-      ctx.fillStyle = COLOR_ECMWF;
+      ctx.fillStyle = timebarColors.ecmwf;
       ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickHeight);
       ctx.globalAlpha = 1.0;
     });
@@ -166,7 +155,7 @@ function drawTimebar(
       const cached = cachedMap.get(layer)!;
       const gpu = gpuMap.get(layer)!;
       const active = activeMap.get(layer)!;
-      const colors = LAYER_COLORS[layer];
+      const colors = layerColors[layer];
       const rowTopY = rowIndex * layerHeight;
 
       ecmwfSet.forEach(tsKey => {
@@ -175,16 +164,16 @@ function drawTimebar(
         const tickHeight = baseTickHeight * diskHeight(t);
         const topY = rowTopY + (layerHeight - tickHeight) / 2;
 
-        // Determine color: green (active) > layer (gpu) > layer dark (cached) > grey (ecmwf)
-        let color = COLOR_ECMWF;
+        // Determine color: green (active) > layer (gpu) > layer dim (cached) > grey (ecmwf)
+        let color = timebarColors.ecmwf;
         if (cached.has(tsKey)) {
-          color = colors.cached;
+          color = colors.dim;
         }
         if (gpu.has(tsKey)) {
-          color = colors.gpu;
+          color = colors.color;
         }
         if (active.has(tsKey)) {
-          color = COLOR_ACTIVE;
+          color = timebarColors.active;
         }
 
         if (sunEnabled) {
@@ -203,7 +192,7 @@ function drawTimebar(
   const nowT = getT(nowTime.toISOString());
   const nowX = getX(nowT);
   if (nowT >= 0 && nowT <= 1) {
-    ctx.fillStyle = COLOR_NOW;
+    ctx.fillStyle = timebarColors.now;
     ctx.fillRect(nowX - NOW_MARKER_WIDTH / 2, 0, NOW_MARKER_WIDTH, height);
   }
 
@@ -252,7 +241,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     },
 
     view({ attrs }) {
-      const { optionsService, slotService, timestepService, configService } = attrs;
+      const { optionsService, slotService, timestepService, configService, themeService } = attrs;
       const readyWeatherLayers = configService.getReadyLayers().filter(isWeatherLayer);
       const currentTime = optionsService.options.value.viewState.time;
       const window = {
@@ -343,6 +332,11 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       const viewState = opts.viewState;
       const sunEnabled = opts.sun.enabled;
 
+      // Calculate NOW label position (same warp as now marker)
+      const nowMs = Date.now() - window.start.getTime();
+      const nowT = Math.max(0, Math.min(1, nowMs / windowMs));
+      const nowPercent = diskWarp(nowT) * 100;
+
       return m('.panel.timebar', [
         m('.control.timeslider', [
           // Canvas for ticks and knob - acts as custom slider
@@ -365,7 +359,9 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
                   progress,
                   viewState.lat,
                   viewState.lon,
-                  sunEnabled
+                  sunEnabled,
+                  themeService.layers,
+                  themeService.timebar
                 );
               },
               onupdate: (vnode: m.VnodeDOM) => {
@@ -382,15 +378,17 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
                   progress,
                   viewState.lat,
                   viewState.lon,
-                  sunEnabled
+                  sunEnabled,
+                  themeService.layers,
+                  themeService.timebar
                 );
               },
             }),
         ]),
         m('.timesteps', [
-          m('span', formatDate(window.start)),
-          m('span', 'NOW'),
-          m('span', formatDate(window.end)),
+          m('span.start', formatDate(window.start)),
+          m('span.now', { style: `left: calc(22px + (100% - 44px) * ${nowPercent / 100})` }, 'NOW'),
+          m('span.end', formatDate(window.end)),
         ]),
       ]);
     },
