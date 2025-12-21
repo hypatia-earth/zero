@@ -83,6 +83,7 @@ export class PressureLayer {
   private generatePipeline!: GPUComputePipeline;
   private scanBlocksPipeline!: GPUComputePipeline;
   private addBlockSumsPipeline!: GPUComputePipeline;
+  private edgeClearPipeline!: GPUComputePipeline;  // Fills edge buffer with -1
 
   // Compute buffers
   private regridUniformBuffer!: GPUBuffer;
@@ -100,6 +101,8 @@ export class PressureLayer {
   private contourBindGroupLayout!: GPUBindGroupLayout;
   private prefixSumBindGroupLayout!: GPUBindGroupLayout;
   private smoothBindGroupLayout!: GPUBindGroupLayout;
+  private edgeClearBindGroupLayout!: GPUBindGroupLayout;
+  private edgeClearBindGroup!: GPUBindGroup;
 
   // Cached contour bind group (invalidated when slots change)
   private contourBindGroup: GPUBindGroup | null = null;
@@ -126,8 +129,6 @@ export class PressureLayer {
   private computeReady = false;
   private currentLevelCount = 21;  // Default for 4 hPa spacing
 
-  // Cached array for edge clearing (reused to avoid allocation per frame)
-  private edgeClearData: Int32Array | null = null;
 
   constructor(
     device: GPUDevice,
@@ -228,6 +229,24 @@ export class PressureLayer {
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.smoothBindGroupLayout] }),
       compute: { module: smoothModule, entryPoint: 'smoothEdges' },
     });
+
+    // Edge clear pipeline - fills edge buffer with -1 (GPU-side, can be batched)
+    this.edgeClearBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      ],
+    });
+    const edgeClearModule = this.device.createShaderModule({
+      code: `@group(0) @binding(0) var<storage, read_write> edges: array<i32>;
+             @compute @workgroup_size(256)
+             fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+               if (gid.x < arrayLength(&edges)) { edges[gid.x] = -1; }
+             }`,
+    });
+    this.edgeClearPipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.edgeClearBindGroupLayout] }),
+      compute: { module: edgeClearModule, entryPoint: 'main' },
+    });
   }
 
   private createComputeBuffers(): void {
@@ -286,6 +305,12 @@ export class PressureLayer {
     this.edgeToVertexBuffer = this.device.createBuffer({
       size: this.numCells * 4 * 4,  // numCells × 4 edges × 4 bytes
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Edge clear bind group (for GPU-side -1 fill)
+    this.edgeClearBindGroup = this.device.createBindGroup({
+      layout: this.edgeClearBindGroupLayout,
+      entries: [{ binding: 0, resource: { buffer: this.edgeToVertexBuffer } }],
     });
 
     // Smoothed vertex buffer (same size as vertex buffer, for ping-pong)
@@ -481,6 +506,10 @@ export class PressureLayer {
       size: this.numCells * 4 * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
+    this.edgeClearBindGroup = this.device.createBindGroup({
+      layout: this.edgeClearBindGroupLayout,
+      entries: [{ binding: 0, resource: { buffer: this.edgeToVertexBuffer } }],
+    });
     this.smoothedVertexBuffer = this.device.createBuffer({
       size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
@@ -629,14 +658,7 @@ export class PressureLayer {
       this.device.queue.writeBuffer(this.contourUniformBuffer, i * this.uniformAlignment, contourUniforms);
     }
 
-    // Clear edge→vertex mapping once (using cached buffer)
-    const requiredSize = this.numCells * 4;
-    if (!this.edgeClearData || this.edgeClearData.length !== requiredSize) {
-      this.edgeClearData = new Int32Array(requiredSize).fill(-1);
-    }
-    this.device.queue.writeBuffer(this.edgeToVertexBuffer, 0, this.edgeClearData as Int32Array<ArrayBuffer>);
-
-    // Clear segment counts padding once
+    // Clear segment counts padding once (edge buffer cleared per-level via compute)
     const paddedCells = Math.ceil(this.numCells / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
     const clearData = new Uint32Array(paddedCells - this.numCells);
     if (clearData.length > 0) {
@@ -678,6 +700,14 @@ export class PressureLayer {
     const dynamicOffset = levelIndex * this.uniformAlignment;
     const paddedCells = Math.ceil(this.numCells / SCAN_BLOCK_SIZE) * SCAN_BLOCK_SIZE;
     const numBlocks = Math.ceil(paddedCells / SCAN_BLOCK_SIZE);
+    const edgeBufferSize = this.numCells * 4;  // 4 edges per cell
+
+    // Clear edge buffer with -1 via compute (GPU-side, maintains batching)
+    const edgeClearPass = commandEncoder.beginComputePass();
+    edgeClearPass.setPipeline(this.edgeClearPipeline);
+    edgeClearPass.setBindGroup(0, this.edgeClearBindGroup);
+    edgeClearPass.dispatchWorkgroups(Math.ceil(edgeBufferSize / 256));
+    edgeClearPass.end();
 
     // Pass 1: Count segments per cell
     const countPass = commandEncoder.beginComputePass();
