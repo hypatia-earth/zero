@@ -335,14 +335,14 @@ export class RenderService {
   }
 
   private getLogoUniforms() {
-    // Logo only visible when enabled and ALL layers are completely off
+    // Logo only visible when enabled and ALL layers are disabled
     if (!this.configService.getConfig().render.logoEnabled) {
       return { logoOpacity: 0 };
     }
-    const totalOpacity = Object.values(this.animatedOpacity).reduce((sum, v) => sum + v, 0);
-    return {
-      logoOpacity: totalOpacity < 0.01 ? 1 : Math.max(0, 1 - totalOpacity * 10),
-    };
+    // Check if any layer is enabled (not just visible - loading layers count as enabled)
+    const opts = this.optionsService.options.value;
+    const anyEnabled = [...DECORATION_LAYERS, ...WEATHER_LAYERS].some(l => opts[l].enabled);
+    return { logoOpacity: anyEnabled ? 0 : 1 };
   }
 
   /**
