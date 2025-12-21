@@ -27,7 +27,7 @@ type OptionFilter = TLayer | 'global' | 'dataCache' | 'gpu' | 'viewState' | 'que
 interface UIMetadata {
   label: string;
   description?: string;
-  group: 'interface' | 'regional' | 'download' | 'interaction' | 'layers' | 'gpu' | 'advanced' | 'viewState';
+  group: 'interface' | 'regional' | 'download' | 'environmental' | 'interaction' | 'layers' | 'gpu' | 'advanced' | 'viewState';
   filter: OptionFilter | OptionFilter[];
   order: number;
   control: ControlType;
@@ -89,6 +89,12 @@ export const optionGroups = {
     label: 'Download',
     description: 'Data loading and caching',
     order: 2,
+  },
+  environmental: {
+    id: 'environmental',
+    label: 'Environmental',
+    description: 'Power and resource usage',
+    order: 2.5,
   },
   interaction: {
     id: 'interaction',
@@ -834,6 +840,17 @@ export const optionsSchema = z.object({
         control: 'toggle',
       }
     ),
+    batterySaver: opt(
+      z.boolean().default(false),
+      {
+        label: 'Battery saver',
+        description: 'Limit to 30 fps to save power and reduce heat',
+        group: 'environmental',
+        filter: 'global',
+        order: 0,
+        control: 'toggle',
+      }
+    ),
   }),
 });
 
@@ -876,7 +893,7 @@ export const defaultOptions: ZeroOptions = {
   wind: { enabled: false, seedCount: defaultConfig.wind.seedCount, opacity: defaultConfig.wind.opacity, speed: defaultConfig.wind.animSpeed },
   pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1', spacing: '4' },
   dataCache: { cacheStrategy: 'alternate', downloadMode: 'on-demand' },
-  debug: { showDevLog: false, showPerfPanel: false },
+  debug: { showDevLog: false, showPerfPanel: false, batterySaver: false },
 };
 
 // ============================================================

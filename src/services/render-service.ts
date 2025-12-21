@@ -164,13 +164,28 @@ export class RenderService {
     this.setupResizeObserver();
     const renderer = this.renderer;
 
-    const render = () => {
+    let lastRafTime = 0;
+    let frameDebt = 0;
+    const TARGET_FRAME_TIME = 1000 / 30;  // 30 fps = 33.33ms
 
-      const tFrame = performance.now();
+    const render = (rafTime: DOMHighResTimeStamp) => {
 
       this.animationId = requestAnimationFrame(render);
 
       const options = this.optionsService.options.value;
+
+      // Battery saver: accumulate time, render when enough has passed
+      if (options.debug.batterySaver) {
+        const delta = lastRafTime ? rafTime - lastRafTime : TARGET_FRAME_TIME;
+        lastRafTime = rafTime;
+        frameDebt += delta;
+        if (frameDebt < TARGET_FRAME_TIME) {
+          return;
+        }
+        frameDebt = Math.min(frameDebt - TARGET_FRAME_TIME, TARGET_FRAME_TIME);
+      }
+
+      const tFrame = performance.now();
       const time = options.viewState.time;
       const loadingState: LayerState = { mode: 'loading', lerp: 0, time };
 
@@ -247,7 +262,7 @@ export class RenderService {
       }
     };
 
-    render();
+    requestAnimationFrame(render);
   }
 
   private getCameraUniforms(renderer: GlobeRenderer) {
