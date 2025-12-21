@@ -13,6 +13,7 @@ import { generateFibonacciSphere } from '../utils/fibonacci-sphere';
 import { generateHurricaneTestData } from '../../tests/wind-test-data';
 import { generateGaussianLUTs } from './gaussian-grid';
 import { defaultConfig } from '../config/defaults';
+import type { LayerState } from '../config/types';
 
 interface WindUniforms {
   viewProj: Float32Array;
@@ -65,6 +66,10 @@ export class WindLayer {
   // State
   private enabled = false;
   private randomSeed = Math.random();
+
+  // Compute caching: only recompute when state changes
+  private lastState: LayerState | null = null;
+  private needsCompute = true;
 
   constructor(device: GPUDevice, format: GPUTextureFormat, lineCount = 8192) {
     this.device = device;
@@ -272,11 +277,21 @@ export class WindLayer {
   }
 
   /**
-   * Set interpolation factor between timesteps (0 = t0, 1 = t1)
+   * Set layer state - triggers compute when state changes significantly
+   * Compares mode and time (minute precision) to avoid unnecessary recomputes
    */
-  setInterpFactor(factor: number): void {
-    this.interpFactor = Math.max(0, Math.min(1, factor));
-    this.updateComputeUniforms(defaultConfig.wind.stepFactor);
+  setState(state: LayerState): void {
+    this.interpFactor = state.mode === 'pair' ? state.lerp : 0;
+
+    // Check if state changed enough to require recompute
+    const needsRecompute = !this.lastState
+      || state.mode !== this.lastState.mode
+      || Math.floor(state.time.getTime() / 60000) !== Math.floor(this.lastState.time.getTime() / 60000);
+
+    if (needsRecompute) {
+      this.needsCompute = true;
+      this.lastState = state;
+    }
   }
 
   getInterpFactor(): number {
@@ -302,6 +317,7 @@ export class WindLayer {
 
     // Mark as using external buffers (don't destroy in dispose)
     this.useExternalBuffers = true;
+    this.needsCompute = true;  // Force recompute with new data
 
     // Recreate compute bind group with new buffers
     this.computeBindGroup = this.device.createBindGroup({
@@ -350,9 +366,18 @@ export class WindLayer {
   }
 
   /**
-   * Run compute pass to trace wind lines
+   * Run compute pass to trace wind lines (only if needed)
+   * Returns true if compute was actually run
    */
-  runCompute(commandEncoder: GPUCommandEncoder): void {
+  runCompute(commandEncoder: GPUCommandEncoder): boolean {
+    // Skip if no recompute needed (state unchanged)
+    if (!this.needsCompute) {
+      return false;
+    }
+
+    // Update uniforms with current interpolation factor
+    this.updateComputeUniforms(defaultConfig.wind.stepFactor);
+
     const computePass = commandEncoder.beginComputePass();
     computePass.setPipeline(this.computePipeline);
     computePass.setBindGroup(0, this.computeBindGroup);
@@ -361,6 +386,10 @@ export class WindLayer {
     const workgroups = Math.ceil(this.seedCount / 64);
     computePass.dispatchWorkgroups(workgroups);
     computePass.end();
+
+    // Mark as computed
+    this.needsCompute = false;
+    return true;
   }
 
   /**
@@ -396,6 +425,7 @@ export class WindLayer {
     console.log(`[Wind] Changing line count: ${this.seedCount} → ${lineCount}`);
     this.seedCount = lineCount;
     this.randomSeed = Math.random();  // Scramble phase offsets
+    this.needsCompute = true;  // Force recompute with new line count
 
     // Destroy old buffers
     this.seedBuffer.destroy();

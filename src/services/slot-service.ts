@@ -11,7 +11,7 @@
  */
 
 import { effect, signal } from '@preact/signals-core';
-import { isWeatherLayer, isWeatherTextureLayer, type TLayer, type TWeatherLayer, type TTimestep, type TimestepOrder, type TWeatherTextureLayer } from '../config/types';
+import { isWeatherLayer, isWeatherTextureLayer, type TLayer, type TWeatherLayer, type TTimestep, type TimestepOrder, type TWeatherTextureLayer, type LayerState } from '../config/types';
 import type { TimestepService } from './timestep-service';
 import type { RenderService } from './render-service';
 import type { QueueService } from './queue-service';
@@ -107,10 +107,10 @@ export class SlotService {
       this.paramSlots.set(param, createParamSlots(param, this.timeslotsPerLayer, slabsCount));
     }
 
-    // Wire up lerp calculations
-    this.renderService.setTempLerpFn((time) => this.getLerp('temp', time));
-    this.renderService.setPressureLerpFn((time) => this.getLerp('pressure', time));
-    this.renderService.setWindLerpFn((time) => this.getLerp('wind', time));
+    // Wire up state calculations
+    this.renderService.setTempStateFn((time) => this.getState('temp', time));
+    this.renderService.setPressureStateFn((time) => this.getState('pressure', time));
+    this.renderService.setWindStateFn((time) => this.getState('wind', time));
 
     // Wire up pressure resolution change callback (re-regrid slots with raw data)
     this.renderService.setPressureResolutionChangeFn((slotsNeedingRegrid) => {
@@ -505,20 +505,41 @@ export class SlotService {
     this.activateIfReady(param, ps, wanted);
   }
 
-  /** Calculate lerp for shader interpolation */
-  getLerp(param: TWeatherLayer, currentTime: Date): number {
+  /** Calculate layer state for shader interpolation */
+  getState(param: TWeatherLayer, currentTime: Date): LayerState {
     const ps = this.paramSlots.get(param);
     const active = ps?.getActiveTimesteps();
-    if (!active || active.length === 0) return -1;
 
-    if (active.length === 1) return -2;  // Single timestep mode
+    // No data loaded
+    if (!active || active.length === 0) {
+      return { mode: 'loading', lerp: 0, time: currentTime };
+    }
 
+    // Single timestep mode (exact timestep, no interpolation)
+    if (active.length === 1) {
+      return { mode: 'single', lerp: 0, time: currentTime };
+    }
+
+    // Pair mode - calculate interpolation factor
     const t0 = this.timestepService.toDate(active[0]!).getTime();
     const t1 = this.timestepService.toDate(active[1]!).getTime();
     const tc = currentTime.getTime();
 
-    if (tc < t0 || tc > t1) return -1;
-    return (tc - t0) / (t1 - t0);
+    // Time outside loaded range
+    if (tc < t0 || tc > t1) {
+      return { mode: 'loading', lerp: 0, time: currentTime };
+    }
+
+    const lerp = (tc - t0) / (t1 - t0);
+    return { mode: 'pair', lerp, time: currentTime };
+  }
+
+  /** @deprecated Use getState instead */
+  getLerp(param: TWeatherLayer, currentTime: Date): number {
+    const state = this.getState(param, currentTime);
+    if (state.mode === 'loading') return -1;
+    if (state.mode === 'single') return -2;
+    return state.lerp;
   }
 
   /** Initialize with priority timesteps for all enabled params */
