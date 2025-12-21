@@ -376,10 +376,22 @@ export class TimestepService {
         layer: param,
       });
 
+      // Build map of current manifest URLs → timestep for this model
+      // Only count as "cached" if URL matches current manifest (same model run)
+      const urlToTimestep = new Map<string, TTimestep>();
+      for (const ts of this.timestepsData[this.defaultModel]) {
+        // Cache key format: https://om-cache/path?range=...
+        // Extract path from full URL for matching
+        const urlPath = new URL(ts.url).pathname;
+        urlToTimestep.set(urlPath, ts.timestep);
+      }
+
       for (const item of detail.items) {
-        const match = /(\d{4}-\d{2}-\d{2}T\d{4})\.om/.exec(item.url);
-        if (match) {
-          const ts = match[1] as TTimestep;
+        // Cache URL format: https://om-cache/data_spatial/...?range=...
+        // Extract path for matching
+        const cachedPath = new URL(item.url).pathname;
+        const ts = urlToTimestep.get(cachedPath);
+        if (ts) {
           cache.add(ts);
           // Parse sizeMB to bytes
           const sizeBytes = parseFloat(item.sizeMB) * 1024 * 1024;

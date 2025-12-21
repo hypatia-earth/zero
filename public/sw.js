@@ -20,7 +20,7 @@ function swLog(...args) {
   logChannel.postMessage(args.join(' '));
 }
 const PAST_MAX_AGE = 30 * 24 * 3600 * 1000; // 30 days in ms
-const FUTURE_MAX_AGE = 3600 * 1000; // 1 hour in ms
+const FUTURE_MAX_AGE = 7 * 24 * 3600 * 1000; // 7 days in ms (data immutable per model run)
 
 // Valid layer names (must match TWeatherLayer + 'meta')
 const VALID_LAYERS = ['temp', 'rain', 'clouds', 'humidity', 'wind', 'pressure', 'meta'];
