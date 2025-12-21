@@ -19,24 +19,54 @@ export interface QueuePanelAttrs {
   slotService: SlotService;
 }
 
-const DEBUG = false;
-
 export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = () => {
   const update = throttle((
-    el: HTMLElement,
+    dom: HTMLElement,
     queuedBytes: number,
     etaSeconds: number | undefined,
     gpuAllocated: number | undefined,
     gpuCapacity: number | undefined,
   ) => {
-    el.textContent = formatStats(queuedBytes, etaSeconds, gpuAllocated, gpuCapacity);
-    DEBUG && console.log('[QueuePanel]', el.textContent);
+    const dlInfo = dom.querySelector<HTMLElement>('.queue-dl-info')!;
+    const gpuRow = dom.querySelector<HTMLElement>('.queue-gpu-row')!;
+    const gpuIcon = dom.querySelector<HTMLElement>('.queue-gpu-icon')!;
+    const gpuInfo = dom.querySelector<HTMLElement>('.queue-gpu-info')!;
+
+    // Download info
+    const mb = Math.round(queuedBytes / 1024 / 1024);
+    if (mb === 0) {
+      dlInfo.textContent = 'idle';
+    } else {
+      let eta: string;
+      if (etaSeconds === undefined) {
+        eta = '?s';
+      } else if (etaSeconds < 60) {
+        eta = `${Math.round(etaSeconds)}s`;
+      } else {
+        eta = `~${Math.ceil(etaSeconds / 60)}m`;
+      }
+      dlInfo.textContent = `${mb} MB · ${eta}`;
+    }
+
+    // GPU info
+    if (gpuAllocated !== undefined && gpuCapacity !== undefined) {
+      gpuRow.style.display = 'contents';
+      const pct = gpuCapacity > 0 ? Math.round((gpuAllocated / gpuCapacity) * 100) : 0;
+      if (pct >= 100) {
+        gpuIcon.textContent = '✓';
+        gpuInfo.textContent = formatMB(gpuCapacity);
+      } else {
+        gpuIcon.textContent = '↑';
+        gpuInfo.textContent = `${pct}% / ${formatMB(gpuCapacity)}`;
+      }
+    } else {
+      gpuRow.style.display = 'none';
+    }
   }, 333);
 
   return {
     oncreate({ dom, attrs }) {
-      const el = dom.querySelector<HTMLElement>('.queue-text')!;
-
+      const el = dom as HTMLElement;
       effect(() => {
         const stats = attrs.queueService.stats.value;
         const showGpu = attrs.optionsService.options.value.gpu.showGpuStats;
@@ -52,53 +82,22 @@ export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = () => {
     },
 
     view({ attrs }) {
-      return m('div.queue.panel', [
+      return m('div.queue.panel.grid', [
         m('button.control.pill', {
           title: 'Download queue',
           onclick: () => attrs.optionsService.openDialog('queue')
         }, [
-          m('span.queue-text', '↓ 0 MB · idle')
+          m('span.label', '↓'),
+          m('span.queue-dl-info', 'idle'),
+          m('span.queue-gpu-row', { style: 'display: contents' }, [
+            m('span.label.queue-gpu-icon', '↑'),
+            m('span.queue-gpu-info', '—'),
+          ]),
         ])
       ]);
     }
   };
 };
-
-function formatStats(
-  queuedBytes: number,
-  etaSeconds: number | undefined,
-  gpuAllocated: number | undefined,
-  gpuCapacity: number | undefined,
-): string {
-  const mb = Math.round(queuedBytes / 1024 / 1024);
-
-  // Download part
-  let download: string;
-  if (mb === 0) {
-    download = '↓ idle';
-  } else {
-    let eta: string;
-    if (etaSeconds === undefined) {
-      eta = '?s';
-    } else if (etaSeconds < 60) {
-      eta = `${Math.round(etaSeconds)}s`;
-    } else {
-      eta = `~${Math.ceil(etaSeconds / 60)}m`;
-    }
-    download = `↓ ${mb} MB · ${eta}`;
-  }
-
-  // GPU part (if enabled)
-  if (gpuAllocated !== undefined && gpuCapacity !== undefined) {
-    const pct = gpuCapacity > 0 ? Math.round((gpuAllocated / gpuCapacity) * 100) : 0;
-    const gpu = pct >= 100
-      ? `✓ ${formatMB(gpuCapacity)}`
-      : `↑ ${pct}%/${formatMB(gpuCapacity)}`;
-    return `${download} ${gpu}`;
-  }
-
-  return download;
-}
 
 function formatMB(mb: number): string {
   if (mb >= 1024) {

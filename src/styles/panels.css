@@ -88,6 +88,11 @@
   text-align: left;
 }
 
+.panel.queue .label {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 1);
+}
+
 .panel.about img {
   width: 24px;
   height: 24px;

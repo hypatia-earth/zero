@@ -288,7 +288,7 @@ export const App: m.ClosureComponent = () => {
             m(FullscreenPanel),
             m(OptionsPanel, { optionsService, dialogService }),
             m(AboutPanel, { aboutService, dialogService }),
-            optionsService.options.value.debug.showPerfPanel && m(PerfPanel, { renderService }),
+            optionsService.options.value.debug.showPerfPanel && m(PerfPanel, { renderService, optionsService }),
           ]),
         ] : []),
       ];

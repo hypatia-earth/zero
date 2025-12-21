@@ -7,9 +7,11 @@
 
 import m from 'mithril';
 import type { RenderService } from '../services/render-service';
+import type { OptionsService } from '../services/options-service';
 
 export interface PerfPanelAttrs {
   renderService: RenderService;
+  optionsService: OptionsService;
 }
 
 export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = (initialVnode) => {
@@ -27,7 +29,8 @@ export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = (initialVnode) => {
       initialVnode.attrs.renderService.setPerfElements(null, null, null, null, null);
     },
 
-    view() {
+    view({ attrs }) {
+      const slots = attrs.optionsService.options.value.gpu.timeslotsPerLayer;
       return m('div.perf.panel.grid', [
         m('button.control.pill', {
           title: 'Frame timing (60-frame avg)'
@@ -42,6 +45,8 @@ export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = (initialVnode) => {
           m('span.perf-screen', '—'),
           m('span.label', 'globe'),
           m('span.perf-globe', '—'),
+          m('span.label', 'slots'),
+          m('span', slots),
         ])
       ]);
     }
