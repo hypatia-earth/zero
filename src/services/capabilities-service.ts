@@ -13,6 +13,7 @@ export class CapabilitiesService {
   msaa_8x = false;
   maxBufferSizeMB = 0;
   minUniformBufferOffsetAlignment = 256;  // Safe default, updated in init()
+  hardwareConcurrency = 1;  // CPU cores for worker pool sizing
 
   // For testing buffer allocation - set to small value (e.g., 50) to test without big downloads
   private readonly DEBUG_MAX_BUFFER_SIZE_MB: number | null = null;  // null = use real GPU limit
@@ -69,11 +70,12 @@ export class CapabilitiesService {
     this.float32_filterable = adapter.features.has('float32-filterable');
     this.timestamp_query = adapter.features.has('timestamp-query');
     this.minUniformBufferOffsetAlignment = adapter.limits.minUniformBufferOffsetAlignment;
+    this.hardwareConcurrency = navigator.hardwareConcurrency || 1;
 
     // MSAA 8x detection removed - WebGPU logs errors even with try/catch
     // Feature deferred anyway (see zero-feat-gpu-budget.md MSAA section)
     this.msaa_8x = false;
 
-    DEBUG && console.log(`[Capabilities] float32_filterable: ${this.float32_filterable}, timestamp_query: ${this.timestamp_query}`);
+    DEBUG && console.log(`[Capabilities] cores: ${this.hardwareConcurrency}, float32: ${this.float32_filterable}, timestamp: ${this.timestamp_query}`);
   }
 }
