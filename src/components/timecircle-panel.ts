@@ -4,10 +4,10 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import type { OptionsService } from '../services/options-service';
+import type { StateService } from '../services/state-service';
 
 interface TimeCirclePanelAttrs {
-  optionsService: OptionsService;
+  stateService: StateService;
 }
 
 export const TimeCirclePanel: m.ClosureComponent<TimeCirclePanelAttrs> = (initialVnode) => {
@@ -16,7 +16,7 @@ export const TimeCirclePanel: m.ClosureComponent<TimeCirclePanelAttrs> = (initia
   return {
     oncreate() {
       unsubscribe = effect(() => {
-        initialVnode.attrs.optionsService.options.value;
+        initialVnode.attrs.stateService.viewState.value;
         m.redraw();
       });
     },
@@ -26,8 +26,8 @@ export const TimeCirclePanel: m.ClosureComponent<TimeCirclePanelAttrs> = (initia
     },
 
     view({ attrs }) {
-      const { optionsService } = attrs;
-      const time = optionsService.options.value.viewState.time;
+      const { stateService } = attrs;
+      const time = stateService.viewState.value.time;
 
       const year = time.getUTCFullYear();
       const month = time.toLocaleString('en', { month: 'short', timeZone: 'UTC' });

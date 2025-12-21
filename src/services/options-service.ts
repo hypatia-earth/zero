@@ -23,7 +23,6 @@ import { deepMerge, getByPath, setByPath } from '../utils/object';
 import { layerIds } from '../config/defaults';
 import type { TLayer } from '../config/types';
 import type { ConfigService } from './config-service';
-import { throttle } from '../utils/debounce';
 
 const DEBUG = false;
 
@@ -195,8 +194,8 @@ export class OptionsService {
   usageStats: UsageStats | null = null;
 
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
-  private urlSyncEnabled = false;
   private initialized = false;
+  private stateService: { scheduleUrlSync: () => void } | null = null;
 
   constructor(private configService: ConfigService) {
     // Auto-merge when userOverrides change
@@ -212,16 +211,10 @@ export class OptionsService {
       this.saveTimeout = setTimeout(() => this.save(), 500);
     });
 
-    // Auto-sync to URL when options change (throttled, last value guaranteed)
-    const throttledUrlSync = throttle(() => {
-      if (this.urlSyncEnabled) {
-        this.syncToUrl(this.options.value);  // read fresh value
-      }
-    }, 100);
-
+    // Notify StateService when layers change (StateService owns URL)
     effect(() => {
       this.options.value;  // subscribe to changes
-      throttledUrlSync();
+      this.stateService?.scheduleUrlSync();
     });
 
     // Force save before page unload
@@ -231,6 +224,11 @@ export class OptionsService {
         this.save();
       }
     });
+  }
+
+  /** Wire up StateService for URL sync notifications */
+  setStateService(stateService: { scheduleUrlSync: () => void }): void {
+    this.stateService = stateService;
   }
 
   /**
@@ -313,65 +311,6 @@ export class OptionsService {
     this.needsReload.value = false;
   }
 
-  /**
-   * Sanitize time after timestep discovery - snap to closest available timestep
-   * Call from app.ts after TimestepService.initialize()
-   */
-  sanitize(getClosestTimestep: (time: Date) => Date): void {
-    const params = new URLSearchParams(window.location.search);
-    const changes: string[] = [];
-    const vs = this.options.value.viewState;
-
-    // If no URL time param and saved time is stale (>12h from now), reset to now
-    // This prevents loading old cached timeline position on return visits
-    const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000; // 12 hours
-    const hasUrlTime = params.has('dt');
-    const now = new Date();
-    const timeDiff = Math.abs(vs.time.getTime() - now.getTime());
-
-    let timeToSnap = vs.time;
-    if (!hasUrlTime && timeDiff > STALE_THRESHOLD_MS) {
-      timeToSnap = now;
-      changes.push(`time=${vs.time.toISOString().slice(0, 13)}→now`);
-    }
-
-    // Snap time to closest available timestep
-    const snappedTime = getClosestTimestep(timeToSnap);
-    if (snappedTime.getTime() !== vs.time.getTime()) {
-      this.update(o => { o.viewState.time = snappedTime; });
-      if (!changes.some(c => c.startsWith('time='))) {
-        changes.push(`time=${vs.time.toISOString().slice(0, 13)}→${snappedTime.toISOString().slice(0, 13)}`);
-      }
-    }
-
-    // Lat/lon: log if defaulted or clamped
-    // URL uses 1 decimal (toFixed(1)) ≈ 11km precision, matching ECMWF 0.1° grid (~10km)
-    // Integer scaling avoids IEEE 754 false positives in comparison
-    const llParam = params.get('ll');
-    if (!llParam) {
-      changes.push(`lat=${vs.lat.toFixed(1)}`, `lon=${vs.lon.toFixed(1)}`);
-    } else {
-      const parts = llParam.split(',').map(parseFloat);
-      const rawLat = parts[0] ?? NaN;
-      const rawLon = parts[1] ?? NaN;
-      if (Math.round(rawLat * 10) !== Math.round(vs.lat * 10)) changes.push(`lat=${rawLat}→${vs.lat}`);
-      if (Math.round(rawLon * 10) !== Math.round(vs.lon * 10)) changes.push(`lon=${rawLon}→${vs.lon}`);
-    }
-
-    // Altitude: log if defaulted or clamped
-    const altParam = params.get('alt');
-    if (!altParam) {
-      changes.push(`alt=${vs.altitude}`);
-    } else {
-      const rawAlt = parseFloat(altParam);
-      if (rawAlt !== vs.altitude) changes.push(`alt=${rawAlt}→${vs.altitude}`);
-    }
-
-    if (changes.length) console.log(`[Sanitized] ${changes.join(', ')}`);
-
-    // Write sanitized state to URL
-    this.syncToUrl(this.options.value);
-  }
 
   /**
    * Update options using Immer-style mutation
@@ -383,6 +322,31 @@ export class OptionsService {
     this.logChange(oldOverrides, newOverrides);
     this.userOverrides.value = newOverrides;
     this.checkNeedsReload();
+  }
+
+  /**
+   * Set enabled layers from StateService (URL delegation)
+   */
+  setEnabledLayers(enabledSet: Set<string>): void {
+    for (const layerId of layerIds) {
+      const shouldEnable = enabledSet.has(layerId);
+      const current = this.options.value[layerId as keyof ZeroOptions] as { enabled: boolean };
+      if (current.enabled !== shouldEnable) {
+        this.update(d => {
+          (d[layerId as keyof ZeroOptions] as { enabled: boolean }).enabled = shouldEnable;
+        });
+      }
+    }
+  }
+
+  /**
+   * Get list of enabled layer IDs for URL sync
+   */
+  getEnabledLayers(): string[] {
+    return layerIds.filter(id => {
+      const layer = this.options.value[id as keyof ZeroOptions] as { enabled?: boolean };
+      return layer?.enabled === true;
+    });
   }
 
   private logChange(oldOverrides: Partial<ZeroOptions>, newOverrides: Partial<ZeroOptions>): void {
@@ -460,59 +424,13 @@ export class OptionsService {
     return this.userOverrides.value;
   }
 
-  // ----------------------------------------------------------
-  // URL synchronization
-  // ----------------------------------------------------------
-
   /**
-   * Enable URL synchronization (call after initial load)
-   * Immediately syncs current state to URL
-   */
-  enableUrlSync(): void {
-    this.urlSyncEnabled = true;
-    this.syncToUrl(this.options.value);  // Write sanitized state to URL
-  }
-
-  /**
-   * Read options from URL query parameters
-   * Full sanitize (defaults) only when URL has NO params at all
-   * Any params = explicit state, respect exactly what's given
+   * Read layer enables from URL (called during init before StateService delegates)
+   * Note: StateService owns URL, but OptionsService needs initial layer state
    */
   private readUrlOptions(): Partial<ZeroOptions> {
     const params = new URLSearchParams(window.location.search);
     const overrides: Record<string, unknown> = {};
-
-    // Parse viewState from URL
-    const viewState: Record<string, unknown> = {};
-
-    const dt = params.get('dt');
-    if (dt) {
-      const time = this.parseDateFromUrl(dt);
-      if (time) viewState.time = time;
-    }
-
-    const ll = params.get('ll');
-    if (ll) {
-      const [latStr, lonStr] = ll.split(',');
-      const lat = parseFloat(latStr ?? '');
-      const lon = parseFloat(lonStr ?? '');
-      if (!isNaN(lat) && !isNaN(lon)) {
-        viewState.lat = Math.max(-90, Math.min(90, lat));
-        viewState.lon = ((lon + 180) % 360) - 180;
-      }
-    }
-
-    const alt = params.get('alt');
-    if (alt) {
-      const altitude = parseFloat(alt);
-      if (!isNaN(altitude)) {
-        viewState.altitude = Math.max(300, Math.min(36_000, altitude));
-      }
-    }
-
-    if (Object.keys(viewState).length > 0) {
-      overrides.viewState = viewState;
-    }
 
     // Parse layers from URL, fall back to config defaults
     const layersStr = params.get('layers');
@@ -528,40 +446,6 @@ export class OptionsService {
     }
 
     return overrides as Partial<ZeroOptions>;
-  }
-
-  private parseDateFromUrl(dt: string): Date | null {
-    const normalized = dt.replace('h', ':').replace('z', ':00.000Z');
-    const date = new Date(normalized);
-    return isNaN(date.getTime()) ? null : date;
-  }
-
-  private formatDateForUrl(date: Date): string {
-    return date.toISOString().slice(0, 16).replace(':', 'h') + 'z';
-  }
-
-  /**
-   * Sync persist:'url' options to URL query parameters
-   * Builds URL manually to keep commas unencoded
-   */
-  private syncToUrl(options: ZeroOptions): void {
-    const { viewState } = options;
-
-    // Build viewState params
-    const dt = this.formatDateForUrl(viewState.time);
-    const ll = `${viewState.lat.toFixed(1)},${viewState.lon.toFixed(1)}`;
-    const alt = Math.round(viewState.altitude).toString();
-
-    // Build layers param
-    const enabledLayers = layerIds.filter(id => options[id].enabled);
-
-    // Build URL manually to keep commas unencoded
-    let search = `?dt=${dt}&ll=${ll}&alt=${alt}`;
-    if (enabledLayers.length > 0) {
-      search += '&layers=' + enabledLayers.join(',');
-    }
-
-    window.history.replaceState(null, '', search);
   }
 
   // ----------------------------------------------------------

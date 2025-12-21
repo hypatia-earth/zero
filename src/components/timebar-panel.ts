@@ -16,6 +16,7 @@ import type { TimestepService } from '../services/timestep-service';
 import type { OptionsService } from '../services/options-service';
 import type { ConfigService } from '../services/config-service';
 import type { ThemeService, LayerColors, TimebarColors } from '../services/theme-service';
+import type { StateService } from '../services/state-service';
 import { getSunDirection } from '../utils/sun-position';
 
 const DEBUG = false;
@@ -71,6 +72,7 @@ function getSunBrightness(lat: number, lon: number, time: Date): number {
 
 interface TimeBarPanelAttrs {
   optionsService: OptionsService;
+  stateService: StateService;
   slotService: SlotService;
   timestepService: TimestepService;
   configService: ConfigService;
@@ -241,9 +243,9 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     },
 
     view({ attrs }) {
-      const { optionsService, slotService, timestepService, configService, themeService } = attrs;
+      const { optionsService, stateService, slotService, timestepService, configService, themeService } = attrs;
       const readyWeatherLayers = configService.getReadyLayers().filter(isWeatherLayer);
-      const currentTime = optionsService.options.value.viewState.time;
+      const currentTime = stateService.viewState.value.time;
       const window = {
         start: timestepService.toDate(timestepService.first()),
         end: timestepService.toDate(timestepService.last()),
@@ -264,13 +266,13 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       const handleMouseDown = (e: MouseEvent) => {
         isDragging = true;
         const time = mouseToTime(e);
-        optionsService.update(d => { d.viewState.time = time; });
+        stateService.setTime(time);
       };
 
       const handleMouseMove = (e: MouseEvent) => {
         if (!isDragging) return;
         const time = mouseToTime(e);
-        optionsService.update(d => { d.viewState.time = time; });
+        stateService.setTime(time);
       };
 
       const handleMouseUp = () => {
@@ -325,11 +327,11 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       DEBUG && console.log(`[Timebar] ECMWF: ${ecmwfSet.size}, cache temp: ${cachedMap.get('temp')?.size}, GPU temp: ${gpuMap.get('temp')?.size}`);
 
       // Filter to only enabled weather layers
-      const opts = attrs.optionsService.options.value;
+      const opts = optionsService.options.value;
       const activeWeatherLayers = readyWeatherLayers.filter(layer => opts[layer].enabled);
 
       // Get camera position and sun state for brightness calculation
-      const viewState = opts.viewState;
+      const viewState = stateService.viewState.value;
       const sunEnabled = opts.sun.enabled;
 
       // Calculate NOW label position (same warp as now marker)

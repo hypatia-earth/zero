@@ -13,6 +13,7 @@ import { calcBandwidth, calcEta, pruneSamples, type Sample } from '../utils/band
 import type { OmService } from './om-service';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
+import type { StateService } from './state-service';
 
 const DEBUG = false;
 
@@ -65,6 +66,7 @@ export class QueueService implements IQueueService {
   constructor(
     private omService: OmService,
     private optionsService: OptionsService,
+    private stateService: StateService,
     private configService: ConfigService
   ) {}
 
@@ -292,9 +294,9 @@ export class QueueService implements IQueueService {
    * Then rest sorted by strategy (alternate: interleave future/past, future-first: all future then past).
    */
   private sortQueueByStrategy(): void {
-    if (!this.optionsService || this.timestepQueue.length <= 1) return;
+    if (!this.stateService || this.timestepQueue.length <= 1) return;
 
-    const currentTime = this.optionsService.options.value.viewState.time;
+    const currentTime = this.stateService.viewState.value.time;
     const strategy = this.optionsService.options.value.dataCache.cacheStrategy;
 
     // Parse timestep to Date for comparison

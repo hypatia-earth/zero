@@ -16,6 +16,7 @@ import type { TimestepService } from './timestep-service';
 import type { RenderService } from './render-service';
 import type { QueueService } from './queue-service';
 import type { OptionsService } from './options-service';
+import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
 import { LayerStore } from './layer-store';
 import { BootstrapService } from './bootstrap-service';
@@ -56,6 +57,7 @@ export class SlotService {
     private renderService: RenderService,
     private queueService: QueueService,
     private optionsService: OptionsService,
+    private stateService: StateService,
     private configService: ConfigService,
   ) {
     // All layers use per-slot buffers with rebinding - no binding size limit
@@ -98,7 +100,7 @@ export class SlotService {
 
     // Effect: pure computation of wanted state + shader activation (no I/O)
     this.disposeEffect = effect(() => {
-      const time = this.optionsService.options.value.viewState.time;
+      const time = this.stateService.viewState.value.time;
       const opts = this.optionsService.options.value;
       if (!this.initialized) return;
 
@@ -421,7 +423,7 @@ export class SlotService {
             return;
           }
 
-          const currentTime = this.optionsService.options.value.viewState.time;
+          const currentTime = this.stateService.viewState.value.time;
           const result = ps.allocateSlot(
             order.timestep,
             currentTime,
@@ -548,7 +550,7 @@ export class SlotService {
     this.dataWindowStart = this.timestepService.first();
     this.dataWindowEnd = this.timestepService.last();
 
-    const time = this.optionsService.options.value.viewState.time;
+    const time = this.stateService.viewState.value.time;
     const opts = this.optionsService.options.value;
 
     const enabledParams = this.readyWeatherLayers.filter(p => opts[p].enabled);

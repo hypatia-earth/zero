@@ -7,14 +7,14 @@
  * Alt+Shift+Arrow: ±1 minute
  */
 
-import type { OptionsService } from './options-service';
+import type { StateService } from './state-service';
 import type { TimestepService } from './timestep-service';
 import { parseTimestep } from '../utils/timestep';
 import { toggleFullscreen } from '../components/fullscreen-panel';
 
 export class KeyboardService {
   constructor(
-    private optionsService: OptionsService,
+    private stateService: StateService,
     private timestepService: TimestepService,
   ) {
     window.addEventListener('keydown', this.handleKeydown);
@@ -35,7 +35,7 @@ export class KeyboardService {
 
     e.preventDefault();
     const direction = e.code === 'ArrowLeft' ? -1 : 1;
-    const currentTime = this.optionsService.options.value.viewState.time;
+    const currentTime = this.stateService.viewState.value.time;
     let newTime: Date;
 
     if (e.altKey && e.shiftKey) {
@@ -52,7 +52,7 @@ export class KeyboardService {
       newTime = this.snapToTimestep(currentTime, direction);
     }
 
-    this.optionsService.update(d => { d.viewState.time = newTime; });
+    this.stateService.setTime(newTime);
   };
 
   private addMinutes(date: Date, minutes: number): Date {

@@ -22,12 +22,12 @@ type OptionImpact = 'uniform' | 'recreate';
 type PersistMode = 'url' | 'local';
 
 /** Filter determines which dialog entry points show this option */
-type OptionFilter = TLayer | 'global' | 'dataCache' | 'gpu' | 'viewState' | 'queue';
+type OptionFilter = TLayer | 'global' | 'dataCache' | 'gpu' | 'queue';
 
 interface UIMetadata {
   label: string;
   description?: string;
-  group: 'interface' | 'regional' | 'download' | 'environmental' | 'interaction' | 'layers' | 'gpu' | 'advanced' | 'viewState' | 'performance';
+  group: 'interface' | 'regional' | 'download' | 'environmental' | 'interaction' | 'layers' | 'gpu' | 'advanced' | 'performance';
   filter: OptionFilter | OptionFilter[];
   order: number;
   control: ControlType;
@@ -134,16 +134,6 @@ export const optionGroups = {
 
 export const optionsSchema = z.object({
   _version: z.number().default(1),
-
-  // ----------------------------------------------------------
-  // View State (URL-persisted, no UI)
-  // ----------------------------------------------------------
-  viewState: z.object({
-    time: z.coerce.date(),
-    lat: z.number().min(-90).max(90),
-    lon: z.number(),
-    altitude: z.number().positive(),
-  }),
 
   // ----------------------------------------------------------
   // Interface Settings
@@ -888,12 +878,6 @@ export type ZeroOptions = z.infer<typeof optionsSchema>;
 
 export const defaultOptions: ZeroOptions = {
   _version: 1,
-  viewState: {
-    time: new Date(),
-    lat: 0,
-    lon: 0,
-    altitude: 14_000,  // km from surface
-  },
   interface: { autocloseModal: true },
   gpu: { timeslotsPerLayer: '4', showGpuStats: false, workerPoolSize: '2' },
   viewport: {

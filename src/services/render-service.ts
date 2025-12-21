@@ -8,6 +8,7 @@ import { generateIsobarLevels } from '../render/pressure-layer';
 import { validateGlobeUniforms } from '../render/globe-uniforms';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
+import type { StateService } from './state-service';
 import type { ZeroOptions } from '../schemas/options.schema';
 import { DECORATION_LAYERS, WEATHER_LAYERS, isWeatherLayer, type TLayer, type TWeatherLayer, type TWeatherTextureLayer, type LayerState } from '../config/types';
 import { getSunDirection } from '../utils/sun-position';
@@ -60,6 +61,7 @@ export class RenderService {
   constructor(
     private canvas: HTMLCanvasElement,
     private optionsService: OptionsService,
+    private stateService: StateService,
     private configService: ConfigService
   ) {}
 
@@ -186,7 +188,7 @@ export class RenderService {
       }
 
       const tFrame = performance.now();
-      const time = options.viewState.time;
+      const time = this.stateService.viewState.value.time;
       const loadingState: LayerState = { mode: 'loading', lerp: 0, time };
 
       // Get layer states

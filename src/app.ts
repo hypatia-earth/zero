@@ -21,6 +21,7 @@ import { RenderService } from './services/render-service';
 import { PaletteService } from './services/palette-service';
 import { ThemeService } from './services/theme-service';
 import { setupCameraControls } from './services/camera-controls';
+import { StateService } from './services/state-service';
 import { initOmWasm } from './adapters/om-file-adapter';
 import { BootstrapModal } from './components/bootstrap-modal';
 import { OptionsDialog } from './components/options-dialog';
@@ -41,6 +42,7 @@ export const App: m.ClosureComponent = () => {
   // Services - initialized during bootstrap, then stable
   let configService: ConfigService;
   let optionsService: OptionsService;
+  let stateService: StateService;
   let capabilitiesService: CapabilitiesService;
   let omService: OmService;
   let queueService: QueueService;
@@ -68,6 +70,10 @@ export const App: m.ClosureComponent = () => {
       configService = new ConfigService();
       await configService.init();
       optionsService = new OptionsService(configService);
+      stateService = new StateService(configService);
+      // Wire up bidirectional reference
+      stateService.setOptionsService(optionsService);
+      optionsService.setStateService(stateService);
       omService = new OmService();
       paletteService = new PaletteService();
       dialogService = new DialogService();
@@ -93,12 +99,14 @@ export const App: m.ClosureComponent = () => {
         timestepService = new TimestepService(configService);
         await timestepService.initialize();
 
-        // Step 3b: Sanitize options (snap time to closest available timestep)
-        optionsService.sanitize((time) => timestepService.getClosestTimestep(time));
+        // Step 3b: Sanitize state (snap time to closest available timestep)
+        stateService.sanitize((time: Date) => timestepService.getClosestTimestep(time));
+        // Delegate layers from URL to OptionsService
+        stateService.delegateLayers();
 
         // Step 4: Assets via QueueService (all files in one batch)
         BootstrapService.setStep('ASSETS');
-        queueService = new QueueService(omService, optionsService, configService);
+        queueService = new QueueService(omService, optionsService, stateService, configService);
         const f16 = !capabilitiesService.float32_filterable;
         const suffix = f16 ? '-16' : '';
 
@@ -170,7 +178,7 @@ export const App: m.ClosureComponent = () => {
 
         // Step 5: GPU Init
         BootstrapService.setStep('GPU_INIT');
-        renderService = new RenderService(canvas, optionsService, configService);
+        renderService = new RenderService(canvas, optionsService, stateService, configService);
         await renderService.initialize(gaussianLats, ringOffsets);
 
         // Step 5: DATA - Initialize with assets from Step 4
@@ -212,6 +220,7 @@ export const App: m.ClosureComponent = () => {
           renderService,
           queueService,
           optionsService,
+          stateService,
           configService,
         );
 
@@ -224,9 +233,9 @@ export const App: m.ClosureComponent = () => {
         // Step 6: Activate
         BootstrapService.setStep('ACTIVATE');
         renderService.start();
-        optionsService.enableUrlSync();
-        keyboardService = new KeyboardService(optionsService, timestepService);
-        setupCameraControls(canvas, renderer.camera, optionsService, configService);
+        stateService.enableUrlSync();
+        keyboardService = new KeyboardService(stateService, timestepService);
+        setupCameraControls(canvas, renderer.camera, stateService, configService);
 
         // Wire up palette reactivity
         effect(() => {
@@ -287,9 +296,9 @@ export const App: m.ClosureComponent = () => {
           m('.ui-container', [
             m(LogoPanel),
             m(LayersPanel, { configService, optionsService }),
-            m(TimeCirclePanel, { optionsService }),
+            m(TimeCirclePanel, { stateService }),
             m(QueuePanel, { queueService, optionsService, slotService }),
-            m(TimeBarPanel, { optionsService, slotService, timestepService, configService, themeService }),
+            m(TimeBarPanel, { optionsService, stateService, slotService, timestepService, configService, themeService }),
             m(FullscreenPanel),
             m(OptionsPanel, { optionsService, dialogService }),
             m(AboutPanel, { aboutService, dialogService }),
