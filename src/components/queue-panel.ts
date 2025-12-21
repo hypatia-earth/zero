@@ -45,7 +45,7 @@ export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = () => {
       } else {
         eta = `~${Math.ceil(etaSeconds / 60)}m`;
       }
-      dlInfo.textContent = `${mb} MB · ${eta}`;
+      dlInfo.textContent = `${formatMB(mb)} · ${eta}`;
     }
 
     // GPU info
