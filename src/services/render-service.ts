@@ -32,14 +32,16 @@ export class RenderService {
   // Wind layer state
   private windStateFn: ((time: Date) => LayerState) | null = null;
 
+  // Other weather layer states (rain, clouds, humidity)
+  private rainStateFn: ((time: Date) => LayerState) | null = null;
+  private cloudsStateFn: ((time: Date) => LayerState) | null = null;
+  private humidityStateFn: ((time: Date) => LayerState) | null = null;
+
   // Animated opacity state (lerps toward target each frame)
   private lastFrameTime = 0;
   private animatedOpacity: Record<TLayer, number> = Object.fromEntries(
     [...DECORATION_LAYERS, ...WEATHER_LAYERS].map(layer => [layer, 0])
   ) as Record<TLayer, number>;
-
-  // Data-ready functions per param (provided by SlotService)
-  private dataReadyFns = new Map<TWeatherLayer, () => boolean>();
 
   // Callback when pressure resolution changes (slots needing regrid)
   private onPressureResolutionChange: ((slotsNeedingRegrid: number[]) => void) | null = null;
@@ -173,12 +175,18 @@ export class RenderService {
       const tempState = this.tempStateFn?.(time) ?? loadingState;
       const pressureState = this.pressureStateFn?.(time) ?? loadingState;
       const windState = this.windStateFn?.(time) ?? loadingState;
+      const rainState = this.rainStateFn?.(time) ?? loadingState;
+      const cloudsState = this.cloudsStateFn?.(time) ?? loadingState;
+      const humidityState = this.humidityStateFn?.(time) ?? loadingState;
 
       // Update animated opacities
       const now = performance.now() / 1000;
       const dt = this.lastFrameTime ? now - this.lastFrameTime : 0;
       this.lastFrameTime = now;
-      this.updateAnimatedOpacities(options, { temp: tempState, pressure: pressureState, wind: windState }, dt);
+      this.updateAnimatedOpacities(options, {
+        temp: tempState, pressure: pressureState, wind: windState,
+        rain: rainState, clouds: cloudsState, humidity: humidityState
+      }, dt);
 
       // Recompute pressure contours when time changes by at least 1 minute
       if (options.pressure.enabled && pressureState.mode !== 'loading') {
@@ -339,7 +347,7 @@ export class RenderService {
    */
   private updateAnimatedOpacities(
     options: ZeroOptions,
-    states: { temp: LayerState; pressure: LayerState; wind: LayerState },
+    states: Record<TWeatherLayer, LayerState>,
     dt: number
   ): void {
     const animMs = this.configService.getConfig().render.opacityAnimationMs;
@@ -349,11 +357,9 @@ export class RenderService {
     // Compute targets: enabled && dataReady ? userOpacity : 0
     // Use LayerState.mode to determine if data is ready for current time
     const isReady = (layer: TWeatherLayer): boolean => {
-      if (layer === 'temp') return states.temp.mode !== 'loading' && this.tempLoadedPoints > 0;
-      if (layer === 'wind') return states.wind.mode !== 'loading';
-      if (layer === 'pressure') return states.pressure.mode !== 'loading';
-      // Other weather layers (rain, clouds, humidity) use callback
-      return this.dataReadyFns.get(layer)?.() ?? false;
+      // Temp needs extra check for progressive loading
+      if (layer === 'temp') return states[layer].mode !== 'loading' && this.tempLoadedPoints > 0;
+      return states[layer].mode !== 'loading';
     };
 
     const targets = {} as Record<TLayer, number>;
@@ -439,12 +445,16 @@ export class RenderService {
     this.windStateFn = fn;
   }
 
-  /**
-   * Set data-ready function for a param (from SlotService)
-   * Returns true when param has loaded data for current time
-   */
-  setDataReadyFn(param: TWeatherLayer, fn: () => boolean): void {
-    this.dataReadyFns.set(param, fn);
+  setRainStateFn(fn: (time: Date) => LayerState): void {
+    this.rainStateFn = fn;
+  }
+
+  setCloudsStateFn(fn: (time: Date) => LayerState): void {
+    this.cloudsStateFn = fn;
+  }
+
+  setHumidityStateFn(fn: (time: Date) => LayerState): void {
+    this.humidityStateFn = fn;
   }
 
   /** Set callback for pressure resolution change (from SlotService) */
