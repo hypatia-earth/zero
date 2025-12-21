@@ -95,6 +95,10 @@ For fullscreen experience, install as a Progressive Web App:
 
 **Interpolation artifacts.** When navigating with Shift/Alt modifiers, the time can land between timesteps. Zero interpolates between two data snapshots. This works well for slowly changing parameters like temperature. Fast-moving features (storm fronts, rain cells) may show ghosting or smearing, especially when timesteps are more than 1 hour apart. Use plain arrow keys to snap to exact timesteps and avoid artifacts.
 
+### Browsers
+
+**Safari has slow initial loading.** Safari doesn't cache large static files as effectively as other browsers. If initial loading takes too long, try Firefox or Chrome—up to 3× faster on repeat visits.
+
 ## How it's Made
 
 Zero is a human/AI collaboration:
