@@ -10,7 +10,7 @@
 import windRenderCode from './shaders/wind-render.wgsl?raw';
 import windComputeCode from './shaders/wind-compute.wgsl?raw';
 import { generateFibonacciSphere } from '../utils/fibonacci-sphere';
-import { generateHurricaneTestData } from '../../tests/wind-test-data';
+// import { generateHurricaneTestData } from '../../tests/wind-test-data';
 import { generateGaussianLUTs } from './gaussian-grid';
 import { defaultConfig } from '../config/defaults';
 import type { LayerState } from '../config/types';
@@ -132,35 +132,25 @@ export class WindLayer {
     });
     this.device.queue.writeBuffer(this.seedBuffer, 0, seedPositions.buffer, seedPositions.byteOffset, seedPositions.byteLength);
 
-    // Generate hurricane test data (t0 and t1)
-    // TODO: Replace with real wind data from slots
-    const hurricaneData = generateHurricaneTestData();
-
-    // Create wind U/V buffers for t0
+    // Create placeholder wind buffers (replaced by setExternalBuffers with real data)
+    // Size: O1280 grid has ~6.6M points, 4 bytes per float = ~26MB per component
+    const placeholderSize = 4;  // Minimal size, will be replaced
     this.windU0Buffer = this.device.createBuffer({
-      size: hurricaneData.t0.u.byteLength,
+      size: placeholderSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(this.windU0Buffer, 0, hurricaneData.t0.u.buffer, hurricaneData.t0.u.byteOffset, hurricaneData.t0.u.byteLength);
-
     this.windV0Buffer = this.device.createBuffer({
-      size: hurricaneData.t0.v.byteLength,
+      size: placeholderSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(this.windV0Buffer, 0, hurricaneData.t0.v.buffer, hurricaneData.t0.v.byteOffset, hurricaneData.t0.v.byteLength);
-
-    // Create wind U/V buffers for t1
     this.windU1Buffer = this.device.createBuffer({
-      size: hurricaneData.t1.u.byteLength,
+      size: placeholderSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(this.windU1Buffer, 0, hurricaneData.t1.u.buffer, hurricaneData.t1.u.byteOffset, hurricaneData.t1.u.byteLength);
-
     this.windV1Buffer = this.device.createBuffer({
-      size: hurricaneData.t1.v.byteLength,
+      size: placeholderSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(this.windV1Buffer, 0, hurricaneData.t1.v.buffer, hurricaneData.t1.v.byteOffset, hurricaneData.t1.v.byteLength);
 
     // Generate Gaussian grid LUTs
     const luts = generateGaussianLUTs(1280);
