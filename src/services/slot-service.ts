@@ -515,17 +515,19 @@ export class SlotService {
       return { mode: 'loading', lerp: 0, time: currentTime };
     }
 
-    // Single timestep mode (exact timestep, no interpolation)
+    const t0 = this.timestepService.toDate(active[0]!).getTime();
+    const tc = currentTime.getTime();
+
+    // Single timestep mode - can only render if time matches exactly
     if (active.length === 1) {
+      if (tc !== t0) {
+        return { mode: 'loading', lerp: 0, time: currentTime };
+      }
       return { mode: 'single', lerp: 0, time: currentTime };
     }
 
-    // Pair mode - calculate interpolation factor
-    const t0 = this.timestepService.toDate(active[0]!).getTime();
+    // Pair mode - can only render if time is within range
     const t1 = this.timestepService.toDate(active[1]!).getTime();
-    const tc = currentTime.getTime();
-
-    // Time outside loaded range
     if (tc < t0 || tc > t1) {
       return { mode: 'loading', lerp: 0, time: currentTime };
     }

@@ -173,7 +173,7 @@ export class RenderService {
       const now = performance.now() / 1000;
       const dt = this.lastFrameTime ? now - this.lastFrameTime : 0;
       this.lastFrameTime = now;
-      this.updateAnimatedOpacities(options, tempState, dt);
+      this.updateAnimatedOpacities(options, { temp: tempState, pressure: pressureState, wind: windState }, dt);
 
       // Recompute pressure contours when time changes by at least 1 minute
       if (options.pressure.enabled && pressureState.mode !== 'loading') {
@@ -265,7 +265,9 @@ export class RenderService {
   }
 
   private getTempUniforms(state: LayerState) {
-    const tempDataReady = state.mode !== 'loading' && this.tempLoadedPoints > 0;
+    // tempDataReady = data exists in buffers (not whether we should render)
+    // Opacity animation handles fade in/out based on state.mode
+    const tempDataReady = this.tempLoadedPoints > 0;
     return {
       tempOpacity: this.animatedOpacity.temp,
       tempDataReady,
@@ -318,15 +320,24 @@ export class RenderService {
    * Update animated opacities toward targets (called each frame)
    * Uses exponential decay for smooth ~100ms transitions
    */
-  private updateAnimatedOpacities(options: ZeroOptions, tempState: LayerState, dt: number): void {
+  private updateAnimatedOpacities(
+    options: ZeroOptions,
+    states: { temp: LayerState; pressure: LayerState; wind: LayerState },
+    dt: number
+  ): void {
     const animMs = this.configService.getConfig().render.opacityAnimationMs;
     const rate = 1000 / animMs;  // Convert ms to rate (e.g., 100ms → 10/s)
     const factor = Math.min(1, dt * rate);
 
     // Compute targets: enabled && dataReady ? userOpacity : 0
-    const tempDataReady = tempState.mode !== 'loading' && this.tempLoadedPoints > 0;
-    const isReady = (layer: TWeatherLayer) =>
-      layer === 'temp' ? tempDataReady : (this.dataReadyFns.get(layer)?.() ?? false);
+    // Use LayerState.mode to determine if data is ready for current time
+    const isReady = (layer: TWeatherLayer): boolean => {
+      if (layer === 'temp') return states.temp.mode !== 'loading' && this.tempLoadedPoints > 0;
+      if (layer === 'wind') return states.wind.mode !== 'loading';
+      if (layer === 'pressure') return states.pressure.mode !== 'loading';
+      // Other weather layers (rain, clouds, humidity) use callback
+      return this.dataReadyFns.get(layer)?.() ?? false;
+    };
 
     const targets = {} as Record<TLayer, number>;
     for (const layer of DECORATION_LAYERS) {
