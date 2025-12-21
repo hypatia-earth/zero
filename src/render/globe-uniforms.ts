@@ -60,7 +60,8 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['cloudsDataReady', 'u32'],      // 252
   ['humidityDataReady', 'u32'],    // 256
   ['windDataReady', 'u32'],        // 260
-  ['weatherPad', 'vec2f'],         // 264: final padding (8-byte aligned)
+  ['logoOpacity', 'f32'],          // 264: computed from all layer opacities
+  ['logoPad', 'f32'],              // 268: padding for alignment
 ]);
 
 // Strongly typed offsets - TypeScript knows all field names exist
@@ -104,7 +105,8 @@ export const U = GLOBE_UNIFORMS.offsets as {
   cloudsDataReady: number;
   humidityDataReady: number;
   windDataReady: number;
-  weatherPad: number;
+  logoOpacity: number;
+  logoPad: number;
 };
 
 // Expected size - can be used for buffer allocation
@@ -123,7 +125,7 @@ export function validateGlobeUniforms(): void {
     gridEnabled: 176,
     tempPaletteRange: 232,
     cloudsOpacity: 240,
-    weatherPad: 264,
+    logoOpacity: 264,
   };
 
   const errors: string[] = [];

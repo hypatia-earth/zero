@@ -11,7 +11,7 @@
  */
 
 import { effect, signal } from '@preact/signals-core';
-import { isWeatherLayer, isWeatherTextureLayer, type TLayer, type TWeatherLayer, type TTimestep, type TimestepOrder, type TWeatherTextureLayer, type LayerState } from '../config/types';
+import { isWeatherLayer, isWeatherTextureLayer, type TLayer, type TWeatherLayer, type TTimestep, type TimestepOrder, type LayerState } from '../config/types';
 import type { TimestepService } from './timestep-service';
 import type { RenderService } from './render-service';
 import type { QueueService } from './queue-service';
@@ -31,38 +31,6 @@ const fmt = (ts: TTimestep) => ts.slice(5, 13);
 /** 4-letter uppercase param code for logs */
 const P = (param: TWeatherLayer) => param.slice(0, 4).toUpperCase();
 
-/** Map layer to Open-Meteo parameter names */
-const PARAM_MAP: Record<string, string[]> = {
-  temp: ['temperature_2m'],
-  pressure: ['pressure_msl'],
-  wind: ['wind_u_component_10m', 'wind_v_component_10m'],
-  rain: ['precipitation'],
-  clouds: ['cloud_cover'],
-  humidity: ['relative_humidity_2m'],
-};
-
-/**
- * Expand a single timestep order into per-slab orders.
- * For wind layer: creates 2 orders (U and V components).
- * For other layers: creates 1 order (slab 0).
- */
-function expandOrder(
-  url: string,
-  param: TWeatherLayer,
-  timestep: TTimestep,
-  sizeEstimate: number
-): TimestepOrder[] {
-  const omParams = PARAM_MAP[param] ?? [param];
-
-  return omParams.map((omParam, slabIndex) => ({
-    url,
-    param,
-    timestep,
-    sizeEstimate: omParams.length > 1 ? sizeEstimate / omParams.length : sizeEstimate,
-    slabIndex,
-    omParam,
-  }));
-}
 
 
 export class SlotService {
@@ -101,9 +69,9 @@ export class SlotService {
     this.initializeLayerStores();
 
     // Create ParamSlots for each slot-based layer
-    // slabsCount = number of data fetches (from PARAM_MAP), NOT GPU buffer count
+    // slabsCount = number of data fetches (from config params), NOT GPU buffer count
     for (const param of this.readyWeatherLayers) {
-      const slabsCount = PARAM_MAP[param]?.length ?? 1;
+      const slabsCount = this.getLayerParams(param).length;
       this.paramSlots.set(param, createParamSlots(param, this.timeslotsPerLayer, slabsCount));
     }
 
@@ -197,10 +165,7 @@ export class SlotService {
           }
         }
 
-        // Revert option (without triggering this effect again)
-        queueMicrotask(() => {
-          this.optionsService.options.value.gpu.timeslotsPerLayer = String(lastTimeslots) as typeof this.optionsService.options.value.gpu.timeslotsPerLayer;
-        });
+        this.optionsService.revertOption('gpu.timeslotsPerLayer', String(lastTimeslots));
         return;
       }
 
@@ -214,8 +179,22 @@ export class SlotService {
           // Shrinking: recreate (TODO: preserve closest to current time)
           const oldPs = this.paramSlots.get(param);
           oldPs?.dispose();
-          const slabsCount = PARAM_MAP[param]?.length ?? 1;
+          const slabsCount = this.getLayerParams(param).length;
           this.paramSlots.set(param, createParamSlots(param, newTimeslots, slabsCount));
+        }
+      }
+
+      // After shrinking, rebind layers only if active slots are now out of range
+      if (!isGrowing) {
+        for (const param of this.readyWeatherLayers) {
+          const slots = this.renderService.getActiveSlots(param);
+          if (slots.slot0 >= newTimeslots || slots.slot1 >= newTimeslots) {
+            // Ensure slot 0 buffers exist before rebinding
+            this.layerStores.get(param)?.ensureSlotBuffers(0);
+            // Active slot is out of range, rebind to slot 0
+            this.rebindLayerBuffers(param, 0, 0);
+            this.renderService.activateSlots(param, 0, 0, 0);
+          }
         }
       }
 
@@ -223,6 +202,33 @@ export class SlotService {
       lastTimeslots = newTimeslots;
       this.slotsVersion.value++;
     });
+  }
+
+  /** Get Open-Meteo parameter names for a layer from config */
+  private getLayerParams(layer: TWeatherLayer): string[] {
+    return this.configService.getLayer(layer)?.params ?? [layer];
+  }
+
+  /**
+   * Expand a single timestep order into per-slab orders.
+   * For wind layer: creates 2 orders (U and V components).
+   * For other layers: creates 1 order (slab 0).
+   */
+  private expandOrder(
+    url: string,
+    param: TWeatherLayer,
+    timestep: TTimestep,
+    sizeEstimate: number
+  ): TimestepOrder[] {
+    const omParams = this.getLayerParams(param);
+    return omParams.map((omParam, slabIndex) => ({
+      url,
+      param,
+      timestep,
+      sizeEstimate: omParams.length > 1 ? sizeEstimate / omParams.length : sizeEstimate,
+      slabIndex,
+      omParam,
+    }));
   }
 
   /** Pure computation: what timesteps does current time need? */
@@ -258,13 +264,8 @@ export class SlotService {
         }
         ps.setActiveTimesteps([ts]);
 
-        // Rebind buffers for texture layers (per-slot mode)
-        if (isWeatherTextureLayer(param)) {
-          this.rebindTextureLayerBuffers(param, slot.slotIndex, slot.slotIndex);
-        } else if (param === 'wind') {
-          this.rebindWindLayerBuffers(slot.slotIndex, slot.slotIndex);
-        }
-
+        // Rebind buffers to renderer
+        this.rebindLayerBuffers(param, slot.slotIndex, slot.slotIndex);
         this.renderService.activateSlots(param, slot.slotIndex, slot.slotIndex, slot.loadedPoints);
         console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
       } else {
@@ -284,13 +285,8 @@ export class SlotService {
         }
         ps.setActiveTimesteps([t0, t1]);
 
-        // Rebind buffers for texture layers (per-slot mode)
-        if (isWeatherTextureLayer(param)) {
-          this.rebindTextureLayerBuffers(param, slot0.slotIndex, slot1.slotIndex);
-        } else if (param === 'wind') {
-          this.rebindWindLayerBuffers(slot0.slotIndex, slot1.slotIndex);
-        }
-
+        // Rebind buffers to renderer
+        this.rebindLayerBuffers(param, slot0.slotIndex, slot1.slotIndex);
         this.renderService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, Math.min(slot0.loadedPoints, slot1.loadedPoints));
         console.log(`[Slot] ${pcode} activated: ${fmt(t0)} → ${fmt(t1)}`);
       } else {
@@ -300,37 +296,32 @@ export class SlotService {
     }
   }
 
-  /** Rebind texture layer slot buffers to renderer */
-  private rebindTextureLayerBuffers(param: TWeatherTextureLayer, slotIndex0: number, slotIndex1: number): void {
+  /** Rebind layer buffers to renderer (generic for all layer types) */
+  private rebindLayerBuffers(param: TWeatherLayer, slotIndex0: number, slotIndex1: number): void {
     const store = this.layerStores.get(param);
     if (!store) return;
 
-    const buffer0 = store.getSlotBuffer(slotIndex0, 0);  // slab 0
-    const buffer1 = store.getSlotBuffer(slotIndex1, 0);
-
-    if (buffer0 && buffer1) {
-      this.renderService.setTextureLayerBuffers(param, buffer0, buffer1);
-    } else {
-      console.warn(`[Slot] Missing ${param} buffer: slot0=${!!buffer0} slot1=${!!buffer1}`);
+    if (isWeatherTextureLayer(param)) {
+      const buffer0 = store.getSlotBuffer(slotIndex0, 0);
+      const buffer1 = store.getSlotBuffer(slotIndex1, 0);
+      if (buffer0 && buffer1) {
+        this.renderService.setTextureLayerBuffers(param, buffer0, buffer1);
+      } else {
+        console.warn(`[Slot] Missing ${param} buffer: slot0=${!!buffer0} slot1=${!!buffer1}`);
+      }
+    } else if (param === 'wind') {
+      // Wind has 2 slabs: U (index 0) and V (index 1)
+      const u0 = store.getSlotBuffer(slotIndex0, 0);
+      const v0 = store.getSlotBuffer(slotIndex0, 1);
+      const u1 = store.getSlotBuffer(slotIndex1, 0);
+      const v1 = store.getSlotBuffer(slotIndex1, 1);
+      if (u0 && v0 && u1 && v1) {
+        this.renderService.setWindLayerBuffers(u0, v0, u1, v1);
+      } else {
+        console.warn(`[Slot] Missing wind buffers: U0=${!!u0} V0=${!!v0} U1=${!!u1} V1=${!!v1}`);
+      }
     }
-  }
-
-  /** Rebind wind layer buffers (U0, V0, U1, V1) to renderer */
-  private rebindWindLayerBuffers(slotIndex0: number, slotIndex1: number): void {
-    const store = this.layerStores.get('wind');
-    if (!store) return;
-
-    // Wind has 2 slabs: U (index 0) and V (index 1)
-    const u0 = store.getSlotBuffer(slotIndex0, 0);
-    const v0 = store.getSlotBuffer(slotIndex0, 1);
-    const u1 = store.getSlotBuffer(slotIndex1, 0);
-    const v1 = store.getSlotBuffer(slotIndex1, 1);
-
-    if (u0 && v0 && u1 && v1) {
-      this.renderService.setWindLayerBuffers(u0, v0, u1, v1);
-    } else {
-      console.warn(`[Slot] Missing wind buffers: U0=${!!u0} V0=${!!v0} U1=${!!u1} V1=${!!v1}`);
-    }
+    // pressure: no buffer rebind needed (uses compute shader)
   }
 
   /** Upload data to slot via LayerStore */
@@ -368,7 +359,7 @@ export class SlotService {
     // Build orders: new loads + already-loading priority (to prevent abort)
     const allOrderTimesteps = [...orderedToLoad, ...priorityAlreadyLoading];
     const orders: TimestepOrder[] = allOrderTimesteps.flatMap(timestep =>
-      expandOrder(
+      this.expandOrder(
         this.timestepService.url(timestep),
         param,
         timestep,
@@ -442,7 +433,17 @@ export class SlotService {
           if (result) {
             if (result.evicted && result.evictedSlotIndex !== null) {
               this.timestepService.setGpuUnloaded(param, result.evicted);
-              // Destroy evicted slot's buffers
+
+              // If evicting an active slot, rebind renderer to safe slot first
+              const activeSlots = this.renderService.getActiveSlots(param);
+              if (activeSlots.slot0 === result.evictedSlotIndex || activeSlots.slot1 === result.evictedSlotIndex) {
+                // Ensure slot 0 buffers exist before rebinding
+                this.layerStores.get(param)?.ensureSlotBuffers(0);
+                this.rebindLayerBuffers(param, 0, 0);
+                this.renderService.activateSlots(param, 0, 0, 0);
+              }
+
+              // Now safe to destroy evicted slot's buffers
               this.layerStores.get(param)?.destroySlotBuffers(result.evictedSlotIndex);
             }
             // Ensure buffer exists for this slot
@@ -453,7 +454,7 @@ export class SlotService {
 
             // For single-slab layers: markLoaded immediately
             // For multi-slab layers: markLoaded creates slot, then markSlabLoaded per slab
-            const slabsCount = PARAM_MAP[param]?.length ?? 1;
+            const slabsCount = this.getLayerParams(param).length;
 
             if (slabsCount === 1) {
               // Single-slab: existing behavior
@@ -572,7 +573,7 @@ export class SlotService {
 
       for (const ts of wanted.priority) {
         ps.setLoading([ts]);
-        const expanded = expandOrder(
+        const expanded = this.expandOrder(
           this.timestepService.url(ts),
           param,
           ts,
@@ -605,7 +606,7 @@ export class SlotService {
 
             // For single-slab layers: markLoaded immediately
             // For multi-slab layers: markLoaded creates slot, then markSlabLoaded per slab
-            const slabsCount = PARAM_MAP[order.param]?.length ?? 1;
+            const slabsCount = this.getLayerParams(order.param).length;
 
             if (slabsCount === 1) {
               ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);

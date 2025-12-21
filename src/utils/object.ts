@@ -37,3 +37,13 @@ export function deepMerge<T extends object>(target: T, source: Partial<T>): T {
 export function getByPath(obj: unknown, path: string): unknown {
   return path.split('.').reduce((o, k) => (o as Record<string, unknown>)?.[k], obj);
 }
+
+/**
+ * Set value at dot-separated path (mutates object)
+ */
+export function setByPath(obj: unknown, path: string, value: unknown): void {
+  const keys = path.split('.');
+  const last = keys.pop()!;
+  const target = keys.reduce((o, k) => (o as Record<string, unknown>)[k], obj);
+  (target as Record<string, unknown>)[last] = value;
+}

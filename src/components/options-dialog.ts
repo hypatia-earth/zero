@@ -37,13 +37,15 @@ interface SliderMeta {
 
 interface SelectMeta {
   control: 'select';
-  options: { value: string | number; label: string }[];
+  options: { value: string | number; label: string; localhostOnly?: boolean }[];
 }
 
 interface RadioMeta {
   control: 'radio';
-  options: { value: string | number; label: string }[];
+  options: { value: string | number; label: string; localhostOnly?: boolean }[];
 }
+
+const isLocalhost = location.hostname === 'localhost';
 
 // ============================================================
 // Drag state (persists across redraws)
@@ -149,12 +151,13 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
 
     case 'select': {
       const selectMeta = meta as SelectMeta;
+      const filteredOptions = selectMeta.options.filter(o => !o.localhostOnly || isLocalhost);
       return m('select.select', {
         value: currentValue,
         onchange: (e: Event) => {
           setOptionValue(optionsService, path, (e.target as HTMLSelectElement).value);
         }
-      }, selectMeta.options.map(o =>
+      }, filteredOptions.map(o =>
         m('option', { value: o.value }, o.label)
       ));
     }

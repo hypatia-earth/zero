@@ -51,6 +51,7 @@ export interface GlobeUniforms {
   tempSlot0: number;         // slot index for time0 in large buffer
   tempSlot1: number;         // slot index for time1 in large buffer
   tempPaletteRange: Float32Array; // min/max temperature values for palette mapping
+  logoOpacity: number;       // computed from all layer opacities
 }
 
 const POINTS_PER_TIMESTEP = 6_599_680;
@@ -547,6 +548,9 @@ export class GlobeRenderer {
     view.setUint32(O.cloudsDataReady, uniforms.cloudsDataReady ? 1 : 0, true);
     view.setUint32(O.humidityDataReady, uniforms.humidityDataReady ? 1 : 0, true);
     view.setUint32(O.windDataReady, uniforms.windDataReady ? 1 : 0, true);
+
+    // Logo
+    view.setFloat32(O.logoOpacity, uniforms.logoOpacity, true);
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 

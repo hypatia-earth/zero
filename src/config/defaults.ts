@@ -55,13 +55,13 @@ export const defaultConfig: ZeroConfig = {
     },
     {
       id: 'rain', label: 'Precipitation', buttonLabel: 'Rain', category: 'weather', defaultEnabled: false,
-      params: ['precipitation', 'rain', 'total_precipitation'],
+      params: ['precipitation'],
       defaultSizeEstimate: 8_000_000,
       slabs: [{ name: 'data', sizeMB: 26 }],
     },
     {
       id: 'clouds', label: 'Cloud Cover', buttonLabel: 'Clouds', category: 'weather', defaultEnabled: false,
-      params: ['cloud_cover', 'total_cloud_cover'],
+      params: ['cloud_cover'],
       defaultSizeEstimate: 8_000_000,
       slabs: [{ name: 'data', sizeMB: 26 }],
     },
@@ -79,14 +79,16 @@ export const defaultConfig: ZeroConfig = {
     },
     {
       id: 'pressure', label: 'Pressure', buttonLabel: 'Pressure', category: 'weather', defaultEnabled: false,
-      params: ['pressure_msl', 'mean_sea_level_pressure'],
+      params: ['pressure_msl'],
       defaultSizeEstimate: 2_000_000,
       slabs: [{ name: 'raw', sizeMB: 26 }, { name: 'grid', sizeMB: 1 }],
     },
   ],
 
+  // layers auto-enabled, when url is '/'
   defaultLayers: ['earth', 'sun', 'temp'],
 
+  // layers marked as ready to use.
   readyLayers: ['earth', 'sun', 'grid', 'temp', 'pressure', 'wind'],
 
   sun: {

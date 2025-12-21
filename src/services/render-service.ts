@@ -9,7 +9,7 @@ import { validateGlobeUniforms } from '../render/globe-uniforms';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { ZeroOptions } from '../schemas/options.schema';
-import { DECORATION_LAYERS, WEATHER_LAYERS, type TLayer, type TWeatherLayer, type TWeatherTextureLayer, type LayerState } from '../config/types';
+import { DECORATION_LAYERS, WEATHER_LAYERS, isWeatherLayer, type TLayer, type TWeatherLayer, type TWeatherTextureLayer, type LayerState } from '../config/types';
 import { getSunDirection } from '../utils/sun-position';
 import { createRingBuffer, type RingBuffer } from '../utils/ringbuffer';
 
@@ -18,14 +18,13 @@ export class RenderService {
   private animationId: number | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private tempLoadedPoints = 0;
-  private tempSlot0 = 0;  // Current active slot indices
-  private tempSlot1 = 1;
   private tempStateFn: ((time: Date) => LayerState) | null = null;
   private tempPaletteRange: Float32Array = new Float32Array([-40, 50]); // Default range
 
+  // Active slot indices per layer (populated by activateSlots)
+  private activeSlots = new Map<TWeatherLayer, { slot0: number; slot1: number }>();
+
   // Pressure contour state
-  private pressureSlot0 = 0;
-  private pressureSlot1 = 0;
   private pressureStateFn: ((time: Date) => LayerState) | null = null;
   private lastPressureMinute = -1;  // For minute-based change detection
   private isobarLevels: number[] = generateIsobarLevels(4);  // Default spacing
@@ -69,6 +68,12 @@ export class RenderService {
   async initialize(gaussianLats: Float32Array, ringOffsets: Uint32Array): Promise<void> {
     // Validate uniform layout at startup
     validateGlobeUniforms();
+
+    // Initialize active slots for ready weather layers
+    const readyWeatherLayers = this.configService.getConfig().readyLayers.filter(isWeatherLayer);
+    for (const layer of readyWeatherLayers) {
+      this.activeSlots.set(layer, { slot0: 0, slot1: 0 });
+    }
 
     const cameraConfig = this.configService.getCameraConfig();
     this.renderer = new GlobeRenderer(this.canvas, cameraConfig);
@@ -181,7 +186,8 @@ export class RenderService {
         if (currentMinute !== this.lastPressureMinute) {
           this.lastPressureMinute = currentMinute;
           const smoothingIterations = parseInt(options.pressure.smoothing, 10);
-          renderer.runPressureContour(this.pressureSlot0, this.pressureSlot1, pressureState.lerp, this.isobarLevels, smoothingIterations);
+          const pSlots = this.activeSlots.get('pressure')!;
+          renderer.runPressureContour(pSlots.slot0, pSlots.slot1, pressureState.lerp, this.isobarLevels, smoothingIterations);
         }
       }
 
@@ -196,6 +202,7 @@ export class RenderService {
         ...this.getHumidityUniforms(),
         ...this.getWindUniforms(windState),
         ...this.getPressureUniforms(),
+        ...this.getLogoUniforms(),
       });
 
       const gpuTimeMs = renderer.render();
@@ -268,13 +275,14 @@ export class RenderService {
     // tempDataReady = data exists in buffers (not whether we should render)
     // Opacity animation handles fade in/out based on state.mode
     const tempDataReady = this.tempLoadedPoints > 0;
+    const slots = this.activeSlots.get('temp')!;
     return {
       tempOpacity: this.animatedOpacity.temp,
       tempDataReady,
       tempLerp: state.mode === 'single' ? -2 : state.lerp,  // -2 = single slot mode (no interpolation)
       tempLoadedPoints: this.tempLoadedPoints,
-      tempSlot0: this.tempSlot0,
-      tempSlot1: this.tempSlot1,
+      tempSlot0: slots.slot0,
+      tempSlot1: slots.slot1,
       tempPaletteRange: this.tempPaletteRange,
     };
   }
@@ -313,6 +321,15 @@ export class RenderService {
   private getPressureUniforms() {
     return {
       pressureOpacity: this.animatedOpacity.pressure,
+    };
+  }
+
+  private getLogoUniforms() {
+    // Logo only visible when ALL layers are completely off
+    // Hard cutoff: any layer opacity > 0.01 hides logo
+    const totalOpacity = Object.values(this.animatedOpacity).reduce((sum, v) => sum + v, 0);
+    return {
+      logoOpacity: totalOpacity < 0.01 ? 1 : Math.max(0, 1 - totalOpacity * 10),
     };
   }
 
@@ -394,12 +411,11 @@ export class RenderService {
    * Set active slot indices for temperature interpolation
    */
   setTempSlots(slot0: number, slot1: number): void {
-    this.tempSlot0 = slot0;
-    this.tempSlot1 = slot1;
+    this.activeSlots.set('temp', { slot0, slot1 });
   }
 
   getTempSlots(): { slot0: number; slot1: number } {
-    return { slot0: this.tempSlot0, slot1: this.tempSlot1 };
+    return this.activeSlots.get('temp')!;
   }
 
   /**
@@ -471,26 +487,23 @@ export class RenderService {
 
   /**
    * Activate slots for a given param (shader will use these slots)
-   * Routes to param-specific activation
    */
   activateSlots(param: TWeatherLayer, slot0: number, slot1: number, loadedPoints: number): void {
-    switch (param) {
-      case 'temp':
-        this.tempSlot0 = slot0;
-        this.tempSlot1 = slot1;
-        this.tempLoadedPoints = loadedPoints;
-        break;
-      case 'pressure':
-        // Store slots for render loop interpolation
-        this.pressureSlot0 = slot0;
-        this.pressureSlot1 = slot1;
-        this.lastPressureMinute = -1;  // Force recompute on next frame
-        break;
-      case 'rain':
-      case 'wind':
-        // TODO: implement when these layers support slots
-        break;
+    this.activeSlots.set(param, { slot0, slot1 });
+
+    // Layer-specific side effects
+    if (param === 'temp') {
+      this.tempLoadedPoints = loadedPoints;
+    } else if (param === 'pressure') {
+      this.lastPressureMinute = -1;  // Force recompute on next frame
     }
+  }
+
+  /**
+   * Get active slot indices for a param
+   */
+  getActiveSlots(param: TWeatherLayer): { slot0: number; slot1: number } {
+    return this.activeSlots.get(param) ?? { slot0: 0, slot1: 0 };
   }
 
   /**

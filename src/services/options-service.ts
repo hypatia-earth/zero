@@ -18,7 +18,7 @@ import {
   type ZeroOptions,
   type OptionFilter,
 } from '../schemas/options.schema';
-import { deepMerge, getByPath } from '../utils/object';
+import { deepMerge, getByPath, setByPath } from '../utils/object';
 import { layerIds } from '../config/defaults';
 import type { TLayer } from '../config/types';
 import type { ConfigService } from './config-service';
@@ -363,6 +363,17 @@ export class OptionsService {
 
     DEBUG && console.log(`[Options] Reset ${path} to default`);
     this.userOverrides.value = deleteByPath(this.userOverrides.value, path);
+  }
+
+  /**
+   * Revert option to a previous value (e.g., after failed operation)
+   * Goes through proper update flow for persistence
+   */
+  revertOption(path: string, value: unknown): void {
+    console.log(`[Options] Revert ${path} = ${value}`);
+    this.update(draft => {
+      setByPath(draft, path, value);
+    });
   }
 
   /**

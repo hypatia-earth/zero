@@ -44,7 +44,8 @@ struct Uniforms {
   cloudsDataReady: u32,
   humidityDataReady: u32,
   windDataReady: u32,
-  weatherPad: vec2f,      // padding to 16-byte alignment
+  logoOpacity: f32,       // computed from all layer opacities
+  logoPad: f32,           // padding for alignment
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -133,7 +134,6 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
   // Layer compositing (back to front)
   // Atmosphere applied in post-process pass
   var color = vec4f(0.086, 0.086, 0.086, 1.0); // Base dark color (#161616)
-  color = blendLogo(color, fragPos.xy);   // Logo sprite when idle
   color = blendBasemap(color, hit.point);
   color = blendTemp(color, lat, lon);
   color = blendRain(color, lat, lon);
@@ -153,6 +153,9 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
   // Front grid (always on top)
   color = blendGrid(color, lat, lon, hit.point);
   color = blendGridText(color, lat, lon, hit.point);
+
+  // Logo (only visible when all layers are off)
+  color = blendLogo(color, fragPos.xy);
 
   // Compute normalized depth from ray hit distance
   // hit.t is distance from camera to globe surface

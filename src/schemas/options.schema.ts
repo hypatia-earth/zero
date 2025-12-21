@@ -48,7 +48,7 @@ interface SliderMeta extends UIMetadata {
 
 interface SelectMeta extends UIMetadata {
   control: 'select';
-  options: { value: string | number; label: string }[];
+  options: { value: string | number; label: string; localhostOnly?: boolean }[];
 }
 
 interface ToggleMeta extends UIMetadata {
@@ -57,7 +57,7 @@ interface ToggleMeta extends UIMetadata {
 
 interface RadioMeta extends UIMetadata {
   control: 'radio';
-  options: { value: string | number; label: string }[];
+  options: { value: string | number; label: string; localhostOnly?: boolean }[];
 }
 
 type OptionMeta = SliderMeta | SelectMeta | ToggleMeta | RadioMeta;
@@ -155,7 +155,7 @@ export const optionsSchema = z.object({
   // ----------------------------------------------------------
   gpu: z.object({
     timeslotsPerLayer: opt(
-      z.enum(['4', '8', '16', '32', '64', '128', '256', '512']).default('4'),
+      z.enum(['2', '3', '4', '8', '16', '32', '64', '128', '256', '512']).default('4'),
       {
         label: 'Timeslots per layer',
         description: 'More timeslots = smoother time scrubbing, more GPU memory',
@@ -164,8 +164,10 @@ export const optionsSchema = z.object({
         order: 0,
         control: 'select',
         options: [
-          { value: '4', label: '4 (108 MB) - Minimum' },
-          { value: '8', label: '8 (216 MB) - Good' },
+          { value: '2', label: '2 (54 MB) - Stress test', localhostOnly: true },
+          { value: '3', label: '3 (81 MB) - Minimum' },
+          { value: '4', label: '4 (108 MB) - Usable' },
+          { value: '8', label: '8 (216 MB) - Comfortable' },
           { value: '16', label: '16 (432 MB) - Smooth' },
           { value: '32', label: '32 (864 MB) - Standard' },
           { value: '64', label: '64 (1.7 GB) - Extended' },

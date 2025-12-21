@@ -1,13 +1,8 @@
 // Logo layer - displays Hypatia logo as screen-space sprite when all layers are off
 
 fn blendLogo(color: vec4f, fragPos: vec2f) -> vec4f {
-  // Calculate total layer opacity to determine logo visibility
-  let totalOpacity = u.earthOpacity + u.tempOpacity + u.rainOpacity + u.cloudsOpacity +
-                     u.humidityOpacity + u.windOpacity + u.gridOpacity;
-
-  // Logo fades out as layers fade in
-  let logoOpacity = 1.0 - clamp(totalOpacity * 2.0, 0.0, 1.0);
-  if (logoOpacity < 0.01) {
+  // Logo opacity computed in JS from all layer opacities
+  if (u.logoOpacity < 0.01) {
     return color;
   }
 
@@ -33,6 +28,6 @@ fn blendLogo(color: vec4f, fragPos: vec2f) -> vec4f {
 
   // Blend based on luminosity (logo is white/gray on black background)
   let luminosity = logoColor.r;  // grayscale, so r=g=b
-  let blendAlpha = luminosity * logoOpacity;
+  let blendAlpha = luminosity * u.logoOpacity;
   return vec4f(mix(color.rgb, vec3f(1.0), blendAlpha), 1.0);
 }
