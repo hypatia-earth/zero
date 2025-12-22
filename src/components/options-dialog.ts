@@ -455,8 +455,9 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
     }
 
     const floatingClass = isFloating ? (isTop ? 'floating top' : 'floating behind') : '';
+    const closingClass = optionsService.dialogClosing ? 'closing' : '';
 
-    return m('div.dialog.options', { class: floatingClass }, [
+    return m('div.dialog.options', { class: `${floatingClass} ${closingClass}` }, [
       m('div.backdrop', {
         onclick: () => {
           if (dialogService.shouldCloseOnBackdrop('options')) {

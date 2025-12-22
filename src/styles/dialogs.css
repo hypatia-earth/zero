@@ -224,6 +224,21 @@
   to { transform: translateY(0); }
 }
 
+@keyframes slideDown {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
+/* Mobile: slide down on close */
+@media (max-width: 639px) {
+  .dialog.options.closing .backdrop {
+    animation: fadeOut 0.25s ease-out forwards;
+  }
+  .dialog.options.closing .window {
+    animation: slideDown 0.25s ease-out forwards;
+  }
+}
+
 /* Header */
 .dialog.options .header {
   display: flex;

@@ -187,6 +187,7 @@ export class OptionsService {
 
   /** Dialog state */
   dialogOpen = false;
+  dialogClosing = false;
   dialogFilter: OptionFilter | undefined = undefined;
 
   /** First time user detection */
@@ -463,9 +464,14 @@ export class OptionsService {
   }
 
   closeDialog(): void {
-    this.dialogOpen = false;
-    this.dialogFilter = undefined;
+    this.dialogClosing = true;
     m.redraw();
+    setTimeout(() => {
+      this.dialogOpen = false;
+      this.dialogClosing = false;
+      this.dialogFilter = undefined;
+      m.redraw();
+    }, 250);
   }
 
   // ----------------------------------------------------------
