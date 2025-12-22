@@ -3,30 +3,28 @@
  *
  * Wraps om-file-adapter with preflight callback for QueueService integration.
  * Reports exact byte size after metadata phases, before data fetch.
- *
- * Supports worker pool for parallel decompression (pool of 1 = main thread).
+ * Uses worker pool for parallel decompression (minimum 1 worker).
  */
 
 import type { IOmService, OmPreflight, OmSlice } from '../config/types';
-import { streamOmVariable, preflightOmVariable } from '../adapters/om-file-adapter';
+import { preflightOmVariable } from '../adapters/om-file-adapter';
 import { WorkerPool } from './worker-pool';
-
-const DEFAULT_SLICES = 10;
+import type { OptionsService } from './options-service';
 
 export class OmService implements IOmService {
   private workerPool: WorkerPool | null = null;
+  private optionsService: OptionsService;
+
+  constructor(optionsService: OptionsService) {
+    this.optionsService = optionsService;
+  }
 
   /**
    * Initialize worker pool for parallel decompression
    * @param wasmBinary - Pre-loaded WASM binary
-   * @param poolSize - Number of workers (1 = main thread only)
    */
-  async initWorkerPool(wasmBinary: ArrayBuffer, poolSize: number): Promise<void> {
-    if (poolSize <= 1) {
-      console.log('[OmService] Pool size 1, using main thread WASM');
-      return;
-    }
-
+  async init(wasmBinary: ArrayBuffer): Promise<void> {
+    const poolSize = Math.max(1, parseInt(this.optionsService.options.value.gpu.workerPoolSize, 10));
     this.workerPool = new WorkerPool(poolSize, wasmBinary);
     await this.workerPool.initialize();
   }
@@ -42,7 +40,6 @@ export class OmService implements IOmService {
 
   /**
    * Fetch data with byte progress tracking
-   * Uses worker pool if initialized, otherwise main thread WASM
    * @param signal - Optional AbortSignal for cancellation
    */
   async fetch(
@@ -53,30 +50,7 @@ export class OmService implements IOmService {
     onBytes?: (bytes: number) => void,
     signal?: AbortSignal
   ): Promise<Float32Array> {
-    // Use worker pool if available
-    if (this.workerPool) {
-      return this.workerPool.fetch(url, param, onPreflight, onSlice, onBytes, signal);
-    }
-
-    // Fallback to main thread WASM
-    const result = await streamOmVariable(
-      url,
-      param,
-      DEFAULT_SLICES,
-      (chunk) => {
-        onSlice({
-          data: chunk.data,
-          sliceIndex: chunk.sliceIndex,
-          totalSlices: chunk.totalSlices,
-          done: chunk.done,
-        });
-      },
-      onPreflight,
-      false,
-      onBytes,
-      signal
-    );
-    return result.data;
+    return this.workerPool!.fetch(url, param, onPreflight, onSlice, onBytes, signal);
   }
 
   dispose(): void {

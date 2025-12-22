@@ -7,7 +7,6 @@
  */
 
 import m from 'mithril';
-import { effect } from '@preact/signals-core';
 import { ConfigService } from './services/config-service';
 import { OptionsService } from './services/options-service';
 import { BootstrapService } from './services/bootstrap-service';
@@ -22,7 +21,7 @@ import { PaletteService } from './services/palette-service';
 import { ThemeService } from './services/theme-service';
 import { setupCameraControls } from './services/camera-controls';
 import { StateService } from './services/state-service';
-import { initOmWasm } from './adapters/om-file-adapter';
+import { registerServiceWorker } from './services/sw-registration';
 import { BootstrapModal } from './components/bootstrap-modal';
 import { OptionsDialog } from './components/options-dialog';
 import { DialogService } from './services/dialog-service';
@@ -70,17 +69,12 @@ export const App: m.ClosureComponent = () => {
       configService = new ConfigService();
       await configService.init();
       optionsService = new OptionsService(configService);
-      stateService = new StateService(configService);
-      // Wire up bidirectional reference
-      stateService.setOptionsService(optionsService);
+      stateService = new StateService(configService, optionsService);
       optionsService.setStateService(stateService);
-      omService = new OmService();
-      paletteService = new PaletteService();
+      omService = new OmService(optionsService);
       dialogService = new DialogService();
       aboutService = new AboutService();
       themeService = new ThemeService();
-      themeService.init();
-      await aboutService.init();  // TODO: Should get its own step
 
       m.redraw();
 
@@ -94,10 +88,18 @@ export const App: m.ClosureComponent = () => {
         BootstrapService.setStep('CONFIG');
         await optionsService.load();
 
-        // Step 3: Discovery (via TimestepService)
+        // Step 3: Discovery (SW registration + TimestepService)
         BootstrapService.setStep('DISCOVERY');
+        await registerServiceWorker();
         timestepService = new TimestepService(configService);
-        await timestepService.initialize();
+        await timestepService.initialize(async (step, detail) => {
+          const labels = {
+            manifest: 'Fetching S3 manifest...',
+            runs: 'Listing model runs...',
+            cache: `Querying cache: ${detail}...`,
+          };
+          await BootstrapService.updateProgress(labels[step], 12);
+        });
 
         // Step 3b: Sanitize state (snap time to closest available timestep)
         stateService.sanitize((time: Date) => timestepService.getClosestTimestep(time));
@@ -165,11 +167,8 @@ export const App: m.ClosureComponent = () => {
         const basemapFaces = await Promise.all(
           basemapBuffers.map(buf => createImageBitmap(new Blob([buf], { type: 'image/png' })))
         );
-        await initOmWasm(wasmBuffer!);
 
-        // Initialize worker pool for parallel decompression
-        const poolSize = parseInt(optionsService.options.value.gpu.workerPoolSize, 10);
-        await omService.initWorkerPool(wasmBuffer!, poolSize);
+        await omService.init(wasmBuffer!);
 
         const fontAtlas = await createImageBitmap(new Blob([fontBuffer!], { type: 'image/png' }));
         const logoImage = await createImageBitmap(new Blob([logoBuffer!], { type: 'image/png' }));
@@ -201,15 +200,12 @@ export const App: m.ClosureComponent = () => {
         // 5d2. Logo for idle globe
         await renderer.loadLogo(logoImage);
 
-        // 5e. Load palettes
+        // 5e. PaletteService (needs renderService for reactivity)
+        paletteService = new PaletteService(renderService);
         await paletteService.loadPalettes('temp');
 
-        // 5f. Initialize default palette texture
-        const tempPalette = paletteService.getPalette('temp');
-        const tempTextureData = paletteService.generateTextureData(tempPalette);
-        const tempRange = paletteService.getRange(tempPalette);
-        renderer.updateTempPalette(tempTextureData);
-        renderService.updateTempPalette(tempTextureData, tempRange.min, tempRange.max);
+        // 5f. About content
+        await aboutService.init();
 
         // Finalize renderer
         renderer.finalize();
@@ -225,9 +221,9 @@ export const App: m.ClosureComponent = () => {
         );
 
         // 5g. Load initial timesteps for all enabled weather layers
-        await slotService.initialize((param, index, total) => {
+        await slotService.initialize(async (param, index, total) => {
           const pct = 50 + (index / total) * 45;  // 50% to 95%
-          BootstrapService.updateProgress(`Loading ${param} ${index}/${total}...`, pct);
+          await BootstrapService.updateProgress(`Loading ${param} ${index}/${total}...`, pct);
         });
 
         // Step 6: Activate
@@ -237,18 +233,7 @@ export const App: m.ClosureComponent = () => {
         keyboardService = new KeyboardService(stateService, timestepService);
         setupCameraControls(canvas, renderer.camera, stateService, configService);
 
-        // Wire up palette reactivity
-        effect(() => {
-          void paletteService.paletteChanged.value; // Subscribe to changes
-          const palette = paletteService.getPalette('temp');
-          const textureData = paletteService.generateTextureData(palette);
-          const range = paletteService.getRange(palette);
-          renderService.updateTempPalette(textureData, range.min, range.max);
-        });
-
-        // Note: Pressure layer loading is handled automatically by SlotService
-        // when pressure.enabled changes (same as temp)
-
+        await BootstrapService.updateProgress('Finishing...', 98);
         BootstrapService.complete();
         canvas.classList.add('ready');
         console.log(`%c[ZERO] Bootstrap complete (${(performance.now() / 1000).toFixed(2)}s)`, 'color: darkgreen; font-weight: bold');

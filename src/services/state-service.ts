@@ -35,16 +35,14 @@ export class StateService {
   private urlSyncTimeout: ReturnType<typeof setTimeout> | null = null;
   private readonly URL_SYNC_DEBOUNCE = 300; // ms
 
-  constructor(
-    private configService: ConfigService
-  ) {
-    this.parseUrl();
-  }
+  private optionsService: OptionsService;
 
-  /** Wire up OptionsService after construction (avoid circular dep) */
-  private optionsService: OptionsService | null = null;
-  setOptionsService(optionsService: OptionsService): void {
+  constructor(
+    private configService: ConfigService,
+    optionsService: OptionsService
+  ) {
     this.optionsService = optionsService;
+    this.parseUrl();
   }
 
   /**
@@ -163,7 +161,6 @@ export class StateService {
    * Call after OptionsService is wired up
    */
   delegateLayers(): void {
-    if (!this.optionsService) return;
 
     const params = new URLSearchParams(window.location.search);
     const layersStr = params.get('layers');
@@ -209,7 +206,7 @@ export class StateService {
     const alt = Math.round(vs.altitude).toString();
 
     // Get enabled layers from OptionsService
-    const enabledLayers = this.optionsService?.getEnabledLayers() ?? [];
+    const enabledLayers = this.optionsService.getEnabledLayers();
 
     // Build URL manually to keep commas unencoded
     let search = `?dt=${dt}&ll=${ll}&alt=${alt}`;

@@ -22,7 +22,7 @@ export class ThemeService {
   readonly layers: Record<TWeatherLayer, LayerColors> = {} as Record<TWeatherLayer, LayerColors>;
   readonly timebar: TimebarColors = {} as TimebarColors;
 
-  init(): void {
+  constructor() {
     const style = getComputedStyle(document.documentElement);
 
     // Read layer colors

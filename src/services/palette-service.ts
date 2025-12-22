@@ -8,7 +8,8 @@
  * - Support for both linear and non-linear (log-spaced) palettes
  */
 
-import { signal } from '@preact/signals-core';
+import { signal, effect } from '@preact/signals-core';
+import type { RenderService } from './render-service';
 
 // ============================================================
 // Types
@@ -64,7 +65,20 @@ export class PaletteService {
   /** Signal that increments when any palette changes (for reactivity) */
   readonly paletteChanged = signal<number>(0);
 
-  constructor() {}
+  private renderService: RenderService;
+
+  constructor(renderService: RenderService) {
+    this.renderService = renderService;
+
+    // Wire up palette reactivity - updates GPU texture when palette changes
+    effect(() => {
+      void this.paletteChanged.value;
+      const palette = this.getPalette('temp');
+      const textureData = this.generateTextureData(palette);
+      const range = this.getRange(palette);
+      this.renderService.updateTempPalette(textureData, range.min, range.max);
+    });
+  }
 
   /**
    * Load palette JSON files for a layer from /images/palettes/{layer}-*.json

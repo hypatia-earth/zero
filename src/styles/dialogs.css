@@ -31,6 +31,7 @@
   border-radius: var(--dialog-window-radius);
   box-shadow: 0 20px 60px var(--color-shadow-strong);
   max-height: 80vh;
+  user-select: text;
 }
 
 /* Animations */

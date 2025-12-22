@@ -535,7 +535,7 @@ export class SlotService {
   }
 
   /** Initialize with priority timesteps for all enabled params */
-  async initialize(onProgress?: (param: TWeatherLayer, index: number, total: number) => void): Promise<void> {
+  async initialize(onProgress?: (param: TWeatherLayer, index: number, total: number) => Promise<void>): Promise<void> {
     this.dataWindowStart = this.timestepService.first();
     this.dataWindowEnd = this.timestepService.last();
 
@@ -577,7 +577,7 @@ export class SlotService {
 
     await this.queueService.submitTimestepOrders(
       allOrders,
-      (order, slice) => {
+      async (order, slice) => {
         if (slice.done) {
           const ps = this.paramSlots.get(order.param)!;
           const result = ps.allocateSlot(
@@ -613,7 +613,7 @@ export class SlotService {
           }
 
           completed++;
-          onProgress?.(order.param, completed, total);
+          await onProgress?.(order.param, completed, total);
         }
       },
       (order, actualBytes) => {

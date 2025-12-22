@@ -23,6 +23,10 @@
   left: var(--layout-margin-left);
 }
 
+.panel.logo a {
+  touch-action: manipulation;
+}
+
 .panel.logo img {
   height: 40px;
 }

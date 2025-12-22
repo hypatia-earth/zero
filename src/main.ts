@@ -22,21 +22,13 @@ import './styles/dialogs.css';
 import './styles/widgets.css';
 
 import { App } from './app';
-import { registerServiceWorker } from './services/sw-registration';
 
 console.log(`%c[ZERO] v${__APP_VERSION__} (${__APP_HASH__})`, 'color: darkgreen; font-weight: bold');
 
-async function main() {
-  // Register Service Worker first - we need cache stats
-  await registerServiceWorker();
-
-  // Mount App - it handles its own loading states
-  const appContainer = document.getElementById('app');
-  if (appContainer) {
-    m.mount(appContainer, App);
-  } else {
-    console.error('[Zero] App container #app not found');
-  }
+// Mount App immediately - SW registration happens in bootstrap Step 3
+const appContainer = document.getElementById('app');
+if (appContainer) {
+  m.mount(appContainer, App);
+} else {
+  console.error('[Zero] App container #app not found');
 }
-
-main();

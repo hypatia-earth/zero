@@ -27,7 +27,7 @@ const P = (param: TWeatherLayer) => param.slice(0, 4).toUpperCase();
 interface QueuedTimestepOrder {
   order: TimestepOrder;
   estimatedBytes: number;
-  onSlice: (order: TimestepOrder, slice: OmSlice) => void;
+  onSlice: (order: TimestepOrder, slice: OmSlice) => void | Promise<void>;
   onPreflight: (actualBytes: number) => void;
 }
 
@@ -99,7 +99,7 @@ export class QueueService implements IQueueService {
    */
   async submitTimestepOrders(
     orders: TimestepOrder[],
-    onSlice: (order: TimestepOrder, slice: OmSlice) => void,
+    onSlice: (order: TimestepOrder, slice: OmSlice) => void | Promise<void>,
     onPreflight?: (order: TimestepOrder, actualBytes: number) => void
   ): Promise<void> {
     // Check if current fetch should be aborted (not in new orders)
@@ -189,7 +189,7 @@ export class QueueService implements IQueueService {
             // Preflight done - report actual size for ETA correction
             next.onPreflight(info.totalBytes);
           },
-          (slice) => next.onSlice(next.order, slice),
+          async (slice) => { await next.onSlice(next.order, slice); },
           (bytes) => {
             this.onChunk(bytes);
           },

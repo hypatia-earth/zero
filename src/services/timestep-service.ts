@@ -14,6 +14,8 @@ import type { ConfigService } from './config-service';
 import { parseTimestep, formatTimestep } from '../utils/timestep';
 import { sendSWMessage } from '../utils/sw-message';
 
+const DEBUG = false;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,12 +86,12 @@ export class TimestepService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   /** Initialize: explore ECMWF and query SW cache */
-  async initialize(): Promise<void> {
+  async initialize(onProgress?: (step: 'manifest' | 'runs' | 'cache', detail?: string) => Promise<void>): Promise<void> {
     const config = this.configService.getDiscovery();
 
     // Discover timesteps for each model
     for (const model of config.models) {
-      await this.exploreModel(model);
+      await this.exploreModel(model, onProgress);
 
       // Build index for fast lookup
       const index = new Map<TTimestep, number>();
@@ -109,6 +111,7 @@ export class TimestepService {
     const params = new Map<TWeatherLayer, ParamState>();
     const readyWeatherLayers = this.configService.getReadyLayers().filter(isWeatherLayer);
     for (const param of readyWeatherLayers) {
+      await onProgress?.('cache', param);
       const { cache, sizes } = await this.querySWCache(param);
       params.set(param, { cache, gpu: new Set(), sizes });
       const avgMB = sizes.size > 0
@@ -130,11 +133,12 @@ export class TimestepService {
   // S3 Discovery
   // ─────────────────────────────────────────────────────────────────────────────
 
-  private async exploreModel(model: TModel): Promise<void> {
+  private async exploreModel(model: TModel, onProgress?: (step: 'manifest' | 'runs' | 'cache', detail?: string) => Promise<void>): Promise<void> {
     const config = this.configService.getDiscovery();
     const basePrefix = `data_spatial/${model}/`;
 
     // 1. Fetch latest.json → completed run info
+    await onProgress?.('manifest', model);
     const response = await fetch(`${config.root}${model}/latest.json`);
     if (!response.ok) {
       throw new Error(`[Timestep] Failed to fetch latest.json for ${model}`);
@@ -145,6 +149,7 @@ export class TimestepService {
     const completedValidTimes: string[] = data.valid_times ?? [];
 
     // 2. Find first and newest runs via S3
+    await onProgress?.('runs', model);
     const { firstRun, newestRun, newestRunPrefix } = await this.discoverRunBounds(basePrefix);
     if (!firstRun) {
       throw new Error(`[Timestep] No runs found for ${model}`);
@@ -401,7 +406,7 @@ export class TimestepService {
         }
       }
     } catch (err) {
-      console.warn(`[Timestep] SW cache query failed for ${param}:`, err);
+      DEBUG && console.warn(`[Timestep] SW cache query failed for ${param}:`, err);
     }
 
     return { cache, sizes };
