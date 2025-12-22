@@ -284,7 +284,9 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       };
 
       const formatDate = (date: Date) => {
-        return `${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
+        const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(date.getUTCDate()).padStart(2, '0');
+        return `${mm}-${dd}`;
       };
 
       // Build ECMWF set (ISO strings for comparison)
