@@ -32,7 +32,7 @@ import { LayersPanel } from './components/layers-panel';
 import { TimeCirclePanel } from './components/timecircle-panel';
 import { QueuePanel } from './components/queue-panel';
 import { PerfPanel } from './components/perf-panel';
-import { TimeBarPanel } from './components/timebar-panel';
+import { TimeBarPanel } from './components/timebar';
 import { LogoPanel } from './components/logo-panel';
 import { OptionsPanel } from './components/options-panel';
 import { FullscreenPanel } from './components/fullscreen-panel';

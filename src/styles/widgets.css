@@ -10,12 +10,16 @@
 
 @media (hover: hover) {
   .layer.widget:hover {
-    background: rgba(255, 255, 255, 0.08);
+    border-top-color: rgba(255, 255, 255, 0.6);
+    border-right-color: rgba(255, 255, 255, 0.6);
+    border-bottom-color: rgba(255, 255, 255, 0.6);
   }
 }
 
 .layer.widget:active {
-  background: rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.7);
+  border-right-color: rgba(255, 255, 255, 0.7);
+  border-bottom-color: rgba(255, 255, 255, 0.7);
 }
 
 /* Layer toggle button */

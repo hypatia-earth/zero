@@ -36,7 +36,7 @@ export const TimeCirclePanel: m.ClosureComponent<TimeCirclePanelAttrs> = (initia
       const minutes = String(time.getUTCMinutes()).padStart(2, '0');
 
       return m('.panel.timecircle', [
-        m('.control.circle.nohover', [
+        m('.control.circle', [
           m('.time-year', year),
           m('.time-date', `${month} ${day}`),
           m('.time-time', `${hours}:${minutes} UTC`),

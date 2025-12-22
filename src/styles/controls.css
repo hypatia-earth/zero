@@ -17,13 +17,13 @@
 
 @media (hover: hover) {
   .control:not(.nohover):hover {
-    background: rgba(40, 40, 40, 1);
+    border-color: rgba(255, 255, 255, 0.5);
   }
 }
 
 /* Touch/click feedback - all platforms */
 .control:not(.nohover):active {
-  background: rgba(60, 60, 60, 1);
+  border-color: rgba(255, 255, 255, 0.6);
 }
 
 .control.circle {
@@ -168,11 +168,19 @@ input[type=range].timeslider::-moz-range-thumb:hover {
 /* Time tick marks (canvas) */
 canvas.time-ticks {
   position: absolute;
-  top: 50%;
+  top: 0;
   left: 21px;
   right: 21px;
-  transform: translateY(-50%);
   height: 100%;
   z-index: 1;
   display: block;
+  /* Remove browser effects */
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  touch-action: none;
 }
