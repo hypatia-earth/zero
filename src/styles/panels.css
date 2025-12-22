@@ -5,6 +5,33 @@
   z-index: 20;
 }
 
+/* Panel stacks - flex containers for left/right sides */
+.panel-stack {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.panel-stack.left {
+  top: 0;
+  left: 0;
+  align-items: flex-start;
+}
+
+.panel-stack.right {
+  top: 0;
+  right: 0;
+  align-items: flex-end;
+}
+
+.panel-stack > .panel {
+  position: static;
+  pointer-events: auto;
+}
+
 .dialog {
   position: absolute;
   pointer-events: auto;
@@ -17,12 +44,7 @@
   z-index: 40;
 }
 
-/* Individual panel positioning */
-.panel.logo {
-  top: var(--layout-margin-top);
-  left: var(--layout-margin-left);
-}
-
+/* Individual panel styles */
 .panel.logo a {
   touch-action: manipulation;
 }
@@ -32,46 +54,20 @@
 }
 
 .panel.layers {
-  top: calc(var(--layout-margin-top) + var(--layout-logo-height) + var(--layout-panel-gap));
-  left: var(--layout-margin-left);
   width: 150px;
-  max-height: calc(var(--layout-vh) - var(--layout-margin-top) - var(--layout-logo-height) - var(--layout-panel-gap) - var(--layout-timebar-height) - var(--layout-margin-bottom) - var(--layout-panel-gap));
+  max-height: calc(var(--layout-vh) - var(--layout-margin-top) - var(--layout-margin-bottom) - var(--layout-logo-height) - var(--layout-panel-gap) - var(--layout-timebar-height) - var(--layout-panel-gap));
   overflow-y: auto;
   padding-right: 16px;
 }
 
 .panel.timecircle {
-  top: 20px;
-  right: 20px;
   width: var(--layout-timecircle-size);
   height: var(--layout-timecircle-size);
 }
 
-.panel.queue {
-  top: calc(20px + var(--layout-timecircle-size) + 10px);
-  right: 20px;
-}
-
 .panel.fullscreen {
-  top: calc(20px + var(--layout-timecircle-size) + 55px);
-  right: 20px;
   width: 44px;
   height: 44px;
-}
-
-.panel.options {
-  top: calc(20px + var(--layout-timecircle-size) + 55px + 44px + 10px);
-  right: 20px;
-}
-
-.panel.about {
-  top: calc(20px + var(--layout-timecircle-size) + 55px + 44px + 10px + 44px + 10px);
-  right: 20px;
-}
-
-.panel.perf {
-  top: calc(20px + var(--layout-timecircle-size) + 55px + 44px + 10px + 44px + 10px + 44px + 10px);
-  right: 20px;
 }
 
 /* Grid layout for label/value panels */
@@ -105,9 +101,9 @@
 }
 
 .panel.timebar {
-  left: var(--layout-margin-left);
-  right: var(--layout-margin-right);
-  bottom: var(--layout-margin-bottom);
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   align-items: center;

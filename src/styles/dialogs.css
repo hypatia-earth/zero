@@ -650,9 +650,16 @@
 }
 
 .dialog.options .danger-zone h3 {
-  margin: 0 0 12px 0;
+  margin: 0 0 4px 0;
   font-size: var(--font-size-md);
   color: #ff8888;
+}
+
+.dialog.options .danger-zone .hint {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+  margin-bottom: 12px;
 }
 
 .dialog.options .danger-zone .actions {

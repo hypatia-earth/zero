@@ -36,6 +36,7 @@ import { TimeBarPanel } from './components/timebar-panel';
 import { LogoPanel } from './components/logo-panel';
 import { OptionsPanel } from './components/options-panel';
 import { FullscreenPanel } from './components/fullscreen-panel';
+import { PanelStack } from './components/panel-stack';
 
 export const App: m.ClosureComponent = () => {
   // Services - initialized during bootstrap, then stable
@@ -279,15 +280,19 @@ export const App: m.ClosureComponent = () => {
           m(OptionsDialog, { optionsService, paletteService, dialogService, configService }),
           m(AboutDialog, { aboutService, dialogService }),
           m('.ui-container', [
-            m(LogoPanel),
-            m(LayersPanel, { configService, optionsService }),
-            m(TimeCirclePanel, { stateService }),
-            m(QueuePanel, { queueService, optionsService, slotService }),
+            m(PanelStack, { side: 'left' }, [
+              m(LogoPanel),
+              m(LayersPanel, { configService, optionsService }),
+            ]),
+            m(PanelStack, { side: 'right' }, [
+              m(TimeCirclePanel, { stateService }),
+              optionsService.options.value.debug.showPerfPanel && m(PerfPanel, { renderService, optionsService }),
+              m(QueuePanel, { queueService, optionsService, slotService }),
+              m(FullscreenPanel),
+              m(AboutPanel, { aboutService, dialogService }),
+              m(OptionsPanel, { optionsService, dialogService }),
+            ]),
             m(TimeBarPanel, { optionsService, stateService, slotService, timestepService, configService, themeService }),
-            m(FullscreenPanel),
-            m(OptionsPanel, { optionsService, dialogService }),
-            m(AboutPanel, { aboutService, dialogService }),
-            optionsService.options.value.debug.showPerfPanel && m(PerfPanel, { renderService, optionsService }),
           ]),
         ] : []),
       ];

@@ -42,7 +42,7 @@
 /* === UI Container === */
 .ui-container {
   position: absolute;
-  inset: 0;
+  inset: var(--layout-margin-top) var(--layout-margin-right) var(--layout-margin-bottom) var(--layout-margin-left);
   pointer-events: none;
   animation: uiFadeIn 1s ease-out;
 }

@@ -498,9 +498,13 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
           // Danger zone (only in global view, above advanced toggle)
           !filter || filter === 'global' ? m('div.danger-zone', { key: '_danger_zone' }, [
             m('h3', 'Danger Zone'),
+            m('span.hint', 'Will restart the application.'),
             m('div.actions', [
               m('button.btn.btn-danger', {
-                onclick: () => optionsService.reset()
+                onclick: () => {
+                  optionsService.reset();
+                  location.reload();
+                }
               }, 'Reset All'),
               m('button.btn.btn-danger', {
                 onclick: async () => {
