@@ -146,9 +146,9 @@
 }
 
 .dialog.bootstrap .error .detail {
-  font-size: var(--font-size-2xs);
+  font-size: var(--font-size-mono);
   opacity: 0.7;
-  font-family: 'Courier New', monospace;
+  font-family: monospace;
 }
 
 /* Start button (first-time user or autocloseModal=false) */
@@ -169,9 +169,9 @@
 }
 
 .dialog .footer .version {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-mono);
   opacity: 0.4;
-  font-family: 'Courier New', monospace;
+  font-family: monospace;
 }
 
 /* =============================================================================
@@ -847,7 +847,7 @@
 
 .dialog.about .content strong {
   color: var(--color-text-primary);
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .dialog.about .content em {
@@ -857,7 +857,7 @@
 
 .dialog.about .content a {
   color: var(--color-btn-primary);
-  font-weight: var(--font-weight-semibold);
+  font-weight: 400;
   text-decoration: none;
 }
 
@@ -869,7 +869,7 @@
   background: var(--color-surface);
   padding: 2px 6px;
   border-radius: 4px;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-mono);
   font-family: monospace;
 }
 
@@ -915,7 +915,7 @@
 
 .dialog.about .content th {
   color: var(--color-text-primary);
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .dialog.about .content td {

@@ -97,9 +97,9 @@
 }
 
 .time-time {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-mono);
   opacity: 0.8;
-  font-family: 'Courier New', monospace;
+  font-family: monospace;
 }
 
 /* Timeslider range input */

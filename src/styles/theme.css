@@ -7,32 +7,16 @@
   font-family: 'Inter';
   font-style: normal;
   font-weight: 200;
-  font-display: swap;
+  font-display: block;
   src: url('/fonts/inter-extralight.woff2') format('woff2');
 }
 
 @font-face {
   font-family: 'Inter';
   font-style: normal;
-  font-weight: 300;
-  font-display: swap;
-  src: url('/fonts/inter-light.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
   font-weight: 400;
-  font-display: swap;
+  font-display: block;
   src: url('/fonts/inter-regular.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('/fonts/inter-semibold.woff2') format('woff2');
 }
 
 :root {
@@ -51,6 +35,7 @@
   --font-size-lg: 1.125rem;    /* 18px */
   --font-size-xl: 1.5rem;      /* 24px */
   --font-size-2xl: 1.75rem;    /* 28px */
+  --font-size-mono: 0.875rem;  /* 14px - monospace base */
 
   /* Core colors */
   --color-bg-primary: #161616;

@@ -75,6 +75,7 @@
   display: grid;
   grid-template-columns: auto auto;
   gap: 2px 8px;
+  font-size: var(--font-size-mono);
   font-family: monospace;
 }
 
