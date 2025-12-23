@@ -34,6 +34,7 @@ export interface TimebarRenderParams {
   activeMap: Map<TWeatherLayer, Set<string>>;
   wantedSet: Set<string>;
   nowTime: Date;
+  viewTime: Date;
   cameraLat: number;
   cameraLon: number;
   sunEnabled: boolean;
@@ -49,7 +50,7 @@ function formatDate(date: Date): string {
 export function renderTimebar(params: TimebarRenderParams): void {
   const {
     canvas, window, activeLayers, ecmwfSet, cachedMap, gpuMap, activeMap,
-    wantedSet, nowTime, cameraLat, cameraLon, sunEnabled, themeService
+    wantedSet, nowTime, viewTime, cameraLat, cameraLon, sunEnabled, themeService
   } = params;
 
   if (ecmwfSet.size === 0) {
@@ -97,7 +98,7 @@ export function renderTimebar(params: TimebarRenderParams): void {
   }
 
   // Draw knob spanning wanted window
-  drawKnob(ctx, { width, height: tickHeight, topOffset: TICK_TOP_OFFSET, ecmwfSet, wantedSet, getT, getX });
+  drawKnob(ctx, { height: tickHeight, topOffset: TICK_TOP_OFFSET, viewTime, ecmwfSet, wantedSet, getT, getX });
 }
 
 interface TickParams {
@@ -257,9 +258,9 @@ function drawLabels(ctx: CanvasRenderingContext2D, params: LabelParams): void {
 }
 
 interface KnobParams {
-  width: number;
   height: number;
   topOffset: number;
+  viewTime: Date;
   ecmwfSet: Set<string>;
   wantedSet: Set<string>;
   getT: (ts: string) => number;
@@ -267,7 +268,7 @@ interface KnobParams {
 }
 
 function drawKnob(ctx: CanvasRenderingContext2D, params: KnobParams): void {
-  const { height, topOffset, ecmwfSet, wantedSet, getT, getX } = params;
+  const { height, topOffset, viewTime, ecmwfSet, wantedSet, getT, getX } = params;
 
   if (wantedSet.size === 0) return;
 
@@ -298,26 +299,19 @@ function drawKnob(ctx: CanvasRenderingContext2D, params: KnobParams): void {
   ctx.strokeStyle = 'rgba(255,255,255,0.6)';
   ctx.strokeRect(leftX, topOffset, rightX - leftX, height);
 
-  // Ticks at edges (100% white)
+  // Tick marks at view time position (100% white)
+  const viewX = getX(getT(viewTime.toISOString()));
   ctx.strokeStyle = 'rgba(255,255,255,1.0)';
 
-  // Left edge tick
+  // Top tick
   ctx.beginPath();
-  ctx.moveTo(leftX, topOffset);
-  ctx.lineTo(leftX, topOffset + KNOB_TICK_LENGTH);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(leftX, topOffset + height);
-  ctx.lineTo(leftX, topOffset + height - KNOB_TICK_LENGTH);
+  ctx.moveTo(viewX, topOffset);
+  ctx.lineTo(viewX, topOffset + KNOB_TICK_LENGTH);
   ctx.stroke();
 
-  // Right edge tick
+  // Bottom tick
   ctx.beginPath();
-  ctx.moveTo(rightX, topOffset);
-  ctx.lineTo(rightX, topOffset + KNOB_TICK_LENGTH);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(rightX, topOffset + height);
-  ctx.lineTo(rightX, topOffset + height - KNOB_TICK_LENGTH);
+  ctx.moveTo(viewX, topOffset + height);
+  ctx.lineTo(viewX, topOffset + height - KNOB_TICK_LENGTH);
   ctx.stroke();
 }

@@ -160,6 +160,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
           activeMap,
           wantedSet,
           nowTime: new Date(),
+          viewTime: stateService.viewState.value.time,
           cameraLat: viewState.lat,
           cameraLon: viewState.lon,
           sunEnabled,
