@@ -1,13 +1,9 @@
 /**
- * SlotService - GPU slot orchestration for timestep data
+ * SlotService - GPU slot management and shader activation
  *
- * Orchestrates ParamSlots instances (one per weather layer).
- * Handles: time changes → wanted computation → fetch triggering → shader activation.
- *
- * Architecture:
- * - ParamSlots: per-param state (slots, loading, activePair)
- * - Effect: pure computation of wanted state + shader activation
- * - Subscribe: side effects (fetching) deferred via debounce
+ * Manages ParamSlots instances (one per weather layer) and LayerStores for GPU buffers.
+ * Handles: shader activation on time change, data receipt from QueueService.
+ * QueueService drives data fetching; SlotService manages where data goes.
  */
 
 import { effect, signal } from '@preact/signals-core';
@@ -19,8 +15,6 @@ import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
 import { LayerStore } from './layer-store';
-import { BootstrapService } from './bootstrap-service';
-import { debounce } from '../utils/debounce';
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
 
 const DEBUG = false;
@@ -41,7 +35,6 @@ export class SlotService {
   private timeslotsPerLayer: number = 8;
   private disposeEffect: (() => void) | null = null;
   private disposeResizeEffect: (() => void) | null = null;
-  private disposeSubscribes: Map<TWeatherLayer, () => void> = new Map();
   private initialized = false;
 
   // Data window boundaries
@@ -118,17 +111,6 @@ export class SlotService {
       }
     });
 
-    // Subscribe: side effects (fetching) debounced - per param
-    for (const param of this.readyWeatherLayers) {
-      const ps = this.paramSlots.get(param)!;
-      const debouncedFetch = debounce((w: WantedState) => this.fetchMissing(param, ps, w), 200);
-      const unsubscribe = ps.wanted.subscribe(wanted => {
-        if (!BootstrapService.state.value.complete) return;
-        if (wanted) debouncedFetch(wanted);
-      });
-      this.disposeSubscribes.set(param, unsubscribe);
-    }
-
     // Effect: resize LayerStores when timeslotsPerLayer option changes
     let lastTimeslots = this.timeslotsPerLayer;
     this.disposeResizeEffect = effect(() => {
@@ -137,6 +119,9 @@ export class SlotService {
       if (newTimeslots === lastTimeslots) return;
 
       console.log(`[Slot] Resizing stores: ${lastTimeslots} → ${newTimeslots} timeslots`);
+
+      // Clear QS tasks before resize to prevent stale data arriving after buffer destruction
+      this.queueService.clearTasks();
 
       // Try resize all LayerStores - rollback on any failure
       const resizedStores: TWeatherLayer[] = [];
@@ -337,38 +322,6 @@ export class SlotService {
     }
   }
 
-  /** Fetch missing timesteps */
-  private fetchMissing(param: TWeatherLayer, ps: ParamSlots, wanted: WantedState): void {
-    if (!BootstrapService.state.value.complete) return;
-
-    const needsLoad = (ts: TTimestep) => !ps.hasSlot(ts) && !ps.isLoading(ts);
-
-    const priorityToLoad = wanted.priority.filter(needsLoad);
-    const windowToLoad = wanted.window.filter(ts => needsLoad(ts) && !wanted.priority.includes(ts));
-    const orderedToLoad = [...priorityToLoad, ...windowToLoad];
-
-    // Include priority timesteps that are already loading - this tells QueueService
-    // not to abort them (abort logic checks if timestep is in new orders)
-    const priorityAlreadyLoading = wanted.priority.filter(ts => ps.isLoading(ts));
-
-    if (orderedToLoad.length === 0 && priorityAlreadyLoading.length === 0) return;
-
-    // Build orders: new loads + already-loading priority (to prevent abort)
-    const allOrderTimesteps = [...orderedToLoad, ...priorityAlreadyLoading];
-    const orders: TimestepOrder[] = allOrderTimesteps.flatMap(timestep =>
-      this.expandOrder(
-        this.timestepService.url(timestep),
-        param,
-        timestep,
-        this.timestepService.getSize(param, timestep)
-      )
-    );
-
-    ps.setLoading(orderedToLoad);  // Only mark new ones as loading
-    console.log(`[Slot] ${P(param)} fetching ${orderedToLoad.length} timesteps (${priorityAlreadyLoading.length} priority in-flight)`);
-    this.loadTimestepsBatch(param, ps, orders);
-  }
-
   /** Calculate ideal load window around time */
   private calculateLoadWindow(time: Date, _param: TWeatherLayer): TTimestep[] {
     const [t0, t1] = this.timestepService.adjacent(time);
@@ -377,7 +330,10 @@ export class SlotService {
     let pastCursor = this.timestepService.prev(t0);
     let futureCursor = this.timestepService.next(t1);
 
-    while (window.length < this.timeslotsPerLayer) {
+    // Use options value directly to stay in sync with QS
+    const numSlots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
+
+    while (window.length < numSlots) {
       const canAddFuture = futureCursor && this.isInDataWindow(futureCursor);
       const canAddPast = pastCursor && this.isInDataWindow(pastCursor);
 
@@ -406,93 +362,84 @@ export class SlotService {
     return timestep >= this.dataWindowStart && timestep <= this.dataWindowEnd;
   }
 
-  /** Load timesteps via QueueService */
-  private loadTimestepsBatch(param: TWeatherLayer, ps: ParamSlots, orders: TimestepOrder[]): void {
-    this.queueService.submitTimestepOrders(
-      orders,
-      (order, slice) => {
-        if (slice.done) {
-          // Skip if timestep no longer wanted
-          if (!ps.wanted.value?.window.includes(order.timestep)) {
-            ps.clearLoading(order.timestep);
-            return;
-          }
-
-          const currentTime = this.stateService.viewState.value.time;
-          const result = ps.allocateSlot(
-            order.timestep,
-            currentTime,
-            (ts) => this.timestepService.toDate(ts)
-          );
-
-          if (result) {
-            if (result.evicted && result.evictedSlotIndex !== null) {
-              this.timestepService.setGpuUnloaded(param, result.evicted);
-
-              // If evicting an active slot, rebind renderer to safe slot first
-              const activeSlots = this.renderService.getActiveSlots(param);
-              if (activeSlots.slot0 === result.evictedSlotIndex || activeSlots.slot1 === result.evictedSlotIndex) {
-                // Ensure slot 0 buffers exist before rebinding
-                this.layerStores.get(param)?.ensureSlotBuffers(0);
-                this.rebindLayerBuffers(param, 0, 0);
-                this.renderService.activateSlots(param, 0, 0, 0);
-              }
-
-              // Now safe to destroy evicted slot's buffers
-              this.layerStores.get(param)?.destroySlotBuffers(result.evictedSlotIndex);
-            }
-            // Ensure buffer exists for this slot
-            this.layerStores.get(param)?.ensureSlotBuffers(result.slotIndex);
-
-            // Upload to the slab specified in the order
-            this.uploadData(param, slice.data, result.slotIndex, order.slabIndex);
-
-            // For single-slab layers: markLoaded immediately
-            // For multi-slab layers: markLoaded creates slot, then markSlabLoaded per slab
-            const slabsCount = this.getLayerParams(param).length;
-
-            if (slabsCount === 1) {
-              // Single-slab: existing behavior
-              ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
-              this.timestepService.setGpuLoaded(param, order.timestep);
-            } else {
-              // Multi-slab: track per-slab loading
-              const slot = ps.getSlot(order.timestep);
-              if (!slot) {
-                // First slab: create slot (not loaded yet)
-                ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
-              }
-              ps.markSlabLoaded(order.timestep, order.slabIndex);
-
-              // Check if all slabs are now loaded
-              if (ps.areAllSlabsLoaded(result.slotIndex)) {
-                this.timestepService.setGpuLoaded(param, order.timestep);
-              }
-            }
-
-            this.timestepService.refreshCacheState(param);
-            this.slotsVersion.value++;
-            this.updateShaderIfReady(param, ps);
-          } else {
-            console.warn(`[Slot] ${P(param)} allocation failed for ${fmt(order.timestep)}`);
-          }
-
-          ps.clearLoading(order.timestep);
-        }
-      },
-      (order, actualBytes) => {
-        this.timestepService.setSize(order.param, order.timestep, actualBytes);
-      }
-    ).catch(err => {
-      console.warn(`[Slot] Failed to load batch:`, err);
-    });
-  }
-
   /** Update shader when a slot finishes loading */
   private updateShaderIfReady(param: TWeatherLayer, ps: ParamSlots): void {
     const wanted = ps.wanted.value;
     if (!wanted) return;
     this.activateIfReady(param, ps, wanted);
+  }
+
+  /**
+   * Receive and process downloaded data for a timestep.
+   * Called by QueueService when data download completes.
+   * Returns true if data was accepted and processed, false if rejected (e.g., unwanted timestep).
+   */
+  receiveData(layer: TWeatherLayer, timestep: TTimestep, slabIndex: number, data: Float32Array): boolean {
+    const ps = this.paramSlots.get(layer);
+    if (!ps) return false;
+
+    // Skip if timestep no longer in wanted window
+    if (!ps.wanted.value?.window.includes(timestep)) {
+      ps.clearLoading(timestep);
+      console.log(`[Slot] ${P(layer)} skip ${fmt(timestep)} (unwanted)`);
+      return false;
+    }
+
+    const currentTime = this.stateService.viewState.value.time;
+    const result = ps.allocateSlot(
+      timestep,
+      currentTime,
+      (ts) => this.timestepService.toDate(ts)
+    );
+
+    if (!result) {
+      console.warn(`[Slot] ${P(layer)} allocation failed for ${fmt(timestep)}`);
+      return false;
+    }
+
+    // Handle eviction
+    if (result.evicted && result.evictedSlotIndex !== null) {
+      this.timestepService.setGpuUnloaded(layer, result.evicted);
+
+      const activeSlots = this.renderService.getActiveSlots(layer);
+      if (activeSlots.slot0 === result.evictedSlotIndex ||
+          activeSlots.slot1 === result.evictedSlotIndex) {
+        this.layerStores.get(layer)?.ensureSlotBuffers(0);
+        this.rebindLayerBuffers(layer, 0, 0);
+        this.renderService.activateSlots(layer, 0, 0, 0);
+      }
+
+      this.layerStores.get(layer)?.destroySlotBuffers(result.evictedSlotIndex);
+    }
+
+    // Upload data
+    this.layerStores.get(layer)?.ensureSlotBuffers(result.slotIndex);
+    this.uploadData(layer, data, result.slotIndex, slabIndex);
+
+    // Mark loaded (handle multi-slab)
+    const slabsCount = this.getLayerParams(layer).length;
+
+    if (slabsCount === 1) {
+      ps.markLoaded(timestep, result.slotIndex, data.length);
+      this.timestepService.setGpuLoaded(layer, timestep);
+    } else {
+      const slot = ps.getSlot(timestep);
+      if (!slot) {
+        ps.markLoaded(timestep, result.slotIndex, data.length);
+      }
+      ps.markSlabLoaded(timestep, slabIndex);
+
+      if (ps.areAllSlabsLoaded(result.slotIndex)) {
+        this.timestepService.setGpuLoaded(layer, timestep);
+      }
+    }
+
+    this.timestepService.refreshCacheState(layer);
+    this.slotsVersion.value++;
+    this.updateShaderIfReady(layer, ps);
+    ps.clearLoading(timestep);
+
+    return true;
   }
 
   /** Calculate layer state for shader interpolation */
@@ -696,10 +643,6 @@ export class SlotService {
     this.disposeEffect = null;
     this.disposeResizeEffect?.();
     this.disposeResizeEffect = null;
-    for (const unsubscribe of this.disposeSubscribes.values()) {
-      unsubscribe();
-    }
-    this.disposeSubscribes.clear();
     for (const ps of this.paramSlots.values()) {
       ps.dispose();
     }

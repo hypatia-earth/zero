@@ -9,7 +9,7 @@
  */
 
 import { signal } from '@preact/signals-core';
-import { isWeatherLayer, type TWeatherLayer, type TTimestep, type TModel, type Timestep } from '../config/types';
+import { isWeatherLayer, type TWeatherLayer, type TTimestep, type TModel, type Timestep, type QueueTask } from '../config/types';
 import type { ConfigService } from './config-service';
 import { parseTimestep, formatTimestep } from '../utils/timestep';
 import { sendSWMessage } from '../utils/sw-message';
@@ -558,5 +558,83 @@ export class TimestepService {
     const d0 = Math.abs(time.getTime() - t0Date.getTime());
     const d1 = Math.abs(time.getTime() - t1Date.getTime());
     return d0 <= d1 ? t0Date : t1Date;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Window Calculation
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /** Calculate load window centered on time (moved from SlotService) */
+  private calculateWindow(time: Date, numSlots: number): TTimestep[] {
+    const [t0, t1] = this.adjacent(time);
+    const window: TTimestep[] = [t0, t1];
+
+    let pastCursor = this.prev(t0);
+    let futureCursor = this.next(t1);
+
+    while (window.length < numSlots) {
+      const canAddFuture = futureCursor !== null;
+      const canAddPast = pastCursor !== null;
+
+      if (!canAddFuture && !canAddPast) break;
+
+      const futureCount = window.filter(ts => ts > t0).length;
+      const pastCount = window.filter(ts => ts < t0).length;
+
+      if (futureCount <= pastCount && canAddFuture) {
+        window.push(futureCursor!);
+        futureCursor = this.next(futureCursor!);
+      } else if (canAddPast) {
+        window.push(pastCursor!);
+        pastCursor = this.prev(pastCursor!);
+      } else if (canAddFuture) {
+        window.push(futureCursor!);
+        futureCursor = this.next(futureCursor!);
+      }
+    }
+
+    return window;
+  }
+
+  /** Get window and tasks for QueueService */
+  getWindowTasks(time: Date, numSlots: number, activeLayers: TWeatherLayer[]): {
+    window: TTimestep[];
+    tasks: QueueTask[];
+  } {
+    const window = this.calculateWindow(time, numSlots);
+    const tasks: QueueTask[] = [];
+
+    for (const param of activeLayers) {
+      const paramState = this.state.value.params.get(param);
+      if (!paramState) continue;
+
+      const layerConfig = this.configService.getLayer(param);
+      const omParams = layerConfig?.params ?? [param];
+      const defaultSize = layerConfig?.defaultSizeEstimate ?? 0;
+
+      for (const timestep of window) {
+        // Skip if already on GPU
+        if (paramState.gpu.has(timestep)) continue;
+
+        const isFast = paramState.cache.has(timestep);
+        const sizeEstimate = paramState.sizes.get(timestep) ?? defaultSize;
+        const url = this.url(timestep);
+
+        // Create one task per slab
+        for (let slabIndex = 0; slabIndex < omParams.length; slabIndex++) {
+          tasks.push({
+            url,
+            param,
+            timestep,
+            sizeEstimate,
+            omParam: omParams[slabIndex]!,
+            slabIndex,
+            isFast,
+          });
+        }
+      }
+    }
+
+    return { window, tasks };
   }
 }

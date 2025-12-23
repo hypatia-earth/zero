@@ -6,14 +6,17 @@
  * Single source of truth for all pending downloads.
  */
 
-import { signal } from '@preact/signals-core';
-import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TWeatherLayer, TTimestep } from '../config/types';
+import { signal, computed, effect } from '@preact/signals-core';
+import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TWeatherLayer, TTimestep, QueueTask } from '../config/types';
+import { isWeatherLayer } from '../config/types';
 import { fetchStreaming } from '../utils/fetch';
 import { calcBandwidth, calcEta, pruneSamples, type Sample } from '../utils/bandwidth';
 import type { OmService } from './om-service';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { StateService } from './state-service';
+import type { TimestepService } from './timestep-service';
+import type { SlotService } from './slot-service';
 
 const DEBUG = false;
 
@@ -29,6 +32,12 @@ interface QueuedTimestepOrder {
   estimatedBytes: number;
   onSlice: (order: TimestepOrder, slice: OmSlice) => void | Promise<void>;
   onPreflight: (actualBytes: number) => void;
+}
+
+/** In-flight task with abort controller */
+interface InFlightTask {
+  task: QueueTask;
+  abortController: AbortController;
 }
 
 export class QueueService implements IQueueService {
@@ -63,12 +72,53 @@ export class QueueService implements IQueueService {
   private currentAbortController: AbortController | null = null;
   private processingPromise: Promise<void> | null = null;
 
+  // Reactive queue (Phase 3)
+  private taskQueue: QueueTask[] = [];
+  private inFlight: Map<string, InFlightTask> = new Map(); // key: `${param}:${timestep}:${slabIndex}`
+  private slotService: SlotService | null = null;
+  private disposeEffect: (() => void) | null = null;
+
+  /** Reactive parameters for queue management */
+  readonly qsParams = computed(() => {
+    const opts = this.optionsService.options.value;
+    const readyWeatherLayers = this.configService.getReadyLayers().filter(isWeatherLayer);
+    const activeLayers = readyWeatherLayers.filter(p => opts[p].enabled);
+
+    return {
+      time: this.stateService.viewState.value.time,
+      poolSize: parseInt(opts.gpu.workerPoolSize, 10),
+      numSlots: parseInt(opts.gpu.timeslotsPerLayer, 10),
+      activeLayers,
+      strategy: opts.dataCache.cacheStrategy,
+    };
+  });
+
   constructor(
     private omService: OmService,
     private optionsService: OptionsService,
     private stateService: StateService,
-    private configService: ConfigService
+    private configService: ConfigService,
+    private timestepService: TimestepService
   ) {}
+
+  /** Set SlotService reference (avoids circular dependency) */
+  setSlotService(ss: SlotService): void {
+    this.slotService = ss;
+  }
+
+  /** Initialize reactive queue management */
+  initReactive(): void {
+    let lastParams: string | null = null;
+    this.disposeEffect = effect(() => {
+      const params = this.qsParams.value;
+      const paramsKey = `t=${params.time.toISOString().slice(11, 16)} pool=${params.poolSize} slots=${params.numSlots} layers=${params.activeLayers.length}`;
+      if (lastParams !== paramsKey) {
+        console.log(`[Queue] Params: ${paramsKey}`);
+        lastParams = paramsKey;
+      }
+      this.onParamChange(params);
+    });
+  }
 
   async submitFileOrders(
     orders: FileOrder[],
@@ -258,10 +308,23 @@ export class QueueService implements IQueueService {
   private updateStats(): void {
     const bytesPerSec = calcBandwidth(this.samples);
 
-    // Estimate remaining bytes (apply compression ratio)
-    const pendingWireBytes = this.pendingExpectedBytes * this.compressionRatio;
-    const activeRemainingBytes = (this.activeExpectedBytes * this.compressionRatio) - this.activeActualBytes;
-    const bytesQueued = Math.max(0, pendingWireBytes + activeRemainingBytes);
+    // Estimate remaining bytes from old path (submitTimestepOrders)
+    const oldPathPending = this.pendingExpectedBytes * this.compressionRatio;
+    const oldPathActive = (this.activeExpectedBytes * this.compressionRatio) - this.activeActualBytes;
+
+    // Estimate remaining bytes from new reactive path (taskQueue + inFlight)
+    const queuedBytes = this.taskQueue.reduce((sum, t) => sum + (t.sizeEstimate || 0), 0);
+    const inFlightBytes = Array.from(this.inFlight.values())
+      .reduce((sum, { task }) => sum + (task.sizeEstimate || 0), 0);
+    // Subtract already-downloaded bytes from in-flight estimate (activeActualBytes tracks this)
+    // But only if we're using reactive path (inFlight has items)
+    const reactiveDownloaded = this.inFlight.size > 0 ? this.activeActualBytes : 0;
+    const reactivePathPending = Math.max(0, (queuedBytes + inFlightBytes) * this.compressionRatio - reactiveDownloaded);
+
+    // Old path uses activeActualBytes in oldPathActive, so only count it once
+    const bytesQueued = this.inFlight.size > 0
+      ? Math.max(0, oldPathPending + reactivePathPending)  // reactive path: don't double-count activeActualBytes
+      : Math.max(0, oldPathPending + oldPathActive);        // old path: use activeActualBytes in oldPathActive
 
     // Update stats signal (no cycle risk: SlotService uses queueMicrotask for fetching)
     const wasDownloading = this.stats.value.status === 'downloading';
@@ -329,7 +392,204 @@ export class QueueService implements IQueueService {
     });
   }
 
+  /** Handle parameter changes - reactive queue management */
+  private onParamChange(params: {
+    time: Date;
+    poolSize: number;
+    numSlots: number;
+    activeLayers: TWeatherLayer[];
+    strategy: string;
+  }): void {
+    // 1. Get window and tasks from TimestepService
+    const { window, tasks } = this.timestepService.getWindowTasks(
+      params.time,
+      params.numSlots,
+      params.activeLayers
+    );
+
+    const windowSet = new Set(window);
+
+    // 2. Abort in-flight tasks OUTSIDE data window
+    for (const [key, inFlightTask] of this.inFlight) {
+      if (!windowSet.has(inFlightTask.task.timestep)) {
+        console.log(`[Queue] Aborting out-of-window: ${fmt(inFlightTask.task.timestep)}`);
+        inFlightTask.abortController.abort();
+        this.inFlight.delete(key);
+      }
+    }
+
+    // 3. Remove queued tasks outside data window
+    this.taskQueue = this.taskQueue.filter(t => windowSet.has(t.timestep));
+
+    // 4. Merge new tasks (avoid duplicates)
+    let added = 0;
+    for (const task of tasks) {
+      const key = `${task.param}:${task.timestep}:${task.slabIndex}`;
+
+      // Skip if already in flight or queued
+      if (this.inFlight.has(key)) continue;
+      if (this.taskQueue.some(t =>
+        t.param === task.param &&
+        t.timestep === task.timestep &&
+        t.slabIndex === task.slabIndex
+      )) continue;
+
+      this.taskQueue.push(task);
+      added++;
+    }
+
+    console.log(`[Queue] Tasks: ${tasks.length} from TS, +${added} new, queue=${this.taskQueue.length}, inFlight=${this.inFlight.size}`);
+
+    // 5. Sort queue by strategy
+    this.sortTaskQueue(params.time, params.strategy);
+
+    // 6. Process queue
+    this.processTaskQueue(params.poolSize);
+
+    // 7. Update stats (deferred to avoid cycle in effect)
+    queueMicrotask(() => this.updateStats());
+  }
+
+  /** Sort task queue by loading strategy */
+  private sortTaskQueue(currentTime: Date, strategy: string): void {
+    if (this.taskQueue.length <= 1) return;
+
+    // Parse timestep to Date for comparison
+    const toDate = (ts: TTimestep): Date => {
+      const formatted = ts.slice(0, 11) + ts.slice(11, 13) + ':00:00Z';
+      return new Date(formatted);
+    };
+
+    this.taskQueue.sort((a, b) => {
+      const tsA = toDate(a.timestep);
+      const tsB = toDate(b.timestep);
+      const distA = Math.abs(tsA.getTime() - currentTime.getTime());
+      const distB = Math.abs(tsB.getTime() - currentTime.getTime());
+
+      // Primary: closest to current time first
+      if (distA !== distB) return distA - distB;
+
+      // Secondary: by strategy
+      const isFutureA = tsA.getTime() >= currentTime.getTime();
+      const isFutureB = tsB.getTime() >= currentTime.getTime();
+
+      if (strategy === 'future-first') {
+        if (isFutureA !== isFutureB) return isFutureA ? -1 : 1;
+      }
+      return 0;
+    });
+  }
+
+  /** Process task queue with fast/slow logic */
+  private processTaskQueue(poolSize: number): void {
+    // Count slow tasks currently in flight
+    let slowInFlight = 0;
+    for (const { task } of this.inFlight.values()) {
+      if (!task.isFast) slowInFlight++;
+    }
+
+    // Start tasks up to pool size (iterate copy since startTask modifies queue)
+    const tasksToProcess = [...this.taskQueue];
+    for (const task of tasksToProcess) {
+      if (this.inFlight.size >= poolSize) break;
+
+      if (task.isFast) {
+        // Fast tasks always start
+        this.startTask(task);
+      } else if (slowInFlight < 2) {
+        // Slow task, network slot available
+        this.startTask(task);
+        slowInFlight++;
+      }
+      // else: skip slow task, wait for network slot
+    }
+  }
+
+  /** Start a task - add to inFlight and call OmService */
+  private startTask(task: QueueTask): void {
+    const key = `${task.param}:${task.timestep}:${task.slabIndex}`;
+
+    // Remove from queue
+    const index = this.taskQueue.findIndex(t =>
+      t.param === task.param &&
+      t.timestep === task.timestep &&
+      t.slabIndex === task.slabIndex
+    );
+    if (index >= 0) {
+      this.taskQueue.splice(index, 1);
+    }
+
+    // Add to in-flight
+    const abortController = new AbortController();
+    this.inFlight.set(key, { task, abortController });
+
+    DEBUG && console.log(`[Queue] Starting: ${P(task.param)} ${fmt(task.timestep)} slab=${task.slabIndex} fast=${task.isFast}`);
+
+    // Start fetch
+    this.omService.fetch(
+      task.url,
+      task.omParam,
+      () => {
+        // Preflight - update size estimate (not currently tracked in reactive mode)
+      },
+      async (slice) => {
+        // Only process when all data is received
+        if (slice.done && this.slotService) {
+          this.slotService.receiveData(task.param, task.timestep, task.slabIndex, slice.data);
+        }
+      },
+      (bytes) => {
+        // Progress callback - update bandwidth stats
+        this.onChunk(bytes);
+      },
+      abortController.signal
+    ).then(() => {
+      // Task complete
+      this.onTaskComplete(key);
+    }).catch((err) => {
+      // Handle errors
+      if (err instanceof Error && err.name === 'AbortError') {
+        DEBUG && console.log(`[Queue] Aborted: ${P(task.param)} ${fmt(task.timestep)}`);
+      } else {
+        console.error(`[Queue] Error fetching ${P(task.param)} ${fmt(task.timestep)}:`, err);
+      }
+      this.inFlight.delete(key);
+      this.updateStats();
+    });
+  }
+
+  /** Handle task completion */
+  private onTaskComplete(key: string): void {
+    this.inFlight.delete(key);
+
+    // Process more from queue
+    const params = this.qsParams.value;
+    this.processTaskQueue(params.poolSize);
+    this.updateStats();
+  }
+
+  /** Clear all pending and in-flight tasks (called during resize) */
+  clearTasks(): void {
+    console.log(`[Queue] Clearing: ${this.taskQueue.length} queued, ${this.inFlight.size} in-flight`);
+    for (const { abortController } of this.inFlight.values()) {
+      abortController.abort();
+    }
+    this.inFlight.clear();
+    this.taskQueue = [];
+    queueMicrotask(() => this.updateStats());
+  }
+
   dispose(): void {
+    this.disposeEffect?.();
+    this.disposeEffect = null;
+
+    // Abort all in-flight tasks
+    for (const { abortController } of this.inFlight.values()) {
+      abortController.abort();
+    }
+    this.inFlight.clear();
+    this.taskQueue = [];
+
     this.samples = [];
     this.compressionRatio = 1.0;
     this.compressionSamples = 0;

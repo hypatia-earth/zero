@@ -109,7 +109,7 @@ export const App: m.ClosureComponent = () => {
 
         // Step 4: Assets via QueueService (all files in one batch)
         BootstrapService.setStep('ASSETS');
-        queueService = new QueueService(omService, optionsService, stateService, configService);
+        queueService = new QueueService(omService, optionsService, stateService, configService, timestepService);
         const f16 = !capabilitiesService.float32_filterable;
         const suffix = f16 ? '-16' : '';
 
@@ -220,6 +220,10 @@ export const App: m.ClosureComponent = () => {
           stateService,
           configService,
         );
+
+        // Connect QueueService to SlotService and enable reactive mode
+        queueService.setSlotService(slotService);
+        queueService.initReactive();
 
         // 5g. Load initial timesteps for all enabled weather layers
         await slotService.initialize(async (param, index, total) => {

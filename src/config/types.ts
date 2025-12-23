@@ -96,6 +96,17 @@ export interface LayerState {
   time: Date;        // current view time
 }
 
+/** Task for QueueService to execute */
+export interface QueueTask {
+  url: string;
+  param: TWeatherLayer;
+  timestep: TTimestep;
+  sizeEstimate: number;
+  omParam: string;
+  slabIndex: number;
+  isFast: boolean;
+}
+
 /** File download order for QueueService */
 export interface FileOrder {
   url: string;
