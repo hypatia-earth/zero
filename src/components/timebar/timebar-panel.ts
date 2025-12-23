@@ -62,11 +62,6 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       };
       const windowMs = window.end.getTime() - window.start.getTime();
 
-      // Current progress
-      const currentTime = stateService.viewState.value.time;
-      const currentMs = currentTime.getTime() - window.start.getTime();
-      const progress = Math.max(0, Math.min(1, currentMs / windowMs));
-
       // Position to time conversion
       const posToTime = (clientX: number): Date => {
         const rect = canvasRef!.getBoundingClientRect();
@@ -145,6 +140,13 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       const viewState = stateService.viewState.value;
       const sunEnabled = opts.sun.enabled;
 
+      // Get wanted window for knob rendering
+      const wantedWindow = slotService.getWantedWindow();
+      const wantedSet = new Set<string>();
+      for (const ts of wantedWindow) {
+        wantedSet.add(timestepService.toDate(ts).toISOString());
+      }
+
       // Render function for canvas
       const render = (canvas: HTMLCanvasElement) => {
         canvasRef = canvas;
@@ -156,8 +158,8 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
           cachedMap,
           gpuMap,
           activeMap,
+          wantedSet,
           nowTime: new Date(),
-          currentProgress: progress,
           cameraLat: viewState.lat,
           cameraLon: viewState.lon,
           sunEnabled,

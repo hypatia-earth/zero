@@ -32,8 +32,8 @@ export interface TimebarRenderParams {
   cachedMap: Map<TWeatherLayer, Set<string>>;
   gpuMap: Map<TWeatherLayer, Set<string>>;
   activeMap: Map<TWeatherLayer, Set<string>>;
+  wantedSet: Set<string>;
   nowTime: Date;
-  currentProgress: number;
   cameraLat: number;
   cameraLon: number;
   sunEnabled: boolean;
@@ -49,7 +49,7 @@ function formatDate(date: Date): string {
 export function renderTimebar(params: TimebarRenderParams): void {
   const {
     canvas, window, activeLayers, ecmwfSet, cachedMap, gpuMap, activeMap,
-    nowTime, currentProgress, cameraLat, cameraLon, sunEnabled, themeService
+    wantedSet, nowTime, cameraLat, cameraLon, sunEnabled, themeService
   } = params;
 
   if (ecmwfSet.size === 0) {
@@ -96,8 +96,8 @@ export function renderTimebar(params: TimebarRenderParams): void {
     ctx.fillRect(nowX - NOW_MARKER_WIDTH / 2, TICK_TOP_OFFSET, NOW_MARKER_WIDTH, tickHeight);
   }
 
-  // Draw knob (tick area only)
-  drawKnob(ctx, { width, height: tickHeight, topOffset: TICK_TOP_OFFSET, currentProgress });
+  // Draw knob spanning wanted window
+  drawKnob(ctx, { width, height: tickHeight, topOffset: TICK_TOP_OFFSET, ecmwfSet, wantedSet, getT, getX });
 }
 
 interface TickParams {
@@ -260,35 +260,64 @@ interface KnobParams {
   width: number;
   height: number;
   topOffset: number;
-  currentProgress: number;
+  ecmwfSet: Set<string>;
+  wantedSet: Set<string>;
+  getT: (ts: string) => number;
+  getX: (t: number) => number;
 }
 
 function drawKnob(ctx: CanvasRenderingContext2D, params: KnobParams): void {
-  const { width, height, topOffset, currentProgress } = params;
+  const { height, topOffset, ecmwfSet, wantedSet, getT, getX } = params;
 
-  const knobX = diskWarp(currentProgress) * width;
-  const knobSize = height;
-  const knobLeft = knobX - knobSize / 2;
-  const knobTop = topOffset;
+  if (wantedSet.size === 0) return;
+
+  // Find wanted window bounds in ecmwf order
+  const ecmwfArray = [...ecmwfSet].sort();
+  const wantedIndices: number[] = [];
+  for (let i = 0; i < ecmwfArray.length; i++) {
+    if (wantedSet.has(ecmwfArray[i]!)) {
+      wantedIndices.push(i);
+    }
+  }
+
+  if (wantedIndices.length === 0) return;
+
+  const firstWantedIdx = wantedIndices[0]!;
+  const lastWantedIdx = wantedIndices[wantedIndices.length - 1]!;
+
+  // Expand to prev/next timestep, then shrink by 1px
+  const leftIdx = Math.max(0, firstWantedIdx - 1);
+  const rightIdx = Math.min(ecmwfArray.length - 1, lastWantedIdx + 1);
+
+  const leftX = getX(getT(ecmwfArray[leftIdx]!)) + 1;
+  const rightX = getX(getT(ecmwfArray[rightIdx]!)) - 1;
 
   ctx.lineWidth = KNOB_LINE_WIDTH;
 
-  // Square outline (60% opacity)
+  // Rectangle outline (60% opacity)
   ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-  ctx.strokeRect(knobLeft, knobTop, knobSize, knobSize);
+  ctx.strokeRect(leftX, topOffset, rightX - leftX, height);
 
-  // Ticks (100% white)
+  // Ticks at edges (100% white)
   ctx.strokeStyle = 'rgba(255,255,255,1.0)';
 
-  // Top center tick
+  // Left edge tick
   ctx.beginPath();
-  ctx.moveTo(knobX, knobTop);
-  ctx.lineTo(knobX, knobTop + KNOB_TICK_LENGTH);
+  ctx.moveTo(leftX, topOffset);
+  ctx.lineTo(leftX, topOffset + KNOB_TICK_LENGTH);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(leftX, topOffset + height);
+  ctx.lineTo(leftX, topOffset + height - KNOB_TICK_LENGTH);
   ctx.stroke();
 
-  // Bottom center tick
+  // Right edge tick
   ctx.beginPath();
-  ctx.moveTo(knobX, knobTop + knobSize);
-  ctx.lineTo(knobX, knobTop + knobSize - KNOB_TICK_LENGTH);
+  ctx.moveTo(rightX, topOffset);
+  ctx.lineTo(rightX, topOffset + KNOB_TICK_LENGTH);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(rightX, topOffset + height);
+  ctx.lineTo(rightX, topOffset + height - KNOB_TICK_LENGTH);
   ctx.stroke();
 }

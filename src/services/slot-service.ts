@@ -583,6 +583,16 @@ export class SlotService {
     return this.paramSlots.get(param)?.getActiveTimesteps() ?? [];
   }
 
+  /** Get wanted window (first enabled param's window, or empty) */
+  getWantedWindow(): TTimestep[] {
+    for (const [param, ps] of this.paramSlots) {
+      if (this.optionsService.options.value[param].enabled) {
+        return ps.wanted.value?.window ?? [];
+      }
+    }
+    return [];
+  }
+
   /** Get GPU memory stats across all layer stores */
   getMemoryStats(): {
     allocatedMB: number;
