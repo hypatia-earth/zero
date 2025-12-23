@@ -254,6 +254,7 @@ export const App: m.ClosureComponent = () => {
           window.__hypatia = {
             configService,
             optionsService,
+            stateService,
             capabilitiesService,
             omService,
             timestepService,
@@ -262,6 +263,9 @@ export const App: m.ClosureComponent = () => {
             slotService,
             keyboardService,
             paletteService,
+            dialogService,
+            aboutService,
+            themeService,
             renderer: renderService.getRenderer(),
           };
         }

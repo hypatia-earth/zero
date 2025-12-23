@@ -4,7 +4,7 @@
  */
 
 import type { TWeatherLayer } from '../../config/types';
-import type { LayerColors, TimebarColors } from '../../services/theme-service';
+import type { ThemeService } from '../../services/theme-service';
 import { diskWarp, diskHeight, getSunBrightness } from './timebar-math';
 
 /** Tick dimensions */
@@ -37,8 +37,7 @@ export interface TimebarRenderParams {
   cameraLat: number;
   cameraLon: number;
   sunEnabled: boolean;
-  layerColors: Record<TWeatherLayer, LayerColors>;
-  timebarColors: TimebarColors;
+  themeService: ThemeService;
 }
 
 function formatDate(date: Date): string {
@@ -50,8 +49,7 @@ function formatDate(date: Date): string {
 export function renderTimebar(params: TimebarRenderParams): void {
   const {
     canvas, window, activeLayers, ecmwfSet, cachedMap, gpuMap, activeMap,
-    nowTime, currentProgress, cameraLat, cameraLon, sunEnabled,
-    layerColors, timebarColors
+    nowTime, currentProgress, cameraLat, cameraLon, sunEnabled, themeService
   } = params;
 
   if (ecmwfSet.size === 0) {
@@ -82,7 +80,7 @@ export function renderTimebar(params: TimebarRenderParams): void {
   // Draw ticks (upper area)
   drawTicks(ctx, {
     height: tickHeight, activeLayers, ecmwfSet, cachedMap, gpuMap, activeMap,
-    getT, getX, cameraLat, cameraLon, sunEnabled, layerColors, timebarColors
+    getT, getX, cameraLat, cameraLon, sunEnabled, themeService
   });
 
   // Draw labels (bottom area)
@@ -94,7 +92,7 @@ export function renderTimebar(params: TimebarRenderParams): void {
   const nowT = getT(nowTime.toISOString());
   if (nowT >= 0 && nowT <= 1) {
     const nowX = getX(nowT);
-    ctx.fillStyle = timebarColors.now;
+    ctx.fillStyle = themeService.getColor('color-timebar-now').hex;
     ctx.fillRect(nowX - NOW_MARKER_WIDTH / 2, TICK_TOP_OFFSET, NOW_MARKER_WIDTH, tickHeight);
   }
 
@@ -114,19 +112,21 @@ interface TickParams {
   cameraLat: number;
   cameraLon: number;
   sunEnabled: boolean;
-  layerColors: Record<TWeatherLayer, LayerColors>;
-  timebarColors: TimebarColors;
+  themeService: ThemeService;
 }
 
 function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
   const {
     height, activeLayers, ecmwfSet, cachedMap, gpuMap, activeMap,
-    getT, getX, cameraLat, cameraLon, sunEnabled, layerColors, timebarColors
+    getT, getX, cameraLat, cameraLon, sunEnabled, themeService
   } = params;
 
   const layerCount = activeLayers.length || 1;
   const layerHeight = height / layerCount;
   const baseTickHeight = layerHeight * TICK_HEIGHT_RATIO;
+
+  const ecmwfColor = themeService.getColor('color-timebar-ecmwf').hex;
+  const activeColor = themeService.getColor('color-timebar-active').hex;
 
   if (activeLayers.length === 0) {
     // No weather layers: show grey ECMWF ticks
@@ -139,7 +139,7 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
       if (sunEnabled) {
         ctx.globalAlpha = getSunBrightness(cameraLat, cameraLon, new Date(tsKey));
       }
-      ctx.fillStyle = timebarColors.ecmwf;
+      ctx.fillStyle = ecmwfColor;
       ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickHeight);
       ctx.globalAlpha = 1.0;
     });
@@ -149,7 +149,8 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
       const cached = cachedMap.get(layer)!;
       const gpu = gpuMap.get(layer)!;
       const active = activeMap.get(layer)!;
-      const colors = layerColors[layer];
+      const layerColor = themeService.getColor(`color-layer-${layer}`).hex;
+      const layerDimColor = themeService.getColor(`color-layer-${layer}-dim`).hex;
       const rowTopY = TICK_TOP_OFFSET + rowIndex * layerHeight;
 
       ecmwfSet.forEach(tsKey => {
@@ -158,10 +159,10 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
         const tickHeight = baseTickHeight * diskHeight(t);
         const topY = rowTopY + (layerHeight - tickHeight) / 2;
 
-        let color = timebarColors.ecmwf;
-        if (cached.has(tsKey)) color = colors.dim;
-        if (gpu.has(tsKey)) color = colors.color;
-        if (active.has(tsKey)) color = timebarColors.active;
+        let color = ecmwfColor;
+        if (cached.has(tsKey)) color = layerDimColor;
+        if (gpu.has(tsKey)) color = layerColor;
+        if (active.has(tsKey)) color = activeColor;
 
         if (sunEnabled) {
           ctx.globalAlpha = getSunBrightness(cameraLat, cameraLon, new Date(tsKey));

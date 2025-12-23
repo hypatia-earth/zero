@@ -56,7 +56,7 @@ export class SlotService {
     this.timeslotsPerLayer = this.renderService.getMaxSlotsPerLayer();
     this.readyLayers = this.configService.getReadyLayers();
     this.readyWeatherLayers = this.readyLayers.filter(isWeatherLayer);
-    console.log(`[Slot] ${this.timeslotsPerLayer} timeslots for: ${this.readyWeatherLayers.join(', ')}`);
+    DEBUG && console.log(`[Slot] ${this.timeslotsPerLayer} timeslots for: ${this.readyWeatherLayers.join(', ')}`);
 
     // Create LayerStores for weather layers with slab definitions
     this.initializeLayerStores();
@@ -84,7 +84,7 @@ export class SlotService {
         const buffer = store.getSlotBuffer(slotIndex, 0);
         if (buffer) {
           this.renderService.triggerPressureRegrid(slotIndex, buffer);
-          console.log(`[Slot] Re-regrid pressure slot ${slotIndex}`);
+          DEBUG && console.log(`[Slot] Re-regrid pressure slot ${slotIndex}`);
         }
       }
     });
@@ -248,7 +248,7 @@ export class SlotService {
         // Rebind buffers to renderer
         this.rebindLayerBuffers(param, slot.slotIndex, slot.slotIndex);
         this.renderService.activateSlots(param, slot.slotIndex, slot.slotIndex, slot.loadedPoints);
-        console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
+        DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
       } else {
         ps.setActiveTimesteps([]);
       }
@@ -268,7 +268,7 @@ export class SlotService {
         // Rebind buffers to renderer
         this.rebindLayerBuffers(param, slot0.slotIndex, slot1.slotIndex);
         this.renderService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, Math.min(slot0.loadedPoints, slot1.loadedPoints));
-        console.log(`[Slot] ${pcode} activated: ${fmt(t0)} → ${fmt(t1)}`);
+        DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(t0)} → ${fmt(t1)}`);
       } else {
         ps.setActiveTimesteps([]);
       }
@@ -378,7 +378,7 @@ export class SlotService {
     // Skip if timestep no longer in wanted window
     if (!ps.wanted.value?.window.includes(timestep)) {
       ps.clearLoading(timestep);
-      console.log(`[Slot] ${P(layer)} skip ${fmt(timestep)} (unwanted)`);
+      DEBUG && console.log(`[Slot] ${P(layer)} skip ${fmt(timestep)} (unwanted)`);
       return false;
     }
 
@@ -489,7 +489,7 @@ export class SlotService {
     const enabledParams = this.readyWeatherLayers.filter(p => opts[p].enabled);
     if (enabledParams.length === 0) {
       this.initialized = true;
-      console.log('[Slot] Initialized (no layers enabled)');
+      DEBUG && console.log('[Slot] Initialized (no layers enabled)');
       return;
     }
 
@@ -502,7 +502,7 @@ export class SlotService {
       const wanted = this.computeWanted(time, param);
       wantedByParam.set(param, wanted);
 
-      console.log(`[Slot] ${P(param)} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
+      DEBUG && console.log(`[Slot] ${P(param)} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
 
       for (const ts of wanted.priority) {
         ps.setLoading([ts]);
@@ -575,7 +575,7 @@ export class SlotService {
 
     this.initialized = true;
     this.slotsVersion.value++;
-    console.log('[Slot] Initialized');
+    DEBUG && console.log('[Slot] Initialized');
   }
 
   /** Get active timesteps for a param (0, 1, or 2 items) */
@@ -631,7 +631,7 @@ export class SlotService {
     }
 
     if (summary.length > 0) {
-      console.log(`[Slot] Stores: ${summary.join(', ')}`);
+      DEBUG && console.log(`[Slot] Stores: ${summary.join(', ')}`);
     }
   }
 

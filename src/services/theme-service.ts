@@ -5,39 +5,75 @@
  * Single source of truth: styles/theme.css
  */
 
-import { WEATHER_LAYERS, type TWeatherLayer } from '../config/types';
-
-export interface LayerColors {
-  color: string;  // Full brightness (GPU loaded)
-  dim: string;    // 50% brightness (SW cached)
+export interface RGB { r: number; g: number; b: number }
+export interface OKLCH { l: number; c: number; h: number }
+export interface Color {
+  hex: string;
+  rgb: RGB;
+  oklch: OKLCH;
 }
 
-export interface TimebarColors {
-  ecmwf: string;   // Grey: available at ECMWF
-  active: string;  // Green: currently interpolated
-  now: string;     // White: now marker
+/** Parse CSS color to Color object */
+function parseColor(cssValue: string): Color {
+  // Get hex via canvas (handles any CSS color format)
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 1;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = cssValue;
+  const hex = ctx.fillStyle; // Returns #rrggbb
+
+  // Parse hex to RGB
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+
+  // Parse OKLCH from original CSS (fallback to 0,0,0 if not oklch format)
+  let oklch: OKLCH = { l: 0, c: 0, h: 0 };
+  const match = cssValue.match(/oklch\(\s*([\d.]+)%?\s+([\d.]+)\s+([\d.]+)\s*\)/);
+  if (match) {
+    oklch = {
+      l: parseFloat(match[1]!) / 100,
+      c: parseFloat(match[2]!),
+      h: parseFloat(match[3]!),
+    };
+  }
+
+  return { hex, rgb: { r, g, b }, oklch };
 }
 
 export class ThemeService {
-  readonly layers: Record<TWeatherLayer, LayerColors> = {} as Record<TWeatherLayer, LayerColors>;
-  readonly timebar: TimebarColors = {} as TimebarColors;
+  private colors = new Map<string, Color>();
 
   constructor() {
     const style = getComputedStyle(document.documentElement);
 
-    // Read layer colors
-    for (const layer of WEATHER_LAYERS) {
-      this.layers[layer] = {
-        color: style.getPropertyValue(`--color-layer-${layer}`).trim(),
-        dim: style.getPropertyValue(`--color-layer-${layer}-dim`).trim(),
-      };
+    // Scan all CSS custom properties starting with --color
+    for (const sheet of document.styleSheets) {
+      try {
+        for (const rule of sheet.cssRules) {
+          if (rule instanceof CSSStyleRule && rule.selectorText === ':root') {
+            for (const prop of rule.style) {
+              if (prop.startsWith('--color')) {
+                const name = prop.slice(2); // Remove '--' prefix
+                const cssValue = style.getPropertyValue(prop).trim();
+                if (cssValue) {
+                  this.colors.set(name, parseColor(cssValue));
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // Skip cross-origin stylesheets
+      }
     }
 
-    // Read timebar UI colors
-    this.timebar.ecmwf = style.getPropertyValue('--color-timebar-ecmwf').trim();
-    this.timebar.active = style.getPropertyValue('--color-timebar-active').trim();
-    this.timebar.now = style.getPropertyValue('--color-timebar-now').trim();
+    console.log('[Theme] Loaded colors:', this.colors.size);
+  }
 
-    console.log('[Theme] Loaded layer colors:', Object.keys(this.layers).length);
+  getColor(name: string): Color {
+    const color = this.colors.get(name);
+    if (!color) throw new Error(`[Theme] Unknown color: ${name}`);
+    return color;
   }
 }

@@ -161,8 +161,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
           cameraLat: viewState.lat,
           cameraLon: viewState.lon,
           sunEnabled,
-          layerColors: themeService.layers,
-          timebarColors: themeService.timebar,
+          themeService,
         });
       };
 
