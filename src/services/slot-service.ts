@@ -34,7 +34,6 @@ export class SlotService {
   private readyWeatherLayers: TWeatherLayer[] = [];
   private timeslotsPerLayer: number = 8;
   private disposeEffect: (() => void) | null = null;
-  private disposeResizeEffect: (() => void) | null = null;
   private initialized = false;
 
   // Data window boundaries
@@ -90,101 +89,99 @@ export class SlotService {
       }
     });
 
-    // Effect: pure computation of wanted state + shader activation (no I/O)
+    // Single effect: listen to options, compare what changed, act accordingly
+    let last = { time: '', slots: 0, layers: '' };
     this.disposeEffect = effect(() => {
-      const time = this.stateService.viewState.value.time;
       const opts = this.optionsService.options.value;
+      const time = this.stateService.viewState.value.time;
+      const newTimeslots = parseInt(opts.gpu.timeslotsPerLayer, 10);
+      const enabledLayers = this.readyWeatherLayers.filter(p => opts[p].enabled);
+
       if (!this.initialized) return;
 
-      for (const param of this.readyWeatherLayers) {
-        if (!opts[param].enabled) continue;
+      // Build current state and diff
+      const curr = {
+        time: time.toISOString().slice(11, 16),
+        slots: newTimeslots,
+        layers: enabledLayers.join(','),
+      };
+      const changes: string[] = [];
+      if (last.time !== curr.time) changes.push(`time=${last.time}→${curr.time}`);
+      if (last.slots !== curr.slots) changes.push(`slots=${last.slots}→${curr.slots}`);
+      if (last.layers !== curr.layers) changes.push(`layers=${last.layers}→${curr.layers}`);
 
+      if (changes.length === 0) return; // Nothing changed
+      console.log(`[SlotParams] ${changes.join(', ')}`);
+
+      // --- RESIZE HANDLING (if slots changed) ---
+      const lastTimeslots = last.slots || this.timeslotsPerLayer;
+      last = curr; // Update AFTER reading lastTimeslots
+      if (newTimeslots !== lastTimeslots) {
+        this.queueService.clearTasks();
+
+        // Resize LayerStores
+        const resizedStores: TWeatherLayer[] = [];
+        let failed = false;
+        for (const [param, store] of this.layerStores) {
+          try {
+            store.resize(newTimeslots);
+            resizedStores.push(param);
+          } catch (err) {
+            console.error(`[Slot] OOM resizing ${param}:`, err);
+            failed = true;
+            break;
+          }
+        }
+
+        if (failed) {
+          console.warn(`[Slot] OOM - reverting to ${lastTimeslots}`);
+          for (const param of resizedStores) {
+            try { this.layerStores.get(param)?.resize(lastTimeslots); } catch { /* ignore */ }
+          }
+          this.optionsService.revertOption('gpu.timeslotsPerLayer', String(lastTimeslots));
+          return;
+        }
+
+        // Update ParamSlots capacity
+        const isGrowing = newTimeslots > lastTimeslots;
+        for (const param of this.readyWeatherLayers) {
+          if (isGrowing) {
+            this.paramSlots.get(param)?.grow(newTimeslots);
+          } else {
+            const oldPs = this.paramSlots.get(param);
+            oldPs?.dispose();
+            const slabsCount = this.getLayerParams(param).length;
+            this.paramSlots.set(param, createParamSlots(param, newTimeslots, slabsCount));
+          }
+        }
+
+        // After shrinking, rebind if active slots out of range
+        if (!isGrowing) {
+          for (const param of this.readyWeatherLayers) {
+            const slots = this.renderService.getActiveSlots(param);
+            if (slots.slot0 >= newTimeslots || slots.slot1 >= newTimeslots) {
+              this.layerStores.get(param)?.ensureSlotBuffers(0);
+              this.rebindLayerBuffers(param, 0, 0);
+              this.renderService.activateSlots(param, 0, 0, 0);
+            }
+          }
+        }
+
+        this.timeslotsPerLayer = newTimeslots;
+        this.slotsVersion.value++;
+      }
+
+      // --- WANTED STATE + SHADER ACTIVATION ---
+      for (const param of enabledLayers) {
         const ps = this.paramSlots.get(param)!;
         const wanted = this.computeWanted(time, param);
         this.activateIfReady(param, ps, wanted);
 
-        // Update wanted signal if priority changed
         const prev = ps.wanted.value;
         if (!prev || prev.priority.join() !== wanted.priority.join()) {
           ps.wanted.value = wanted;
         }
       }
-    });
-
-    // Effect: resize LayerStores when timeslotsPerLayer option changes
-    let lastTimeslots = this.timeslotsPerLayer;
-    this.disposeResizeEffect = effect(() => {
-      const newTimeslots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
-
-      if (newTimeslots === lastTimeslots) return;
-
-      console.log(`[Slot] Resizing stores: ${lastTimeslots} → ${newTimeslots} timeslots`);
-
-      // Clear QS tasks before resize to prevent stale data arriving after buffer destruction
-      this.queueService.clearTasks();
-
-      // Try resize all LayerStores - rollback on any failure
-      const resizedStores: TWeatherLayer[] = [];
-      let failed = false;
-
-      for (const [param, store] of this.layerStores) {
-        try {
-          store.resize(newTimeslots);
-          resizedStores.push(param);
-        } catch (err) {
-          console.error(`[Slot] OOM resizing ${param}:`, err);
-          failed = true;
-          break;
-        }
-      }
-
-      if (failed) {
-        // Rollback: resize already-resized stores back to old size
-        console.warn(`[Slot] OOM - reverting to ${lastTimeslots} timeslots`);
-        for (const param of resizedStores) {
-          try {
-            this.layerStores.get(param)?.resize(lastTimeslots);
-          } catch {
-            console.error(`[Slot] Failed to rollback ${param}`);
-          }
-        }
-
-        this.optionsService.revertOption('gpu.timeslotsPerLayer', String(lastTimeslots));
-        return;
-      }
-
-      // Update ParamSlots capacity
-      const isGrowing = newTimeslots > lastTimeslots;
-      for (const param of this.readyWeatherLayers) {
-        if (isGrowing) {
-          // Growing: just add more free indices, preserve slots
-          this.paramSlots.get(param)?.grow(newTimeslots);
-        } else {
-          // Shrinking: recreate (TODO: preserve closest to current time)
-          const oldPs = this.paramSlots.get(param);
-          oldPs?.dispose();
-          const slabsCount = this.getLayerParams(param).length;
-          this.paramSlots.set(param, createParamSlots(param, newTimeslots, slabsCount));
-        }
-      }
-
-      // After shrinking, rebind layers only if active slots are now out of range
-      if (!isGrowing) {
-        for (const param of this.readyWeatherLayers) {
-          const slots = this.renderService.getActiveSlots(param);
-          if (slots.slot0 >= newTimeslots || slots.slot1 >= newTimeslots) {
-            // Ensure slot 0 buffers exist before rebinding
-            this.layerStores.get(param)?.ensureSlotBuffers(0);
-            // Active slot is out of range, rebind to slot 0
-            this.rebindLayerBuffers(param, 0, 0);
-            this.renderService.activateSlots(param, 0, 0, 0);
-          }
-        }
-      }
-
-      this.timeslotsPerLayer = newTimeslots;
-      lastTimeslots = newTimeslots;
-      this.slotsVersion.value++;
     });
   }
 
@@ -641,8 +638,6 @@ export class SlotService {
   dispose(): void {
     this.disposeEffect?.();
     this.disposeEffect = null;
-    this.disposeResizeEffect?.();
-    this.disposeResizeEffect = null;
     for (const ps of this.paramSlots.values()) {
       ps.dispose();
     }

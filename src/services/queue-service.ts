@@ -41,7 +41,7 @@ interface InFlightTask {
 }
 
 export class QueueService implements IQueueService {
-  readonly stats = signal<QueueStats>({
+  readonly queueStats = signal<QueueStats>({
     bytesQueued: 0,
     bytesCompleted: 0,
     bytesPerSec: undefined,
@@ -108,14 +108,27 @@ export class QueueService implements IQueueService {
 
   /** Initialize reactive queue management */
   initReactive(): void {
-    let lastParams: string | null = null;
+    let last = { time: '', pool: 0, slots: 0, layers: 0 };
     this.disposeEffect = effect(() => {
       const params = this.qsParams.value;
-      const paramsKey = `t=${params.time.toISOString().slice(11, 16)} pool=${params.poolSize} slots=${params.numSlots} layers=${params.activeLayers.length}`;
-      if (lastParams !== paramsKey) {
-        console.log(`[Queue] Params: ${paramsKey}`);
-        lastParams = paramsKey;
-      }
+      const curr = {
+        time: params.time.toISOString().slice(11, 16),
+        pool: params.poolSize,
+        slots: params.numSlots,
+        layers: params.activeLayers.length,
+      };
+
+      // Build diff of what changed
+      const changes: string[] = [];
+      if (last.time !== curr.time) changes.push(`time=${last.time}→${curr.time}`);
+      if (last.pool !== curr.pool) changes.push(`pool=${last.pool}→${curr.pool}`);
+      if (last.slots !== curr.slots) changes.push(`slots=${last.slots}→${curr.slots}`);
+      if (last.layers !== curr.layers) changes.push(`layers=${last.layers}→${curr.layers}`);
+
+      if (changes.length === 0) return; // Skip if no change
+
+      console.log(`[QueueParams] ${changes.join(', ')}`);
+      last = curr;
       this.onParamChange(params);
     });
   }
@@ -316,20 +329,20 @@ export class QueueService implements IQueueService {
     const queuedBytes = this.taskQueue.reduce((sum, t) => sum + (t.sizeEstimate || 0), 0);
     const inFlightBytes = Array.from(this.inFlight.values())
       .reduce((sum, { task }) => sum + (task.sizeEstimate || 0), 0);
-    // Subtract already-downloaded bytes from in-flight estimate (activeActualBytes tracks this)
-    // But only if we're using reactive path (inFlight has items)
-    const reactiveDownloaded = this.inFlight.size > 0 ? this.activeActualBytes : 0;
-    const reactivePathPending = Math.max(0, (queuedBytes + inFlightBytes) * this.compressionRatio - reactiveDownloaded);
+    // Don't subtract activeActualBytes - it accumulates across batches and causes undercount
+    // Just use the estimated pending bytes directly
+    const reactivePathPending = (queuedBytes + inFlightBytes) * this.compressionRatio;
 
-    // Old path uses activeActualBytes in oldPathActive, so only count it once
-    const bytesQueued = this.inFlight.size > 0
-      ? Math.max(0, oldPathPending + reactivePathPending)  // reactive path: don't double-count activeActualBytes
-      : Math.max(0, oldPathPending + oldPathActive);        // old path: use activeActualBytes in oldPathActive
+    // Use reactive path if any reactive work pending (queue or inFlight)
+    const useReactivePath = this.inFlight.size > 0 || this.taskQueue.length > 0;
+    const bytesQueued = useReactivePath
+      ? Math.max(0, oldPathPending + reactivePathPending)  // reactive path
+      : Math.max(0, oldPathPending + oldPathActive);        // old path only
 
     // Update stats signal (no cycle risk: SlotService uses queueMicrotask for fetching)
-    const wasDownloading = this.stats.value.status === 'downloading';
+    const wasDownloading = this.queueStats.value.status === 'downloading';
     const newStatus = bytesQueued > 0 ? 'downloading' : 'idle';
-    this.stats.value = {
+    this.queueStats.value = {
       bytesQueued,
       bytesCompleted: this.totalBytesCompleted,
       bytesPerSec,
@@ -348,7 +361,7 @@ export class QueueService implements IQueueService {
       this.batchStartTime = 0;
       this.batchBytesCompleted = 0;
     }
-    DEBUG && console.log('[Queue]', formatStats(this.stats.value));
+    DEBUG && console.log('[Queue]', formatStats(this.queueStats.value));
   }
 
   /**

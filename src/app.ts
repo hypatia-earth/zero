@@ -221,15 +221,20 @@ export const App: m.ClosureComponent = () => {
           configService,
         );
 
-        // Connect QueueService to SlotService and enable reactive mode
+        // Connect QueueService to SlotService (reactive mode enabled after initialize)
         queueService.setSlotService(slotService);
-        queueService.initReactive();
 
         // 5g. Load initial timesteps for all enabled weather layers
         await slotService.initialize(async (param, index, total) => {
           const pct = 50 + (index / total) * 45;  // 50% to 95%
           await BootstrapService.updateProgress(`Loading ${param} ${index}/${total}...`, pct);
         });
+
+        // Enable QS reactive mode AFTER initialize (avoids race with bootstrap)
+        // IMPORTANT: SS effect created in SlotService constructor, QS effect created here.
+        // Effect execution order = creation order. When both fire (e.g., slots change):
+        // SS runs first (resize buffers, clearTasks), then QS (fetch with new window).
+        queueService.initReactive();
 
         // Step 6: Activate
         BootstrapService.setStep('ACTIVATE');

@@ -68,7 +68,7 @@ export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = () => {
     oncreate({ dom, attrs }) {
       const el = dom as HTMLElement;
       effect(() => {
-        const stats = attrs.queueService.stats.value;
+        const stats = attrs.queueService.queueStats.value;
         const showGpu = attrs.optionsService.options.value.gpu.showGpuStats;
         let gpuAllocated: number | undefined;
         let gpuCapacity: number | undefined;

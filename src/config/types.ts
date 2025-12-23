@@ -124,7 +124,7 @@ export interface QueueStats {
 
 /** QueueService public API */
 export interface IQueueService {
-  readonly stats: Signal<QueueStats>;
+  readonly queueStats: Signal<QueueStats>;
   submitFileOrders(
     orders: FileOrder[],
     onComplete?: (index: number, buffer: ArrayBuffer) => void | Promise<void>
