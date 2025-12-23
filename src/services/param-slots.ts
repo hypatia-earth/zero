@@ -9,6 +9,8 @@
 import { signal } from '@preact/signals-core';
 import type { TTimestep } from '../config/types';
 
+const DEBUG = false;
+
 /** What timesteps the current time needs */
 export interface WantedState {
   mode: 'single' | 'pair';
@@ -103,7 +105,7 @@ export function createParamSlots(param: string, timeslots: number, slabsCount?: 
       }
 
       const [evictTs, evictSlot] = candidates[0]!;
-      console.log(`[Slot] ${P} evict ${fmt(evictTs)} for ${fmt(timestep)}`);
+      DEBUG && console.log(`[Slot] ${P} evict ${fmt(evictTs)} for ${fmt(timestep)}`);
       slots.delete(evictTs);
       slabsLoaded.delete(evictSlot.slotIndex);  // Clear slab tracking for evicted slot
       return { slotIndex: evictSlot.slotIndex, evicted: evictTs, evictedSlotIndex: evictSlot.slotIndex };
@@ -123,9 +125,9 @@ export function createParamSlots(param: string, timeslots: number, slabsCount?: 
       slots.set(timestep, slot);
 
       if (isMultiSlab) {
-        console.log(`[Slot] ${P} allocated ${fmt(timestep)} → slot ${slotIndex} (waiting for ${slabsCount} slabs)`);
+        DEBUG && console.log(`[Slot] ${P} allocated ${fmt(timestep)} → slot ${slotIndex} (waiting for ${slabsCount} slabs)`);
       } else {
-        console.log(`[Slot] ${P} loaded ${fmt(timestep)} → slot ${slotIndex} (${slots.size}/${capacity})`);
+        DEBUG && console.log(`[Slot] ${P} loaded ${fmt(timestep)} → slot ${slotIndex} (${slots.size}/${capacity})`);
       }
     },
 
@@ -142,12 +144,12 @@ export function createParamSlots(param: string, timeslots: number, slabsCount?: 
       slabsLoaded.get(slot.slotIndex)!.add(slabIndex);
 
       const loadedCount = slabsLoaded.get(slot.slotIndex)!.size;
-      console.log(`[Slot] ${P} slab ${slabIndex} loaded for ${fmt(timestep)} → slot ${slot.slotIndex} (${loadedCount}/${slabsCount})`);
+      DEBUG && console.log(`[Slot] ${P} slab ${slabIndex} loaded for ${fmt(timestep)} → slot ${slot.slotIndex} (${loadedCount}/${slabsCount})`);
 
       // Check if all slabs are now loaded
       if (slabsCount !== undefined && loadedCount === slabsCount) {
         slot.loaded = true;
-        console.log(`[Slot] ${P} ALL slabs loaded for ${fmt(timestep)} → slot ${slot.slotIndex} (${slots.size}/${capacity})`);
+        DEBUG && console.log(`[Slot] ${P} ALL slabs loaded for ${fmt(timestep)} → slot ${slot.slotIndex} (${slots.size}/${capacity})`);
       }
     },
 
@@ -177,7 +179,7 @@ export function createParamSlots(param: string, timeslots: number, slabsCount?: 
       for (let i = capacity; i < newTotal; i++) {
         freeIndices.push(i);
       }
-      console.log(`[Slot] ${P} grew: ${capacity} → ${newTotal} slots (${slots.size} preserved)`);
+      DEBUG && console.log(`[Slot] ${P} grew: ${capacity} → ${newTotal} slots (${slots.size} preserved)`);
       capacity = newTotal;
     },
 
