@@ -15,6 +15,8 @@ import { generateGaussianLUTs } from './gaussian-grid';
 import { defaultConfig } from '../config/defaults';
 import type { LayerState } from '../config/types';
 
+const DEBUG = false;
+
 interface WindUniforms {
   viewProj: Float32Array;
   eyePosition: [number, number, number];
@@ -324,7 +326,7 @@ export class WindLayer {
       ],
     });
 
-    console.log('[Wind] External buffers set (live data mode)');
+    DEBUG && console.log('[Wind] External buffers set (live data mode)');
   }
 
   /**
@@ -411,7 +413,7 @@ export class WindLayer {
   setLineCount(lineCount: number): void {
     if (lineCount === this.seedCount) return;
 
-    console.log(`[Wind] Changing line count: ${this.seedCount} → ${lineCount}`);
+    DEBUG && console.log(`[Wind] Changing line count: ${this.seedCount} → ${lineCount}`);
     this.seedCount = lineCount;
     this.randomSeed = Math.random();  // Scramble phase offsets
     this.needsCompute = true;  // Force recompute with new line count
