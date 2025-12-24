@@ -244,6 +244,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 2rem;
   padding: 16px 20px;
   border-bottom: 1px solid var(--color-border-light);
 }
@@ -253,13 +254,16 @@
   font-size: var(--font-size-lg);
   font-weight: 500;
   color: var(--color-text-primary);
+  white-space: nowrap;
 }
 
 .dialog.options .header .bar {
   display: flex;
   align-items: center;
-  justify-content: end;
+  justify-content: flex-end;
   gap: 4px;
+  width: auto;
+  flex-shrink: 0;
 }
 
 .dialog.options .close {

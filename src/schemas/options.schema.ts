@@ -178,7 +178,6 @@ export const optionsSchema = z.object({
           { value: '256', label: '256 (27.6 GB) - Ultra' },
           { value: '512', label: '512 (55 GB) - Max' },
         ],
-        impact: 'recreate',
       }
     ),
     showGpuStats: opt(
@@ -196,7 +195,7 @@ export const optionsSchema = z.object({
       z.enum(['1', '2', '4', '6', '8', '12']).default('2'),
       {
         label: 'Decoder threads',
-        description: 'Parallel WASM decoders for faster loading (requires reload)',
+        description: 'Parallel WASM decoders for faster loading',
         group: 'performance',
         filter: ['global', 'gpu', 'queue'],
         order: 4,
@@ -209,7 +208,6 @@ export const optionsSchema = z.object({
           { value: '8', label: '8' },
           { value: '12', label: '12' },
         ],
-        impact: 'recreate',
       }
     ),
   }),
