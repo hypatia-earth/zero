@@ -41,10 +41,9 @@ export const App: m.ClosureComponent = () => {
         return;
       }
 
-      const { services: s } = await runBootstrap(canvas, progress);
-      if (s) {
-        services = s;
-        exposeDebugServices(s);
+      ({ services } = await runBootstrap(canvas, progress));
+      if (services) {
+        exposeDebugServices(services);
       }
       m.redraw();
     },
