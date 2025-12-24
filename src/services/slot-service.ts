@@ -68,13 +68,10 @@ export class SlotService {
       this.paramSlots.set(param, createParamSlots(param, this.timeslotsPerLayer, slabsCount));
     }
 
-    // Wire up state calculations for all weather layers
-    this.renderService.setTempStateFn((time) => this.getState('temp', time));
-    this.renderService.setPressureStateFn((time) => this.getState('pressure', time));
-    this.renderService.setWindStateFn((time) => this.getState('wind', time));
-    this.renderService.setRainStateFn((time) => this.getState('rain', time));
-    this.renderService.setCloudsStateFn((time) => this.getState('clouds', time));
-    this.renderService.setHumidityStateFn((time) => this.getState('humidity', time));
+    // Wire up state calculations for ready weather layers
+    for (const layer of this.readyWeatherLayers) {
+      this.renderService.setLayerStateFn(layer, (time) => this.getState(layer, time));
+    }
 
     // Wire up pressure resolution change callback (re-regrid slots with raw data)
     this.renderService.setPressureResolutionChangeFn((slotsNeedingRegrid) => {
