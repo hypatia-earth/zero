@@ -171,7 +171,7 @@ canvas.time-ticks {
   top: 0;
   left: 21px;
   right: 21px;
-  height: 100%;
+  /* height set by inline style from JS (reads CSS vars) */
   z-index: 1;
   display: block;
   /* Remove browser effects */

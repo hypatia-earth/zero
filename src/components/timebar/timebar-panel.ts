@@ -18,7 +18,7 @@ import type { ConfigService } from '../../services/config-service';
 import type { ThemeService } from '../../services/theme-service';
 import type { StateService } from '../../services/state-service';
 import { diskUnwarp } from './timebar-math';
-import { renderTimebar } from './timebar-renderer';
+import { renderTimebar, getTimebarHeight } from './timebar-renderer';
 
 interface TimeBarPanelAttrs {
   optionsService: OptionsService;
@@ -168,9 +168,13 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
         });
       };
 
+      // Canvas height from CSS vars
+      const canvasHeight = getTimebarHeight(themeService);
+
       return m('.panel.timebar', [
-        m('.control.timeslider', [
+        m('.control.timeslider', { style: { height: `${canvasHeight}px` } }, [
           m('canvas.time-ticks', {
+            style: { height: `${canvasHeight}px` },
             onmousedown: handleMouseDown,
             onmousemove: handleMouseMove,
             onmouseup: handleMouseUp,
