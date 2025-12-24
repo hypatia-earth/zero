@@ -196,7 +196,6 @@ export class OptionsService {
 
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
   private initialized = false;
-  private stateService: { scheduleUrlSync: () => void } | null = null;
 
   constructor(private configService: ConfigService) {
     // Auto-merge when userOverrides change
@@ -212,12 +211,6 @@ export class OptionsService {
       this.saveTimeout = setTimeout(() => this.save(), 500);
     });
 
-    // Notify StateService when layers change (StateService owns URL)
-    effect(() => {
-      this.options.value;  // subscribe to changes
-      this.stateService?.scheduleUrlSync();
-    });
-
     // Force save before page unload
     window.addEventListener('beforeunload', () => {
       if (this.saveTimeout) {
@@ -225,11 +218,6 @@ export class OptionsService {
         this.save();
       }
     });
-  }
-
-  /** Wire up StateService for URL sync notifications */
-  setStateService(stateService: { scheduleUrlSync: () => void }): void {
-    this.stateService = stateService;
   }
 
   /**

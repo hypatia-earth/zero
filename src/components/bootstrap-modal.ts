@@ -6,11 +6,12 @@
  */
 
 import m from 'mithril';
-import { effect } from '@preact/signals-core';
-import { BootstrapService } from '../services/bootstrap-service';
+import { effect, type Signal } from '@preact/signals-core';
+import type { ProgressState } from '../bootstrap/progress';
 import type { OptionsService } from '../services/options-service';
 
 interface BootstrapModalAttrs {
+  progressState: Signal<ProgressState>;
   optionsService?: OptionsService;
 }
 
@@ -28,9 +29,9 @@ export const BootstrapModal: m.ClosureComponent<BootstrapModalAttrs> = () => {
   };
 
   return {
-    oninit() {
+    oninit({ attrs }) {
       unsubscribe = effect(() => {
-        BootstrapService.state.value;
+        attrs.progressState.value;
         m.redraw();
       });
     },
@@ -40,7 +41,7 @@ export const BootstrapModal: m.ClosureComponent<BootstrapModalAttrs> = () => {
     },
 
     view({ attrs }) {
-      const state = BootstrapService.state.value;
+      const state = attrs.progressState.value;
       const { optionsService } = attrs;
 
       if (hidden) {

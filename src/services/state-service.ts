@@ -6,7 +6,7 @@
  * Single entry point for time changes with logging.
  */
 
-import { signal } from '@preact/signals-core';
+import { signal, effect } from '@preact/signals-core';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 
@@ -43,6 +43,12 @@ export class StateService {
   ) {
     this.optionsService = optionsService;
     this.parseUrl();
+
+    // Effect-based decoupling: watch options and sync URL when they change
+    effect(() => {
+      this.optionsService.options.value;  // subscribe to options changes
+      this.scheduleUrlSync();
+    });
   }
 
   /**
