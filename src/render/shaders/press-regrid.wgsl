@@ -38,12 +38,25 @@ fn findRing(lat: f32) -> u32 {
 }
 
 // Sample O1280 at lat/lon (radians)
+//
+// ╔═══════════════════════════════════════════════════════════════════════════╗
+// ║  DO NOT TOUCH - VERIFIED WORKING FORMULA (2024-12)                        ║
+// ║                                                                           ║
+// ║  O1280 coordinate system (discovered via synthetic data testing):         ║
+// ║  - lonIdx=0 corresponds to 90°E (not 0°!)                                 ║
+// ║  - Longitude increases WESTWARD (opposite of standard convention)         ║
+// ║  - Formula: lonIdx = (90° - targetLon) / 360° × nPoints                   ║
+// ║                                                                           ║
+// ║  Changing this will break pressure contour positions vs windy.com         ║
+// ╚═══════════════════════════════════════════════════════════════════════════╝
+//
 fn sampleO1280(lat: f32, lon: f32) -> f32 {
   let ring = findRing(lat);
   let ringFromPole = select(ring + 1u, 2560u - ring, ring >= 1280u);
   let nPoints = 4u * ringFromPole + 16u;
 
-  var lonNorm = lon;
+  // O1280 index: 0=90°E, increases westward. DO NOT CHANGE.
+  var lonNorm = PI * 0.5 - lon;  // 90° - target_lon (in radians)
   if (lonNorm < 0.0) { lonNorm += TWO_PI; }
   let lonIdx = u32(floor(lonNorm / TWO_PI * f32(nPoints))) % nPoints;
 

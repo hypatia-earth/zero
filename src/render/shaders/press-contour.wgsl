@@ -130,7 +130,8 @@ fn gridToSphere(gridPos: vec2<f32>) -> vec3<f32> {
   // Wrap x for longitude continuity (wrap column produces x >= gridWidth)
   let wx = gridPos.x - floor(gridPos.x / f32(uniforms.gridWidth)) * f32(uniforms.gridWidth);
   let lon = (wx / f32(uniforms.gridWidth)) * 360.0 - 180.0;
-  let lat = 90.0 - (gridPos.y / f32(uniforms.gridHeight - 1u)) * 180.0;
+  // Must match regrid shader: lat = 90 - y * (180 / gridHeight)
+  let lat = 90.0 - (gridPos.y / f32(uniforms.gridHeight)) * 180.0;
 
   let latRad = radians(lat);
   let lonRad = radians(lon);
