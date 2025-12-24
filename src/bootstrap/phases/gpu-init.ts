@@ -17,10 +17,8 @@ export async function runGpuInitPhase(
   assets: LoadedAssets,
   progress: Progress
 ): Promise<void> {
-  const range = progress.getStepRange('GPU_INIT');
-
   // Initialize WebGPU
-  await progress.run('Requesting GPU adapter...', range.start, async () => {
+  await progress.run('Requesting GPU adapter...', 0, async () => {
     const gaussianLats = new Float32Array(assets.gaussianLatsBuffer);
     const ringOffsets = new Uint32Array(assets.ringOffsetsBuffer);
     await renderService.initialize(gaussianLats, ringOffsets);
@@ -29,7 +27,7 @@ export async function runGpuInitPhase(
   const renderer = renderService.getRenderer();
 
   // Upload atmosphere LUTs
-  await progress.run('Uploading atmosphere textures...', range.start + 2, async () => {
+  await progress.run('Uploading atmosphere textures...', 0.15, async () => {
     renderer.createAtmosphereTextures({
       transmittance: assets.lutBuffers[0]!,
       scattering: assets.lutBuffers[1]!,
@@ -38,7 +36,7 @@ export async function runGpuInitPhase(
   });
 
   // Load basemap
-  await progress.run('Processing basemap textures...', range.start + 4, async () => {
+  await progress.run('Processing basemap textures...', 0.3, async () => {
     const basemapFaces = await Promise.all(
       assets.basemapBuffers.map(buf =>
         createImageBitmap(new Blob([buf], { type: 'image/png' }))
@@ -48,7 +46,7 @@ export async function runGpuInitPhase(
   });
 
   // Load font atlas
-  await progress.run('Loading font atlas...', range.start + 6, async () => {
+  await progress.run('Loading font atlas...', 0.5, async () => {
     const fontAtlas = await createImageBitmap(
       new Blob([assets.fontBuffer], { type: 'image/png' })
     );
@@ -56,7 +54,7 @@ export async function runGpuInitPhase(
   });
 
   // Load logo
-  await progress.run('Loading logo...', range.start + 7, async () => {
+  await progress.run('Loading logo...', 0.6, async () => {
     const logoImage = await createImageBitmap(
       new Blob([assets.logoBuffer], { type: 'image/png' })
     );
@@ -64,17 +62,17 @@ export async function runGpuInitPhase(
   });
 
   // Initialize WASM decoder
-  await progress.run('Initializing data decoder...', range.start + 8, async () => {
+  await progress.run('Initializing data decoder...', 0.7, async () => {
     await omService.init(assets.wasmBuffer);
   });
 
   // Load palettes
-  await progress.run('Loading color palettes...', range.start + 9, async () => {
+  await progress.run('Loading color palettes...', 0.85, async () => {
     await paletteService.loadPalettes('temp');
   });
 
   // Load about content
-  await progress.run('Loading about content...', range.start + 9.5, async () => {
+  await progress.run('Loading about content...', 0.95, async () => {
     await aboutService.init();
   });
 

@@ -1,8 +1,9 @@
 /**
- * Progress - Prospective progress announcements for bootstrap
+ * Progress - Centralized bootstrap progress with step weights
  *
- * Messages tell the user what is ABOUT to happen, not what just finished.
- * This ensures the user always sees the current operation before it starts.
+ * Steps and their weights are defined here. Phases report relative progress
+ * within their step (0.0 to 1.0), and Progress calculates absolute percentage.
+ * Messages are prospective - they tell user what's ABOUT to happen.
  */
 
 import { signal } from '@preact/signals-core';
@@ -27,18 +28,48 @@ export interface ProgressState {
   complete: boolean;
 }
 
-const STEP_INFO: Record<BootstrapStep, { start: number; end: number }> = {
-  CAPABILITIES: { start: 0, end: 5 },
-  CONFIG: { start: 5, end: 10 },
-  DISCOVERY: { start: 10, end: 20 },
-  ASSETS: { start: 20, end: 50 },
-  GPU_INIT: { start: 50, end: 60 },
-  DATA: { start: 60, end: 95 },
-  ACTIVATE: { start: 95, end: 100 },
-};
+/** Step definition with relative weight */
+interface StepDef {
+  id: BootstrapStep;
+  weight: number;
+  label: string;
+}
+
+/**
+ * Bootstrap steps with relative weights.
+ * Heavier steps (more work) get higher weights.
+ * This is the single source of truth for step ordering and progress distribution.
+ */
+const STEPS: StepDef[] = [
+  { id: 'CAPABILITIES', weight: 5, label: 'Checking capabilities...' },
+  { id: 'CONFIG', weight: 5, label: 'Loading configuration...' },
+  { id: 'DISCOVERY', weight: 10, label: 'Discovering data...' },
+  { id: 'ASSETS', weight: 30, label: 'Loading assets...' },
+  { id: 'GPU_INIT', weight: 10, label: 'Initializing GPU...' },
+  { id: 'DATA', weight: 35, label: 'Loading weather data...' },
+  { id: 'ACTIVATE', weight: 5, label: 'Starting...' },
+];
+
+/** Calculate percentage ranges from weights */
+function calculateRanges(): Map<BootstrapStep, { start: number; end: number }> {
+  const total = STEPS.reduce((sum, s) => sum + s.weight, 0);
+  const ranges = new Map<BootstrapStep, { start: number; end: number }>();
+
+  let cursor = 0;
+  for (const step of STEPS) {
+    const size = (step.weight / total) * 100;
+    ranges.set(step.id, { start: cursor, end: cursor + size });
+    cursor += size;
+  }
+
+  return ranges;
+}
+
+const STEP_RANGES = calculateRanges();
 
 export class Progress {
   private progressSleep = defaultConfig.bootstrap.progressSleep;
+  private currentStep: BootstrapStep = 'CAPABILITIES';
 
   readonly state = signal<ProgressState>({
     step: 'CAPABILITIES',
@@ -49,42 +80,18 @@ export class Progress {
   });
 
   /**
-   * Announce what's about to happen, then execute the work.
-   * User sees the message BEFORE work starts.
+   * Start a new bootstrap step.
+   * Called by orchestrator, not by phases.
    */
-  async run<T>(message: string, pct: number, work: () => Promise<T>): Promise<T> {
-    this.state.value = {
-      ...this.state.value,
-      label: message,
-      progress: Math.min(100, Math.max(0, pct)),
-    };
-    m.redraw();
-    await sleep(this.progressSleep);
-    return work();
-  }
+  startStep(step: BootstrapStep): void {
+    this.currentStep = step;
+    const range = STEP_RANGES.get(step)!;
+    const def = STEPS.find(s => s.id === step)!;
 
-  /**
-   * Announce a step without blocking work (for sub-steps)
-   */
-  async announce(message: string, pct: number): Promise<void> {
-    this.state.value = {
-      ...this.state.value,
-      label: message,
-      progress: Math.min(100, Math.max(0, pct)),
-    };
-    m.redraw();
-    await sleep(this.progressSleep);
-  }
-
-  /**
-   * Set the current bootstrap step
-   */
-  setStep(step: BootstrapStep, label: string): void {
-    const info = STEP_INFO[step];
     this.state.value = {
       step,
-      progress: info.start,
-      label,
+      progress: range.start,
+      label: def.label,
       error: null,
       complete: false,
     };
@@ -92,10 +99,41 @@ export class Progress {
   }
 
   /**
-   * Get progress range for current step (for sub-progress calculations)
+   * Report sub-progress within current step.
+   * @param message - Prospective message (what's about to happen)
+   * @param fraction - Progress within step (0.0 to 1.0)
    */
-  getStepRange(step: BootstrapStep): { start: number; end: number } {
-    return STEP_INFO[step];
+  async sub(message: string, fraction: number): Promise<void>;
+  /**
+   * Report sub-progress within current step.
+   * @param message - Prospective message (what's about to happen)
+   * @param current - Current item number (1-based)
+   * @param total - Total items
+   */
+  async sub(message: string, current: number, total: number): Promise<void>;
+  async sub(message: string, a: number, b?: number): Promise<void> {
+    const fraction = b !== undefined ? a / b : a;
+    const range = STEP_RANGES.get(this.currentStep)!;
+    const pct = range.start + fraction * (range.end - range.start);
+
+    this.state.value = {
+      ...this.state.value,
+      label: message,
+      progress: Math.min(100, Math.max(0, pct)),
+    };
+    m.redraw();
+    await sleep(this.progressSleep);
+  }
+
+  /**
+   * Announce and execute work. User sees message BEFORE work starts.
+   * @param message - Prospective message
+   * @param fraction - Progress within step (0.0 to 1.0)
+   * @param work - Async work to execute
+   */
+  async run<T>(message: string, fraction: number, work: () => Promise<T>): Promise<T> {
+    await this.sub(message, fraction);
+    return work();
   }
 
   /**

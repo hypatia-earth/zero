@@ -23,11 +23,11 @@ export async function runActivatePhase(
   timestepService: TimestepService,
   progress: Progress
 ): Promise<ActivateResult> {
-  await progress.run('Starting render loop...', 95, async () => {
+  await progress.run('Starting render loop...', 0, async () => {
     renderService.start();
   });
 
-  await progress.run('Enabling controls...', 98, async () => {
+  await progress.run('Enabling controls...', 0.5, async () => {
     stateService.enableUrlSync();
   });
 

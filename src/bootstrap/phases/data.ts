@@ -11,14 +11,10 @@ export async function runDataPhase(
   queueService: QueueService,
   progress: Progress
 ): Promise<void> {
-  const range = progress.getStepRange('DATA');
-
   // Initialize slots with priority timesteps
   await slotService.initialize(async (param, index, total) => {
-    const pct = range.start + (index / total) * (range.end - range.start);
-    // Prospective: tell user what's being loaded
     const paramLabel = param.charAt(0).toUpperCase() + param.slice(1);
-    await progress.announce(`Loading ${paramLabel} data (${index}/${total})...`, pct);
+    await progress.sub(`Loading ${paramLabel} data (${index}/${total})...`, index, total);
   });
 
   // Enable reactive queue mode (after bootstrap loaded priority timesteps)

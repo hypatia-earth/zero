@@ -59,20 +59,20 @@ export async function runBootstrap(
   m.redraw();
 
   // Phase 1: Capabilities
-  progress.setStep('CAPABILITIES', 'Checking browser capabilities...');
+  progress.startStep('CAPABILITIES');
   await runCapabilitiesPhase(services.capabilitiesService, progress);
 
   // Phase 2: Config
-  progress.setStep('CONFIG', 'Loading configuration...');
+  progress.startStep('CONFIG');
   await runConfigPhase(services.optionsService, progress);
 
   // Phase 3: Discovery
-  progress.setStep('DISCOVERY', 'Discovering available data...');
+  progress.startStep('DISCOVERY');
   services.timestepService = createTimestepService(services.configService);
   await runDiscoveryPhase(services.timestepService, services.stateService, progress);
 
   // Phase 4: Assets
-  progress.setStep('ASSETS', 'Loading static assets...');
+  progress.startStep('ASSETS');
   services.queueService = createQueueService(
     services.omService,
     services.optionsService,
@@ -83,7 +83,7 @@ export async function runBootstrap(
   const assets = await runAssetsPhase(services.queueService, services.capabilitiesService, progress);
 
   // Phase 5: GPU Init
-  progress.setStep('GPU_INIT', 'Initializing graphics...');
+  progress.startStep('GPU_INIT');
   services.renderService = createRenderService(
     canvas,
     services.optionsService,
@@ -101,7 +101,7 @@ export async function runBootstrap(
   );
 
   // Phase 6: Data
-  progress.setStep('DATA', 'Loading weather data...');
+  progress.startStep('DATA');
   services.slotService = createSlotService(
     services.timestepService,
     services.renderService,
@@ -113,7 +113,7 @@ export async function runBootstrap(
   await runDataPhase(services.slotService, services.queueService, progress);
 
   // Phase 7: Activate
-  progress.setStep('ACTIVATE', 'Starting application...');
+  progress.startStep('ACTIVATE');
   const { keyboardService } = await runActivatePhase(
     canvas,
     services.renderService,

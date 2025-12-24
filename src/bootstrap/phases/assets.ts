@@ -56,10 +56,19 @@ export async function runAssetsPhase(
   ];
 
   const TOTAL = files.length;
-  const range = progress.getStepRange('ASSETS');
 
-  // Announce before starting
-  await progress.announce('Loading atmosphere textures...', range.start);
+  // Prospective messages for each file group
+  const getNextMessage = (i: number): string => {
+    if (i < 3) return 'Loading atmosphere textures...';
+    if (i < 9) return 'Loading basemap textures...';
+    if (i === 9) return 'Loading WASM decoder...';
+    if (i === 10) return 'Loading font atlas...';
+    if (i < 13) return 'Loading grid geometry...';
+    return 'Loading logo...';
+  };
+
+  // Announce first file
+  await progress.sub(getNextMessage(0), 0, TOTAL);
 
   await queueService.submitFileOrders(files, async (i, buffer) => {
     // Collect buffers
@@ -71,27 +80,9 @@ export async function runAssetsPhase(
     else if (i === 12) ringOffsetsBuffer = buffer;
     else if (i === 13) logoBuffer = buffer;
 
-    // Prospective message for NEXT file
-    const pct = range.start + ((i + 1) / TOTAL) * (range.end - range.start);
-    const nextMessages = [
-      'Loading atmosphere textures...',  // 0
-      'Loading atmosphere textures...',  // 1
-      'Loading atmosphere textures...',  // 2
-      'Loading basemap textures...',     // 3
-      'Loading basemap textures...',     // 4
-      'Loading basemap textures...',     // 5
-      'Loading basemap textures...',     // 6
-      'Loading basemap textures...',     // 7
-      'Loading basemap textures...',     // 8
-      'Loading WASM decoder...',         // 9
-      'Loading font atlas...',           // 10
-      'Loading grid geometry...',        // 11
-      'Loading grid geometry...',        // 12
-      'Loading logo...',                 // 13
-    ];
-
+    // Announce next file (prospective)
     if (i + 1 < TOTAL) {
-      await progress.announce(nextMessages[i + 1]!, pct);
+      await progress.sub(getNextMessage(i + 1), i + 1, TOTAL);
     }
   });
 

@@ -13,7 +13,7 @@ export async function runDiscoveryPhase(
   progress: Progress
 ): Promise<void> {
   // Register service worker
-  await progress.run('Registering service worker...', 10, async () => {
+  await progress.run('Registering service worker...', 0, async () => {
     await registerServiceWorker();
   });
 
@@ -24,11 +24,16 @@ export async function runDiscoveryPhase(
       runs: 'Discovering model runs...',
       cache: `Checking cache: ${detail}...`,
     };
-    await progress.announce(messages[step] ?? `Discovery: ${step}...`, 12);
+    const fractions: Record<string, number> = {
+      manifest: 0.2,
+      runs: 0.5,
+      cache: 0.7,
+    };
+    await progress.sub(messages[step] ?? `Discovery: ${step}...`, fractions[step] ?? 0.5);
   });
 
   // Snap time to closest available timestep
-  await progress.run('Synchronizing time...', 18, async () => {
+  await progress.run('Synchronizing time...', 0.9, async () => {
     stateService.sanitize((time: Date) => timestepService.getClosestTimestep(time));
     stateService.delegateLayers();
   });

@@ -9,7 +9,7 @@ export async function runConfigPhase(
   optionsService: OptionsService,
   progress: Progress
 ): Promise<void> {
-  await progress.run('Loading user preferences...', 5, async () => {
+  await progress.run('Loading user preferences...', 0, async () => {
     await optionsService.load();
   });
 }
