@@ -153,14 +153,12 @@ export class SlotService {
           }
         }
 
-        // After shrinking, rebind if active slots out of range
+        // After shrinking, deactivate if active slots out of range
         if (!isGrowing) {
           for (const param of this.readyWeatherLayers) {
             const slots = this.renderService.getActiveSlots(param);
             if (slots.slot0 >= newTimeslots || slots.slot1 >= newTimeslots) {
-              this.layerStores.get(param)?.ensureSlotBuffers(0);
-              this.rebindLayerBuffers(param, 0, 0);
-              this.renderService.activateSlots(param, 0, 0, 0);
+              this.deactivateLayer(param);
             }
           }
         }
@@ -301,6 +299,13 @@ export class SlotService {
     // pressure: no buffer rebind needed (uses compute shader)
   }
 
+  /** Deactivate layer by rebinding to slot 0 with 0 points */
+  private deactivateLayer(param: TWeatherLayer): void {
+    this.layerStores.get(param)?.ensureSlotBuffers(0);
+    this.rebindLayerBuffers(param, 0, 0);
+    this.renderService.activateSlots(param, 0, 0, 0);
+  }
+
   /** Upload data to slot via LayerStore */
   private uploadData(param: TWeatherLayer, data: Float32Array, slotIndex: number, slabIndex: number = 0): void {
     const store = this.layerStores.get(param);
@@ -433,17 +438,12 @@ export class SlotService {
       return false;
     }
 
-    // Handle eviction - don't destroy buffer, just rebind if active
-    // Buffer reused for new data (avoids race with pending GPU commands)
+    // Handle eviction - deactivate if evicted slot was active
     if (result.evicted && result.evictedSlotIndex !== null) {
       this.timestepService.setGpuUnloaded(layer, result.evicted);
-
       const activeSlots = this.renderService.getActiveSlots(layer);
-      if (activeSlots.slot0 === result.evictedSlotIndex ||
-          activeSlots.slot1 === result.evictedSlotIndex) {
-        this.layerStores.get(layer)?.ensureSlotBuffers(0);
-        this.rebindLayerBuffers(layer, 0, 0);
-        this.renderService.activateSlots(layer, 0, 0, 0);
+      if (activeSlots.slot0 === result.evictedSlotIndex || activeSlots.slot1 === result.evictedSlotIndex) {
+        this.deactivateLayer(layer);
       }
     }
 
