@@ -47,7 +47,7 @@ export async function runBootstrap(
     }
 
     const message = err instanceof Error
-      ? `${err.message}${err.stack ? '\n' + err.stack.split('\n').slice(1, 4).join('\n') : ''}`
+      ? `${err.message || err.name || 'Unknown error'}${err.stack ? '\n' + err.stack.split('\n').slice(1, 6).join('\n') : ''}`
       : String(err);
 
     progress.setError(message);
@@ -99,10 +99,10 @@ async function runBootstrapInner(
     services.stateService!,
     services.configService!
   );
-  services.paletteService = createPaletteService(services.renderService);
-  await runGpuInitPhase(
+  // PaletteService created inside phase after renderService.initialize()
+  services.paletteService = await runGpuInitPhase(
     services.renderService,
-    services.paletteService,
+    createPaletteService,
     services.aboutService!,
     services.omService!,
     assets,
