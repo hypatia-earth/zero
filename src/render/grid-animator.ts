@@ -8,6 +8,8 @@
 import { defaultConfig } from '../config/defaults';
 import type { GridLodLevel } from '../config/types';
 
+const DEBUG = false;
+
 // Per-line animation state
 interface LineState {
   targetDeg: number;    // final position in degrees
@@ -155,7 +157,7 @@ export class GridAnimator {
 
     // Jump directly to correct level if more than 1 level off (e.g., camera moved dramatically)
     if (Math.abs(targetLevel - currentLevel) > 1) {
-      console.log(`GridAnimator: LoD ${currentLevel} → ${targetLevel} (jump) at altitude=${altitude}km`);
+      DEBUG && console.log(`GridAnimator: LoD ${currentLevel} → ${targetLevel} (jump) at altitude=${altitude}km`);
       this.lodLevel = targetLevel;
       this.initializeLines();
       return;
@@ -180,7 +182,7 @@ export class GridAnimator {
     }
 
     if (newLevel !== currentLevel) {
-      console.log(`GridAnimator: LoD ${currentLevel} → ${newLevel} at altitude=${altitude}km`);
+      DEBUG && console.log(`GridAnimator: LoD ${currentLevel} → ${newLevel} at altitude=${altitude}km`);
       this.startTransition(newLevel);
     }
   }
