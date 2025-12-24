@@ -384,7 +384,6 @@ export class PressureLayer {
   setExternalBuffers(buffers: PressureExternalBuffers): void {
     this.externalBuffers = buffers;
     this.computeReady = true;
-    console.log(`[Pressure] External buffers set (per-slot mode)`);
   }
 
   /**

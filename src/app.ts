@@ -234,6 +234,7 @@ export const App: m.ClosureComponent = () => {
         // IMPORTANT: SS effect created in SlotService constructor, QS effect created here.
         // Effect execution order = creation order. When both fire (e.g., slots change):
         // SS runs first (resize buffers, clearTasks), then QS (fetch with new window).
+        // Note: initReactive() skips first run - bootstrap already loaded priority timesteps.
         queueService.initReactive();
 
         // Step 6: Activate
@@ -243,7 +244,6 @@ export const App: m.ClosureComponent = () => {
         keyboardService = new KeyboardService(stateService, timestepService);
         setupCameraControls(canvas, renderer.camera, stateService, configService);
 
-        await BootstrapService.updateProgress('Finishing...', 98);
         BootstrapService.complete();
         canvas.classList.add('ready');
         console.log(`%c[ZERO] Bootstrap complete (${(performance.now() / 1000).toFixed(2)}s)`, 'color: darkgreen; font-weight: bold');

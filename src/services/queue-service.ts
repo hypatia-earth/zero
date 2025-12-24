@@ -106,9 +106,11 @@ export class QueueService implements IQueueService {
     this.slotService = ss;
   }
 
-  /** Initialize reactive queue management */
+  /** Initialize reactive queue management (skips first run - bootstrap already loaded priority) */
   initReactive(): void {
+    let isFirstRun = true;
     let last = { time: '', pool: 0, slots: 0, layers: 0 };
+
     this.disposeEffect = effect(() => {
       const params = this.qsParams.value;
       const curr = {
@@ -126,6 +128,13 @@ export class QueueService implements IQueueService {
       if (last.layers !== curr.layers) changes.push(`layers=${last.layers}→${curr.layers}`);
 
       if (changes.length === 0) return; // Skip if no change
+
+      // Skip first run - bootstrap already loaded priority timesteps via submitTimestepOrders
+      if (isFirstRun) {
+        isFirstRun = false;
+        last = curr;
+        return;
+      }
 
       console.log(`[QueueParams] ${changes.join(', ')}`);
       last = curr;
@@ -590,6 +599,22 @@ export class QueueService implements IQueueService {
     this.inFlight.clear();
     this.taskQueue = [];
     queueMicrotask(() => this.updateStats());
+  }
+
+  /** Wait for queue to become idle (no pending or in-flight tasks) */
+  waitForIdle(): Promise<void> {
+    return new Promise(resolve => {
+      if (this.queueStats.value.status === 'idle') {
+        resolve();
+        return;
+      }
+      const unsub = effect(() => {
+        if (this.queueStats.value.status === 'idle') {
+          unsub();
+          resolve();
+        }
+      });
+    });
   }
 
   dispose(): void {
