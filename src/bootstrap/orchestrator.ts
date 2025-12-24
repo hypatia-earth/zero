@@ -28,19 +28,43 @@ import {
 import { KeyboardService } from '../services/keyboard-service';
 
 export interface BootstrapResult {
-  services: ServiceContainer;
+  services: ServiceContainer | null;
+  error: string | null;
 }
 
 /**
  * Run the full bootstrap sequence
  * @param canvas - The canvas element for rendering
  * @param progress - Progress tracker (created by caller for early subscription)
+ * @returns services on success, error message on failure
  */
 export async function runBootstrap(
   canvas: HTMLCanvasElement,
   progress: Progress
 ): Promise<BootstrapResult> {
+  try {
+    return await runBootstrapInner(canvas, progress);
+  } catch (err) {
+    // Ignore abort errors (e.g., navigation away)
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return { services: null, error: null };
+    }
 
+    const message = err instanceof Error
+      ? `${err.message}${err.stack ? '\n' + err.stack.split('\n').slice(1, 4).join('\n') : ''}`
+      : String(err);
+
+    progress.setError(message);
+    console.error('[ZERO] Bootstrap failed:', err);
+
+    return { services: null, error: message };
+  }
+}
+
+async function runBootstrapInner(
+  canvas: HTMLCanvasElement,
+  progress: Progress
+): Promise<BootstrapResult> {
   // Create foundation services (sync)
   const foundation = createFoundationServices();
   await foundation.configService.init();
@@ -133,7 +157,7 @@ export async function runBootstrap(
     'color: darkgreen; font-weight: bold'
   );
 
-  return { services };
+  return { services, error: null };
 }
 
 /**

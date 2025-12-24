@@ -41,22 +41,12 @@ export const App: m.ClosureComponent = () => {
         return;
       }
 
-      try {
-        const result = await runBootstrap(canvas, progress);
+      const result = await runBootstrap(canvas, progress);
+      if (result.services) {
         services = result.services;
         exposeDebugServices(services);
-        m.redraw();
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          return;
-        }
-        const message = err instanceof Error
-          ? `${err.message}${err.stack ? '\n' + err.stack.split('\n').slice(1, 4).join('\n') : ''}`
-          : String(err);
-        progress.setError(message);
-        console.error('[ZERO] Bootstrap failed:', err);
-        m.redraw();
       }
+      m.redraw();
     },
 
     view() {
