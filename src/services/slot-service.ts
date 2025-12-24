@@ -175,7 +175,7 @@ export class SlotService {
       // --- WANTED STATE + SHADER ACTIVATION ---
       for (const param of enabledLayers) {
         const ps = this.paramSlots.get(param)!;
-        const wanted = this.computeWanted(time, param);
+        const wanted = this.computeWanted(time);
         this.activateIfReady(param, ps, wanted);
 
         const prev = ps.wanted.value;
@@ -214,9 +214,9 @@ export class SlotService {
   }
 
   /** Pure computation: what timesteps does current time need? */
-  private computeWanted(time: Date, param: TWeatherLayer): WantedState {
+  private computeWanted(time: Date): WantedState {
     const exactTs = this.timestepService.getExactTimestep(time);
-    const window = this.calculateLoadWindow(time, param);
+    const window = this.calculateLoadWindow(time);
 
     if (exactTs) {
       return { mode: 'single', priority: [exactTs], window };
@@ -320,8 +320,49 @@ export class SlotService {
     }
   }
 
+  /**
+   * Upload data and mark slot as loaded.
+   * Handles both single-slab and multi-slab layers.
+   * Returns true if all slabs for this timestep are now loaded.
+   */
+  private uploadAndMarkLoaded(
+    param: TWeatherLayer,
+    timestep: TTimestep,
+    slotIndex: number,
+    slabIndex: number,
+    data: Float32Array
+  ): boolean {
+    const ps = this.paramSlots.get(param);
+    if (!ps) return false;
+
+    // Ensure buffer + upload
+    this.layerStores.get(param)?.ensureSlotBuffers(slotIndex);
+    this.uploadData(param, data, slotIndex, slabIndex);
+
+    // Mark loaded (handle multi-slab)
+    const slabsCount = this.getLayerParams(param).length;
+
+    if (slabsCount === 1) {
+      ps.markLoaded(timestep, slotIndex, data.length);
+      this.timestepService.setGpuLoaded(param, timestep);
+      return true;
+    } else {
+      const slot = ps.getSlot(timestep);
+      if (!slot) {
+        ps.markLoaded(timestep, slotIndex, data.length);
+      }
+      ps.markSlabLoaded(timestep, slabIndex);
+
+      if (ps.areAllSlabsLoaded(slotIndex)) {
+        this.timestepService.setGpuLoaded(param, timestep);
+        return true;
+      }
+      return false;
+    }
+  }
+
   /** Calculate ideal load window around time */
-  private calculateLoadWindow(time: Date, _param: TWeatherLayer): TTimestep[] {
+  private calculateLoadWindow(time: Date): TTimestep[] {
     const [t0, t1] = this.timestepService.adjacent(time);
     const window: TTimestep[] = [t0, t1];
 
@@ -409,28 +450,8 @@ export class SlotService {
       }
     }
 
-    // Upload data
-    this.layerStores.get(layer)?.ensureSlotBuffers(result.slotIndex);
-    this.uploadData(layer, data, result.slotIndex, slabIndex);
-
-    // Mark loaded (handle multi-slab)
-    const slabsCount = this.getLayerParams(layer).length;
-
-    if (slabsCount === 1) {
-      ps.markLoaded(timestep, result.slotIndex, data.length);
-      this.timestepService.setGpuLoaded(layer, timestep);
-    } else {
-      const slot = ps.getSlot(timestep);
-      if (!slot) {
-        ps.markLoaded(timestep, result.slotIndex, data.length);
-      }
-      ps.markSlabLoaded(timestep, slabIndex);
-
-      if (ps.areAllSlabsLoaded(result.slotIndex)) {
-        this.timestepService.setGpuLoaded(layer, timestep);
-      }
-    }
-
+    // Upload and mark loaded
+    this.uploadAndMarkLoaded(layer, timestep, result.slotIndex, slabIndex, data);
     this.timestepService.setCached(layer, timestep, data.byteLength);
     this.slotsVersion.value++;
     this.updateShaderIfReady(layer, ps);
@@ -470,14 +491,6 @@ export class SlotService {
     return { mode: 'pair', lerp, time: currentTime };
   }
 
-  /** @deprecated Use getState instead */
-  getLerp(param: TWeatherLayer, currentTime: Date): number {
-    const state = this.getState(param, currentTime);
-    if (state.mode === 'loading') return -1;
-    if (state.mode === 'single') return -2;
-    return state.lerp;
-  }
-
   /** Initialize with priority timesteps for all enabled params */
   async initialize(onProgress?: (param: TWeatherLayer, index: number, total: number) => Promise<void>): Promise<void> {
     this.dataWindowStart = this.timestepService.first();
@@ -499,7 +512,7 @@ export class SlotService {
 
     for (const param of enabledParams) {
       const ps = this.paramSlots.get(param)!;
-      const wanted = this.computeWanted(time, param);
+      const wanted = this.computeWanted(time);
       wantedByParam.set(param, wanted);
 
       DEBUG && console.log(`[Slot] ${P(param)} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
@@ -531,29 +544,7 @@ export class SlotService {
           );
 
           if (result) {
-            // Ensure buffer exists for this slot
-            this.layerStores.get(order.param)?.ensureSlotBuffers(result.slotIndex);
-
-            // Upload to the slab specified in the order
-            this.uploadData(order.param, slice.data, result.slotIndex, order.slabIndex);
-
-            // For single-slab layers: markLoaded immediately
-            // For multi-slab layers: markLoaded creates slot, then markSlabLoaded per slab
-            const slabsCount = this.getLayerParams(order.param).length;
-
-            if (slabsCount === 1) {
-              ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
-              this.timestepService.setGpuLoaded(order.param, order.timestep);
-            } else {
-              const slot = ps.getSlot(order.timestep);
-              if (!slot) {
-                ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
-              }
-              ps.markSlabLoaded(order.timestep, order.slabIndex);
-              if (ps.areAllSlabsLoaded(result.slotIndex)) {
-                this.timestepService.setGpuLoaded(order.param, order.timestep);
-              }
-            }
+            this.uploadAndMarkLoaded(order.param, order.timestep, result.slotIndex, order.slabIndex, slice.data);
           }
 
           completed++;
