@@ -3,5 +3,5 @@
  */
 
 export { Progress, type ProgressState, type BootstrapStep } from './progress';
-export { runBootstrap, exposeDebugServices, type BootstrapResult } from './orchestrator';
+export { runBootstrap } from './orchestrator';
 export type { ServiceContainer } from './service-container';

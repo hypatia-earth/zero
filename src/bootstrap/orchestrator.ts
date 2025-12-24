@@ -2,7 +2,7 @@
  * Bootstrap Orchestrator - Runs all bootstrap phases in sequence
  *
  * Coordinates service creation and phase execution with proper error handling.
- * Returns fully initialized services ready for rendering.
+ * Populates the provided services container in place.
  */
 
 import m from 'mithril';
@@ -27,27 +27,23 @@ import {
 } from './phases';
 import { KeyboardService } from '../services/keyboard-service';
 
-export interface BootstrapResult {
-  services: ServiceContainer | null;
-  error: string | null;
-}
-
 /**
  * Run the full bootstrap sequence
  * @param canvas - The canvas element for rendering
  * @param progress - Progress tracker (created by caller for early subscription)
- * @returns services on success, error message on failure
+ * @param services - Container to populate with services
  */
 export async function runBootstrap(
   canvas: HTMLCanvasElement,
-  progress: Progress
-): Promise<BootstrapResult> {
+  progress: Progress,
+  services: Partial<ServiceContainer>
+): Promise<void> {
   try {
-    return await runBootstrapInner(canvas, progress);
+    await runBootstrapInner(canvas, progress, services);
   } catch (err) {
     // Ignore abort errors (e.g., navigation away)
     if (err instanceof DOMException && err.name === 'AbortError') {
-      return { services: null, error: null };
+      return;
     }
 
     const message = err instanceof Error
@@ -56,70 +52,59 @@ export async function runBootstrap(
 
     progress.setError(message);
     console.error('[ZERO] Bootstrap failed:', err);
-
-    return { services: null, error: message };
   }
 }
 
 async function runBootstrapInner(
   canvas: HTMLCanvasElement,
-  progress: Progress
-): Promise<BootstrapResult> {
+  progress: Progress,
+  services: Partial<ServiceContainer>
+): Promise<void> {
   // Create foundation services (sync)
   const foundation = createFoundationServices();
   await foundation.configService.init();
-
-  // Build partial container
-  const services: ServiceContainer = {
-    ...foundation,
-    timestepService: null as unknown as ServiceContainer['timestepService'],
-    queueService: null as unknown as ServiceContainer['queueService'],
-    renderService: null,
-    slotService: null,
-    paletteService: null,
-    keyboardService: null,
-  };
+  Object.assign(services, foundation);
 
   m.redraw();
 
   // Phase 1: Capabilities
   progress.startStep('CAPABILITIES');
-  await runCapabilitiesPhase(services.capabilitiesService, progress);
+  await runCapabilitiesPhase(services.capabilitiesService!, progress);
 
   // Phase 2: Config
   progress.startStep('CONFIG');
-  await runConfigPhase(services.optionsService, progress);
+  await runConfigPhase(services.optionsService!, progress);
 
   // Phase 3: Discovery
   progress.startStep('DISCOVERY');
-  services.timestepService = createTimestepService(services.configService);
-  await runDiscoveryPhase(services.timestepService, services.stateService, progress);
+  services.timestepService = createTimestepService(services.configService!);
+  await runDiscoveryPhase(services.timestepService, services.stateService!, progress);
 
   // Phase 4: Assets
   progress.startStep('ASSETS');
   services.queueService = createQueueService(
-    services.omService,
-    services.optionsService,
-    services.stateService,
-    services.configService,
+    services.omService!,
+    services.optionsService!,
+    services.stateService!,
+    services.configService!,
     services.timestepService
   );
-  const assets = await runAssetsPhase(services.queueService, services.capabilitiesService, progress);
+  const assets = await runAssetsPhase(services.queueService, services.capabilitiesService!, progress);
 
   // Phase 5: GPU Init
   progress.startStep('GPU_INIT');
   services.renderService = createRenderService(
     canvas,
-    services.optionsService,
-    services.stateService,
-    services.configService
+    services.optionsService!,
+    services.stateService!,
+    services.configService!
   );
   services.paletteService = createPaletteService(services.renderService);
   await runGpuInitPhase(
     services.renderService,
     services.paletteService,
-    services.aboutService,
-    services.omService,
+    services.aboutService!,
+    services.omService!,
     assets,
     progress
   );
@@ -130,9 +115,9 @@ async function runBootstrapInner(
     services.timestepService,
     services.renderService,
     services.queueService,
-    services.optionsService,
-    services.stateService,
-    services.configService
+    services.optionsService!,
+    services.stateService!,
+    services.configService!
   );
   await runDataPhase(services.slotService, services.queueService, progress);
 
@@ -141,8 +126,8 @@ async function runBootstrapInner(
   const { keyboardService } = await runActivatePhase(
     canvas,
     services.renderService,
-    services.stateService,
-    services.configService,
+    services.stateService!,
+    services.configService!,
     KeyboardService,
     services.timestepService,
     progress
@@ -157,7 +142,8 @@ async function runBootstrapInner(
     'color: darkgreen; font-weight: bold'
   );
 
-  return { services, error: null };
+  // Expose for debugging
+  exposeDebugServices(services as ServiceContainer);
 }
 
 /**
