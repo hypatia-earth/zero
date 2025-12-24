@@ -16,6 +16,7 @@ import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
 import { LayerStore } from './layer-store';
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
+import { generateSyntheticO1280Pressure } from '../utils/synthetic-pressure';
 
 const DEBUG = false;
 
@@ -35,6 +36,7 @@ export class SlotService {
   private timeslotsPerLayer: number = 8;
   private disposeEffect: (() => void) | null = null;
   private initialized = false;
+  private syntheticDataCache = new Map<TWeatherLayer, Float32Array>();
 
   // Data window boundaries
   private dataWindowStart!: TTimestep;
@@ -186,6 +188,32 @@ export class SlotService {
     return this.configService.getLayer(layer)?.params ?? [layer];
   }
 
+  /** Check if layer uses synthetic test data (from config) */
+  private usesSynthData(layer: TWeatherLayer): boolean {
+    return this.configService.getLayer(layer)?.useSynthData === true;
+  }
+
+  /** Get or generate synthetic data for a layer (cached) */
+  private getSyntheticData(layer: TWeatherLayer): Float32Array {
+    let data = this.syntheticDataCache.get(layer);
+    if (data) return data;
+
+    const gaussianLats = this.renderService.getGaussianLats();
+    if (!gaussianLats) {
+      throw new Error(`Cannot generate synthetic data: gaussianLats not available`);
+    }
+
+    if (layer === 'pressure') {
+      data = generateSyntheticO1280Pressure(gaussianLats);
+    } else {
+      throw new Error(`No synthetic data generator for layer: ${layer}`);
+    }
+
+    console.log(`[Slot] Generated synthetic data for ${layer}: ${(data.byteLength / 1024 / 1024).toFixed(1)} MB`);
+    this.syntheticDataCache.set(layer, data);
+    return data;
+  }
+
   /**
    * Expand a single timestep order into per-slab orders.
    * For wind layer: creates 2 orders (U and V components).
@@ -311,6 +339,11 @@ export class SlotService {
     const store = this.layerStores.get(param);
     if (!store) return;
 
+    // Swap with synthetic data if configured
+    if (this.usesSynthData(param)) {
+      data = this.getSyntheticData(param);
+    }
+
     store.writeToSlab(slabIndex, slotIndex, data);
 
     // Pressure needs regrid after upload (pass the per-slot buffer)
@@ -416,6 +449,7 @@ export class SlotService {
    * Returns true if data was accepted and processed, false if rejected (e.g., unwanted timestep).
    */
   receiveData(layer: TWeatherLayer, timestep: TTimestep, slabIndex: number, data: Float32Array): boolean {
+    DEBUG && console.log(`[Slot] receiveData: ${layer} ${timestep} slab=${slabIndex}`);
     const ps = this.paramSlots.get(layer);
     if (!ps) return false;
 
@@ -503,7 +537,7 @@ export class SlotService {
       return;
     }
 
-    // Build orders for all enabled params
+    // Build orders for all enabled params (synthetic swap happens at upload time)
     const allOrders: TimestepOrder[] = [];
     const wantedByParam = new Map<TWeatherLayer, WantedState>();
 
@@ -562,7 +596,7 @@ export class SlotService {
       }
     );
 
-    // Activate shaders
+    // Activate shaders for all layers
     for (const param of enabledParams) {
       const ps = this.paramSlots.get(param)!;
       const wanted = wantedByParam.get(param)!;

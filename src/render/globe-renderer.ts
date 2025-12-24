@@ -13,7 +13,6 @@ import { U, UNIFORM_BUFFER_SIZE } from './globe-uniforms';
 import { GpuTimestamp } from './gpu-timestamp';
 import type { TWeatherTextureLayer, LayerState } from '../config/types';
 import { defaultConfig } from '../config/defaults';
-import { generateSyntheticO1280Pressure } from '../utils/synthetic-pressure';
 
 export interface GlobeUniforms {
   viewProjInverse: Float32Array;
@@ -999,28 +998,6 @@ export class GlobeRenderer {
     // Single GPU submit for all levels
     this.device.queue.submit([commandEncoder.finish()]);
     this.pressureLayer.setVertexCount(levels.length * maxVerticesPerLevel);
-  }
-
-  /**
-   * Initialize pressure layer with synthetic O1280 data for testing
-   */
-  initSyntheticPressure(): void {
-    const syntheticData = generateSyntheticO1280Pressure();
-
-    const syntheticBuffer = this.device.createBuffer({
-      size: BYTES_PER_TIMESTEP,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-      label: 'synthetic-pressure-data',
-    });
-    this.device.queue.writeBuffer(syntheticBuffer, 0, syntheticData.buffer, syntheticData.byteOffset, syntheticData.byteLength);
-
-    this.triggerPressureRegrid(0, syntheticBuffer);
-
-    const testLevels = [976, 984, 992, 1000, 1008, 1016];
-    this.runPressureContour(0, 0, 0, testLevels);
-
-    this.pressureLayer.setEnabled(true);
-    console.log(`[Globe] Synthetic pressure: ${testLevels.length} levels`);
   }
 
   dispose(): void {

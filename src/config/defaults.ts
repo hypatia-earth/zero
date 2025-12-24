@@ -82,6 +82,7 @@ export const defaultConfig: ZeroConfig = {
       params: ['pressure_msl'],
       defaultSizeEstimate: 2_000_000,
       slabs: [{ name: 'raw', sizeMB: 26 }, { name: 'grid', sizeMB: 1 }],
+      useSynthData: true,
     },
   ],
 

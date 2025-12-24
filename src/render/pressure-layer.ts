@@ -395,7 +395,7 @@ export class PressureLayer {
       const gridSlotSize = this.gridWidth * this.gridHeight * 4;  // f32 per cell
       this.gridSlotBuffers.push(this.device.createBuffer({
         size: gridSlotSize,
-        usage: GPUBufferUsage.STORAGE,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
         label: `pressure-grid-slot${this.gridSlotBuffers.length}`,
       }));
       this.gridSlotReady.push(false);
@@ -449,7 +449,7 @@ export class PressureLayer {
     for (let i = 0; i < slotCount; i++) {
       this.gridSlotBuffers.push(this.device.createBuffer({
         size: gridSlotSize,
-        usage: GPUBufferUsage.STORAGE,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
         label: `pressure-grid-slot${i}`,
       }));
       this.gridSlotReady.push(false);
@@ -924,6 +924,82 @@ export class PressureLayer {
 
   isComputeReady(): boolean {
     return this.computeReady;
+  }
+
+  /** Debug: read back regridded pressure data to check values */
+  async debugReadGrid(slotIndex: number): Promise<void> {
+    if (!this.gridSlotReady[slotIndex]) {
+      console.log('[Pressure] Slot not ready');
+      return;
+    }
+
+    const buffer = this.gridSlotBuffers[slotIndex]!;
+    const size = this.gridWidth * this.gridHeight * 4;
+
+    const readBuffer = this.device.createBuffer({
+      size,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+
+    const encoder = this.device.createCommandEncoder();
+    encoder.copyBufferToBuffer(buffer, 0, readBuffer, 0, size);
+    this.device.queue.submit([encoder.finish()]);
+
+    await readBuffer.mapAsync(GPUMapMode.READ);
+    const data = new Float32Array(readBuffer.getMappedRange().slice(0));
+    readBuffer.unmap();
+    readBuffer.destroy();
+
+    // Find min/max and their locations
+    let min = Infinity, max = -Infinity;
+    let minIdx = 0, maxIdx = 0;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i]! < min) { min = data[i]!; minIdx = i; }
+      if (data[i]! > max) { max = data[i]!; maxIdx = i; }
+    }
+
+    // Convert index to lat/lon
+    const w = this.gridWidth;
+    const h = this.gridHeight;
+    const idxToLatLon = (idx: number) => {
+      const x = idx % w;
+      const y = Math.floor(idx / w);
+      const lat = 90 - y * (180 / h);
+      const lon = -180 + x * (360 / w);
+      return `${lat.toFixed(0)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(0)}°${lon >= 0 ? 'E' : 'W'}`;
+    };
+
+    console.log(`[Pressure] LOW: ${(min/100).toFixed(0)} hPa at ${idxToLatLon(minIdx)}`);
+    console.log(`[Pressure] HIGH: ${(max/100).toFixed(0)} hPa at ${idxToLatLon(maxIdx)}`);
+
+    // Sample at known geographic points
+    // Grid: y=0 is 90°N, y=h-1 is 90°S
+    // Grid: x=0 is 180°W, x=w-1 is ~180°E
+    // latToY: y = (90 - lat) * h / 180
+    // lonToX: x = (lon + 180) * w / 360
+    const latLonToIdx = (lat: number, lon: number) => {
+      const y = Math.round((90 - lat) * h / 180);
+      const x = Math.round((lon + 180) * w / 360) % w;
+      return y * w + x;
+    };
+    const sampleLatLon = (lat: number, lon: number) => (data[latLonToIdx(lat, lon)]! / 100).toFixed(0);
+
+    // Find lowest in North Atlantic region (30-60N, 80W-0E)
+    let naMin = Infinity, naMinLat = 0, naMinLon = 0;
+    for (let lat = 30; lat <= 60; lat += 2) {
+      for (let lon = -80; lon <= 0; lon += 2) {
+        const p = data[latLonToIdx(lat, lon)]!;
+        if (p < naMin) { naMin = p; naMinLat = lat; naMinLon = lon; }
+      }
+    }
+    console.log(`[Pressure] N.Atlantic LOW: ${(naMin/100).toFixed(0)} hPa at ${naMinLat}°N, ${Math.abs(naMinLon)}°W`);
+
+    // Sample east of New York (where windy shows low)
+    const nyEast = sampleLatLon(40, -65);
+    const greenland = sampleLatLon(65, -40);
+
+    console.log(`[Pressure] East of NY (40N,65W): ${nyEast} hPa`);
+    console.log(`[Pressure] S.Greenland (65N,40W): ${greenland} hPa`);
   }
 
   dispose(): void {

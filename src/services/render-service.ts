@@ -53,6 +53,9 @@ export class RenderService {
   private perfScreenElement: HTMLElement | null = null;
   private perfGlobeElement: HTMLElement | null = null;
 
+  // Gaussian grid lookup tables (for synthetic data generation)
+  private gaussianLats: Float32Array | null = null;
+
   constructor(
     private canvas: HTMLCanvasElement,
     private optionsService: OptionsService,
@@ -94,6 +97,7 @@ export class RenderService {
 
     // Upload pre-computed Gaussian LUTs (O1280 grid)
     this.renderer.uploadGaussianLUTs(gaussianLats, ringOffsets);
+    this.gaussianLats = gaussianLats;
 
     // Listen for pressure resolution changes (live update)
     let lastResolution = pressureResolution;
@@ -526,6 +530,13 @@ export class RenderService {
    */
   getDevice(): GPUDevice {
     return this.renderer!.getDevice();
+  }
+
+  /**
+   * Get Gaussian latitudes for O1280 grid (for synthetic data generation)
+   */
+  getGaussianLats(): Float32Array | null {
+    return this.gaussianLats;
   }
 
   /**

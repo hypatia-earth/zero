@@ -181,6 +181,7 @@ export interface LayerConfig {
   params?: TParam[];             // ECMWF param names (weather layers)
   defaultSizeEstimate?: number;  // bytes per timestep (weather layers)
   slabs?: SlabConfig[];          // GPU buffer slabs (weather layers only)
+  useSynthData?: boolean;        // Use synthetic test data instead of real data
 }
 
 export interface DiscoveryConfig {
