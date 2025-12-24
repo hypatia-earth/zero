@@ -12,9 +12,10 @@ export async function runDataPhase(
   progress: Progress
 ): Promise<void> {
   // Initialize slots with priority timesteps
-  await slotService.initialize(async (param, index, total) => {
-    const paramLabel = param.charAt(0).toUpperCase() + param.slice(1);
-    await progress.sub(`Loading ${paramLabel} data (${index}/${total})...`, index, total);
+  // Callback is prospective: called BEFORE each order with (nextParam, index, total)
+  await slotService.initialize(async (nextParam, index, total) => {
+    const paramLabel = nextParam.charAt(0).toUpperCase() + nextParam.slice(1);
+    await progress.sub(`Loading ${paramLabel} data...`, index, total);
   });
 
   // Enable reactive queue mode (after bootstrap loaded priority timesteps)

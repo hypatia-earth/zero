@@ -516,8 +516,13 @@ export class SlotService {
       }
     }
 
-    let completed = 0;
     const total = allOrders.length;
+    let orderIndex = 0;
+
+    // Prospective: announce first order BEFORE any downloading starts
+    if (onProgress && allOrders.length > 0) {
+      await onProgress(allOrders[0]!.param, 0, total);
+    }
 
     await this.queueService.submitTimestepOrders(
       allOrders,
@@ -556,8 +561,12 @@ export class SlotService {
             }
           }
 
-          completed++;
-          await onProgress?.(order.param, completed, total);
+          orderIndex++;
+          // Prospective: announce NEXT order (what's about to load)
+          const nextOrder = allOrders[orderIndex];
+          if (nextOrder && onProgress) {
+            await onProgress(nextOrder.param, orderIndex, total);
+          }
         }
       },
       (order, actualBytes) => {
