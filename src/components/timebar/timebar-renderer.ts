@@ -7,10 +7,26 @@ import type { TWeatherLayer } from '../../config/types';
 import type { ThemeService } from '../../services/theme-service';
 import { diskWarp, diskHeight, getSunBrightness } from './timebar-math';
 
+/** Get layout from ThemeService */
+function getLayout(themeService: ThemeService) {
+  return {
+    topPadding: themeService.getSize('size-timebar-top-padding'),
+    diskHeight: themeService.getSize('size-timebar-disk-height'),
+    diskLabelGap: themeService.getSize('size-timebar-disk-label-gap'),
+    labelHeight: themeService.getSize('size-timebar-label-height'),
+    bottomPadding: themeService.getSize('size-timebar-bottom-padding'),
+  };
+}
+
+/** Total timebar height in pixels */
+export function getTimebarHeight(themeService: ThemeService): number {
+  const L = getLayout(themeService);
+  return L.topPadding + L.diskHeight + L.diskLabelGap + L.labelHeight + L.bottomPadding;
+}
+
 /** Tick dimensions */
 const TICK_WIDTH = 2;
 const TICK_HEIGHT_RATIO = 0.9;
-const TICK_TOP_OFFSET = 2;
 const NOW_MARKER_WIDTH = 1;
 
 /** Knob dimensions */
@@ -21,7 +37,6 @@ const KNOB_TICK_LENGTH = 6;
 const LABEL_FONT = '12px Inter Light, system-ui, sans-serif';
 const LABEL_COLOR = 'rgba(255,255,255,0.7)';
 const LABEL_NOW_COLOR = 'rgba(255,255,255,0.9)';
-const LABEL_AREA_HEIGHT = 16;
 const LABEL_MIN_GAP = 40;
 
 export interface TimebarRenderParams {
@@ -65,11 +80,14 @@ export function renderTimebar(params: TimebarRenderParams): void {
   ctx.scale(dpr, dpr);
 
   const width = rect.width;
-  const height = rect.height;
-  const tickHeight = height - LABEL_AREA_HEIGHT;
+
+  // Get layout from CSS vars via themeService
+  const L = getLayout(themeService);
+  const diskTop = L.topPadding;
+  const labelTop = diskTop + L.diskHeight + L.diskLabelGap;
   const windowMs = window.end.getTime() - window.start.getTime();
 
-  ctx.clearRect(0, 0, width, height);
+  ctx.clearRect(0, 0, rect.width, rect.height);
 
   const getT = (ts: string): number => {
     const time = new Date(ts).getTime();
@@ -78,31 +96,32 @@ export function renderTimebar(params: TimebarRenderParams): void {
 
   const getX = (t: number): number => diskWarp(t) * width;
 
-  // Draw ticks (upper area)
+  // Draw ticks (disk area)
   drawTicks(ctx, {
-    height: tickHeight, activeLayers, ecmwfSet, cachedMap, gpuMap, activeMap,
+    diskTop, diskHeight: L.diskHeight, activeLayers, ecmwfSet, cachedMap, gpuMap, activeMap,
     getT, getX, cameraLat, cameraLon, sunEnabled, themeService
   });
 
-  // Draw labels (bottom area)
+  // Draw labels (below disk)
   drawLabels(ctx, {
-    height, tickHeight, window, windowMs, nowTime, getX
+    labelTop, labelHeight: L.labelHeight, window, windowMs, nowTime, getX
   });
 
-  // Draw now marker (tick area only)
+  // Draw now marker (disk area only)
   const nowT = getT(nowTime.toISOString());
   if (nowT >= 0 && nowT <= 1) {
     const nowX = getX(nowT);
     ctx.fillStyle = themeService.getColor('color-timebar-now').hex;
-    ctx.fillRect(nowX - NOW_MARKER_WIDTH / 2, TICK_TOP_OFFSET, NOW_MARKER_WIDTH, tickHeight);
+    ctx.fillRect(nowX - NOW_MARKER_WIDTH / 2, diskTop, NOW_MARKER_WIDTH, L.diskHeight);
   }
 
   // Draw knob spanning wanted window
-  drawKnob(ctx, { height: tickHeight, topOffset: TICK_TOP_OFFSET, viewTime, ecmwfSet, wantedSet, getT, getX });
+  drawKnob(ctx, { diskTop, diskHeight: L.diskHeight, viewTime, ecmwfSet, wantedSet, getT, getX });
 }
 
 interface TickParams {
-  height: number;
+  diskTop: number;
+  diskHeight: number;
   activeLayers: TWeatherLayer[];
   ecmwfSet: Set<string>;
   cachedMap: Map<TWeatherLayer, Set<string>>;
@@ -118,12 +137,12 @@ interface TickParams {
 
 function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
   const {
-    height, activeLayers, ecmwfSet, cachedMap, gpuMap, activeMap,
+    diskTop, diskHeight: totalDiskHeight, activeLayers, ecmwfSet, cachedMap, gpuMap, activeMap,
     getT, getX, cameraLat, cameraLon, sunEnabled, themeService
   } = params;
 
   const layerCount = activeLayers.length || 1;
-  const layerHeight = height / layerCount;
+  const layerHeight = totalDiskHeight / layerCount;
   const baseTickHeight = layerHeight * TICK_HEIGHT_RATIO;
 
   const ecmwfColor = themeService.getColor('color-timebar-ecmwf').hex;
@@ -134,14 +153,14 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
     ecmwfSet.forEach(tsKey => {
       const t = getT(tsKey);
       const x = getX(t);
-      const tickHeight = baseTickHeight * diskHeight(t);
-      const topY = TICK_TOP_OFFSET + (layerHeight - tickHeight) / 2;
+      const tickH = baseTickHeight * diskHeight(t);
+      const topY = diskTop + (layerHeight - tickH) / 2;
 
       if (sunEnabled) {
         ctx.globalAlpha = getSunBrightness(cameraLat, cameraLon, new Date(tsKey));
       }
       ctx.fillStyle = ecmwfColor;
-      ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickHeight);
+      ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickH);
       ctx.globalAlpha = 1.0;
     });
   } else {
@@ -150,15 +169,15 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
       const cached = cachedMap.get(layer)!;
       const gpu = gpuMap.get(layer)!;
       const active = activeMap.get(layer)!;
-      const layerColor = themeService.getColor(`color-layer-${layer}`).hex;
-      const layerDimColor = themeService.getColor(`color-layer-${layer}-dim`).hex;
-      const rowTopY = TICK_TOP_OFFSET + rowIndex * layerHeight;
+      const layerColor = themeService.getColor(`color-layer-${layer}`, 1.1, 1.2).hex;
+      const layerDimColor = themeService.getColor(`color-layer-${layer}`, 0.67, 0.67).hex;
+      const rowTopY = diskTop + rowIndex * layerHeight;
 
       ecmwfSet.forEach(tsKey => {
         const t = getT(tsKey);
         const x = getX(t);
-        const tickHeight = baseTickHeight * diskHeight(t);
-        const topY = rowTopY + (layerHeight - tickHeight) / 2;
+        const tickH = baseTickHeight * diskHeight(t);
+        const topY = rowTopY + (layerHeight - tickH) / 2;
 
         let color = ecmwfColor;
         if (cached.has(tsKey)) color = layerDimColor;
@@ -169,7 +188,7 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
           ctx.globalAlpha = getSunBrightness(cameraLat, cameraLon, new Date(tsKey));
         }
         ctx.fillStyle = color;
-        ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickHeight);
+        ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickH);
         ctx.globalAlpha = 1.0;
       });
     });
@@ -177,8 +196,8 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
 }
 
 interface LabelParams {
-  height: number;
-  tickHeight: number;
+  labelTop: number;
+  labelHeight: number;
   window: { start: Date; end: Date };
   windowMs: number;
   nowTime: Date;
@@ -186,11 +205,11 @@ interface LabelParams {
 }
 
 function drawLabels(ctx: CanvasRenderingContext2D, params: LabelParams): void {
-  const { height, window, windowMs, nowTime, getX } = params;
+  const { labelTop, labelHeight, window, windowMs, nowTime, getX } = params;
 
   ctx.font = LABEL_FONT;
   ctx.textBaseline = 'middle';
-  const y = height - LABEL_AREA_HEIGHT / 2;
+  const y = labelTop + labelHeight / 2;
 
   // Track occupied x ranges for collision detection (scaled widths)
   const occupied: Array<{ left: number; right: number }> = [];
@@ -258,8 +277,8 @@ function drawLabels(ctx: CanvasRenderingContext2D, params: LabelParams): void {
 }
 
 interface KnobParams {
-  height: number;
-  topOffset: number;
+  diskTop: number;
+  diskHeight: number;
   viewTime: Date;
   ecmwfSet: Set<string>;
   wantedSet: Set<string>;
@@ -268,7 +287,7 @@ interface KnobParams {
 }
 
 function drawKnob(ctx: CanvasRenderingContext2D, params: KnobParams): void {
-  const { height, topOffset, viewTime, ecmwfSet, wantedSet, getT, getX } = params;
+  const { diskTop, diskHeight, viewTime, ecmwfSet, wantedSet, getT, getX } = params;
 
   if (wantedSet.size === 0) return;
 
@@ -295,9 +314,9 @@ function drawKnob(ctx: CanvasRenderingContext2D, params: KnobParams): void {
 
   ctx.lineWidth = KNOB_LINE_WIDTH;
 
-  // Rectangle outline (60% opacity)
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-  ctx.strokeRect(leftX, topOffset, rightX - leftX, height);
+  // Rectangle outline (30% opacity)
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.strokeRect(leftX, diskTop, rightX - leftX, diskHeight);
 
   // Tick marks at view time position (100% white)
   const viewX = getX(getT(viewTime.toISOString()));
@@ -305,13 +324,13 @@ function drawKnob(ctx: CanvasRenderingContext2D, params: KnobParams): void {
 
   // Top tick
   ctx.beginPath();
-  ctx.moveTo(viewX, topOffset);
-  ctx.lineTo(viewX, topOffset + KNOB_TICK_LENGTH);
+  ctx.moveTo(viewX, diskTop);
+  ctx.lineTo(viewX, diskTop + KNOB_TICK_LENGTH);
   ctx.stroke();
 
   // Bottom tick
   ctx.beginPath();
-  ctx.moveTo(viewX, topOffset + height);
-  ctx.lineTo(viewX, topOffset + height - KNOB_TICK_LENGTH);
+  ctx.moveTo(viewX, diskTop + diskHeight);
+  ctx.lineTo(viewX, diskTop + diskHeight - KNOB_TICK_LENGTH);
   ctx.stroke();
 }

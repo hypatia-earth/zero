@@ -55,9 +55,7 @@ export async function registerServiceWorker(): Promise<void> {
         try {
           await sendSWMessage({ type: 'CLAIM' });
           await new Promise(r => setTimeout(r, 100));
-          if (navigator.serviceWorker.controller) {
-            console.log('[SW] Claimed after explicit request');
-          } else {
+          if (!navigator.serviceWorker.controller) {
             console.warn('[SW] Still no controller after CLAIM request');
           }
         } catch {

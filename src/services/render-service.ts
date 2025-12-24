@@ -19,25 +19,20 @@ export class RenderService {
   private animationId: number | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private tempLoadedPoints = 0;
-  private tempStateFn: ((time: Date) => LayerState) | null = null;
   private tempPaletteRange: Float32Array = new Float32Array([-40, 50]); // Default range
 
   // Active slot indices per layer (populated by activateSlots)
   private activeSlots = new Map<TWeatherLayer, { slot0: number; slot1: number }>();
 
   // Pressure contour state
-  private pressureStateFn: ((time: Date) => LayerState) | null = null;
   private lastPressureMinute = -1;  // For minute-based change detection
   private isobarLevels: number[] = generateIsobarLevels(4);  // Default spacing
 
   // Wind layer state
-  private windStateFn: ((time: Date) => LayerState) | null = null;
   private windHasData = false;  // Set when wind buffers are loaded
 
-  // Other weather layer states (rain, clouds, humidity)
-  private rainStateFn: ((time: Date) => LayerState) | null = null;
-  private cloudsStateFn: ((time: Date) => LayerState) | null = null;
-  private humidityStateFn: ((time: Date) => LayerState) | null = null;
+  // Weather layer state functions (set by SlotService)
+  private layerStateFns = new Map<TWeatherLayer, (time: Date) => LayerState>();
 
   // Animated opacity state (lerps toward target each frame)
   private lastFrameTime = 0;
@@ -192,12 +187,13 @@ export class RenderService {
       const loadingState: LayerState = { mode: 'loading', lerp: 0, time };
 
       // Get layer states
-      const tempState = this.tempStateFn?.(time) ?? loadingState;
-      const pressureState = this.pressureStateFn?.(time) ?? loadingState;
-      const windState = this.windStateFn?.(time) ?? loadingState;
-      const rainState = this.rainStateFn?.(time) ?? loadingState;
-      const cloudsState = this.cloudsStateFn?.(time) ?? loadingState;
-      const humidityState = this.humidityStateFn?.(time) ?? loadingState;
+      const getState = (layer: TWeatherLayer) => this.layerStateFns.get(layer)?.(time) ?? loadingState;
+      const tempState = getState('temp');
+      const pressureState = getState('pressure');
+      const windState = getState('wind');
+      const rainState = getState('rain');
+      const cloudsState = getState('clouds');
+      const humidityState = getState('humidity');
 
       // Update animated opacities and track frame intervals for FPS
       const now = performance.now() / 1000;
@@ -454,37 +450,9 @@ export class RenderService {
     return this.activeSlots.get('temp')!;
   }
 
-  /**
-   * Set the function to get temp layer state (from SlotService)
-   */
-  setTempStateFn(fn: (time: Date) => LayerState): void {
-    this.tempStateFn = fn;
-  }
-
-  /**
-   * Set the function to get pressure layer state (from SlotService)
-   */
-  setPressureStateFn(fn: (time: Date) => LayerState): void {
-    this.pressureStateFn = fn;
-  }
-
-  /**
-   * Set the function to get wind layer state (from SlotService)
-   */
-  setWindStateFn(fn: (time: Date) => LayerState): void {
-    this.windStateFn = fn;
-  }
-
-  setRainStateFn(fn: (time: Date) => LayerState): void {
-    this.rainStateFn = fn;
-  }
-
-  setCloudsStateFn(fn: (time: Date) => LayerState): void {
-    this.cloudsStateFn = fn;
-  }
-
-  setHumidityStateFn(fn: (time: Date) => LayerState): void {
-    this.humidityStateFn = fn;
+  /** Set the state function for a weather layer (from SlotService) */
+  setLayerStateFn(layer: TWeatherLayer, fn: (time: Date) => LayerState): void {
+    this.layerStateFns.set(layer, fn);
   }
 
   /** Set callback for pressure resolution change (from SlotService) */

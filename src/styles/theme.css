@@ -111,19 +111,17 @@
   --color-layer-text: #ffffff;
   --color-layer-debug: #ffffff;
 
-  /* Layer dim colors - 50% lightness/chroma for cached state */
-  --color-layer-temp-dim: oklch(35% 0.09 20);
-  --color-layer-rain-dim: oklch(35% 0.09 250);
-  --color-layer-wind-dim: oklch(35% 0.09 130);
-  --color-layer-pressure-dim: oklch(35% 0.09 300);
-  --color-layer-humidity-dim: oklch(35% 0.09 180);
-  --color-layer-clouds-dim: oklch(35% 0.09 60);
-  --color-layer-waves-dim: oklch(35% 0.09 210);
-
   /* Timebar UI colors */
-  --color-timebar-ecmwf: oklch(40% 0.00 0);     /* grey: available */
+  --color-timebar-ecmwf: oklch(30% 0.00 0);     /* grey: available */
   --color-timebar-active: #ffffff;              /* white: interpolated */
   --color-timebar-now: rgba(255, 255, 255, 0.7);
+
+  /* Timebar layout (pixels) */
+  --size-timebar-top-padding: 4;
+  --size-timebar-disk-height: 36;
+  --size-timebar-disk-label-gap: 4;
+  --size-timebar-label-height: 12;
+  --size-timebar-bottom-padding: 5;
 }
 
 /* Bar helper - flexbox row */

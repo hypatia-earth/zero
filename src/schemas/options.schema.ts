@@ -166,18 +166,18 @@ export const optionsSchema = z.object({
         order: 2,
         control: 'select',
         options: [
-          { value: '2', label: '2 (54 MB) - Stress test', localhostOnly: true },
-          { value: '3', label: '3 (81 MB) - Minimum' },
-          { value: '4', label: '4 (108 MB) - Usable' },
-          { value: '8', label: '8 (216 MB) - Comfortable' },
-          { value: '16', label: '16 (432 MB) - Smooth' },
-          { value: '32', label: '32 (864 MB) - Standard' },
-          { value: '64', label: '64 (1.7 GB) - Extended' },
-          { value: '128', label: '128 (3.4 GB) - Pro' },
-          { value: '256', label: '256 (6.9 GB) - Ultra' },
-          { value: '512', label: '512 (13.8 GB) - Max' },
+          // Memory = slots × 27 MB × 4 slabs (temp + pressure + wind U/V)
+          { value: '2', label: '2 (216 MB) - Stress test', localhostOnly: true },
+          { value: '3', label: '3 (324 MB) - Minimum' },
+          { value: '4', label: '4 (432 MB) - Usable' },
+          { value: '8', label: '8 (864 MB) - Comfortable' },
+          { value: '16', label: '16 (1.7 GB) - Smooth' },
+          { value: '32', label: '32 (3.5 GB) - Standard' },
+          { value: '64', label: '64 (6.9 GB) - Extended' },
+          { value: '128', label: '128 (13.8 GB) - Pro' },
+          { value: '256', label: '256 (27.6 GB) - Ultra' },
+          { value: '512', label: '512 (55 GB) - Max' },
         ],
-        impact: 'recreate',
       }
     ),
     showGpuStats: opt(
@@ -195,7 +195,7 @@ export const optionsSchema = z.object({
       z.enum(['1', '2', '4', '6', '8', '12']).default('2'),
       {
         label: 'Decoder threads',
-        description: 'Parallel WASM decoders for faster loading (requires reload)',
+        description: 'Parallel WASM decoders for faster loading',
         group: 'performance',
         filter: ['global', 'gpu', 'queue'],
         order: 4,
@@ -208,7 +208,6 @@ export const optionsSchema = z.object({
           { value: '8', label: '8' },
           { value: '12', label: '12' },
         ],
-        impact: 'recreate',
       }
     ),
   }),
