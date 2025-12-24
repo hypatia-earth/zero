@@ -69,7 +69,12 @@ export class PaletteService {
 
   constructor(renderService: RenderService) {
     this.renderService = renderService;
+  }
 
+  /**
+   * Initialize palette reactivity (call after renderer is ready)
+   */
+  init(): void {
     // Wire up palette reactivity - updates GPU texture when palette changes
     effect(() => {
       void this.paletteChanged.value;

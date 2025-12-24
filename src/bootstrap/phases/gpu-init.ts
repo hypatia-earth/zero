@@ -11,12 +11,12 @@ import type { LoadedAssets } from './assets';
 
 export async function runGpuInitPhase(
   renderService: RenderService,
-  createPaletteService: (rs: RenderService) => PaletteService,
+  paletteService: PaletteService,
   aboutService: AboutService,
   omService: OmService,
   assets: LoadedAssets,
   progress: Progress
-): Promise<PaletteService> {
+): Promise<void> {
   // Initialize WebGPU
   await progress.run('Requesting GPU adapter...', 0, async () => {
     const gaussianLats = new Float32Array(assets.gaussianLatsBuffer);
@@ -24,8 +24,8 @@ export async function runGpuInitPhase(
     await renderService.initialize(gaussianLats, ringOffsets);
   });
 
-  // Create PaletteService after renderer is initialized (effect needs renderer)
-  const paletteService = createPaletteService(renderService);
+  // Initialize palette reactivity now that renderer is ready
+  paletteService.init();
 
   const renderer = renderService.getRenderer();
 
@@ -81,6 +81,4 @@ export async function runGpuInitPhase(
 
   // Finalize renderer
   renderer.finalize();
-
-  return paletteService;
 }

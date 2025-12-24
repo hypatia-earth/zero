@@ -99,10 +99,10 @@ async function runBootstrapInner(
     services.stateService!,
     services.configService!
   );
-  // PaletteService created inside phase after renderService.initialize()
-  services.paletteService = await runGpuInitPhase(
+  services.paletteService = createPaletteService(services.renderService);
+  await runGpuInitPhase(
     services.renderService,
-    createPaletteService,
+    services.paletteService,
     services.aboutService!,
     services.omService!,
     assets,
