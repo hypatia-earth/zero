@@ -813,21 +813,6 @@ export const optionsSchema = z.object({
         ],
       }
     ),
-    downloadMode: opt(
-      z.enum(['on-demand', 'aggressive']).default('on-demand'),
-      {
-        label: 'Mode',
-        description: 'When to fetch data files',
-        group: 'performance',
-        filter: ['global', 'dataCache', 'queue'],
-        order: 1,
-        control: 'radio',
-        options: [
-          { value: 'on-demand', label: 'On demand' },
-          { value: 'aggressive', label: 'Eager' },
-        ],
-      }
-    ),
   }),
 
   // ----------------------------------------------------------
@@ -902,7 +887,7 @@ export const defaultOptions: ZeroOptions = {
   humidity: { enabled: false, opacity: 0.6 },
   wind: { enabled: false, seedCount: defaultConfig.wind.seedCount, opacity: defaultConfig.wind.opacity, speed: defaultConfig.wind.animSpeed },
   pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1', spacing: '4' },
-  dataCache: { cacheStrategy: 'alternate', downloadMode: 'on-demand' },
+  dataCache: { cacheStrategy: 'alternate' },
   debug: { showDevLog: false, showPerfPanel: false, batterySaver: false },
 };
 
