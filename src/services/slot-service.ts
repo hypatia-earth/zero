@@ -284,19 +284,19 @@ export class SlotService {
       } else {
         console.warn(`[Slot] Missing ${param} buffer: slot0=${!!buffer0} slot1=${!!buffer1}`);
       }
-    } else if (param === 'wind') {
-      // Wind has 2 slabs: U (index 0) and V (index 1)
-      const u0 = store.getSlotBuffer(slotIndex0, 0);
-      const v0 = store.getSlotBuffer(slotIndex0, 1);
-      const u1 = store.getSlotBuffer(slotIndex1, 0);
-      const v1 = store.getSlotBuffer(slotIndex1, 1);
-      if (u0 && v0 && u1 && v1) {
-        this.renderService.setWindLayerBuffers(u0, v0, u1, v1);
+    } else if (this.getLayerParams(param).length === 2) {
+      // Multi-slab layer (e.g., wind with U/V components)
+      const buf00 = store.getSlotBuffer(slotIndex0, 0);
+      const buf01 = store.getSlotBuffer(slotIndex0, 1);
+      const buf10 = store.getSlotBuffer(slotIndex1, 0);
+      const buf11 = store.getSlotBuffer(slotIndex1, 1);
+      if (buf00 && buf01 && buf10 && buf11) {
+        this.renderService.setWindLayerBuffers(buf00, buf01, buf10, buf11);
       } else {
-        console.warn(`[Slot] Missing wind buffers: U0=${!!u0} V0=${!!v0} U1=${!!u1} V1=${!!v1}`);
+        console.warn(`[Slot] Missing ${param} buffers: [0,0]=${!!buf00} [0,1]=${!!buf01} [1,0]=${!!buf10} [1,1]=${!!buf11}`);
       }
     }
-    // pressure: no buffer rebind needed (uses compute shader)
+    // Single-param geometry layers (pressure): no buffer rebind needed
   }
 
   /** Deactivate layer by rebinding to slot 0 with 0 points */
