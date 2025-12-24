@@ -369,6 +369,9 @@ export class QueueService implements IQueueService {
       }
       this.batchStartTime = 0;
       this.batchBytesCompleted = 0;
+
+      // Refresh cache state from SW (with longer timeout since queue is idle)
+      this.refreshAllCacheStates();
     }
     DEBUG && console.log('[Queue]', formatStats(this.queueStats.value));
   }
@@ -615,6 +618,14 @@ export class QueueService implements IQueueService {
         }
       });
     });
+  }
+
+  /** Refresh cache state for all weather layers from SW */
+  private refreshAllCacheStates(): void {
+    const layers = this.configService.getReadyLayers().filter(isWeatherLayer);
+    for (const layer of layers) {
+      this.timestepService.refreshCacheState(layer);
+    }
   }
 
   dispose(): void {

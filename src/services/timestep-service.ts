@@ -425,6 +425,19 @@ export class TimestepService {
     this.state.value = { ...current };
   }
 
+  /** Mark timestep as cached (called after successful fetch) */
+  setCached(param: TWeatherLayer, timestep: TTimestep, sizeBytes: number): void {
+    const current = this.state.value;
+    const paramState = current.params.get(param);
+    if (!paramState) return;
+
+    paramState.cache.add(timestep);
+    // Accumulate size (multi-slab layers like wind have U+V)
+    const existing = paramState.sizes.get(timestep) ?? 0;
+    paramState.sizes.set(timestep, existing + sizeBytes);
+    this.state.value = { ...current };
+  }
+
   /** Refresh cache state for a param from SW */
   async refreshCacheState(param: TWeatherLayer): Promise<void> {
     const { cache, sizes } = await this.querySWCache(param);

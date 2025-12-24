@@ -111,7 +111,7 @@ export class SlotService {
       if (last.layers !== curr.layers) changes.push(`layers=${last.layers}→${curr.layers}`);
 
       if (changes.length === 0) return; // Nothing changed
-      console.log(`[SlotParams] ${changes.join(', ')}`);
+      DEBUG && console.log(`[SlotParams] ${changes.join(', ')}`);
 
       // --- RESIZE HANDLING (if slots changed) ---
       const lastTimeslots = last.slots || this.timeslotsPerLayer;
@@ -431,7 +431,7 @@ export class SlotService {
       }
     }
 
-    this.timestepService.refreshCacheState(layer);
+    this.timestepService.setCached(layer, timestep, data.byteLength);
     this.slotsVersion.value++;
     this.updateShaderIfReady(layer, ps);
     ps.clearLoading(timestep);
