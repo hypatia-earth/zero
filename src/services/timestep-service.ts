@@ -468,6 +468,16 @@ export class TimestepService {
     this.state.value = { ...current };
   }
 
+  /** Clear all GPU state for a layer (used when shrinking slots) */
+  clearGpuState(param: TWeatherLayer): void {
+    const current = this.state.value;
+    const paramState = current.params.get(param);
+    if (!paramState) return;
+
+    paramState.gpu.clear();
+    this.state.value = { ...current };
+  }
+
   // ─────────────────────────────────────────────────────────────────────────────
   // Size Management
   // ─────────────────────────────────────────────────────────────────────────────

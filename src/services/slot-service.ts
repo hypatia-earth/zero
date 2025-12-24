@@ -152,6 +152,7 @@ export class SlotService {
             oldPs?.dispose();
             const slabsCount = this.getLayerParams(param).length;
             this.paramSlots.set(param, createParamSlots(param, newTimeslots, slabsCount));
+            this.timestepService.clearGpuState(param);
           }
         }
 
@@ -394,7 +395,8 @@ export class SlotService {
       return false;
     }
 
-    // Handle eviction
+    // Handle eviction - don't destroy buffer, just rebind if active
+    // Buffer reused for new data (avoids race with pending GPU commands)
     if (result.evicted && result.evictedSlotIndex !== null) {
       this.timestepService.setGpuUnloaded(layer, result.evicted);
 
@@ -405,8 +407,6 @@ export class SlotService {
         this.rebindLayerBuffers(layer, 0, 0);
         this.renderService.activateSlots(layer, 0, 0, 0);
       }
-
-      this.layerStores.get(layer)?.destroySlotBuffers(result.evictedSlotIndex);
     }
 
     // Upload data
