@@ -139,11 +139,11 @@ export const defaultConfig: ZeroConfig = {
     yellow: [1, 0.9, 0.4, 0.85] as const,
     green:  [0.4, 0.9, 0.5, 0.85] as const,
 
-    // Fixed gradient colors
+    // Fixed gradient colors (oklch mirrored: L=0.70, C=0.18)
     gradient: {
-      low:  [0.3, 0.5, 1, 1] as const,   // blue
-      ref:  [1, 1, 1, 1] as const,       // white at 1012
-      high: [1, 0.3, 0.3, 1] as const,   // red
+      low:  [0.28, 0.58, 1, 1] as const,   // oklch(0.70, 0.18, 260°) blue
+      ref:  [1, 1, 1, 1] as const,         // white at 1012
+      high: [1, 0.50, 0.35, 1] as const,   // oklch(0.70, 0.18, 30°) red
     },
 
     // "Other" color for normal mode (dimmed white)
