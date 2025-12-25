@@ -781,7 +781,7 @@ export const optionsSchema = z.object({
       z.enum(['1', '2']).default('2'),
       {
         label: 'Grid resolution',
-        description: 'Contour grid resolution (1° = finer, 2° = faster). Requires reload.',
+        description: 'Contour grid resolution (1° = finer, 2° = faster)',
         group: 'layers',
         filter: ['global', 'pressure'],
         order: 17.5,
@@ -790,7 +790,6 @@ export const optionsSchema = z.object({
           { value: '2', label: '2° (fast)' },
           { value: '1', label: '1° (detailed)' },
         ],
-        impact: 'recreate',
       }
     ),
     smoothing: opt(
