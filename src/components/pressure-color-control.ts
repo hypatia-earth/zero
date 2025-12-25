@@ -28,7 +28,7 @@ const isLocalhost = location.hostname === 'localhost';
 
 const colorPresets: ColorPreset[] = [
   { name: 'White', color: defaultConfig.pressureColors.white },
-  { name: 'Blue', color: defaultConfig.pressureColors.blue },
+  { name: 'Violet', color: defaultConfig.pressureColors.violet },
   { name: 'Gold', color: defaultConfig.pressureColors.gold },
   { name: 'Teal', color: defaultConfig.pressureColors.teal },
 ];

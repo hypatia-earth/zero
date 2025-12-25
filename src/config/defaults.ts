@@ -133,11 +133,11 @@ export const defaultConfig: ZeroConfig = {
   // Pressure Color Presets
   // ============================================================
   pressureColors: {
-    // 4 colors for solid and normal modes (oklch L=0.71, C=0.16)
+    // 4 colors for solid and normal modes (oklch L=0.70, C=0.18 matching layer color)
     white:  [1, 1, 1, 0.85] as const,
-    blue:   [0.30, 0.60, 1.00, 0.85] as const,  // hue 250°
-    gold:   [0.78, 0.64, 0.42, 0.85] as const,  // hue 70°
-    teal:   [0.40, 0.72, 0.62, 0.85] as const,  // hue 170°
+    violet: [0.72, 0.50, 0.88, 0.85] as const,  // hue 300° (layer color)
+    gold:   [0.80, 0.62, 0.32, 0.85] as const,  // hue 70°
+    teal:   [0.32, 0.72, 0.62, 0.85] as const,  // hue 170°
 
     // Fixed gradient colors (oklch mirrored: L=0.70, C=0.18)
     gradient: {
