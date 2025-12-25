@@ -864,10 +864,11 @@ export class PressureLayer {
     floatView[23] = uniforms.opacity;
 
     // Color mode and pressure range - offset 24
+    // Symmetric range around 1012: ±36 hPa for balanced gradient
     const modeMap = { solid: 0, gradient: 1, normal: 2, debug: 3 } as const;
     uintView[24] = modeMap[colorOption.mode];
-    floatView[25] = 96000;   // pressureMin (960 hPa)
-    floatView[26] = 104000;  // pressureMax (1040 hPa)
+    floatView[25] = 97600;   // pressureMin (976 hPa)
+    floatView[26] = 104800;  // pressureMax (1048 hPa)
     floatView[27] = 101200;  // pressureRef (1012 hPa)
 
     // Colors - offset 28 (vec4 each = 4 floats)
