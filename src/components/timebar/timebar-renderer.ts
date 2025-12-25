@@ -111,7 +111,7 @@ export function renderTimebar(params: TimebarRenderParams): void {
   const nowT = getT(nowTime.toISOString());
   if (nowT >= 0 && nowT <= 1) {
     const nowX = getX(nowT);
-    ctx.fillStyle = themeService.getColor('color-timebar-now').hex;
+    ctx.fillStyle = themeService.getColor('color-timebar-now').css;
     ctx.fillRect(nowX - NOW_MARKER_WIDTH / 2, diskTop, NOW_MARKER_WIDTH, L.diskHeight);
   }
 
@@ -145,8 +145,8 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
   const layerHeight = totalDiskHeight / layerCount;
   const baseTickHeight = layerHeight * TICK_HEIGHT_RATIO;
 
-  const ecmwfColor = themeService.getColor('color-timebar-ecmwf').hex;
-  const activeColor = themeService.getColor('color-timebar-active').hex;
+  const ecmwfColor = themeService.getColor('color-timebar-ecmwf').css;
+  const activeColor = themeService.getColor('color-timebar-active').css;
 
   if (activeLayers.length === 0) {
     // No weather layers: show grey ECMWF ticks
@@ -169,8 +169,8 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
       const cached = cachedMap.get(layer)!;
       const gpu = gpuMap.get(layer)!;
       const active = activeMap.get(layer)!;
-      const layerColor = themeService.getColor(`color-layer-${layer}`, 1.1, 1.2).hex;
-      const layerDimColor = themeService.getColor(`color-layer-${layer}`, 0.67, 0.67).hex;
+      const layerColor = themeService.getColor(`color-layer-${layer}`, 1.1, 1.2).css;
+      const layerDimColor = themeService.getColor(`color-layer-${layer}`, 0.67, 0.67).css;
       const rowTopY = diskTop + rowIndex * layerHeight;
 
       ecmwfSet.forEach(tsKey => {
