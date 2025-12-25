@@ -148,8 +148,9 @@ fn smoothEdges(@builtin(global_invocation_id) id: vec3<u32>) {
     // Laplacian: move toward average of neighbors
     let smoothed = mix(pos, avgNeighbor, smoothFactor);
 
-    // Re-normalize to sphere surface
+    // Re-normalize to sphere surface, preserve pressure value in w
     let normalized = normalize(smoothed) * uniforms.earthRadius * 1.002;
-    outputVertices[vIdx] = vec4<f32>(normalized, 1.0);
+    let w = inputVertices[vIdx].w;
+    outputVertices[vIdx] = vec4<f32>(normalized, w);
   }
 }

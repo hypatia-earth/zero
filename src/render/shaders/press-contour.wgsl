@@ -230,8 +230,8 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
     let world0 = gridToSphere(p0);
     let world1 = gridToSphere(p1);
 
-    vertices[baseIdx] = vec4<f32>(world0, 1.0);
-    vertices[baseIdx + 1u] = vec4<f32>(world1, 1.0);
+    vertices[baseIdx] = vec4<f32>(world0, uniforms.isovalue);
+    vertices[baseIdx + 1u] = vec4<f32>(world1, uniforms.isovalue);
 
     // Store edge→vertex mapping for smoothing
     edgeToVertex[edgeIdxBase + u32(edges.x)] = i32(baseIdx);
@@ -246,8 +246,8 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
     let world0 = gridToSphere(p0);
     let world1 = gridToSphere(p1);
 
-    vertices[baseIdx + 2u] = vec4<f32>(world0, 1.0);
-    vertices[baseIdx + 3u] = vec4<f32>(world1, 1.0);
+    vertices[baseIdx + 2u] = vec4<f32>(world0, uniforms.isovalue);
+    vertices[baseIdx + 3u] = vec4<f32>(world1, uniforms.isovalue);
 
     // Store edge→vertex mapping for smoothing
     edgeToVertex[edgeIdxBase + u32(edges.z)] = i32(baseIdx + 2u);

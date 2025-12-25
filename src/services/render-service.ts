@@ -355,6 +355,7 @@ export class RenderService {
   private getPressureUniforms() {
     return {
       pressureOpacity: this.animatedOpacity.pressure,
+      pressureColors: this.optionsService.options.value.pressure.colors,
     };
   }
 

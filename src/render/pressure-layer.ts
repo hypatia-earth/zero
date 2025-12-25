@@ -17,6 +17,7 @@ import pressRegridCode from './shaders/press-regrid.wgsl?raw';
 import pressContourCode from './shaders/press-contour.wgsl?raw';
 import pressPrefixSumCode from './shaders/press-prefix-sum.wgsl?raw';
 import pressSmoothCode from './shaders/press-smooth.wgsl?raw';
+import type { PressureColorOption } from '../schemas/options.schema';
 
 /** Isobar configuration */
 export const ISOBAR_CONFIG = {
@@ -361,9 +362,9 @@ export class PressureLayer {
   }
 
   private createRenderBuffers(): void {
-    // Render uniform buffer (viewProj + eyePos + sunDir + opacity + isStandard)
+    // Render uniform buffer (viewProj + eyePos + sunDir + opacity + colorMode + pressure range + 3 colors)
     this.renderUniformBuffer = this.device.createBuffer({
-      size: 128,  // mat4 + vec3 + pad + vec3 + f32 + u32 + vec3 pad
+      size: 192,  // mat4(64) + vec3+pad(16) + vec3+f32(16) + u32+3f32(16) + 3×vec4(48) = 160, pad to 192
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -849,20 +850,38 @@ export class PressureLayer {
   /**
    * Update render uniforms
    */
-  updateUniforms(uniforms: PressureUniforms, isStandard: boolean): void {
-    const uniformData = new ArrayBuffer(128);
+  updateUniforms(uniforms: PressureUniforms, colorOption: PressureColorOption): void {
+    const uniformData = new ArrayBuffer(192);
     const floatView = new Float32Array(uniformData);
     const uintView = new Uint32Array(uniformData);
 
-    // viewProj (16 floats)
+    // viewProj (16 floats) - offset 0
     floatView.set(uniforms.viewProj, 0);
-    // eyePosition (3 floats + 1 pad)
+    // eyePosition (3 floats + 1 pad) - offset 16
     floatView.set(uniforms.eyePosition, 16);
-    // sunDirection (3 floats) + opacity (1 float)
+    // sunDirection (3 floats) + opacity (1 float) - offset 20
     floatView.set(uniforms.sunDirection, 20);
     floatView[23] = uniforms.opacity;
-    // isStandard (1 u32) + pad
-    uintView[24] = isStandard ? 1 : 0;
+
+    // Color mode and pressure range - offset 24
+    const modeMap = { solid: 0, gradient: 1, normal: 2, debug: 3 } as const;
+    uintView[24] = modeMap[colorOption.mode];
+    floatView[25] = 96000;   // pressureMin (960 hPa)
+    floatView[26] = 104000;  // pressureMax (1040 hPa)
+    floatView[27] = 101200;  // pressureRef (1012 hPa)
+
+    // Colors - offset 28 (vec4 each = 4 floats)
+    if (colorOption.mode !== 'debug') {
+      const colors = colorOption.colors;
+      floatView.set(colors[0], 28);                           // color0
+      floatView.set(colors[1] ?? [1, 1, 1, 1], 32);           // color1
+      floatView.set(colors[2] ?? [1, 1, 1, 1], 36);           // color2
+    } else {
+      // Debug mode: colors not used, but set defaults
+      floatView.set([1, 1, 1, 1], 28);
+      floatView.set([1, 1, 1, 1], 32);
+      floatView.set([1, 1, 1, 1], 36);
+    }
 
     this.device.queue.writeBuffer(this.renderUniformBuffer, 0, uniformData);
   }

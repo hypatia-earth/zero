@@ -13,6 +13,7 @@ import { U, UNIFORM_BUFFER_SIZE } from './globe-uniforms';
 import { GpuTimestamp } from './gpu-timestamp';
 import type { TWeatherTextureLayer, LayerState } from '../config/types';
 import { defaultConfig } from '../config/defaults';
+import type { PressureColorOption } from '../schemas/options.schema';
 
 export interface GlobeUniforms {
   viewProjInverse: Float32Array;
@@ -40,6 +41,7 @@ export interface GlobeUniforms {
   windAnimSpeed: number;  // updates per second
   windState: LayerState;  // full state for compute caching
   pressureOpacity: number;
+  pressureColors: PressureColorOption;
   tempDataReady: boolean;
   rainDataReady: boolean;
   cloudsDataReady: boolean;
@@ -581,7 +583,7 @@ export class GlobeRenderer {
           uniforms.sunDirection[2]!,
         ],
         opacity: uniforms.pressureOpacity,
-      }, false);
+      }, uniforms.pressureColors);
     }
 
     // Update wind layer based on opacity AND data readiness
