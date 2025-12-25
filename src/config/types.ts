@@ -309,8 +309,8 @@ export interface ZeroConfig {
   pressureColors: {
     white: readonly [number, number, number, number];
     blue: readonly [number, number, number, number];
-    yellow: readonly [number, number, number, number];
-    green: readonly [number, number, number, number];
+    gold: readonly [number, number, number, number];
+    teal: readonly [number, number, number, number];
     gradient: {
       low: readonly [number, number, number, number];
       ref: readonly [number, number, number, number];

@@ -29,8 +29,8 @@ const isLocalhost = location.hostname === 'localhost';
 const colorPresets: ColorPreset[] = [
   { name: 'White', color: defaultConfig.pressureColors.white },
   { name: 'Blue', color: defaultConfig.pressureColors.blue },
-  { name: 'Yellow', color: defaultConfig.pressureColors.yellow },
-  { name: 'Green', color: defaultConfig.pressureColors.green },
+  { name: 'Gold', color: defaultConfig.pressureColors.gold },
+  { name: 'Teal', color: defaultConfig.pressureColors.teal },
 ];
 
 function colorToCSS(c: readonly [number, number, number, number]): string {
