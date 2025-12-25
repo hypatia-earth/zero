@@ -13,7 +13,7 @@ import { defaultConfig } from '../config/defaults';
 // UI Metadata Types
 // ============================================================
 
-type ControlType = 'toggle' | 'slider' | 'select' | 'radio';
+type ControlType = 'toggle' | 'slider' | 'select' | 'radio' | 'pressure-colors';
 
 /** Impact level for option changes */
 type OptionImpact = 'uniform' | 'recreate';
@@ -60,7 +60,11 @@ interface RadioMeta extends UIMetadata {
   options: { value: string | number; label: string; localhostOnly?: boolean }[];
 }
 
-type OptionMeta = SliderMeta | SelectMeta | ToggleMeta | RadioMeta;
+interface PressureColorsMeta extends UIMetadata {
+  control: 'pressure-colors';
+}
+
+type OptionMeta = SliderMeta | SelectMeta | ToggleMeta | RadioMeta | PressureColorsMeta;
 
 /** Helper to attach metadata to Zod schema */
 function opt<T extends z.ZodTypeAny>(schema: T, meta: OptionMeta): T & { _meta: OptionMeta } {
@@ -127,6 +131,37 @@ export const optionGroups = {
     order: 6,
   },
 } as const;
+
+// ============================================================
+// Pressure Color Option Schema
+// ============================================================
+
+const Color = z.tuple([z.number(), z.number(), z.number(), z.number()]);
+
+export const PressureColorOptionSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('solid'),
+    colors: z.tuple([Color]),           // [all]
+  }),
+  z.object({
+    mode: z.literal('gradient'),
+    colors: z.tuple([Color, Color, Color]),  // [low, ref, high]
+  }),
+  z.object({
+    mode: z.literal('normal'),
+    colors: z.tuple([Color, Color]),    // [ref, other]
+  }),
+  z.object({
+    mode: z.literal('debug'),
+  }),
+]);
+
+export type PressureColorOption = z.infer<typeof PressureColorOptionSchema>;
+
+export const PRESSURE_COLOR_DEFAULT: PressureColorOption = {
+  mode: 'solid',
+  colors: [[1, 1, 1, 0.85]],
+};
 
 // ============================================================
 // Options Schema
@@ -791,6 +826,17 @@ export const optionsSchema = z.object({
         ],
       }
     ),
+    colors: opt(
+      PressureColorOptionSchema.default(PRESSURE_COLOR_DEFAULT),
+      {
+        label: 'Line colors',
+        description: 'Color scheme for isobar lines',
+        group: 'layers',
+        filter: ['global', 'pressure'],
+        order: 19.5,
+        control: 'pressure-colors',
+      }
+    ),
   }),
 
   // ----------------------------------------------------------
@@ -885,7 +931,7 @@ export const defaultOptions: ZeroOptions = {
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },
   wind: { enabled: false, seedCount: defaultConfig.wind.seedCount, opacity: defaultConfig.wind.opacity, speed: defaultConfig.wind.animSpeed },
-  pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1', spacing: '4' },
+  pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   debug: { showDevLog: false, showPerfPanel: false, batterySaver: false },
 };

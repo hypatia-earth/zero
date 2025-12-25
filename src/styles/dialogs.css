@@ -609,6 +609,91 @@
   color: var(--color-primary);
 }
 
+/* Pressure Color Control */
+.pressure-color-control {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.pressure-color-control .mode-selector {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.pressure-color-control .mode-option {
+  display: flex;
+  align-items: center;
+  padding: 5px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+@media (hover: hover) {
+  .pressure-color-control .mode-option:hover {
+    background: var(--color-surface-hover);
+  }
+}
+
+.pressure-color-control .mode-option.selected {
+  background: var(--color-primary-bg);
+  border-color: var(--color-primary-border-selected);
+}
+
+.pressure-color-control .mode-option input[type="radio"] {
+  display: none;
+}
+
+.pressure-color-control .mode-option span {
+  font-size: var(--font-size-2xs);
+  color: var(--color-glow);
+}
+
+.pressure-color-control .mode-option.selected span {
+  color: var(--color-primary);
+}
+
+.pressure-color-control .color-chips {
+  display: flex;
+  gap: 8px;
+}
+
+.pressure-color-control .color-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+@media (hover: hover) {
+  .pressure-color-control .color-chip:hover {
+    transform: scale(1.1);
+  }
+}
+
+.pressure-color-control .color-chip.selected {
+  border-color: var(--color-primary);
+}
+
+.pressure-color-control .gradient-preview {
+  height: 24px;
+  border-radius: 4px;
+  width: 100%;
+}
+
+.pressure-color-control .debug-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+  font-style: italic;
+}
+
 /* Spinner for loading state */
 .dialog.options .spinner {
   width: 14px;

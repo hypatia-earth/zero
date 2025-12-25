@@ -128,4 +128,25 @@ export const defaultConfig: ZeroConfig = {
     opacityAnimationMs: 100,  // Layer fade in/out duration
     logoEnabled: true,        // Show logo when all layers off
   },
+
+  // ============================================================
+  // Pressure Color Presets
+  // ============================================================
+  pressureColors: {
+    // 4 colors for solid and normal modes
+    white:  [1, 1, 1, 0.85] as const,
+    blue:   [0.3, 0.6, 1, 0.85] as const,
+    yellow: [1, 0.9, 0.4, 0.85] as const,
+    green:  [0.4, 0.9, 0.5, 0.85] as const,
+
+    // Fixed gradient colors
+    gradient: {
+      low:  [0.3, 0.5, 1, 1] as const,   // blue
+      ref:  [1, 1, 1, 1] as const,       // white at 1012
+      high: [1, 0.3, 0.3, 1] as const,   // red
+    },
+
+    // "Other" color for normal mode (dimmed white)
+    normalOther: [1, 1, 1, 0.5] as const,
+  },
 };

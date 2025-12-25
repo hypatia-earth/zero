@@ -304,4 +304,18 @@ export interface ZeroConfig {
     opacityAnimationMs: number;  // Layer fade in/out duration
     logoEnabled: boolean;        // Show logo when all layers off
   };
+
+  /** Pressure color presets */
+  pressureColors: {
+    white: readonly [number, number, number, number];
+    blue: readonly [number, number, number, number];
+    yellow: readonly [number, number, number, number];
+    green: readonly [number, number, number, number];
+    gradient: {
+      low: readonly [number, number, number, number];
+      ref: readonly [number, number, number, number];
+      high: readonly [number, number, number, number];
+    };
+    normalOther: readonly [number, number, number, number];
+  };
 }

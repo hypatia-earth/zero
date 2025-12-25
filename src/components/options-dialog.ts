@@ -15,6 +15,7 @@ import {
   defaultOptions,
   type ZeroOptions,
   type FlatOption,
+  type PressureColorOption,
 } from '../schemas/options.schema';
 import type { OptionsService } from '../services/options-service';
 import type { PaletteService } from '../services/palette-service';
@@ -23,6 +24,7 @@ import type { ConfigService } from '../services/config-service';
 import type { DialogService } from '../services/dialog-service';
 import { clearCache } from '../services/sw-registration';
 import { RadioPaletteControl } from './radio-palette-control';
+import { PressureColorControl } from './pressure-color-control';
 
 // ============================================================
 // Type guards for control types
@@ -121,6 +123,16 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
     });
   }
 
+  // Special handling for pressure colors
+  if (path === 'pressure.colors') {
+    return m(PressureColorControl, {
+      value: currentValue as PressureColorOption,
+      onChange: (value: PressureColorOption) => {
+        setOptionValue(optionsService, path, value);
+      }
+    });
+  }
+
   switch (meta.control) {
     case 'toggle':
       return m('label.toggle', [
@@ -184,6 +196,10 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
         )
       ]);
     }
+
+    case 'pressure-colors':
+      // Handled by special case before switch
+      return null;
   }
 }
 
