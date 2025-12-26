@@ -229,11 +229,16 @@
   to { transform: translateY(100%); }
 }
 
-/* Mobile: slide down on close */
+/* Desktop: fade out on close */
+.dialog.options.closing .backdrop {
+  animation: fadeOut 0.25s ease-out forwards;
+}
+.dialog.options.closing .window {
+  animation: scaleOut 0.25s ease-out forwards;
+}
+
+/* Mobile: slide down on close (overrides desktop) */
 @media (max-width: 639px) {
-  .dialog.options.closing .backdrop {
-    animation: fadeOut 0.25s ease-out forwards;
-  }
   .dialog.options.closing .window {
     animation: slideDown 0.25s ease-out forwards;
   }

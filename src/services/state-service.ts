@@ -7,6 +7,7 @@
  */
 
 import { signal, effect } from '@preact/signals-core';
+import { debounceFlush } from '../utils/debounce-flush';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 
@@ -32,8 +33,7 @@ export class StateService {
   readonly viewState = signal<ViewState>({ ...DEFAULT_VIEW_STATE });
 
   private urlSyncEnabled = false;
-  private urlSyncTimeout: ReturnType<typeof setTimeout> | null = null;
-  private readonly URL_SYNC_DEBOUNCE = 300; // ms
+  private debouncedUrlSync = debounceFlush(() => this.syncToUrl(), 300);
 
   private optionsService: OptionsService;
 
@@ -48,6 +48,14 @@ export class StateService {
     effect(() => {
       this.optionsService.options.value;  // subscribe to options changes
       this.scheduleUrlSync();
+    });
+
+    // Flush URL sync before page unload
+    window.addEventListener('beforeunload', () => this.debouncedUrlSync.flush());
+
+    // Flush when page becomes hidden (more reliable in Safari)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.debouncedUrlSync.flush();
     });
   }
 
@@ -193,14 +201,7 @@ export class StateService {
   /** Schedule URL sync (debounced). Called by OptionsService when layers change. */
   scheduleUrlSync(): void {
     if (!this.urlSyncEnabled) return;
-
-    if (this.urlSyncTimeout) {
-      clearTimeout(this.urlSyncTimeout);
-    }
-    this.urlSyncTimeout = setTimeout(() => {
-      this.syncToUrl();
-      this.urlSyncTimeout = null;
-    }, this.URL_SYNC_DEBOUNCE);
+    this.debouncedUrlSync();
   }
 
   private syncToUrl(): void {

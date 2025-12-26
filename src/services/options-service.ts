@@ -20,6 +20,7 @@ import {
   type OptionFilter,
 } from '../schemas/options.schema';
 import { deepMerge, getByPath, setByPath } from '../utils/object';
+import { debounceFlush } from '../utils/debounce-flush';
 import { layerIds } from '../config/defaults';
 import type { TLayer } from '../config/types';
 import type { ConfigService } from './config-service';
@@ -194,7 +195,7 @@ export class OptionsService {
   isFirstTimeUser = false;
   usageStats: UsageStats | null = null;
 
-  private saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private debouncedSave = debounceFlush(() => this.save(), 500);
   private initialized = false;
 
   constructor(private configService: ConfigService) {
@@ -207,24 +208,15 @@ export class OptionsService {
     effect(() => {
       void this.userOverrides.value;
       if (!this.initialized) return;
-      if (this.saveTimeout) clearTimeout(this.saveTimeout);
-      this.saveTimeout = setTimeout(() => this.save(), 500);
+      this.debouncedSave();
     });
 
     // Force save before page unload
-    window.addEventListener('beforeunload', () => {
-      if (this.saveTimeout) {
-        clearTimeout(this.saveTimeout);
-        this.save();
-      }
-    });
+    window.addEventListener('beforeunload', () => this.debouncedSave.flush());
 
     // Save when page becomes hidden (more reliable in Safari)
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden' && this.saveTimeout) {
-        clearTimeout(this.saveTimeout);
-        this.save();
-      }
+      if (document.visibilityState === 'hidden') this.debouncedSave.flush();
     });
   }
 
