@@ -21,7 +21,7 @@ export class ConfigService {
     if (this.initialized) return;
 
     try {
-      const response = await fetch('/config/zero.config.json');
+      const response = await fetch(`${import.meta.env.BASE_URL}config/zero.config.json`);
       if (response.ok) {
         const runtimeConfig = await response.json();
         this.config = deepMerge(defaultConfig, runtimeConfig);

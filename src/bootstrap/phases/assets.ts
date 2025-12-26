@@ -32,27 +32,28 @@ export async function runAssetsPhase(
   let ringOffsetsBuffer!: ArrayBuffer;
   let logoBuffer!: ArrayBuffer;
 
+  const base = import.meta.env.BASE_URL;
   const files = [
     // 0-2: Atmosphere LUTs
-    { url: `/atmosphere/transmittance${suffix}.dat`, size: f16 ? 131072 : 262144 },
-    { url: `/atmosphere/scattering${suffix}.dat`, size: f16 ? 8388608 : 16777216 },
-    { url: `/atmosphere/irradiance${suffix}.dat`, size: f16 ? 8192 : 16384 },
+    { url: `${base}atmosphere/transmittance${suffix}.dat`, size: f16 ? 131072 : 262144 },
+    { url: `${base}atmosphere/scattering${suffix}.dat`, size: f16 ? 8388608 : 16777216 },
+    { url: `${base}atmosphere/irradiance${suffix}.dat`, size: f16 ? 8192 : 16384 },
     // 3-8: Basemap faces
-    { url: '/images/basemaps/rtopo2/px.png', size: 111244 },
-    { url: '/images/basemaps/rtopo2/nx.png', size: 78946 },
-    { url: '/images/basemaps/rtopo2/py.png', size: 215476 },
-    { url: '/images/basemaps/rtopo2/ny.png', size: 292274 },
-    { url: '/images/basemaps/rtopo2/pz.png', size: 85084 },
-    { url: '/images/basemaps/rtopo2/nz.png', size: 59133 },
+    { url: `${base}images/basemaps/rtopo2/px.png`, size: 111244 },
+    { url: `${base}images/basemaps/rtopo2/nx.png`, size: 78946 },
+    { url: `${base}images/basemaps/rtopo2/py.png`, size: 215476 },
+    { url: `${base}images/basemaps/rtopo2/ny.png`, size: 292274 },
+    { url: `${base}images/basemaps/rtopo2/pz.png`, size: 85084 },
+    { url: `${base}images/basemaps/rtopo2/nz.png`, size: 59133 },
     // 9: WASM decoder
-    { url: '/om-decoder.wasm', size: 2107564 },
+    { url: `${base}om-decoder.wasm`, size: 2107564 },
     // 10: Font atlas
-    { url: '/fonts/plex-mono.png', size: 15926 },
+    { url: `${base}fonts/plex-mono.png`, size: 15926 },
     // 11-12: Gaussian grid LUTs
-    { url: '/om1280/gaussian-lats.bin', size: 10240 },
-    { url: '/om1280/ring-offsets.bin', size: 10240 },
+    { url: `${base}om1280/gaussian-lats.bin`, size: 10240 },
+    { url: `${base}om1280/ring-offsets.bin`, size: 10240 },
     // 13: Logo for idle globe
-    { url: '/images/hypatia.png', size: 240500 },
+    { url: `${base}images/hypatia.png`, size: 240500 },
   ];
 
   const TOTAL = files.length;

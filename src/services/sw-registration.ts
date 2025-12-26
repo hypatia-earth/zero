@@ -38,7 +38,7 @@ interface LayerDetail {
  */
 export async function registerServiceWorker(): Promise<void> {
   try {
-    await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
     await navigator.serviceWorker.ready;
 
     // Wait for SW to claim this client (skipWaiting + clients.claim), with timeout

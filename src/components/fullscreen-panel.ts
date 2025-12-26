@@ -45,7 +45,7 @@ export const FullscreenPanel: m.ClosureComponent = () => {
           title: isFullscreen ? 'Exit Fullscreen (F)' : 'Enter Fullscreen (F)'
         }, [
           m('img.fullscreen-icon', {
-            src: isFullscreen ? '/icon-fullscreen-on.svg' : '/icon-fullscreen-off.svg',
+            src: `${import.meta.env.BASE_URL}${isFullscreen ? 'icon-fullscreen-on.svg' : 'icon-fullscreen-off.svg'}`,
             alt: isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'
           })
         ])

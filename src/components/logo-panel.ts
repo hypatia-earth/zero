@@ -36,7 +36,7 @@ export const LogoPanel: m.ClosureComponent = () => {
           onmouseleave: cancelPress,
         }, [
           m('img', {
-            src: '/zero.hypatia.earth-brand-white.svg',
+            src: `${import.meta.env.BASE_URL}zero.hypatia.earth-brand-white.svg`,
             alt: 'Zero - hypatia.earth',
           }),
         ]),
