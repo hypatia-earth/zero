@@ -500,6 +500,15 @@
   transform: translateX(20px);
 }
 
+.dialog.options .toggle.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dialog.options .toggle.disabled input {
+  cursor: not-allowed;
+}
+
 /* Layer toggle (color square + toggle) */
 .dialog.options .layer-toggle-row {
   display: flex;
