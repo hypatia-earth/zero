@@ -478,6 +478,19 @@ export class TimestepService {
     this.state.value = { ...current };
   }
 
+  /** Set GPU state for a layer (used after smart shrink) */
+  setGpuState(param: TWeatherLayer, timesteps: Set<TTimestep>): void {
+    const current = this.state.value;
+    const paramState = current.params.get(param);
+    if (!paramState) return;
+
+    paramState.gpu.clear();
+    for (const ts of timesteps) {
+      paramState.gpu.add(ts);
+    }
+    this.state.value = { ...current };
+  }
+
   // ─────────────────────────────────────────────────────────────────────────────
   // Size Management
   // ─────────────────────────────────────────────────────────────────────────────

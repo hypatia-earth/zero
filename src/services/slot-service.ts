@@ -118,17 +118,21 @@ export class SlotService {
       if (newTimeslots !== lastTimeslots) {
         this.queueService.clearTasks();
 
-        // Resize LayerStores
+        // Resize LayerStores (grow only - shrink handled per-layer below)
         const resizedStores: TWeatherLayer[] = [];
         let failed = false;
-        for (const [param, store] of this.layerStores) {
-          try {
-            store.resize(newTimeslots);
-            resizedStores.push(param);
-          } catch (err) {
-            console.error(`[Slot] OOM resizing ${param}:`, err);
-            failed = true;
-            break;
+        const toDate = (ts: TTimestep) => this.timestepService.toDate(ts);
+        const isGrowingStore = newTimeslots > lastTimeslots;
+        if (isGrowingStore) {
+          for (const [param, store] of this.layerStores) {
+            try {
+              store.resize(newTimeslots);
+              resizedStores.push(param);
+            } catch (err) {
+              console.error(`[Slot] OOM resizing ${param}:`, err);
+              failed = true;
+              break;
+            }
           }
         }
 
@@ -147,19 +151,33 @@ export class SlotService {
           if (isGrowing) {
             this.paramSlots.get(param)?.grow(newTimeslots);
           } else {
-            const oldPs = this.paramSlots.get(param);
-            oldPs?.dispose();
-            const slabsCount = this.getLayerParams(param).length;
-            this.paramSlots.set(param, createParamSlots(param, newTimeslots, slabsCount));
-            this.timestepService.clearGpuState(param);
-          }
-        }
+            // Smart shrink: get current mapping from ParamSlots
+            const ps = this.paramSlots.get(param);
+            const currentMapping = ps?.getTimeslotMapping() ?? new Map();
 
-        // After shrinking, deactivate if active slots out of range
-        if (!isGrowing) {
-          for (const param of this.readyWeatherLayers) {
-            const slots = this.renderService.getActiveSlots(param);
-            if (slots.slot0 >= newTimeslots || slots.slot1 >= newTimeslots) {
+            // Sort by distance from current time, keep closest N
+            const sorted = [...currentMapping.entries()].sort((a, b) => {
+              const distA = Math.abs(toDate(a[0]).getTime() - time.getTime());
+              const distB = Math.abs(toDate(b[0]).getTime() - time.getTime());
+              return distA - distB;
+            });
+            const keptEntries = sorted.slice(0, newTimeslots);
+            const keptMapping = new Map(keptEntries.map(([ts, _], i) => [ts, i])); // Renumber to 0..N-1
+            const evictedSlots = new Set(sorted.slice(newTimeslots).map(([, idx]) => idx));
+
+            // Tell LayerStore which slots to evict and renumber
+            const store = this.layerStores.get(param);
+            store?.shrinkWithMapping(newTimeslots, keptEntries, evictedSlots);
+
+            // Sync ParamSlots
+            ps?.shrink(newTimeslots, keptMapping);
+
+            // Update timestepService GPU state
+            this.timestepService.setGpuState(param, new Set(keptMapping.keys()));
+
+            // Deactivate (will re-activate on next tick with correct slots)
+            const activeSlots = this.renderService.getActiveSlots(param);
+            if (activeSlots.slot0 >= 0) {
               this.deactivateLayer(param);
             }
           }

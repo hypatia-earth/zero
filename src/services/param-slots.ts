@@ -51,6 +51,7 @@ export interface ParamSlots {
   // Queries
   hasSlot(timestep: TTimestep): boolean;
   getSlot(timestep: TTimestep): Slot | undefined;
+  getTimeslotMapping(): Map<TTimestep, number>;
 
   // Active timesteps (0, 1, or 2) ordered by time
   getActiveTimesteps(): TTimestep[];
@@ -58,6 +59,7 @@ export interface ParamSlots {
 
   // Resize
   grow(newTotal: number): void;
+  shrink(newTotal: number, keptMapping: Map<TTimestep, number>): void;
 
   // Cleanup
   dispose(): void;
@@ -170,6 +172,13 @@ export function createParamSlots(param: string, timeslots: number, slabsCount?: 
 
     hasSlot: (ts) => slots.has(ts),
     getSlot: (ts) => slots.get(ts),
+    getTimeslotMapping: () => {
+      const mapping = new Map<TTimestep, number>();
+      for (const [ts, slot] of slots) {
+        if (slot.loaded) mapping.set(ts, slot.slotIndex);
+      }
+      return mapping;
+    },
 
     getActiveTimesteps: () => activeTimesteps,
     setActiveTimesteps: (ts) => { activeTimesteps = ts; },
@@ -181,6 +190,42 @@ export function createParamSlots(param: string, timeslots: number, slabsCount?: 
       }
       DEBUG && console.log(`[Slot] ${P} grew: ${capacity} → ${newTotal} slots (${slots.size} preserved)`);
       capacity = newTotal;
+    },
+
+    shrink(newTotal, keptMapping) {
+      const oldSize = slots.size;
+
+      // Rebuild slots from kept mapping
+      const newSlots = new Map<TTimestep, Slot>();
+      for (const [ts, newSlotIndex] of keptMapping) {
+        const existing = slots.get(ts);
+        if (existing) {
+          newSlots.set(ts, { ...existing, slotIndex: newSlotIndex });
+        }
+      }
+      slots.clear();
+      for (const [ts, slot] of newSlots) {
+        slots.set(ts, slot);
+      }
+
+      // Rebuild free indices
+      const usedIndices = new Set(keptMapping.values());
+      freeIndices.length = 0;
+      for (let i = 0; i < newTotal; i++) {
+        if (!usedIndices.has(i)) freeIndices.push(i);
+      }
+
+      // Clear loading state and slabs for evicted
+      loadingKeys.clear();
+      slabsLoaded.clear();
+
+      // Clear active if references evicted slots
+      if (activeTimesteps.some(ts => !keptMapping.has(ts))) {
+        activeTimesteps = [];
+      }
+
+      capacity = newTotal;
+      DEBUG && console.log(`[Slot] ${P} shrunk: ${oldSize} → ${slots.size} slots (capacity ${newTotal})`);
     },
 
     dispose() {

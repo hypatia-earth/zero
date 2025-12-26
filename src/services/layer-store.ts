@@ -185,7 +185,7 @@ export class LayerStore {
   /**
    * Resize store capacity - may grow or shrink.
    * Growing: preserves existing buffers, adds new free indices.
-   * Shrinking: destroys all buffers (data refetch needed).
+   * Shrinking: use shrinkWithMapping() for smart shrink.
    */
   resize(newTimeslots: number): void {
     if (newTimeslots === this.timeslotCount) return;
@@ -200,19 +200,63 @@ export class LayerStore {
       this.timeslotCount = newTimeslots;
       console.log(`[Store] ${this.layerId} grew: ${oldCount} → ${newTimeslots} slots (${this.slotBuffers.size} preserved)`);
     } else {
-      // Shrinking: destroy all buffers (TODO: preserve closest to current time)
-      const evictedCount = this.slotBuffers.size;
-      for (const buffers of this.slotBuffers.values()) {
-        for (const buffer of buffers) {
-          buffer.destroy();
-        }
-      }
-      this.slotBuffers.clear();
-      this.timeslots.clear();
-      this.timeslotCount = newTimeslots;
-      this.freeSlotIndices = Array.from({ length: this.timeslotCount }, (_, i) => i);
-      console.log(`[Store] ${this.layerId} shrunk: ${oldCount} → ${newTimeslots} slots (${evictedCount} evicted)`);
+      // Simple shrink: evict all (use shrinkWithMapping for smart shrink)
+      this.evictAll(newTimeslots);
     }
+  }
+
+  /**
+   * Smart shrink: keep specified slots, evict rest, renumber.
+   * Called by SlotService which knows the timestep→slot mapping.
+   */
+  shrinkWithMapping(
+    newTimeslots: number,
+    keptEntries: Array<[TTimestep, number]>,  // [timestep, oldSlotIndex]
+    evictedSlots: Set<number>,
+  ): void {
+    const oldCount = this.timeslotCount;
+
+    // Evict buffers for slots not being kept
+    for (const slotIndex of evictedSlots) {
+      const buffers = this.slotBuffers.get(slotIndex);
+      if (buffers) {
+        for (const buffer of buffers) buffer.destroy();
+        this.slotBuffers.delete(slotIndex);
+      }
+    }
+
+    // Renumber kept buffers to 0..N-1
+    const newSlotBuffers = new Map<number, GPUBuffer[]>();
+    for (let i = 0; i < keptEntries.length; i++) {
+      const [, oldSlotIndex] = keptEntries[i]!;
+      const buffers = this.slotBuffers.get(oldSlotIndex);
+      if (buffers) {
+        newSlotBuffers.set(i, buffers);
+      }
+    }
+
+    this.slotBuffers = newSlotBuffers;
+    this.timeslotCount = newTimeslots;
+    this.freeSlotIndices = [];
+    for (let i = keptEntries.length; i < newTimeslots; i++) {
+      this.freeSlotIndices.push(i);
+    }
+
+    console.log(`[Store] ${this.layerId} shrunk: ${oldCount} → ${newTimeslots} (${keptEntries.length} kept, ${evictedSlots.size} evicted)`);
+  }
+
+  /** Evict all slots (fallback for simple shrink) */
+  private evictAll(newTimeslots: number): void {
+    const oldCount = this.timeslotCount;
+    const evictedCount = this.slotBuffers.size;
+    for (const buffers of this.slotBuffers.values()) {
+      for (const buffer of buffers) buffer.destroy();
+    }
+    this.slotBuffers.clear();
+    this.timeslots.clear();
+    this.timeslotCount = newTimeslots;
+    this.freeSlotIndices = Array.from({ length: newTimeslots }, (_, i) => i);
+    console.log(`[Store] ${this.layerId} shrunk: ${oldCount} → ${newTimeslots} (${evictedCount} evicted, no ref)`);
   }
 
   /** Clean up GPU resources */
