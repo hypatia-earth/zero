@@ -48,7 +48,48 @@ interface RadioMeta {
   options: { value: string | number; label: string; localhostOnly?: boolean }[];
 }
 
+interface LayerToggleMeta {
+  control: 'layer-toggle';
+  layerId: string;
+}
+
 const isLocalhost = location.hostname === 'localhost';
+
+// ============================================================
+// Prefetch size calculation
+// ============================================================
+
+/** Timesteps per forecast day range (ECMWF: 1h to 90h, 3h to 144h, 6h after) */
+const TIMESTEPS_BY_DAYS: Record<string, number> = {
+  '1': 24,   // 0-24h: hourly
+  '2': 48,   // 0-48h: hourly
+  '4': 92,   // 0-72h hourly (72) + 72-96h mixed (20)
+  '6': 108,  // + 96-144h 3-hourly (16)
+  '8': 116,  // + 144-192h 6-hourly (8)
+};
+
+/** Network transfer size per timestep per layer (MB) from defaultSizeEstimate */
+const SIZE_PER_TIMESTEP_MB: Record<string, number> = {
+  temp: 8,
+  pressure: 2,
+  wind: 16.4,  // U + V components
+};
+
+/** Calculate estimated prefetch size in MB */
+function calculatePrefetchSizeMB(days: string, layers: { temp: boolean; pressure: boolean; wind: boolean }): number {
+  const timesteps = TIMESTEPS_BY_DAYS[days] ?? 48;
+  let sizePerTimestep = 0;
+  if (layers.temp) sizePerTimestep += SIZE_PER_TIMESTEP_MB.temp ?? 0;
+  if (layers.pressure) sizePerTimestep += SIZE_PER_TIMESTEP_MB.pressure ?? 0;
+  if (layers.wind) sizePerTimestep += SIZE_PER_TIMESTEP_MB.wind ?? 0;
+  return timesteps * sizePerTimestep;
+}
+
+/** Format size for display */
+function formatSize(mb: number): string {
+  if (mb >= 1000) return `${(mb / 1000).toFixed(1)} GB`;
+  return `${Math.round(mb)} MB`;
+}
 
 // ============================================================
 // Drag state (persists across redraws)
@@ -204,7 +245,55 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
     case 'pressure-colors':
       // Handled by special case before switch
       return null;
+
+    case 'layer-toggle': {
+      const layerToggleMeta = meta as LayerToggleMeta;
+      return m('div.layer-toggle-row', [
+        m('span.layer-color', {
+          style: { backgroundColor: `var(--color-layer-${layerToggleMeta.layerId})` }
+        }),
+        m('label.toggle', [
+          m('input[type=checkbox]', {
+            checked: currentValue as boolean,
+            onchange: (e: Event) => {
+              setOptionValue(optionsService, path, (e.target as HTMLInputElement).checked);
+            }
+          }),
+          m('span.track')
+        ])
+      ]);
+    }
   }
+}
+
+/** Render prefetch size estimate row */
+function renderPrefetchSizeEstimate(options: ZeroOptions): m.Children {
+  const { prefetch } = options;
+  const sizeMB = calculatePrefetchSizeMB(prefetch.forecastDays, {
+    temp: prefetch.temp,
+    pressure: prefetch.pressure,
+    wind: prefetch.wind,
+  });
+
+  if (sizeMB === 0) {
+    return m('div.row.prefetch-size', { key: '_prefetch_size' }, [
+      m('div.info', [
+        m('label.label', 'Estimated size'),
+      ]),
+      m('div.controls', [
+        m('span.size-value', 'No layers selected'),
+      ]),
+    ]);
+  }
+
+  return m('div.row.prefetch-size', { key: '_prefetch_size' }, [
+    m('div.info', [
+      m('label.label', 'Estimated size'),
+    ]),
+    m('div.controls', [
+      m('span.size-value', formatSize(sizeMB)),
+    ]),
+  ]);
 }
 
 function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: OptionsService, paletteService: PaletteService, cores: number): m.Children {
@@ -344,6 +433,26 @@ function renderGroup(
           ...opts.map(opt => renderOption(opt, options, optionsService, paletteService, cores))
         ])
       )
+    ].filter(Boolean));
+  }
+
+  // Download group: add prefetch size estimate after layer toggles
+  // Hide prefetch sub-options when prefetch.enabled is false
+  if (groupId === 'download') {
+    const prefetchEnabled = options.prefetch.enabled;
+    const filteredOptions = visibleOptions.filter(opt => {
+      // Always show the enabled toggle
+      if (opt.path === 'prefetch.enabled') return true;
+      // Hide other prefetch options when disabled
+      if (opt.path.startsWith('prefetch.')) return prefetchEnabled;
+      return true;
+    });
+
+    return m('div.section', { key: groupId }, [
+      !skipGroupHeader ? m('h3.title', { key: '_title' }, group.label) : null,
+      !skipGroupHeader && group.description ? m('p.description', { key: '_desc' }, group.description) : null,
+      ...filteredOptions.map(opt => renderOption(opt, options, optionsService, paletteService, cores)),
+      prefetchEnabled ? renderPrefetchSizeEstimate(options) : null,
     ].filter(Boolean));
   }
 

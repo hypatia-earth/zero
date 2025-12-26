@@ -24,6 +24,7 @@ import { debounceFlush } from '../utils/debounce-flush';
 import { layerIds } from '../config/defaults';
 import type { TLayer } from '../config/types';
 import type { ConfigService } from './config-service';
+import { updatePrefetchConfig } from './sw-registration';
 
 const DEBUG = false;
 
@@ -217,6 +218,23 @@ export class OptionsService {
     // Save when page becomes hidden (more reliable in Safari)
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') this.debouncedSave.flush();
+    });
+
+    // Sync prefetch config to SW when prefetch options change
+    effect(() => {
+      const { prefetch } = this.options.value;
+      if (!this.initialized) return;
+
+      const layers: string[] = [];
+      if (prefetch.temp) layers.push('temp');
+      if (prefetch.pressure) layers.push('pressure');
+      if (prefetch.wind) layers.push('wind');
+
+      void updatePrefetchConfig({
+        enabled: prefetch.enabled,
+        forecastDays: prefetch.forecastDays,
+        layers,
+      });
     });
   }
 

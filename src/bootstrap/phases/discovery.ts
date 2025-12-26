@@ -5,7 +5,7 @@
 import type { TimestepService } from '../../services/timestep-service';
 import type { StateService } from '../../services/state-service';
 import type { Progress } from '../progress';
-import { registerServiceWorker } from '../../services/sw-registration';
+import { registerServiceWorker, getPrefetchHistory } from '../../services/sw-registration';
 
 export async function runDiscoveryPhase(
   timestepService: TimestepService,
@@ -15,6 +15,16 @@ export async function runDiscoveryPhase(
   // Register service worker
   await progress.run('Registering service worker...', 0, async () => {
     await registerServiceWorker();
+
+    // Log last prefetch (non-blocking)
+    getPrefetchHistory().then(history => {
+      if (history.length > 0) {
+        const last = history[0]!;
+        const date = new Date(last.timestamp);
+        const ago = Math.round((Date.now() - date.getTime()) / 3600000);
+        console.log(`[Prefetch] Last: ${ago}h ago, ${last.success}/${last.totalFiles} OK, ${last.layers.join('+')}`);
+      }
+    }).catch(() => {});
   });
 
   // Discover available timesteps

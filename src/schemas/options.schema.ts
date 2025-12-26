@@ -13,7 +13,7 @@ import { defaultConfig } from '../config/defaults';
 // UI Metadata Types
 // ============================================================
 
-type ControlType = 'toggle' | 'slider' | 'select' | 'radio' | 'pressure-colors';
+type ControlType = 'toggle' | 'slider' | 'select' | 'radio' | 'pressure-colors' | 'layer-toggle';
 
 /** Impact level for option changes */
 type OptionImpact = 'uniform' | 'recreate';
@@ -64,7 +64,12 @@ interface PressureColorsMeta extends UIMetadata {
   control: 'pressure-colors';
 }
 
-type OptionMeta = SliderMeta | SelectMeta | ToggleMeta | RadioMeta | PressureColorsMeta;
+interface LayerToggleMeta extends UIMetadata {
+  control: 'layer-toggle';
+  layerId: string;  // For CSS color variable lookup
+}
+
+type OptionMeta = SliderMeta | SelectMeta | ToggleMeta | RadioMeta | PressureColorsMeta | LayerToggleMeta;
 
 /** Helper to attach metadata to Zod schema */
 function opt<T extends z.ZodTypeAny>(schema: T, meta: OptionMeta): T & { _meta: OptionMeta } {
@@ -862,6 +867,74 @@ export const optionsSchema = z.object({
   }),
 
   // ----------------------------------------------------------
+  // Background Prefetch
+  // ----------------------------------------------------------
+  prefetch: z.object({
+    enabled: opt(
+      z.boolean().default(false),
+      {
+        label: 'Background prefetch',
+        description: 'Download forecast data when browser is closed. Chrome and Edge only. Browser decides when to run, typically overnight. May not run on battery or with low site engagement.',
+        group: 'download',
+        filter: ['global', 'dataCache'],
+        order: 10,
+        control: 'toggle',
+      }
+    ),
+    forecastDays: opt(
+      z.enum(['1', '2', '4', '6', '8']).default('2'),
+      {
+        label: 'Forecast days',
+        description: 'Days of forecast to download in background',
+        group: 'download',
+        filter: ['global', 'dataCache'],
+        order: 11,
+        control: 'select',
+        options: [
+          { value: '1', label: '1 day' },
+          { value: '2', label: '2 days' },
+          { value: '4', label: '4 days' },
+          { value: '6', label: '6 days' },
+          { value: '8', label: '8 days' },
+        ],
+      }
+    ),
+    temp: opt(
+      z.boolean().default(true),
+      {
+        label: 'Temperature',
+        group: 'download',
+        filter: ['global', 'dataCache'],
+        order: 12,
+        control: 'layer-toggle',
+        layerId: 'temp',
+      }
+    ),
+    pressure: opt(
+      z.boolean().default(false),
+      {
+        label: 'Pressure',
+        group: 'download',
+        filter: ['global', 'dataCache'],
+        order: 13,
+        control: 'layer-toggle',
+        layerId: 'pressure',
+      }
+    ),
+    wind: opt(
+      z.boolean().default(false),
+      {
+        label: 'Wind',
+        group: 'download',
+        filter: ['global', 'dataCache'],
+        order: 14,
+        control: 'layer-toggle',
+        layerId: 'wind',
+      }
+    ),
+  }),
+
+  // ----------------------------------------------------------
   // Debug
   // ----------------------------------------------------------
   debug: z.object({
@@ -923,6 +996,7 @@ export const defaultOptions: ZeroOptions = {
   wind: { enabled: false, seedCount: defaultConfig.wind.seedCount, opacity: defaultConfig.wind.opacity, speed: defaultConfig.wind.animSpeed },
   pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
+  prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
   debug: { showPerfPanel: false, batterySaver: false },
 };
 

@@ -500,6 +500,27 @@
   transform: translateX(20px);
 }
 
+/* Layer toggle (color square + toggle) */
+.dialog.options .layer-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialog.options .layer-toggle-row .layer-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Prefetch size estimate */
+.dialog.options .prefetch-size .size-value {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Slider */
 .dialog.options .slider {
   display: flex;

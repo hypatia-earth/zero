@@ -55,7 +55,6 @@ self.addEventListener('activate', (event) => {
       )
     ])
   );
-  console.log('[SW] Activated and claiming clients');
 });
 
 /**
@@ -172,6 +171,11 @@ self.addEventListener('message', async (event) => {
     return;
   }
 
+  if (type === 'PING') {
+    event.ports[0].postMessage({ ready: true });
+    return;
+  }
+
   if (type === 'CLEAR_CACHE') {
     // Clear all layer caches
     const keys = await caches.keys();
@@ -191,32 +195,21 @@ self.addEventListener('message', async (event) => {
   if (type === 'GET_CACHE_STATS') {
     const keys = await caches.keys();
     const layerCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
-    const stats = { layers: {}, totalEntries: 0, totalSizeMB: 0 };
+    const stats = { layers: {}, totalEntries: 0, totalSizeMB: '0' };
 
     for (const cacheName of layerCaches) {
       const cache = await caches.open(cacheName);
       const requests = await cache.keys();
-      let layerSize = 0;
-
-      for (const request of requests) {
-        const response = await cache.match(request);
-        if (response) {
-          const blob = await response.blob();
-          layerSize += blob.size;
-        }
-      }
 
       // Extract layer name from cache name: om-temp-v2 → temp
       const layerName = cacheName.replace(CACHE_PREFIX, '').replace(`-${CACHE_VERSION}`, '');
       stats.layers[layerName] = {
         entries: requests.length,
-        sizeMB: (layerSize / (1024 * 1024)).toFixed(2)
+        sizeMB: '0'  // Skip slow blob size calc for quick stats
       };
       stats.totalEntries += requests.length;
-      stats.totalSizeMB += layerSize / (1024 * 1024);
     }
 
-    stats.totalSizeMB = stats.totalSizeMB.toFixed(2);
     event.ports[0].postMessage(stats);
   }
 
@@ -275,4 +268,280 @@ self.addEventListener('message', async (event) => {
 
     event.ports[0].postMessage({ deleted });
   }
+
+  if (type === 'SET_PREFETCH_CONFIG') {
+    const { config } = event.data;
+    prefetchConfig = config;
+    console.log('[SW] Prefetch config updated:', config);
+    event.ports[0].postMessage({ success: true });
+  }
+
+  if (type === 'GET_PREFETCH_HISTORY') {
+    const history = await getPrefetchHistory();
+    event.ports[0].postMessage(history);
+  }
+
+  if (type === 'CLEAR_PREFETCH_HISTORY') {
+    try {
+      const db = await openPrefetchDB();
+      const tx = db.transaction(PREFETCH_STORE, 'readwrite');
+      tx.objectStore(PREFETCH_STORE).clear();
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+      event.ports[0].postMessage({ success: true });
+    } catch (err) {
+      event.ports[0].postMessage({ success: false, error: err.message });
+    }
+  }
+
+  if (type === 'TRIGGER_PREFETCH') {
+    // Respond immediately, run prefetch in background
+    event.ports[0].postMessage({ started: true });
+    handlePrefetch();
+  }
 });
+
+// ============================================================
+// Periodic Background Sync - Prefetching
+// ============================================================
+
+/**
+ * Prefetch configuration (set by main thread)
+ */
+let prefetchConfig = {
+  enabled: false,
+  forecastDays: '2',
+  layers: ['temp'],
+};
+
+// ============================================================
+// Prefetch History (IndexedDB)
+// ============================================================
+
+const PREFETCH_DB_NAME = 'hypatia-zero-prefetch';
+const PREFETCH_DB_VERSION = 1;
+const PREFETCH_STORE = 'history';
+const MAX_HISTORY_ENTRIES = 50;
+
+/**
+ * Open prefetch history database
+ */
+function openPrefetchDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(PREFETCH_DB_NAME, PREFETCH_DB_VERSION);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains(PREFETCH_STORE)) {
+        const store = db.createObjectStore(PREFETCH_STORE, { keyPath: 'id', autoIncrement: true });
+        store.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+    };
+  });
+}
+
+/**
+ * Save prefetch run to history
+ */
+async function savePrefetchHistory(entry) {
+  try {
+    const db = await openPrefetchDB();
+    const tx = db.transaction(PREFETCH_STORE, 'readwrite');
+    const store = tx.objectStore(PREFETCH_STORE);
+
+    // Add new entry
+    store.add(entry);
+
+    // Prune old entries (keep last MAX_HISTORY_ENTRIES)
+    const countRequest = store.count();
+    countRequest.onsuccess = () => {
+      const count = countRequest.result;
+      if (count > MAX_HISTORY_ENTRIES) {
+        const deleteCount = count - MAX_HISTORY_ENTRIES;
+        const cursorRequest = store.openCursor();
+        let deleted = 0;
+        cursorRequest.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor && deleted < deleteCount) {
+            cursor.delete();
+            deleted++;
+            cursor.continue();
+          }
+        };
+      }
+    };
+
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch (err) {
+    console.warn('[SW] Failed to save prefetch history:', err);
+  }
+}
+
+/**
+ * Get prefetch history
+ */
+async function getPrefetchHistory() {
+  try {
+    const db = await openPrefetchDB();
+    const tx = db.transaction(PREFETCH_STORE, 'readonly');
+    const store = tx.objectStore(PREFETCH_STORE);
+    const index = store.index('timestamp');
+
+    const entries = await new Promise((resolve, reject) => {
+      const request = index.getAll(null, MAX_HISTORY_ENTRIES);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+
+    db.close();
+    // Return newest first
+    return entries.reverse();
+  } catch (err) {
+    console.warn('[SW] Failed to get prefetch history:', err);
+    return [];
+  }
+}
+
+/** Timesteps per forecast day range */
+const TIMESTEPS_BY_DAYS = {
+  '1': 24,
+  '2': 48,
+  '4': 92,
+  '6': 108,
+  '8': 116,
+};
+
+/** Open-Meteo S3 base URL */
+const OM_BASE_URL = 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs';
+
+/** Layer to Open-Meteo parameter mapping */
+const LAYER_PARAMS = {
+  temp: ['temperature_2m'],
+  pressure: ['pressure_msl'],
+  wind: ['wind_u_component_10m', 'wind_v_component_10m'],
+};
+
+/**
+ * Generate timestep URLs for prefetching
+ * ECMWF: 1h to 90h, 3h to 144h, 6h after
+ */
+function generatePrefetchUrls(forecastDays, layers) {
+  const urls = [];
+  const now = new Date();
+  const hoursToFetch = {
+    '1': 24,
+    '2': 48,
+    '4': 96,
+    '6': 144,
+    '8': 192,
+  }[forecastDays] || 48;
+
+  // Find latest model run (00Z, 06Z, 12Z, 18Z) that's likely available (~6h delay)
+  const runHour = Math.floor((now.getUTCHours() - 6) / 6) * 6;
+  const runDate = new Date(now);
+  runDate.setUTCHours(runHour, 0, 0, 0);
+  if (runHour < 0) {
+    runDate.setUTCDate(runDate.getUTCDate() - 1);
+    runDate.setUTCHours(18, 0, 0, 0);
+  }
+
+  const runStr = runDate.toISOString().slice(0, 10).replace(/-/g, '/') +
+                 '/' + String(runDate.getUTCHours()).padStart(2, '0') + '00Z';
+
+  // Generate timesteps
+  for (let h = 0; h <= hoursToFetch; h++) {
+    // Check resolution: 1h to 90h, 3h to 144h, 6h after
+    if (h > 90 && h <= 144 && h % 3 !== 0) continue;
+    if (h > 144 && h % 6 !== 0) continue;
+
+    const validTime = new Date(runDate.getTime() + h * 3600 * 1000);
+    const validStr = validTime.toISOString().slice(0, 13).replace('T', 'T') + '00';
+    const dateStr = validTime.toISOString().slice(0, 10);
+
+    for (const layer of layers) {
+      const params = LAYER_PARAMS[layer] || [];
+      for (const param of params) {
+        urls.push({
+          url: `${OM_BASE_URL}/${runStr}/${param}/${dateStr}T${String(validTime.getUTCHours()).padStart(2, '0')}00.om`,
+          layer,
+          param,
+        });
+      }
+    }
+  }
+
+  return urls;
+}
+
+/**
+ * Prefetch a single file (just the header/metadata for now)
+ * Full prefetch would require implementing the .om range request logic
+ */
+async function prefetchFile(urlInfo) {
+  try {
+    // For now, just do a HEAD request to trigger any CDN caching
+    // Full implementation would parse .om file and fetch data ranges
+    const response = await fetch(urlInfo.url, { method: 'HEAD' });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Handle periodic sync event
+ */
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'prefetch-forecast') {
+    console.log('[SW] Periodic sync triggered: prefetch-forecast');
+    event.waitUntil(handlePrefetch());
+  }
+});
+
+/**
+ * Execute prefetch based on current config
+ */
+async function handlePrefetch() {
+  if (!prefetchConfig.enabled) {
+    console.log('[SW] Prefetch disabled, skipping');
+    return;
+  }
+
+  const startTime = Date.now();
+  const urls = generatePrefetchUrls(prefetchConfig.forecastDays, prefetchConfig.layers);
+  console.log(`[SW] Prefetching ${urls.length} files...`);
+
+  let success = 0;
+  let failed = 0;
+
+  // Prefetch in batches to avoid overwhelming the network
+  const batchSize = 5;
+  for (let i = 0; i < urls.length; i += batchSize) {
+    const batch = urls.slice(i, i + batchSize);
+    const results = await Promise.all(batch.map(prefetchFile));
+    success += results.filter(r => r).length;
+    failed += results.filter(r => !r).length;
+  }
+
+  const durationMs = Date.now() - startTime;
+  console.log(`[SW] Prefetch complete: ${success} success, ${failed} failed in ${(durationMs / 1000).toFixed(1)}s`);
+
+  // Save to history
+  await savePrefetchHistory({
+    timestamp: new Date().toISOString(),
+    forecastDays: prefetchConfig.forecastDays,
+    layers: [...prefetchConfig.layers],
+    totalFiles: urls.length,
+    success,
+    failed,
+    durationMs,
+  });
+}

@@ -2,10 +2,29 @@
  * Service Worker Registration
  *
  * Registers the SW for Range request caching and exposes console utilities.
+ * Optionally registers Periodic Background Sync for prefetching.
  */
 
 import { SW_CACHED_WEATHER_LAYERS } from '../config/types';
 import { sendSWMessage } from '../utils/sw-message';
+
+/** Prefetch configuration passed to SW */
+export interface PrefetchConfig {
+  enabled: boolean;
+  forecastDays: string;
+  layers: string[];  // ['temp', 'pressure', 'wind']
+}
+
+// Extend ServiceWorkerRegistration for Periodic Sync (not in all TS libs)
+interface PeriodicSyncManager {
+  register(tag: string, options?: { minInterval: number }): Promise<void>;
+  unregister(tag: string): Promise<void>;
+  getTags(): Promise<string[]>;
+}
+
+interface ServiceWorkerRegistrationWithPeriodicSync extends ServiceWorkerRegistration {
+  periodicSync?: PeriodicSyncManager;
+}
 
 /** Layer stats from SW */
 interface LayerStats {
@@ -64,7 +83,8 @@ export async function registerServiceWorker(): Promise<void> {
       }
     }
 
-    // Log available cached slices
+    // Ping SW to confirm it's fully activated, then log cache stats
+    await sendSWMessage({ type: 'PING' });
     await logCachedTimesteps();
 
     // Setup cache utils for debugging (localhost only)
@@ -82,16 +102,17 @@ export async function registerServiceWorker(): Promise<void> {
 async function logCachedTimesteps(): Promise<void> {
   try {
     const stats = await sendSWMessage<CacheStats>({ type: 'GET_CACHE_STATS' });
-    const codes: Record<string, string> = { temp: 'temp', rain: 'rain', clouds: 'clou', humidity: 'humi', pressure: 'pres', wind: 'wind' };
+    const codes: Record<string, string> = { temp: 'T', rain: 'R', clouds: 'C', humidity: 'H', pressure: 'P', wind: 'W' };
     const parts = SW_CACHED_WEATHER_LAYERS
       .map(layer => {
-        const layerStats = stats.layers[layer];
-        const code = codes[layer] ?? layer.slice(0, 4);
-        return `${code}: ${layerStats?.entries ?? 0}`;
-      });
-    console.log(`[SW] Reg OK, C: ${parts.join(', ')}`);
+        const n = stats.layers[layer]?.entries ?? 0;
+        return n > 0 ? `${codes[layer]}:${n}` : null;
+      })
+      .filter(Boolean);
+    const cacheInfo = parts.length > 0 ? ` cache: ${parts.join(' ')}` : '';
+    console.log(`[SW] Ready${cacheInfo}`);
   } catch {
-    console.log('[SW] Registered (no cache stats yet)');
+    console.log('[SW] Ready');
   }
 }
 
@@ -188,6 +209,14 @@ export async function nuke(): Promise<void> {
 }
 
 /**
+ * Trigger manual prefetch (for testing)
+ */
+export async function triggerPrefetch(): Promise<void> {
+  console.log('[SW] Triggering manual prefetch...');
+  await sendSWMessage({ type: 'TRIGGER_PREFETCH' });
+}
+
+/**
  * Setup console utilities (call after SW is ready)
  */
 export function setupCacheUtils(): void {
@@ -198,6 +227,9 @@ export function setupCacheUtils(): void {
     getLayerStats,
     clearOlderThan,
     unregister,
+    prefetch: triggerPrefetch,
+    prefetchHistory: getPrefetchHistory,
+    clearPrefetchHistory,
     help: () => {
       console.log(`
 __omCache utilities:
@@ -207,9 +239,162 @@ __omCache utilities:
   clearLayerCache('temp') - Clear a specific layer cache
   clearOlderThan(7)       - Clear entries older than N days
   unregister()            - Unregister SW and clear caches
+  prefetch()              - Trigger manual prefetch (test)
+  prefetchHistory()       - Show prefetch history
+  clearPrefetchHistory()  - Clear prefetch history
       `);
     }
   };
 
   window.__omCache = utils;
+}
+
+// ============================================================
+// Periodic Background Sync
+// ============================================================
+
+const PERIODIC_SYNC_TAG = 'prefetch-forecast';
+const PERIODIC_SYNC_MIN_INTERVAL = 12 * 60 * 60 * 1000; // 12 hours
+
+/**
+ * Check if Periodic Background Sync is supported
+ */
+export function isPeriodicSyncSupported(): boolean {
+  return 'serviceWorker' in navigator && 'periodicSync' in ServiceWorkerRegistration.prototype;
+}
+
+/**
+ * Register periodic sync for background prefetching
+ * Only works on Chrome/Edge with sufficient site engagement
+ */
+export async function registerPeriodicSync(): Promise<boolean> {
+  if (!isPeriodicSyncSupported()) {
+    console.log('[SW] Periodic Sync not supported');
+    return false;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready as ServiceWorkerRegistrationWithPeriodicSync;
+    if (!registration.periodicSync) {
+      console.log('[SW] Periodic Sync manager not available');
+      return false;
+    }
+
+    // Check if already registered
+    const tags = await registration.periodicSync.getTags();
+    if (tags.includes(PERIODIC_SYNC_TAG)) {
+      console.log('[SW] Periodic Sync already registered');
+      return true;
+    }
+
+    await registration.periodicSync.register(PERIODIC_SYNC_TAG, {
+      minInterval: PERIODIC_SYNC_MIN_INTERVAL,
+    });
+    console.log('[SW] Periodic Sync registered');
+    return true;
+  } catch (error) {
+    // Permission denied or not enough engagement
+    console.log('[SW] Periodic Sync registration failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Unregister periodic sync
+ */
+export async function unregisterPeriodicSync(): Promise<void> {
+  if (!isPeriodicSyncSupported()) return;
+
+  try {
+    const registration = await navigator.serviceWorker.ready as ServiceWorkerRegistrationWithPeriodicSync;
+    if (registration.periodicSync) {
+      await registration.periodicSync.unregister(PERIODIC_SYNC_TAG);
+      console.log('[SW] Periodic Sync unregistered');
+    }
+  } catch (error) {
+    console.warn('[SW] Periodic Sync unregister failed:', error);
+  }
+}
+
+/**
+ * Update prefetch configuration in SW
+ * Called when user changes prefetch settings
+ */
+export async function updatePrefetchConfig(config: PrefetchConfig): Promise<void> {
+  try {
+    // Send config to SW
+    await sendSWMessage({ type: 'SET_PREFETCH_CONFIG', config });
+
+    // Register/unregister periodic sync based on enabled state
+    if (config.enabled) {
+      const success = await registerPeriodicSync();
+      if (!success) {
+        console.log('[SW] Prefetch enabled but Periodic Sync not available');
+      }
+    } else {
+      await unregisterPeriodicSync();
+    }
+  } catch (error) {
+    console.error('[SW] Failed to update prefetch config:', error);
+  }
+}
+
+/**
+ * Get current periodic sync status
+ */
+export async function getPeriodicSyncStatus(): Promise<{ supported: boolean; registered: boolean }> {
+  if (!isPeriodicSyncSupported()) {
+    return { supported: false, registered: false };
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready as ServiceWorkerRegistrationWithPeriodicSync;
+    if (!registration.periodicSync) {
+      return { supported: false, registered: false };
+    }
+
+    const tags = await registration.periodicSync.getTags();
+    return { supported: true, registered: tags.includes(PERIODIC_SYNC_TAG) };
+  } catch {
+    return { supported: true, registered: false };
+  }
+}
+
+// ============================================================
+// Prefetch History
+// ============================================================
+
+/** Prefetch history entry */
+export interface PrefetchHistoryEntry {
+  id: number;
+  timestamp: string;
+  forecastDays: string;
+  layers: string[];
+  totalFiles: number;
+  success: number;
+  failed: number;
+  durationMs: number;
+}
+
+/**
+ * Get prefetch history from SW
+ */
+export async function getPrefetchHistory(): Promise<PrefetchHistoryEntry[]> {
+  try {
+    return await sendSWMessage<PrefetchHistoryEntry[]>({ type: 'GET_PREFETCH_HISTORY' });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Clear prefetch history
+ */
+export async function clearPrefetchHistory(): Promise<boolean> {
+  try {
+    const result = await sendSWMessage<{ success: boolean }>({ type: 'CLEAR_PREFETCH_HISTORY' });
+    return result.success;
+  } catch {
+    return false;
+  }
 }
