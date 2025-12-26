@@ -30,6 +30,28 @@ jobs:
         env:
           BASE_URL: /zero/
 
+      - name: Inject production config
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          HASH=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          mkdir -p dist/config
+          cat > dist/config/zero.config.json << EOF
+          {
+            "app": {
+              "name": "Hypatia Zero",
+              "version": "$VERSION",
+              "hash": "$HASH",
+              "timestamp": "$TIMESTAMP",
+              "environment": "production"
+            },
+            "dataBaseUrl": "https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs",
+            "dataWindowDays": 5,
+            "prefetchCount": 24,
+            "gpuBudgetMB": 2000
+          }
+          EOF
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
