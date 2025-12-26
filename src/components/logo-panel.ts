@@ -27,7 +27,7 @@ export const LogoPanel: m.ClosureComponent = () => {
     view() {
       return m('.panel.logo', [
         m('a', {
-          href: '/',
+          href: import.meta.env.BASE_URL,
           ontouchstart: startPress,
           ontouchend: cancelPress,
           ontouchcancel: cancelPress,
