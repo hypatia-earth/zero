@@ -13,7 +13,9 @@
     "convert-luts": "node scripts/convert-luts-float16.js",
     "deploy:zero": "cd ../server/scripts && ./build-zero.sh && ./deploy-zero.sh",
     "wiki": "python3 scripts/publish-wiki.py",
-    "wiki:push": "python3 scripts/publish-wiki.py --push"
+    "wiki:push": "python3 scripts/publish-wiki.py --push",
+    "repo-docs": "python3 scripts/publish-repo-docs.py",
+    "repo-docs:push": "python3 scripts/publish-repo-docs.py --push"
   },
   "dependencies": {
     "@preact/signals-core": "^1.5.0",
