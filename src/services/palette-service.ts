@@ -117,7 +117,7 @@ export class PaletteService {
 
     for (const suffix of knownSuffixes) {
       try {
-        const res = await fetch(`/images/palettes/${layer}-${suffix}.json`);
+        const res = await fetch(`${import.meta.env.BASE_URL}images/palettes/${layer}-${suffix}.json`);
         if (res.ok) {
           const palette = await res.json() as PaletteData;
           palettes.push(palette);
