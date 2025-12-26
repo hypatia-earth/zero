@@ -218,6 +218,14 @@ export class OptionsService {
         this.save();
       }
     });
+
+    // Save when page becomes hidden (more reliable in Safari)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && this.saveTimeout) {
+        clearTimeout(this.saveTimeout);
+        this.save();
+      }
+    });
   }
 
   /**
