@@ -17,7 +17,28 @@ npm install
 npm run dev
 ```
 
-Open https://localhost:5173 (requires accepting self-signed cert).
+Open http://localhost:5173 for basic development.
+
+### HTTPS (Required for some features)
+
+These features require HTTPS:
+- Service Worker (data caching)
+- PWA installation
+- Geolocation
+
+To enable HTTPS:
+
+```bash
+# Create certs directory (one level up from zero/)
+mkdir -p ../certs
+cd ../certs
+
+# Generate self-signed certificate
+openssl req -x509 -newkey rsa:2048 -keyout hypatia-key.pem -out hypatia.pem \
+  -days 365 -nodes -subj "/CN=localhost"
+```
+
+Then open https://localhost:5173 and accept the self-signed certificate warning.
 
 ## Development
 
