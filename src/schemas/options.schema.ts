@@ -865,17 +865,6 @@ export const optionsSchema = z.object({
   // Debug
   // ----------------------------------------------------------
   debug: z.object({
-    showDevLog: opt(
-      z.boolean().default(false),
-      {
-        label: 'Show dev log',
-        description: 'On-screen debug messages',
-        group: 'advanced',
-        filter: 'global',
-        order: 99,
-        control: 'toggle',
-      }
-    ),
     showPerfPanel: opt(
       z.boolean().default(false),
       {
@@ -934,7 +923,7 @@ export const defaultOptions: ZeroOptions = {
   wind: { enabled: false, seedCount: defaultConfig.wind.seedCount, opacity: defaultConfig.wind.opacity, speed: defaultConfig.wind.animSpeed },
   pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
-  debug: { showDevLog: false, showPerfPanel: false, batterySaver: false },
+  debug: { showPerfPanel: false, batterySaver: false },
 };
 
 // ============================================================
