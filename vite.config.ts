@@ -80,6 +80,7 @@ function wgslProcess(): Plugin {
 }
 
 export default defineConfig({
+  base: process.env.BASE_URL || '/',
   plugins: [cacheHeaders(), wgslProcess()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
