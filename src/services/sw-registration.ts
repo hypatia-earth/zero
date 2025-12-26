@@ -163,6 +163,31 @@ async function unregister(): Promise<void> {
 }
 
 /**
+ * Nuclear option: delete IndexedDB, unregister SW, clear caches, reload
+ */
+export async function nuke(): Promise<void> {
+  // Delete IndexedDB
+  const dbs = await indexedDB.databases();
+  await Promise.all(dbs.filter(db => db.name).map(db => {
+    console.log(`[Nuke] Deleting IndexedDB: ${db.name}`);
+    return new Promise<void>((resolve, reject) => {
+      const req = indexedDB.deleteDatabase(db.name!);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }));
+  // Unregister SW and clear caches
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  for (const reg of registrations) {
+    await reg.unregister();
+  }
+  const keys = await caches.keys();
+  await Promise.all(keys.map(k => caches.delete(k)));
+  console.log('[Nuke] All data cleared, reloading...');
+  location.reload();
+}
+
+/**
  * Setup console utilities (call after SW is ready)
  */
 export function setupCacheUtils(): void {

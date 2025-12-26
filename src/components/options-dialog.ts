@@ -22,7 +22,8 @@ import type { PaletteService } from '../services/palette-service';
 import { getByPath } from '../utils/object';
 import type { ConfigService } from '../services/config-service';
 import type { DialogService } from '../services/dialog-service';
-import { clearCache } from '../services/sw-registration';
+import type { CapabilitiesService } from '../services/capabilities-service';
+import { clearCache, nuke } from '../services/sw-registration';
 import { RadioPaletteControl } from './radio-palette-control';
 import { PressureColorControl } from './pressure-color-control';
 
@@ -39,7 +40,7 @@ interface SliderMeta {
 
 interface SelectMeta {
   control: 'select';
-  options: { value: string | number; label: string; localhostOnly?: boolean }[];
+  options: { value: string | number; label: string; localhostOnly?: boolean; maxCores?: number }[];
 }
 
 interface RadioMeta {
@@ -105,7 +106,7 @@ function formatValue(value: number, meta: SliderMeta): string {
 // Control renderers
 // ============================================================
 
-function renderControl(opt: FlatOption, currentValue: unknown, optionsService: OptionsService, paletteService: PaletteService): m.Children {
+function renderControl(opt: FlatOption, currentValue: unknown, optionsService: OptionsService, paletteService: PaletteService, cores: number): m.Children {
   const { path, meta } = opt;
 
   // Special handling for palette selection
@@ -163,7 +164,10 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
 
     case 'select': {
       const selectMeta = meta as SelectMeta;
-      const filteredOptions = selectMeta.options.filter(o => !o.localhostOnly || isLocalhost);
+      const filteredOptions = selectMeta.options.filter(o =>
+        (!o.localhostOnly || isLocalhost) &&
+        (!o.maxCores || cores >= o.maxCores)
+      );
       return m('select.select', {
         value: currentValue,
         onchange: (e: Event) => {
@@ -203,7 +207,7 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
   }
 }
 
-function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: OptionsService, paletteService: PaletteService): m.Children {
+function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: OptionsService, paletteService: PaletteService, cores: number): m.Children {
   const currentValue = getByPath(options, opt.path);
   const modified = isModified(opt.path, currentValue);
   const isPalette = opt.path.endsWith('.palette');
@@ -229,7 +233,7 @@ function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: Opt
         onclick: () => optionsService.reset(opt.path),
         style: { visibility: modified ? 'visible' : 'hidden' }
       }, '↺') : null,
-      renderControl(opt, currentValue, optionsService, paletteService)
+      renderControl(opt, currentValue, optionsService, paletteService, cores)
     ].filter(Boolean))
   ]);
 }
@@ -276,6 +280,7 @@ function renderGroup(
   optionsService: OptionsService,
   paletteService: PaletteService,
   showAdvancedOptions: boolean,
+  cores: number,
   skipGroupHeader: boolean = false
 ): m.Children {
   const group = optionGroups[groupId as keyof typeof optionGroups];
@@ -284,12 +289,14 @@ function renderGroup(
   const currentModel = options.viewport.physicsModel;
 
   // Filter options
-  const visibleOptions = groupOptions.filter(o => {
-    if (o.meta.hidden) return false;
-    if (!showAdvancedOptions && o.meta.group === 'advanced') return false;
-    if (o.meta.model && o.meta.model !== currentModel) return false;
-    return true;
-  });
+  const visibleOptions = groupOptions
+    .filter(o => {
+      if (o.meta.hidden) return false;
+      if (!showAdvancedOptions && o.meta.group === 'advanced') return false;
+      if (o.meta.model && o.meta.model !== currentModel) return false;
+      return true;
+    })
+    .sort((a, b) => (a.meta.order ?? 99) - (b.meta.order ?? 99));
 
   if (visibleOptions.length === 0) return null;
 
@@ -308,7 +315,7 @@ function renderGroup(
       ...Array.from(byLayer.entries()).map(([layerId, opts]) =>
         m('div.subsection', { key: layerId }, [
           m('h4.title', { key: `${layerId}_title` }, layerLabels[layerId] || layerId),
-          ...opts.map(opt => renderOption(opt, options, optionsService, paletteService))
+          ...opts.map(opt => renderOption(opt, options, optionsService, paletteService, cores))
         ])
       )
     ].filter(Boolean));
@@ -334,7 +341,7 @@ function renderGroup(
       ...sortedSubgroups.map(([subgroupKey, opts]) =>
         m('div.subsection', { key: subgroupKey }, [
           m('h4.title', { key: `${subgroupKey}_title` }, advancedSubgroups[subgroupKey] || subgroupKey),
-          ...opts.map(opt => renderOption(opt, options, optionsService, paletteService))
+          ...opts.map(opt => renderOption(opt, options, optionsService, paletteService, cores))
         ])
       )
     ].filter(Boolean));
@@ -343,7 +350,7 @@ function renderGroup(
   return m('div.section', { key: groupId }, [
     !skipGroupHeader ? m('h3.title', { key: '_title' }, group.label) : null,
     !skipGroupHeader && group.description ? m('p.description', { key: '_desc' }, group.description) : null,
-    ...visibleOptions.map(opt => renderOption(opt, options, optionsService, paletteService))
+    ...visibleOptions.map(opt => renderOption(opt, options, optionsService, paletteService, cores))
   ].filter(Boolean));
 }
 
@@ -356,12 +363,14 @@ export interface OptionsDialogAttrs {
   paletteService: PaletteService;
   dialogService: DialogService;
   configService: ConfigService;
+  capabilitiesService: CapabilitiesService;
 }
 
 export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
   return {
     view({ attrs }) {
-      const { optionsService, paletteService, dialogService, configService } = attrs;
+      const { optionsService, paletteService, dialogService, configService, capabilitiesService } = attrs;
+      const cores = capabilitiesService.hardwareConcurrency;
 
     if (!optionsService.dialogOpen) return null;
 
@@ -509,7 +518,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
           ...sortedGroupIds.map(groupId => {
             const groupOpts = filteredGroups[groupId];
             if (!groupOpts) return null;
-            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, showAdvanced, !!filter && filter !== 'global');
+            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, showAdvanced, cores, !!filter && filter !== 'global');
           }).filter(Boolean),
 
           // Danger zone (only in global view, above advanced toggle)
@@ -529,6 +538,9 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
                   location.reload();
                 }
               }, 'Clear Cache'),
+              m('button.btn.btn-danger', {
+                onclick: () => nuke()
+              }, 'Nuke'),
             ])
           ]) : null,
 
@@ -551,7 +563,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
 
           // Advanced group
           showAdvanced && advancedGroup
-            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, true)
+            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, true, cores)
             : null
         ].filter(Boolean)),
         m('div.footer', [
@@ -559,7 +571,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
           m('div.actions', [
             filter && filter !== 'global' ? m('button.btn.btn-danger', {
               onclick: () => optionsService.reset(filter)
-            }, 'Reset Layer') : null,
+            }, layerLabels[filter] ? 'Reset Layer' : 'Reset') : null,
             optionsService.needsReload.value ? m('button.btn.btn-secondary', {
               onclick: () => location.reload()
             }, 'Reload') : null,

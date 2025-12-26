@@ -48,7 +48,7 @@ interface SliderMeta extends UIMetadata {
 
 interface SelectMeta extends UIMetadata {
   control: 'select';
-  options: { value: string | number; label: string; localhostOnly?: boolean }[];
+  options: { value: string | number; label: string; localhostOnly?: boolean; maxCores?: number }[];
 }
 
 interface ToggleMeta extends UIMetadata {
@@ -222,26 +222,28 @@ export const optionsSchema = z.object({
         description: 'Display GPU memory usage in download panel',
         group: 'performance',
         filter: ['global', 'gpu', 'queue'],
-        order: 3,
+        order: 4,
         control: 'toggle',
       }
     ),
     workerPoolSize: opt(
-      z.enum(['1', '2', '4', '6', '8', '12']).default('2'),
+      z.enum(['2', '4', '6', '8', '10', '12', '14', '16']).default('4'),
       {
         label: 'Decoder threads',
-        description: 'Parallel WASM decoders for faster loading',
+        description: 'Parallel WASM decoders (~30 MB each)',
         group: 'performance',
         filter: ['global', 'gpu', 'queue'],
-        order: 4,
+        order: 3,
         control: 'select',
         options: [
-          { value: '1', label: '1 (single)' },
           { value: '2', label: '2' },
           { value: '4', label: '4' },
-          { value: '6', label: '6' },
-          { value: '8', label: '8' },
-          { value: '12', label: '12' },
+          { value: '6', label: '6', maxCores: 7 },
+          { value: '8', label: '8', maxCores: 9 },
+          { value: '10', label: '10', maxCores: 11 },
+          { value: '12', label: '12', maxCores: 13 },
+          { value: '14', label: '14', maxCores: 15 },
+          { value: '16', label: '16', maxCores: 17 },
         ],
       }
     ),
@@ -908,7 +910,7 @@ export type ZeroOptions = z.infer<typeof optionsSchema>;
 export const defaultOptions: ZeroOptions = {
   _version: 1,
   interface: { autocloseModal: true },
-  gpu: { timeslotsPerLayer: '4', showGpuStats: false, workerPoolSize: '2' },
+  gpu: { timeslotsPerLayer: '4', showGpuStats: false, workerPoolSize: '4' },
   viewport: {
     physicsModel: 'inertia',
     mass: 10,

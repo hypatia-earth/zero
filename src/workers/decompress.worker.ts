@@ -8,9 +8,10 @@
 import { initOmWasm, streamOmVariable } from '../adapters/om-file-adapter';
 
 let ready = false;
+const activeJobs = new Map<string, AbortController>();
 
 export interface WorkerRequest {
-  type: 'init' | 'fetch';
+  type: 'init' | 'fetch' | 'abort';
   id?: string;
   wasmBinary?: ArrayBuffer;
   url?: string;
@@ -45,11 +46,24 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     return;
   }
 
+  if (type === 'abort') {
+    const controller = activeJobs.get(id!);
+    if (controller) {
+      controller.abort();
+      activeJobs.delete(id!);
+    }
+    return;
+  }
+
   if (type === 'fetch') {
     if (!ready) {
       self.postMessage({ type: 'error', id, error: 'Worker not initialized' } as WorkerResponse);
       return;
     }
+
+    // Create AbortController for this job
+    const abortController = new AbortController();
+    activeJobs.set(id!, abortController);
 
     try {
       const result = await streamOmVariable(
@@ -89,8 +103,11 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
             id,
             bytes,
           } as WorkerResponse);
-        }
+        },
+        abortController.signal
       );
+
+      activeJobs.delete(id!);
 
       // Send final result (transfer the buffer)
       const transferable = result.data.buffer as ArrayBuffer;
@@ -103,6 +120,11 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
         [transferable]
       );
     } catch (err) {
+      activeJobs.delete(id!);
+      // Don't report abort errors
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       self.postMessage({
         type: 'error',
         id,

@@ -8,6 +8,8 @@
 import type { WorkerRequest, WorkerResponse } from '../workers/decompress.worker';
 import type { OmSlice, OmPreflight } from '../config/types';
 
+const DEBUG = false;
+
 interface PendingJob {
   url: string;
   param: string;
@@ -15,6 +17,7 @@ interface PendingJob {
   onPreflight: (info: OmPreflight) => void;
   onSlice: (slice: OmSlice) => void;
   onBytes: ((bytes: number) => void) | undefined;
+  signal: AbortSignal | undefined;
   resolve: (data: Float32Array) => void;
   reject: (err: Error) => void;
 }
@@ -92,9 +95,15 @@ export class WorkerPool {
     onPreflight: (info: OmPreflight) => void,
     onSlice: (slice: OmSlice) => void,
     onBytes?: (bytes: number) => void,
-    _signal?: AbortSignal // TODO: implement abort
+    signal?: AbortSignal
   ): Promise<Float32Array> {
     return new Promise((resolve, reject) => {
+      // Check if already aborted
+      if (signal?.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'));
+        return;
+      }
+
       const job: PendingJob = {
         url,
         param,
@@ -102,6 +111,7 @@ export class WorkerPool {
         onPreflight,
         onSlice,
         onBytes,
+        signal,
         resolve,
         reject,
       };
@@ -121,6 +131,18 @@ export class WorkerPool {
     const activeJob: ActiveJob = { ...job, id, worker };
     this.active.set(id, activeJob);
 
+    // Listen for abort signal
+    if (job.signal) {
+      const onAbort = () => {
+        worker.postMessage({ type: 'abort', id } as WorkerRequest);
+        // Clean up - job will be removed when worker responds (or silently if already done)
+        this.active.delete(id);
+        job.reject(new DOMException('Aborted', 'AbortError'));
+        this.processQueue(worker);
+      };
+      job.signal.addEventListener('abort', onAbort, { once: true });
+    }
+
     worker.postMessage({
       type: 'fetch',
       id,
@@ -138,7 +160,7 @@ export class WorkerPool {
 
     const job = id ? this.active.get(id) : undefined;
     if (!job) {
-      console.warn(`[WorkerPool] Message for unknown job: ${id}`);
+      DEBUG && console.warn(`[WorkerPool] Message for unknown job: ${id}`);
       return;
     }
 
@@ -175,6 +197,14 @@ export class WorkerPool {
   }
 
   private processQueue(worker: Worker): void {
+    // Skip aborted jobs in queue
+    let front = this.queue[0];
+    while (front && front.signal?.aborted) {
+      this.queue.shift();
+      front.reject(new DOMException('Aborted', 'AbortError'));
+      front = this.queue[0];
+    }
+
     const next = this.queue.shift();
     if (next) {
       this.dispatch(worker, next);
