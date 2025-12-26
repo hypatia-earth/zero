@@ -72,6 +72,7 @@ export const BootstrapModal: m.ClosureComponent<BootstrapModalAttrs> = () => {
               src: `${import.meta.env.BASE_URL}zero.hypatia.earth-brand-white.svg`,
               alt: 'Zero - hypatia.earth',
             }),
+            m('.tagline', '4D Weather Globe with ECMWF Forecast'),
           ]),
           m('.progress', [
             m('.progress-text', state.label),
