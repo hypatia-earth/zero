@@ -40,6 +40,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     oncreate() {
       unsubscribe = effect(() => {
         initialVnode.attrs.optionsService.options.value;
+        initialVnode.attrs.stateService.viewState.value;
         initialVnode.attrs.slotService.slotsVersion.value;
         initialVnode.attrs.timestepService.state.value;
         m.redraw();
@@ -140,10 +141,11 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       const viewState = stateService.viewState.value;
       const sunEnabled = opts.sun.enabled;
 
-      // Get wanted window for knob rendering
-      const wantedWindow = slotService.getWantedWindow();
+      // Calculate window for knob rendering (based on option, not actual slots)
+      const numSlots = parseInt(opts.gpu.timeslotsPerLayer, 10);
+      const windowTimesteps = timestepService.getWindow(viewState.time, numSlots);
       const wantedSet = new Set<string>();
-      for (const ts of wantedWindow) {
+      for (const ts of windowTimesteps) {
         wantedSet.add(timestepService.toDate(ts).toISOString());
       }
 

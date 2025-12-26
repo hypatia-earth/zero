@@ -587,8 +587,8 @@ export class TimestepService {
   // Window Calculation
   // ─────────────────────────────────────────────────────────────────────────────
 
-  /** Calculate load window centered on time (moved from SlotService) */
-  private calculateWindow(time: Date, numSlots: number): TTimestep[] {
+  /** Calculate load window centered on time */
+  getWindow(time: Date, numSlots: number): TTimestep[] {
     const [t0, t1] = this.adjacent(time);
     const window: TTimestep[] = [t0, t1];
 
@@ -624,7 +624,7 @@ export class TimestepService {
     window: TTimestep[];
     tasks: QueueTask[];
   } {
-    const window = this.calculateWindow(time, numSlots);
+    const window = this.getWindow(time, numSlots);
     const tasks: QueueTask[] = [];
 
     for (const param of activeLayers) {
