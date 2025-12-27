@@ -135,10 +135,7 @@ export class WorkerPool {
     if (job.signal) {
       const onAbort = () => {
         worker.postMessage({ type: 'abort', id } as WorkerRequest);
-        // Clean up - job will be removed when worker responds (or silently if already done)
-        this.active.delete(id);
-        job.reject(new DOMException('Aborted', 'AbortError'));
-        this.processQueue(worker);
+        // Don't processQueue here - wait for worker's 'aborted' message
       };
       job.signal.addEventListener('abort', onAbort, { once: true });
     }
@@ -191,6 +188,12 @@ export class WorkerPool {
       case 'error':
         this.active.delete(id!);
         job.reject(new Error(msg.error ?? 'Unknown error'));
+        this.processQueue(worker);
+        break;
+
+      case 'aborted':
+        this.active.delete(id!);
+        job.reject(new DOMException('Aborted', 'AbortError'));
         this.processQueue(worker);
         break;
     }

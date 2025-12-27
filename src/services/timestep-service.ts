@@ -374,6 +374,7 @@ export class TimestepService {
   private async querySWCache(param: TWeatherLayer): Promise<{ cache: Set<TTimestep>; sizes: Map<TTimestep, number> }> {
     const cache = new Set<TTimestep>();
     const sizes = new Map<TTimestep, number>();
+    const rangeCount = new Map<TTimestep, number>();
 
     try {
       const detail = await sendSWMessage<LayerDetail>({
@@ -397,12 +398,21 @@ export class TimestepService {
         const cachedPath = new URL(item.url).pathname;
         const ts = urlToTimestep.get(cachedPath);
         if (ts) {
-          cache.add(ts);
+          // Count ranges per timestep
+          rangeCount.set(ts, (rangeCount.get(ts) ?? 0) + 1);
           // Parse sizeMB to bytes
           const sizeBytes = parseFloat(item.sizeMB) * 1024 * 1024;
           if (!isNaN(sizeBytes)) {
             sizes.set(ts, (sizes.get(ts) ?? 0) + sizeBytes);
           }
+        }
+      }
+
+      // Only mark as cached if >= 10 ranges (data slices) completed
+      // Partial downloads from aborted fetches have fewer ranges
+      for (const [ts, count] of rangeCount) {
+        if (count >= 10) {
+          cache.add(ts);
         }
       }
     } catch (err) {

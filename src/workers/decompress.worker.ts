@@ -20,7 +20,7 @@ export interface WorkerRequest {
 }
 
 export interface WorkerResponse {
-  type: 'ready' | 'preflight' | 'slice' | 'bytes' | 'done' | 'error';
+  type: 'ready' | 'preflight' | 'slice' | 'bytes' | 'done' | 'error' | 'aborted';
   id?: string;
   data?: Float32Array;
   totalBytes?: number;
@@ -121,8 +121,9 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       );
     } catch (err) {
       activeJobs.delete(id!);
-      // Don't report abort errors
+      // Report abort so WorkerPool knows worker is free
       if (err instanceof Error && err.name === 'AbortError') {
+        self.postMessage({ type: 'aborted', id } as WorkerResponse);
         return;
       }
       self.postMessage({
