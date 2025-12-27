@@ -437,7 +437,7 @@ export class QueueService implements IQueueService {
     // 2. Abort in-flight tasks OUTSIDE data window
     for (const [key, inFlightTask] of this.inFlight) {
       if (!windowSet.has(inFlightTask.task.timestep)) {
-        console.log(`[Queue] Aborting out-of-window: ${fmt(inFlightTask.task.timestep)}`);
+        DEBUG && console.log(`[Queue] Aborting out-of-window: ${fmt(inFlightTask.task.timestep)}`);
         inFlightTask.abortController.abort();
         this.inFlight.delete(key);
       }
