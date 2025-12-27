@@ -272,7 +272,7 @@ self.addEventListener('message', async (event) => {
   if (type === 'SET_PREFETCH_CONFIG') {
     const { config } = event.data;
     prefetchConfig = config;
-    console.log('[SW] Prefetch config updated:', config);
+    DEBUG && console.log('[SW] Prefetch config updated:', config);
     event.ports[0].postMessage({ success: true });
   }
 
