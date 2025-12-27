@@ -221,9 +221,16 @@ export class OptionsService {
     });
 
     // Sync prefetch config to SW when prefetch options change
+    let prevEnabled = false;
     effect(() => {
       const { prefetch } = this.options.value;
       if (!this.initialized) return;
+
+      // Skip sending if disabled and was already disabled (SW defaults to disabled)
+      if (!prefetch.enabled && !prevEnabled) {
+        return;
+      }
+      prevEnabled = prefetch.enabled;
 
       const layers: string[] = [];
       if (prefetch.temp) layers.push('temp');
