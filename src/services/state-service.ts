@@ -11,6 +11,8 @@ import { debounceFlush } from '../utils/debounce-flush';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 
+const DEBUG = false;
+
 /** Format time as MM-DD:HH-MM for logging */
 const fmtTime = (d: Date) =>
   `${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}:${String(d.getUTCHours()).padStart(2, '0')}-${String(d.getUTCMinutes()).padStart(2, '0')}`;
@@ -67,7 +69,7 @@ export class StateService {
     const oldTime = this.viewState.value.time;
     if (oldTime.getTime() === newTime.getTime()) return;
 
-    console.log(`[TimeEvent] ${fmtTime(oldTime)} => ${fmtTime(newTime)}`);
+    DEBUG && console.log(`[TimeEvent] ${fmtTime(oldTime)} => ${fmtTime(newTime)}`);
     this.viewState.value = { ...this.viewState.value, time: newTime };
     this.scheduleUrlSync();
   }

@@ -136,7 +136,7 @@ export class QueueService implements IQueueService {
         return;
       }
 
-      console.log(`[QueueParams] ${changes.join(', ')}`);
+      DEBUG && console.log(`[QueueParams] ${changes.join(', ')}`);
       last = curr;
       this.onParamChange(params);
     });
@@ -463,7 +463,7 @@ export class QueueService implements IQueueService {
       added++;
     }
 
-    console.log(`[Queue] Tasks: ${tasks.length} from TS, +${added} new, queue=${this.taskQueue.length}, inFlight=${this.inFlight.size}`);
+    DEBUG && console.log(`[Queue] Tasks: ${tasks.length} from TS, +${added} new, queue=${this.taskQueue.length}, inFlight=${this.inFlight.size}`);
 
     // 5. Sort queue by strategy
     this.sortTaskQueue(params.time, params.strategy);
