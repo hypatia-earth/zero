@@ -634,9 +634,25 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
             return renderGroup(groupId, groupOpts, options, optionsService, paletteService, showAdvanced, cores, !!filter && filter !== 'global');
           }).filter(Boolean),
 
-          // Danger zone (only in global view, above advanced toggle)
+          // Danger zone (only in global view)
           !filter || filter === 'global' ? m('div.danger-zone', { key: '_danger_zone' }, [
             m('h3', 'Danger Zone'),
+            // Advanced toggle
+            hasAdvanced ? m('div.advanced-toggle-row', [
+              m('span.toggle-label', 'Show advanced options'),
+              m('label.toggle', {
+                onclick: () => {
+                  showAdvanced = !showAdvanced;
+                  m.redraw();
+                }
+              }, [
+                m('input[type=checkbox]', {
+                  checked: showAdvanced,
+                  onclick: (e: Event) => e.stopPropagation()
+                }),
+                m('span.track')
+              ])
+            ]) : null,
             m('span.hint', 'Will restart the application.'),
             m('div.actions', [
               m('button.btn.btn-danger', {
@@ -654,23 +670,6 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
               m('button.btn.btn-danger', {
                 onclick: () => nuke()
               }, 'Nuke'),
-            ])
-          ]) : null,
-
-          // Advanced toggle (only in full dialog)
-          hasAdvanced ? m('div.advanced-toggle', {
-            key: '_advanced_toggle',
-            onclick: () => {
-              showAdvanced = !showAdvanced;
-              m.redraw();
-            }
-          }, [
-            m('label', [
-              m('input[type=checkbox]', {
-                checked: showAdvanced,
-                onclick: (e: Event) => e.stopPropagation()
-              }),
-              'Show advanced options'
             ])
           ]) : null,
 

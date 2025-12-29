@@ -807,6 +807,18 @@
   gap: 12px;
 }
 
+.dialog.options .danger-zone .advanced-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.dialog.options .danger-zone .toggle-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
 .dialog.options .footer {
   display: flex;
   align-items: center;

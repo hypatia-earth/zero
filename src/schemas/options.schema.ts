@@ -87,34 +87,22 @@ export const optionGroups = {
     description: 'User interface behavior',
     order: 0,
   },
-  regional: {
-    id: 'regional',
-    label: 'Regional',
-    description: 'Location and unit preferences',
+  environmental: {
+    id: 'environmental',
+    label: 'Environmental',
+    description: 'Power and resource usage',
     order: 1,
-  },
-  download: {
-    id: 'download',
-    label: 'Download',
-    description: 'Data loading and caching',
-    order: 2,
   },
   performance: {
     id: 'performance',
     label: 'Performance',
     description: 'Loading strategy and GPU memory',
-    order: 2.3,
+    order: 2,
   },
-  environmental: {
-    id: 'environmental',
-    label: 'Environmental',
-    description: 'Power and resource usage',
-    order: 2.5,
-  },
-  interaction: {
-    id: 'interaction',
-    label: 'Interaction',
-    description: 'Controls and input settings',
+  download: {
+    id: 'download',
+    label: 'Download',
+    description: 'Data loading and caching',
     order: 3,
   },
   layers: {
@@ -123,17 +111,29 @@ export const optionGroups = {
     description: 'Visual appearance of map layers',
     order: 4,
   },
+  regional: {
+    id: 'regional',
+    label: 'Regional',
+    description: 'Location and unit preferences',
+    order: 5,
+  },
+  interaction: {
+    id: 'interaction',
+    label: 'Interaction',
+    description: 'Controls and input settings',
+    order: 6,
+  },
   gpu: {
     id: 'gpu',
     label: 'GPU',
     description: 'Graphics memory and performance',
-    order: 5,
+    order: 7,
   },
   advanced: {
     id: 'advanced',
     label: 'Advanced',
     description: 'Fine-tuning and experimental options',
-    order: 6,
+    order: 99,
   },
 } as const;
 
