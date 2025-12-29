@@ -6,6 +6,7 @@ import type { RenderService } from '../../services/render-service';
 import type { StateService } from '../../services/state-service';
 import type { KeyboardService } from '../../services/keyboard-service';
 import type { ConfigService } from '../../services/config-service';
+import type { OptionsService } from '../../services/options-service';
 import type { TimestepService } from '../../services/timestep-service';
 import type { Progress } from '../progress';
 import { setupCameraControls } from '../../services/camera-controls';
@@ -19,6 +20,7 @@ export async function runActivatePhase(
   renderService: RenderService,
   stateService: StateService,
   configService: ConfigService,
+  optionsService: OptionsService,
   KeyboardServiceClass: typeof KeyboardService,
   timestepService: TimestepService,
   progress: Progress
@@ -32,7 +34,7 @@ export async function runActivatePhase(
   });
 
   const keyboardService = new KeyboardServiceClass(stateService, timestepService);
-  setupCameraControls(canvas, renderService.getRenderer().camera, stateService, configService);
+  setupCameraControls(canvas, renderService.getRenderer().camera, stateService, configService, optionsService);
 
   return { keyboardService };
 }

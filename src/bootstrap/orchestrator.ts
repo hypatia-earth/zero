@@ -128,6 +128,7 @@ async function runBootstrapInner(
     services.renderService,
     services.stateService!,
     services.configService!,
+    services.optionsService!,
     KeyboardService,
     services.timestepService,
     progress

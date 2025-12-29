@@ -1,158 +1,269 @@
 /**
  * Camera Controls - Mouse/touch interaction for globe navigation
+ *
+ * Uses modular input handlers and physics model from viewport-controls.
  */
 
 import type { Camera } from '../render/camera';
 import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
+import type { OptionsService } from './options-service';
 import { EARTH_RADIUS } from '../config/defaults';
+import {
+  GestureDetector,
+  PhysicsModel,
+  MouseInputHandler,
+  TouchInputHandler,
+} from './viewport-controls';
 
 const EARTH_RADIUS_KM = EARTH_RADIUS / 1000;  // 6371 km
 
-interface DragState {
-  active: boolean;
-  lastX: number;
-  lastY: number;
-  velocityLat: number;
-  velocityLon: number;
-}
+// Minutes per pixel for time scrolling
+const TIME_MINUTES_PER_PIXEL = 0.5;
 
 export function setupCameraControls(
   canvas: HTMLCanvasElement,
   camera: Camera,
   stateService: StateService,
-  configService: ConfigService
+  configService: ConfigService,
+  optionsService: OptionsService
 ): void {
-  const drag: DragState = {
-    active: false,
-    lastX: 0,
-    lastY: 0,
-    velocityLat: 0,
-    velocityLon: 0,
-  };
-
   const cameraConfig = configService.getCameraConfig();
-  const sensitivity = 0.3;
-  const friction = 0.92;
   const minDistance = cameraConfig.minDistance;
   const maxDistance = cameraConfig.maxDistance;
 
-  // Sync camera from state
+  // Initialize from state
   const viewState = stateService.viewState.value;
   camera.setPosition(viewState.lat, viewState.lon, (viewState.altitude + EARTH_RADIUS_KM) / EARTH_RADIUS_KM);
 
-  // Mouse events
-  canvas.addEventListener('mousedown', (e) => {
-    drag.active = true;
-    drag.lastX = e.clientX;
-    drag.lastY = e.clientY;
-    drag.velocityLat = 0;
-    drag.velocityLon = 0;
-    canvas.style.cursor = 'grabbing';
+  // Create physics model
+  const physics = new PhysicsModel(-89, 89);
+  physics.initFromCamera(camera.lat, camera.lon, camera.distance);
+
+  // Create gesture detector
+  const gestureDetector = new GestureDetector({
+    idleResetMs: 150,
+    twoFingerThreshold: 10,
   });
 
-  window.addEventListener('mousemove', (e) => {
-    if (!drag.active) return;
+  // Track dragging state
+  let isDragging = false;
 
-    const dx = e.clientX - drag.lastX;
-    const dy = e.clientY - drag.lastY;
+  // Helper to check if point is on globe (simplified - always true for now)
+  const isPointOnGlobe = (_clientX: number, _clientY: number): boolean => {
+    // TODO: implement ray-sphere intersection check
+    return true;
+  };
 
-    drag.velocityLon = -dx * sensitivity;
-    drag.velocityLat = dy * sensitivity;
+  // Get current options
+  const getOptions = () => optionsService.options.value.viewport;
 
-    camera.lon += drag.velocityLon;
-    camera.lat += drag.velocityLat;
-    camera.lat = Math.max(-89, Math.min(89, camera.lat));
+  // Mouse input handler
+  const mouseHandler = new MouseInputHandler({
+    onDragStart: () => {
+      isDragging = true;
+      physics.stopVelocities();
+      canvas.style.cursor = 'grabbing';
+    },
 
-    drag.lastX = e.clientX;
-    drag.lastY = e.clientY;
+    onDragMove: (pixelVelocityX: number, pixelVelocityY: number) => {
+      const opts = getOptions();
+      const sensitivity = opts.mouse.drag.sensitivity;
+      const invert = opts.mouse.drag.invert ? -1 : 1;
 
-    updateState();
-  });
+      // Convert pixel velocity to angular velocity
+      // Note: positive pixelVelocityY (drag down) should decrease lat (move camera south to see north)
+      // Sign flip: Hypatia uses phi which increases south, we use lat which increases north
+      const lonDelta = -pixelVelocityX * sensitivity * invert;
+      const latDelta = pixelVelocityY * sensitivity * invert;
 
-  window.addEventListener('mouseup', () => {
-    if (drag.active) {
-      drag.active = false;
+      if (opts.physicsModel === 'inertia') {
+        physics.lonForce = lonDelta * 1000;
+        physics.latForce = latDelta * 1000;
+      } else {
+        physics.lonVelocity = lonDelta;
+        physics.latVelocity = latDelta;
+      }
+    },
+
+    onDragEnd: () => {
+      isDragging = false;
       canvas.style.cursor = 'grab';
-    }
+    },
+
+    onWheelZoom: (deltaY: number) => {
+      const opts = getOptions();
+      const speed = opts.mouse.wheel.zoom.speed;
+      const invert = opts.mouse.wheel.zoom.invert ? -1 : 1;
+
+      const zoomFactor = 1 + deltaY * 0.001 * speed * invert;
+      physics.targetDistance = Math.max(minDistance, Math.min(maxDistance, physics.targetDistance * zoomFactor));
+    },
+
+    onWheelTime: (deltaX: number) => {
+      const opts = getOptions();
+      const invert = opts.mouse.wheel.time.invert ? -1 : 1;
+
+      const minutesDelta = deltaX * TIME_MINUTES_PER_PIXEL * invert;
+      const currentTime = stateService.viewState.value.time;
+      const newTime = new Date(currentTime.getTime() + minutesDelta * 60 * 1000);
+      stateService.setTime(newTime);
+    },
+
+    onDoubleClick: () => {
+      // Zoom in on double-click
+      physics.targetDistance = Math.max(minDistance, physics.targetDistance * 0.7);
+    },
+
+    onClick: () => {
+      // Could be used for location selection
+    },
+
+    detectWheelGesture: (deltaX, deltaY) => gestureDetector.detectWheelGesture(deltaX, deltaY),
+
+    isPointOnGlobe,
   });
 
-  // Wheel zoom
-  canvas.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const zoomSpeed = 0.001;
-    camera.distance *= 1 + e.deltaY * zoomSpeed;
-    camera.distance = Math.max(minDistance, Math.min(maxDistance, camera.distance));
-    updateState();
-  }, { passive: false });
+  // Touch input handler
+  const touchHandler = new TouchInputHandler(
+    {
+      onDragStart: () => {
+        isDragging = true;
+        physics.stopVelocities();
+      },
 
-  // Touch events
-  let touchStartDistance = 0;
-  let touchStartCameraDistance = camera.distance;
+      onDragMove: (pixelVelocityX: number, pixelVelocityY: number) => {
+        const opts = getOptions();
+        const sensitivity = opts.touch.oneFingerDrag.sensitivity;
+        const invert = opts.touch.oneFingerDrag.invert ? -1 : 1;
 
-  canvas.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 1) {
-      drag.active = true;
-      drag.lastX = e.touches[0]!.clientX;
-      drag.lastY = e.touches[0]!.clientY;
-      drag.velocityLat = 0;
-      drag.velocityLon = 0;
-    } else if (e.touches.length === 2) {
-      drag.active = false;
-      const dx = e.touches[0]!.clientX - e.touches[1]!.clientX;
-      const dy = e.touches[0]!.clientY - e.touches[1]!.clientY;
-      touchStartDistance = Math.sqrt(dx * dx + dy * dy);
-      touchStartCameraDistance = camera.distance;
+        const lonDelta = -pixelVelocityX * sensitivity * invert;
+        const latDelta = pixelVelocityY * sensitivity * invert;
+
+        if (opts.physicsModel === 'inertia') {
+          physics.lonForce = lonDelta * 1000;
+          physics.latForce = latDelta * 1000;
+        } else {
+          physics.lonVelocity = lonDelta;
+          physics.latVelocity = latDelta;
+        }
+      },
+
+      onDragEnd: () => {
+        isDragging = false;
+      },
+
+      onPinchZoom: (distanceDelta: number) => {
+        const opts = getOptions();
+        const speed = opts.touch.twoFingerPinch.speed;
+        const invert = opts.touch.twoFingerPinch.invert ? -1 : 1;
+
+        const zoomFactor = 1 - distanceDelta * 0.005 * speed * invert;
+        physics.targetDistance = Math.max(minDistance, Math.min(maxDistance, physics.targetDistance * zoomFactor));
+      },
+
+      onPanTime: (deltaX: number) => {
+        const opts = getOptions();
+        const invert = opts.touch.twoFingerPan.invert ? -1 : 1;
+
+        const minutesDelta = deltaX * TIME_MINUTES_PER_PIXEL * invert;
+        const currentTime = stateService.viewState.value.time;
+        const newTime = new Date(currentTime.getTime() + minutesDelta * 60 * 1000);
+        stateService.setTime(newTime);
+      },
+
+      onTap: () => {
+        // Tap to zoom
+        physics.targetDistance = Math.max(minDistance, physics.targetDistance * 0.7);
+      },
+
+      detectTwoFingerGesture: (distanceDelta, panDeltaX, panDeltaY) =>
+        gestureDetector.detectTwoFingerGesture(distanceDelta, panDeltaX, panDeltaY),
+
+      getTwoFingerMode: () => gestureDetector.getTwoFingerMode(),
+
+      resetTwoFingerGestureAfterIdle: () => gestureDetector.resetTwoFingerGestureAfterIdle(),
+
+      resetTwoFingerGesture: () => gestureDetector.resetTwoFingerGesture(),
+    },
+    {
+      maxDurationMs: 200,
+      maxDistancePx: 10,
+      zoomFactor: 0.7,
+      animationMs: 300,
     }
+  );
+
+  // Attach event listeners
+  canvas.addEventListener('mousedown', (e) => mouseHandler.handleMouseDown(e));
+  window.addEventListener('mousemove', (e) => mouseHandler.handleMouseMove(e));
+  window.addEventListener('mouseup', (e) => mouseHandler.handleMouseUp(e));
+  canvas.addEventListener('wheel', (e) => mouseHandler.handleWheel(e), { passive: false });
+  canvas.addEventListener('click', (e) => mouseHandler.handleClick(e));
+  canvas.addEventListener('dblclick', (e) => mouseHandler.handleDoubleClick(e));
+
+  canvas.addEventListener('touchstart', (e) => touchHandler.handleTouchStart(e));
+  canvas.addEventListener('touchmove', (e) => touchHandler.handleTouchMove(e), { passive: false });
+  canvas.addEventListener('touchend', (e) => {
+    const opts = getOptions();
+    touchHandler.handleTouchEnd(e, opts.tapToZoom);
   });
 
-  canvas.addEventListener('touchmove', (e) => {
-    e.preventDefault();
+  // Animation loop
+  let lastTime = performance.now();
 
-    if (e.touches.length === 1 && drag.active) {
-      const touch = e.touches[0]!;
-      const dx = touch.clientX - drag.lastX;
-      const dy = touch.clientY - drag.lastY;
-
-      drag.velocityLon = -dx * sensitivity;
-      drag.velocityLat = dy * sensitivity;
-
-      camera.lon += drag.velocityLon;
-      camera.lat += drag.velocityLat;
-      camera.lat = Math.max(-89, Math.min(89, camera.lat));
-
-      drag.lastX = touch.clientX;
-      drag.lastY = touch.clientY;
-      updateState();
-    } else if (e.touches.length === 2) {
-      const dx = e.touches[0]!.clientX - e.touches[1]!.clientX;
-      const dy = e.touches[0]!.clientY - e.touches[1]!.clientY;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      const scale = touchStartDistance / distance;
-      camera.distance = Math.max(minDistance, Math.min(maxDistance, touchStartCameraDistance * scale));
-      updateState();
-    }
-  }, { passive: false });
-
-  canvas.addEventListener('touchend', () => {
-    drag.active = false;
-  });
-
-  // Inertia animation
   function animate() {
     requestAnimationFrame(animate);
 
-    if (!drag.active && (Math.abs(drag.velocityLat) > 0.01 || Math.abs(drag.velocityLon) > 0.01)) {
-      camera.lon += drag.velocityLon;
-      camera.lat += drag.velocityLat;
-      camera.lat = Math.max(-89, Math.min(89, camera.lat));
+    const now = performance.now();
+    const deltaTime = (now - lastTime) / 1000;
+    lastTime = now;
 
-      drag.velocityLat *= friction;
-      drag.velocityLon *= friction;
+    // Skip if delta is too large (tab was inactive)
+    if (deltaTime > 0.1) return;
 
-      updateState();
+    const opts = getOptions();
+
+    // Update physics based on model
+    if (opts.physicsModel === 'inertia') {
+      physics.updateInertia(deltaTime, {
+        mass: opts.mass,
+        friction: 0.15,  // Fixed friction for inertia model
+        fingerFriction: 0.8,
+      }, isDragging);
+    } else {
+      physics.updateVelocity({
+        baseFriction: opts.friction,
+        maxFriction: 0.99,
+        frictionScale: 0.1,
+        minVelocity: 0.01,
+        maxVelocity: 1000,
+      });
     }
+
+    // Apply velocity to position
+    physics.applyVelocity(deltaTime);
+
+    // Apply zoom damping
+    physics.applyZoomDamping(0.1);
+
+    // Apply time momentum
+    const hoursDelta = physics.applyTimeMomentum(deltaTime);
+    if (hoursDelta !== 0) {
+      const currentTime = stateService.viewState.value.time;
+      const newTime = new Date(currentTime.getTime() + hoursDelta * 60 * 60 * 1000);
+      stateService.setTime(newTime);
+    }
+
+    // Update camera from physics
+    camera.lat = physics.lat;
+    camera.lon = physics.lon;
+    camera.distance = physics.distance;
+
+    // Sync to state
+    updateState();
   }
+
   animate();
 
   // Initial cursor

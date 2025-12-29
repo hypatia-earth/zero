@@ -304,6 +304,24 @@ export const optionsSchema = z.object({
       }
     ),
 
+    tapToZoom: opt(
+      z.enum(['off', 'single', 'double']).default('double'),
+      {
+        label: 'Tap to zoom',
+        description: 'Tap on globe to zoom in (touch devices)',
+        group: 'interaction',
+        filter: 'global',
+        order: 5,
+        control: 'radio',
+        options: [
+          { value: 'off', label: 'Off' },
+          { value: 'single', label: 'Single tap' },
+          { value: 'double', label: 'Double tap' },
+        ],
+        device: 'touch',
+      }
+    ),
+
     mouse: z.object({
       drag: z.object({
         sensitivity: opt(
@@ -359,6 +377,20 @@ export const optionsSchema = z.object({
               group: 'advanced',
               filter: 'global',
               order: 13,
+              control: 'toggle',
+              device: 'mouse',
+            }
+          ),
+        }),
+        time: z.object({
+          invert: opt(
+            z.boolean().default(false),
+            {
+              label: 'Invert time scroll',
+              description: 'Reverse horizontal scroll direction for time',
+              group: 'advanced',
+              filter: 'global',
+              order: 14,
               control: 'toggle',
               device: 'mouse',
             }
@@ -421,6 +453,20 @@ export const optionsSchema = z.object({
             group: 'advanced',
             filter: 'global',
             order: 23,
+            control: 'toggle',
+            device: 'touch',
+          }
+        ),
+      }),
+      twoFingerPan: z.object({
+        invert: opt(
+          z.boolean().default(false),
+          {
+            label: 'Invert time pan',
+            description: 'Reverse two-finger pan direction for time',
+            group: 'advanced',
+            filter: 'global',
+            order: 24,
             control: 'toggle',
             device: 'touch',
           }
@@ -977,13 +1023,18 @@ export const defaultOptions: ZeroOptions = {
     physicsModel: 'inertia',
     mass: 10,
     friction: 0.949,
+    tapToZoom: 'double',
     mouse: {
       drag: { sensitivity: 0.005, invert: false },
-      wheel: { zoom: { speed: 0.8, invert: false } },
+      wheel: {
+        zoom: { speed: 0.8, invert: false },
+        time: { invert: false },
+      },
     },
     touch: {
       oneFingerDrag: { sensitivity: 0.005, invert: false },
       twoFingerPinch: { speed: 0.8, invert: false },
+      twoFingerPan: { invert: false },
     },
   },
   earth: { enabled: true, opacity: 1, blend: 0 },
