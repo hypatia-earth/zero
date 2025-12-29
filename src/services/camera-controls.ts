@@ -48,6 +48,7 @@ export function setupCameraControls(
 
   // Track dragging state
   let isDragging = false;
+  let dragRadiusFactor = 1;
 
   // Calculate globe radius in screen pixels
   const getGlobeRadiusPx = (): number => {
@@ -80,6 +81,8 @@ export function setupCameraControls(
     onDragStart: () => {
       isDragging = true;
       physics.stopVelocities();
+      // Capture radius factor at drag start for consistent feel
+      dragRadiusFactor = getReferenceRadiusPx() / getGlobeRadiusPx();
       canvas.style.cursor = 'grabbing';
     },
 
@@ -88,18 +91,15 @@ export function setupCameraControls(
       const sensitivity = opts.mouse.drag.sensitivity;
       const invert = opts.mouse.drag.invert ? -1 : 1;
 
-      // Scale sensitivity by globe pixel radius - larger globe = slower rotation
-      const radiusFactor = getReferenceRadiusPx() / getGlobeRadiusPx();
-
       // Convert pixel velocity to angular velocity
       // Note: positive pixelVelocityY (drag down) should decrease lat (move camera south to see north)
       // Sign flip: Hypatia uses phi which increases south, we use lat which increases north
-      const lonDelta = -pixelVelocityX * sensitivity * radiusFactor * invert;
-      const latDelta = pixelVelocityY * sensitivity * radiusFactor * invert;
+      const lonDelta = -pixelVelocityX * sensitivity * dragRadiusFactor * invert;
+      const latDelta = pixelVelocityY * sensitivity * dragRadiusFactor * invert;
 
       if (opts.physicsModel === 'inertia') {
-        physics.lonForce = lonDelta * 1000;
-        physics.latForce = latDelta * 1000;
+        physics.lonForce = lonDelta * 100;
+        physics.latForce = latDelta * 100;
       } else {
         physics.lonVelocity = lonDelta;
         physics.latVelocity = latDelta;
@@ -150,6 +150,8 @@ export function setupCameraControls(
       onDragStart: () => {
         isDragging = true;
         physics.stopVelocities();
+        // Capture radius factor at drag start for consistent feel
+        dragRadiusFactor = getReferenceRadiusPx() / getGlobeRadiusPx();
       },
 
       onDragMove: (pixelVelocityX: number, pixelVelocityY: number) => {
@@ -157,15 +159,12 @@ export function setupCameraControls(
         const sensitivity = opts.touch.oneFingerDrag.sensitivity;
         const invert = opts.touch.oneFingerDrag.invert ? -1 : 1;
 
-        // Scale sensitivity by globe pixel radius - larger globe = slower rotation
-        const radiusFactor = getReferenceRadiusPx() / getGlobeRadiusPx();
-
-        const lonDelta = -pixelVelocityX * sensitivity * radiusFactor * invert;
-        const latDelta = pixelVelocityY * sensitivity * radiusFactor * invert;
+        const lonDelta = -pixelVelocityX * sensitivity * dragRadiusFactor * invert;
+        const latDelta = pixelVelocityY * sensitivity * dragRadiusFactor * invert;
 
         if (opts.physicsModel === 'inertia') {
-          physics.lonForce = lonDelta * 1000;
-          physics.latForce = latDelta * 1000;
+          physics.lonForce = lonDelta * 100;
+          physics.latForce = latDelta * 100;
         } else {
           physics.lonVelocity = lonDelta;
           physics.latVelocity = latDelta;
