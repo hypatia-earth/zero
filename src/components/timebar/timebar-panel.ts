@@ -99,6 +99,15 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
 
       const handleTouchEnd = () => { isDragging = false; };
 
+      // Wheel handler - vertical scroll changes time
+      const handleWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        const minutesDelta = e.deltaY * 0.5; // 0.5 min per pixel
+        const currentTime = stateService.viewState.value.time;
+        const newTime = new Date(currentTime.getTime() + minutesDelta * 60 * 1000);
+        stateService.setTime(newTime);
+      };
+
       // Build data maps
       const tsState = timestepService.state.value;
       const ecmwfSet = new Set<string>();
@@ -184,6 +193,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
             ontouchstart: handleTouchStart,
             ontouchmove: handleTouchMove,
             ontouchend: handleTouchEnd,
+            onwheel: handleWheel,
             oncreate: (vnode: m.VnodeDOM) => render(vnode.dom as HTMLCanvasElement),
             onupdate: (vnode: m.VnodeDOM) => render(vnode.dom as HTMLCanvasElement),
           }),

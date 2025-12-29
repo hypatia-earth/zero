@@ -19,7 +19,7 @@ import {
 const EARTH_RADIUS_KM = EARTH_RADIUS / 1000;  // 6371 km
 
 // Minutes per pixel for time scrolling
-const TIME_MINUTES_PER_PIXEL = 0.5;
+const TIME_MINUTES_PER_PIXEL = 2;
 
 export function setupCameraControls(
   canvas: HTMLCanvasElement,
@@ -49,6 +49,23 @@ export function setupCameraControls(
   // Track dragging state
   let isDragging = false;
 
+  // Calculate globe radius in screen pixels
+  const getGlobeRadiusPx = (): number => {
+    const tanFov = camera.getTanFov();
+    const fov = 2 * Math.atan(tanFov);
+    const heightCss = canvas.clientHeight;
+    return Math.asin(1 / physics.distance) * (heightCss / fov);
+  };
+
+  // Reference radius at default distance (for scaling)
+  const defaultDistance = 3.0;
+  const getReferenceRadiusPx = (): number => {
+    const tanFov = camera.getTanFov();
+    const fov = 2 * Math.atan(tanFov);
+    const heightCss = canvas.clientHeight;
+    return Math.asin(1 / defaultDistance) * (heightCss / fov);
+  };
+
   // Helper to check if point is on globe (simplified - always true for now)
   const isPointOnGlobe = (_clientX: number, _clientY: number): boolean => {
     // TODO: implement ray-sphere intersection check
@@ -71,14 +88,14 @@ export function setupCameraControls(
       const sensitivity = opts.mouse.drag.sensitivity;
       const invert = opts.mouse.drag.invert ? -1 : 1;
 
-      // Scale sensitivity by distance - closer = slower rotation (squared for more slowdown)
-      const distanceFactor = Math.pow(physics.distance / maxDistance, 2);
+      // Scale sensitivity by globe pixel radius - larger globe = slower rotation
+      const radiusFactor = getReferenceRadiusPx() / getGlobeRadiusPx();
 
       // Convert pixel velocity to angular velocity
       // Note: positive pixelVelocityY (drag down) should decrease lat (move camera south to see north)
       // Sign flip: Hypatia uses phi which increases south, we use lat which increases north
-      const lonDelta = -pixelVelocityX * sensitivity * distanceFactor * invert;
-      const latDelta = pixelVelocityY * sensitivity * distanceFactor * invert;
+      const lonDelta = -pixelVelocityX * sensitivity * radiusFactor * invert;
+      const latDelta = pixelVelocityY * sensitivity * radiusFactor * invert;
 
       if (opts.physicsModel === 'inertia') {
         physics.lonForce = lonDelta * 1000;
@@ -140,11 +157,11 @@ export function setupCameraControls(
         const sensitivity = opts.touch.oneFingerDrag.sensitivity;
         const invert = opts.touch.oneFingerDrag.invert ? -1 : 1;
 
-        // Scale sensitivity by distance - closer = slower rotation
-        const distanceFactor = physics.distance / maxDistance;
+        // Scale sensitivity by globe pixel radius - larger globe = slower rotation
+        const radiusFactor = getReferenceRadiusPx() / getGlobeRadiusPx();
 
-        const lonDelta = -pixelVelocityX * sensitivity * distanceFactor * invert;
-        const latDelta = pixelVelocityY * sensitivity * distanceFactor * invert;
+        const lonDelta = -pixelVelocityX * sensitivity * radiusFactor * invert;
+        const latDelta = pixelVelocityY * sensitivity * radiusFactor * invert;
 
         if (opts.physicsModel === 'inertia') {
           physics.lonForce = lonDelta * 1000;

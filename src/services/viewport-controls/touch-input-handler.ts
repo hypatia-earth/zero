@@ -179,7 +179,7 @@ export class TouchInputHandler {
           const panDeltaX = centerX - this.lastPanX;
           const panDeltaTime = (now - this.lastPanTime) / 1000;
 
-          if (panDeltaTime > 0 && panDeltaTime < 0.1) {
+          if (panDeltaTime > 0) {
             this.callbacks.onPanTime(panDeltaX, panDeltaTime);
           }
         }
