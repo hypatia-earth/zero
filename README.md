@@ -1,7 +1,7 @@
 # Zero
 
 Browser-based weather visualization rendering ECMWF forecast data directly on a 3D globe using WebGPU.
-<img src="images/Screen-Shot-2025-12-26-at-14.48.14.png" width="800" alt="Screen Shot 2025-12-26 at 14.48.14">
+<img src=".github/Screen-Shot-2025-12-26-at-14.48.14.png" width="800" alt="Zero screenshot">
 
 **Live Demo:** [zero.hypatia.earth](http://zero.hypatia.earth)  
 **Mirror:** [hypatia-earth.github.io/zero](https://hypatia-earth.github.io/zero/?dt=2025-12-26T14h00z&ll=0.0,0.0&alt=14000&layers=earth,sun,temp)
