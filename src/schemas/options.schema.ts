@@ -105,22 +105,22 @@ export const optionGroups = {
     description: 'Data loading and caching',
     order: 3,
   },
+  interaction: {
+    id: 'interaction',
+    label: 'Interaction',
+    description: 'Controls and input settings',
+    order: 4,
+  },
   layers: {
     id: 'layers',
     label: 'Layers',
     description: 'Visual appearance of map layers',
-    order: 4,
+    order: 5,
   },
   regional: {
     id: 'regional',
     label: 'Regional',
     description: 'Location and unit preferences',
-    order: 5,
-  },
-  interaction: {
-    id: 'interaction',
-    label: 'Interaction',
-    description: 'Controls and input settings',
     order: 6,
   },
   gpu: {
@@ -274,7 +274,7 @@ export const optionsSchema = z.object({
       }
     ),
     mass: opt(
-      z.number().min(1).max(20).default(10),
+      z.number().min(1).max(10).default(5),
       {
         label: 'Mass',
         description: 'Higher = heavier feel, more momentum',
@@ -283,8 +283,23 @@ export const optionsSchema = z.object({
         order: 2,
         control: 'slider',
         min: 1,
-        max: 20,
+        max: 10,
         step: 1,
+        model: 'inertia',
+      }
+    ),
+    inertiaFriction: opt(
+      z.number().min(0.1).max(0.9).default(0.5),
+      {
+        label: 'Friction',
+        description: 'Higher = stops faster',
+        group: 'interaction',
+        filter: 'global',
+        order: 3,
+        control: 'slider',
+        min: 0.1,
+        max: 0.9,
+        step: 0.1,
         model: 'inertia',
       }
     ),
@@ -295,7 +310,7 @@ export const optionsSchema = z.object({
         description: 'Higher = spins longer',
         group: 'interaction',
         filter: 'global',
-        order: 2,
+        order: 3,
         control: 'slider',
         min: 0.85,
         max: 0.99,
@@ -1021,7 +1036,8 @@ export const defaultOptions: ZeroOptions = {
   gpu: { timeslotsPerLayer: '4', showGpuStats: false, workerPoolSize: '4' },
   viewport: {
     physicsModel: 'inertia',
-    mass: 10,
+    mass: 5,
+    inertiaFriction: 0.5,
     friction: 0.949,
     tapToZoom: 'double',
     mouse: {

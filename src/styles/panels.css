@@ -47,6 +47,9 @@
 /* Individual panel styles */
 .panel.logo a {
   touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .panel.logo img {

@@ -71,11 +71,14 @@ export function setupCameraControls(
       const sensitivity = opts.mouse.drag.sensitivity;
       const invert = opts.mouse.drag.invert ? -1 : 1;
 
+      // Scale sensitivity by distance - closer = slower rotation (squared for more slowdown)
+      const distanceFactor = Math.pow(physics.distance / maxDistance, 2);
+
       // Convert pixel velocity to angular velocity
       // Note: positive pixelVelocityY (drag down) should decrease lat (move camera south to see north)
       // Sign flip: Hypatia uses phi which increases south, we use lat which increases north
-      const lonDelta = -pixelVelocityX * sensitivity * invert;
-      const latDelta = pixelVelocityY * sensitivity * invert;
+      const lonDelta = -pixelVelocityX * sensitivity * distanceFactor * invert;
+      const latDelta = pixelVelocityY * sensitivity * distanceFactor * invert;
 
       if (opts.physicsModel === 'inertia') {
         physics.lonForce = lonDelta * 1000;
@@ -137,8 +140,11 @@ export function setupCameraControls(
         const sensitivity = opts.touch.oneFingerDrag.sensitivity;
         const invert = opts.touch.oneFingerDrag.invert ? -1 : 1;
 
-        const lonDelta = -pixelVelocityX * sensitivity * invert;
-        const latDelta = pixelVelocityY * sensitivity * invert;
+        // Scale sensitivity by distance - closer = slower rotation
+        const distanceFactor = physics.distance / maxDistance;
+
+        const lonDelta = -pixelVelocityX * sensitivity * distanceFactor * invert;
+        const latDelta = pixelVelocityY * sensitivity * distanceFactor * invert;
 
         if (opts.physicsModel === 'inertia') {
           physics.lonForce = lonDelta * 1000;
@@ -226,9 +232,10 @@ export function setupCameraControls(
 
     // Update physics based on model
     if (opts.physicsModel === 'inertia') {
+      // Map UI values to internal: mass 5→0.8, friction 0.5→0.02
       physics.updateInertia(deltaTime, {
-        mass: opts.mass,
-        friction: 0.15,  // Fixed friction for inertia model
+        mass: opts.mass * 0.16,
+        friction: opts.inertiaFriction * 0.04,
         fingerFriction: 0.8,
       }, isDragging);
     } else {
