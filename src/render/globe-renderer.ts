@@ -117,6 +117,9 @@ export class GlobeRenderer {
   // GPU timing
   private gpuTimestamp: GpuTimestamp | null = null;
 
+  // Suppress errors during intentional page unload
+  private isDestroying = false;
+
   constructor(private canvas: HTMLCanvasElement, cameraConfig?: CameraConfig) {
     this.camera = new Camera({ lat: 30, lon: 0, distance: 3 }, cameraConfig);
   }
@@ -149,16 +152,18 @@ export class GlobeRenderer {
       },
     });
 
-    // Handle device loss
+    // Handle device loss (suppress during intentional unload)
     this.device.lost.then((info) => {
-      console.error('[Globe] WebGPU device lost:', info.message, info.reason);
+      if (!this.isDestroying) {
+        console.error('[Globe] WebGPU device lost:', info.message, info.reason);
+      }
     });
 
     // WORKAROUND for Chrome bug 469455157: GPU crash on reload
     // Explicitly destroy device before page unload to prevent SharedImage mailbox race
     window.addEventListener('beforeunload', () => {
-      console.log('[Globe] beforeunload: cleanup');
-      this.context?.unconfigure();
+      this.isDestroying = true;
+      this.canvas.getContext('webgpu')!.unconfigure();
       this.device.destroy();
     });
 
@@ -635,6 +640,7 @@ export class GlobeRenderer {
   }
 
   render(): number | null {
+    if (this.isDestroying) return null;
     const commandEncoder = this.device.createCommandEncoder();
 
     // PASS 1: Render globe to offscreen textures (no atmosphere)

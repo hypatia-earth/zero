@@ -1,4 +1,4 @@
-console.clear();
+// console.clear();
 
 // Listen for SW logs via BroadcastChannel
 new BroadcastChannel('sw-log').onmessage = (e) => console.log(e.data);
