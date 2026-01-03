@@ -33,7 +33,7 @@ export interface GridLinesUniforms {
 // Constants
 const MAX_LINES = 80;  // max lines per axis (72 lon + margin)
 const ANIMATION_DURATION = 1000;  // ms per birth/death cycle
-export const GRID_BUFFER_SIZE = 1296;  // bytes for GPU buffer
+export const GRID_BUFFER_SIZE = 1328;  // bytes for GPU buffer (aligned to 16)
 
 // LoD levels from config
 const LOD_LEVELS: GridLodLevel[] = defaultConfig.grid.lodLevels;
@@ -371,18 +371,7 @@ export class GridAnimator {
 
     // Update longitude lines
     for (const line of this.lonLines) {
-      if (line.isNew) {
-        // Slide from 0° to target
-        line.currentDeg = this.lerpAngle(0, line.targetDeg, eased, true);
-        line.opacity = 1;
-        if (t < 1) allComplete = false;
-      } else if (line.isDying) {
-        // Slide from saved start toward 0°
-        line.currentDeg = this.lerpAngle(line.startDeg, 0, eased, true);
-        line.opacity = 1;
-        if (t < 1) allComplete = false;
-      } else if (line.startDeg !== line.targetDeg) {
-        // Slide from start to target (redistribution)
+      if (line.isNew || line.isDying || line.startDeg !== line.targetDeg) {
         line.currentDeg = this.lerpAngle(line.startDeg, line.targetDeg, eased, true);
         if (t < 1) allComplete = false;
       }
@@ -390,17 +379,7 @@ export class GridAnimator {
 
     // Update latitude lines
     for (const line of this.latLines) {
-      if (line.isNew) {
-        line.currentDeg = this.lerp(0, line.targetDeg, eased);
-        line.opacity = 1;
-        if (t < 1) allComplete = false;
-      } else if (line.isDying) {
-        // Slide from saved start toward 0°
-        line.currentDeg = this.lerp(line.startDeg, 0, eased);
-        line.opacity = 1;
-        if (t < 1) allComplete = false;
-      } else if (line.startDeg !== line.targetDeg) {
-        // Slide from start to target (redistribution)
+      if (line.isNew || line.isDying || line.startDeg !== line.targetDeg) {
         line.currentDeg = this.lerp(line.startDeg, line.targetDeg, eased);
         if (t < 1) allComplete = false;
       }
@@ -523,9 +502,14 @@ export class GridAnimator {
       offset += 4;
     }
 
-    // Counts (16 bytes: lonCount, latCount, pad, pad)
+    // Counts and animation state (32 bytes)
     view.setUint32(offset, this.lonLines.length, true);
     view.setUint32(offset + 4, this.latLines.length, true);
+    view.setUint32(offset + 8, this.animating ? 1 : 0, true);
+    const level = LOD_LEVELS[this.lodLevel]!;
+    view.setFloat32(offset + 12, level.lonSpacing, true);
+    view.setFloat32(offset + 16, level.latSpacing, true);
+    // offset + 20..31 = padding
 
     return buffer;
   }
