@@ -205,8 +205,9 @@ export interface SunConfig {
 }
 
 export interface GridLodLevel {
-  lonSpacing: number;  // degrees between longitude lines
-  latSpacing: number;  // degrees between latitude lines
+  spacing: number;     // degrees between grid lines (same for lon/lat)
+  zoomInPx: number;    // enter this LoD when globeRadiusPx >= this
+  zoomOutPx: number;   // leave this LoD when globeRadiusPx <= this
 }
 
 export interface GridConfig {

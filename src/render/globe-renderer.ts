@@ -241,9 +241,12 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Grid animator for LoD transitions (initialize at correct LoD for camera altitude)
-    const initialAltitudeKm = (this.camera.getState().distance - 1.0) * 6371;
-    this.gridAnimator = new GridAnimator(initialAltitudeKm);
+    // Grid animator for LoD transitions (initialize at correct LoD for globe screen size)
+    const distance = this.camera.getState().distance;
+    const fov = 2 * Math.atan(this.camera.getTanFov());
+    const heightCss = this.canvas.clientHeight || 800;  // fallback for tests
+    const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightCss / fov);
+    this.gridAnimator = new GridAnimator(initialGlobeRadiusPx);
 
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
     this.fontAtlasTexture = this.device.createTexture({
@@ -570,14 +573,16 @@ export class GlobeRenderer {
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 
-    // Update grid animation based on camera altitude
+    // Update grid animation based on globe screen size
     const cameraDistance = Math.sqrt(
       uniforms.eyePosition[0]! ** 2 +
       uniforms.eyePosition[1]! ** 2 +
       uniforms.eyePosition[2]! ** 2
     );
-    const altitudeKm = (cameraDistance - 1.0) * 6371;
-    const gridBuffer = this.gridAnimator.packToBuffer(altitudeKm, 16);
+    const fov = 2 * Math.atan(uniforms.tanFov);
+    const heightCss = uniforms.resolution[1]! / devicePixelRatio;
+    const globeRadiusPx = Math.asin(1 / cameraDistance) * (heightCss / fov);
+    const gridBuffer = this.gridAnimator.packToBuffer(globeRadiusPx, 16);
     this.device.queue.writeBuffer(this.gridLinesBuffer, 0, gridBuffer);
 
     // Update pressure layer based on opacity

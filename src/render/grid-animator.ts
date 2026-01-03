@@ -32,25 +32,11 @@ export interface GridLinesUniforms {
 
 // Constants
 const MAX_LINES = 80;  // max lines per axis (72 lon + margin)
-const ANIMATION_DURATION = 1000;  // ms per birth/death cycle
+const ANIMATION_DURATION = 2000;  // ms per birth/death cycle (debug)
 export const GRID_BUFFER_SIZE = 1328;  // bytes for GPU buffer (aligned to 16)
 
-// LoD levels from config
+// LoD levels from config (includes spacing and pixel thresholds)
 const LOD_LEVELS: GridLodLevel[] = defaultConfig.grid.lodLevels;
-
-// Altitude thresholds for LoD transitions (km)
-// zoomIn: altitude to transition TO this level (getting closer)
-// zoomOut: altitude to transition FROM this level (getting further)
-const LOD_THRESHOLDS = [
-  { zoomIn: Infinity, zoomOut: Infinity },  // LoD 0
-  { zoomIn: 23000, zoomOut: 27000 },        // LoD 1
-  { zoomIn: 13000, zoomOut: 17000 },        // LoD 2
-  { zoomIn: 7000, zoomOut: 9000 },          // LoD 3
-  { zoomIn: 5000, zoomOut: 6000 },          // LoD 4
-  { zoomIn: 3500, zoomOut: 4500 },          // LoD 5
-  { zoomIn: 1700, zoomOut: 2300 },          // LoD 6
-  { zoomIn: 700, zoomOut: 900 },            // LoD 7
-];
 
 // Generate line positions for a given spacing
 function generateLonLines(spacing: number): number[] {
@@ -88,16 +74,16 @@ export class GridAnimator {
     latCount: 0,
   };
 
-  constructor(initialAltitudeKm: number) {
-    // Find correct LoD for starting altitude
-    this.lodLevel = this.getLodForAltitude(initialAltitudeKm);
+  constructor(initialGlobeRadiusPx: number) {
+    // Find correct LoD for starting globe radius
+    this.lodLevel = this.getLodForGlobeRadius(initialGlobeRadiusPx);
     this.initializeLines();
   }
 
-  private getLodForAltitude(altitude: number): number {
-    // Find highest LoD level where altitude is below zoomIn threshold
-    for (let i = LOD_THRESHOLDS.length - 1; i >= 0; i--) {
-      if (altitude < LOD_THRESHOLDS[i]!.zoomIn) {
+  private getLodForGlobeRadius(globeRadiusPx: number): number {
+    // Find highest LoD level where globe radius is at or above zoomInPx threshold
+    for (let i = LOD_LEVELS.length - 1; i >= 0; i--) {
+      if (globeRadiusPx >= LOD_LEVELS[i]!.zoomInPx) {
         return i;
       }
     }
@@ -108,7 +94,7 @@ export class GridAnimator {
     const level = LOD_LEVELS[this.lodLevel]!;
 
     // Initialize longitude lines
-    this.lonLines = generateLonLines(level.lonSpacing).map(deg => ({
+    this.lonLines = generateLonLines(level.spacing).map(deg => ({
       targetDeg: deg,
       currentDeg: deg,
       startDeg: deg,
@@ -118,7 +104,7 @@ export class GridAnimator {
     }));
 
     // Initialize latitude lines
-    this.latLines = generateLatLines(level.latSpacing).map(deg => ({
+    this.latLines = generateLatLines(level.spacing).map(deg => ({
       targetDeg: deg,
       currentDeg: deg,
       startDeg: deg,
@@ -129,14 +115,14 @@ export class GridAnimator {
   }
 
   /**
-   * Update animation state based on altitude
-   * @param altitude Camera altitude in km
+   * Update animation state based on globe radius
+   * @param globeRadiusPx Globe radius in screen pixels
    * @param dt Delta time in ms
    * @returns Uniform data for shader
    */
-  update(altitude: number, dt: number): GridLinesUniforms {
+  update(globeRadiusPx: number, dt: number): GridLinesUniforms {
     // Check for LoD transition (with hysteresis)
-    this.checkLodTransition(altitude);
+    this.checkLodTransition(globeRadiusPx);
 
     // Update animations
     if (this.animating) {
@@ -149,41 +135,12 @@ export class GridAnimator {
     return this.uniforms;
   }
 
-  private checkLodTransition(altitude: number): void {
-    if (this.animating) return;  // Don't change during animation
+  private checkLodTransition(globeRadiusPx: number): void {
+    const targetLevel = this.getLodForGlobeRadius(globeRadiusPx);
 
-    const currentLevel = this.lodLevel;
-    const targetLevel = this.getLodForAltitude(altitude);
-
-    // Jump directly to correct level if more than 1 level off (e.g., camera moved dramatically)
-    if (Math.abs(targetLevel - currentLevel) > 1) {
-      DEBUG && console.log(`GridAnimator: LoD ${currentLevel} → ${targetLevel} (jump) at altitude=${altitude}km`);
-      this.lodLevel = targetLevel;
-      this.initializeLines();
-      return;
-    }
-
-    let newLevel = currentLevel;
-
-    // Check zoom in (need more lines) - use hysteresis
-    if (currentLevel < LOD_THRESHOLDS.length - 1) {
-      const nextThreshold = LOD_THRESHOLDS[currentLevel + 1]!;
-      if (altitude < nextThreshold.zoomIn) {
-        newLevel = currentLevel + 1;
-      }
-    }
-
-    // Check zoom out (need fewer lines) - use hysteresis
-    if (currentLevel > 0) {
-      const thisThreshold = LOD_THRESHOLDS[currentLevel]!;
-      if (altitude > thisThreshold.zoomOut) {
-        newLevel = currentLevel - 1;
-      }
-    }
-
-    if (newLevel !== currentLevel) {
-      DEBUG && console.log(`GridAnimator: LoD ${currentLevel} → ${newLevel} at altitude=${altitude}km`);
-      this.startTransition(newLevel);
+    if (targetLevel !== this.lodLevel) {
+      DEBUG && console.log(`GridAnimator: LoD ${this.lodLevel} → ${targetLevel} at ${globeRadiusPx}px`);
+      this.startTransition(targetLevel);
     }
   }
 
@@ -195,8 +152,8 @@ export class GridAnimator {
     this.animationProgress = 0;
 
     // Calculate target line positions
-    const targetLonPositions = generateLonLines(targetLevel.lonSpacing);
-    const targetLatPositions = generateLatLines(targetLevel.latSpacing);
+    const targetLonPositions = generateLonLines(targetLevel.spacing);
+    const targetLatPositions = generateLatLines(targetLevel.spacing);
 
     // Unified transition: handles both birth and death
     this.transitionLines(this.lonLines, targetLonPositions, true);
@@ -227,14 +184,16 @@ export class GridAnimator {
     const toSigned = (deg: number) => deg > 180 ? deg - 360 : deg;
     const toUnsigned = (deg: number) => deg < 0 ? deg + 360 : deg;
 
-    const oldSigned = lines.map(l => ({ line: l, signed: toSigned(l.targetDeg) }));
+    // Use currentDeg for grouping (where lines actually are now)
+    const oldSigned = lines.map(l => ({ line: l, signed: toSigned(l.currentDeg) }));
     const newSigned = targetPositions.map(p => toSigned(p));
 
     // Handle 0° specially - always stays if in both sets
     const old0 = oldSigned.find(o => o.signed === 0);
     const has0 = newSigned.includes(0);
     if (old0 && has0) {
-      result.push(old0.line);
+      const l = old0.line;
+      result.push({ targetDeg: 0, currentDeg: l.currentDeg, startDeg: l.currentDeg, opacity: 1, isNew: false, isDying: false });
     } else if (has0) {
       result.push({ targetDeg: 0, currentDeg: 0, startDeg: 0, opacity: 1, isNew: false, isDying: false });
     }
@@ -243,7 +202,8 @@ export class GridAnimator {
     const old180 = oldSigned.find(o => Math.abs(o.signed) === 180);
     const has180 = newSigned.some(p => Math.abs(p) === 180);
     if (old180 && has180) {
-      result.push(old180.line);
+      const l = old180.line;
+      result.push({ targetDeg: 180, currentDeg: l.currentDeg, startDeg: l.currentDeg, opacity: 1, isNew: false, isDying: false });
     } else if (has180) {
       result.push({ targetDeg: 180, currentDeg: 180, startDeg: 180, opacity: 1, isNew: false, isDying: false });
     }
@@ -264,15 +224,16 @@ export class GridAnimator {
   private transitionLatLines(lines: LineState[], targetPositions: number[]): void {
     const result: LineState[] = [];
 
-    // Lat lines are already -90 to 90, no conversion needed
-    const oldLines = lines.map(l => ({ line: l, deg: l.targetDeg }));
+    // Use currentDeg for grouping (where lines actually are now)
+    const oldLines = lines.map(l => ({ line: l, deg: l.currentDeg }));
     const newDegs = [...targetPositions];
 
     // Handle 0° (equator) specially - always stays
     const old0 = oldLines.find(o => o.deg === 0);
     const has0 = newDegs.includes(0);
     if (old0 && has0) {
-      result.push(old0.line);
+      const l = old0.line;
+      result.push({ targetDeg: 0, currentDeg: l.currentDeg, startDeg: l.currentDeg, opacity: 1, isNew: false, isDying: false });
     } else if (has0) {
       result.push({ targetDeg: 0, currentDeg: 0, startDeg: 0, opacity: 1, isNew: false, isDying: false });
     }
@@ -309,46 +270,33 @@ export class GridAnimator {
   }
 
   /**
-   * Match old lines to new positions for one side of the globe
-   * Lines are sorted outermost-first
+   * Match old lines to new positions using nearest-neighbor matching
+   * Each old line slides to its nearest new position, remaining new positions birth new lines
    */
   private matchSide(
     oldLines: LineState[],
     newPositions: number[],
     result: LineState[]
   ): void {
-    const maxLen = Math.max(oldLines.length, newPositions.length);
     const oldPositions = oldLines.map(l => l.currentDeg);
+    const claimedNew = new Set<number>();
 
-    for (let i = 0; i < maxLen; i++) {
-      if (i < oldLines.length && i < newPositions.length) {
-        // Old line slides to new position (outward or inward)
-        const old = oldLines[i]!;
-        const newDeg = newPositions[i]!;
+    // Step 1: Each old line claims its nearest new position
+    for (const old of oldLines) {
+      const nearestNew = this.findNearest(old.currentDeg, newPositions);
+      if (!claimedNew.has(nearestNew)) {
+        // Slide to nearest new position
+        claimedNew.add(nearestNew);
         result.push({
-          targetDeg: newDeg,
+          targetDeg: nearestNew,
           currentDeg: old.currentDeg,
           startDeg: old.currentDeg,
           opacity: 1,
           isNew: false,
           isDying: false,
         });
-      } else if (i < newPositions.length) {
-        // New line born from nearest existing line
-        const birthPos = newPositions[i]!;
-        const nearestOld = this.findNearest(birthPos, oldPositions);
-        result.push({
-          targetDeg: birthPos,
-          currentDeg: nearestOld,
-          startDeg: nearestOld,
-          opacity: 1,
-          isNew: true,
-          isDying: false,
-        });
       } else {
-        // Old line dies toward nearest surviving line
-        const old = oldLines[i]!;
-        const nearestNew = this.findNearest(old.currentDeg, newPositions);
+        // Position already claimed, this line dies toward it
         result.push({
           targetDeg: nearestNew,
           currentDeg: old.currentDeg,
@@ -356,6 +304,21 @@ export class GridAnimator {
           opacity: 1,
           isNew: false,
           isDying: true,
+        });
+      }
+    }
+
+    // Step 2: Unclaimed new positions birth new lines from nearest old
+    for (const newPos of newPositions) {
+      if (!claimedNew.has(newPos)) {
+        const nearestOld = this.findNearest(newPos, oldPositions);
+        result.push({
+          targetDeg: newPos,
+          currentDeg: nearestOld,
+          startDeg: nearestOld,
+          opacity: 1,
+          isNew: true,
+          isDying: false,
         });
       }
     }
@@ -470,8 +433,8 @@ export class GridAnimator {
    * Pack grid lines directly to GPU buffer format
    * Layout: 20 vec4s each for lonDeg, lonOpacity, latDeg, latOpacity + counts
    */
-  packToBuffer(altitude: number, dt: number): ArrayBuffer {
-    this.checkLodTransition(altitude);
+  packToBuffer(globeRadiusPx: number, dt: number): ArrayBuffer {
+    this.checkLodTransition(globeRadiusPx);
     if (this.animating) this.updateAnimation(dt);
 
     const buffer = new ArrayBuffer(GRID_BUFFER_SIZE);
@@ -507,8 +470,8 @@ export class GridAnimator {
     view.setUint32(offset + 4, this.latLines.length, true);
     view.setUint32(offset + 8, this.animating ? 1 : 0, true);
     const level = LOD_LEVELS[this.lodLevel]!;
-    view.setFloat32(offset + 12, level.lonSpacing, true);
-    view.setFloat32(offset + 16, level.latSpacing, true);
+    view.setFloat32(offset + 12, level.spacing, true);  // lonSpacing
+    view.setFloat32(offset + 16, level.spacing, true);  // latSpacing (same)
     // offset + 20..31 = padding
 
     return buffer;
