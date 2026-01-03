@@ -154,6 +154,14 @@ export class GlobeRenderer {
       console.error('[Globe] WebGPU device lost:', info.message, info.reason);
     });
 
+    // WORKAROUND for Chrome bug 469455157: GPU crash on reload
+    // Explicitly destroy device before page unload to prevent SharedImage mailbox race
+    window.addEventListener('beforeunload', () => {
+      console.log('[Globe] beforeunload: cleanup');
+      this.context?.unconfigure();
+      this.device.destroy();
+    });
+
     // Wait for device to be fully ready
     await this.device.queue.onSubmittedWorkDone();
 
