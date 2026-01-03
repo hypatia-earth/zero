@@ -20,19 +20,9 @@ interface LineState {
   isDying: boolean;     // converging to 0° to die
 }
 
-// Uniform data for shader
-export interface GridLinesUniforms {
-  lonDegrees: Float32Array;   // MAX_LINES floats
-  lonOpacities: Float32Array; // MAX_LINES floats
-  lonCount: number;
-  latDegrees: Float32Array;   // MAX_LINES floats
-  latOpacities: Float32Array; // MAX_LINES floats
-  latCount: number;
-}
-
 // Constants
 const MAX_LINES = 80;  // max lines per axis (72 lon + margin)
-const ANIMATION_DURATION = 2000;  // ms per birth/death cycle (debug)
+const ANIMATION_DURATION = 1000;  // ms per birth/death cycle
 export const GRID_BUFFER_SIZE = 1328;  // bytes for GPU buffer (aligned to 16)
 
 // LoD levels from config (includes spacing and pixel thresholds)
@@ -63,16 +53,6 @@ export class GridAnimator {
   private latLines: LineState[] = [];
   private animating = false;
   private animationProgress = 0;
-
-  // Cached uniform arrays (reused each frame)
-  private uniforms: GridLinesUniforms = {
-    lonDegrees: new Float32Array(MAX_LINES),
-    lonOpacities: new Float32Array(MAX_LINES),
-    lonCount: 0,
-    latDegrees: new Float32Array(MAX_LINES),
-    latOpacities: new Float32Array(MAX_LINES),
-    latCount: 0,
-  };
 
   constructor(initialGlobeRadiusPx: number) {
     // Find correct LoD for starting globe radius
@@ -112,27 +92,6 @@ export class GridAnimator {
       isNew: false,
       isDying: false,
     }));
-  }
-
-  /**
-   * Update animation state based on globe radius
-   * @param globeRadiusPx Globe radius in screen pixels
-   * @param dt Delta time in ms
-   * @returns Uniform data for shader
-   */
-  update(globeRadiusPx: number, dt: number): GridLinesUniforms {
-    // Check for LoD transition (with hysteresis)
-    this.checkLodTransition(globeRadiusPx);
-
-    // Update animations
-    if (this.animating) {
-      this.updateAnimation(dt);
-    }
-
-    // Pack uniforms
-    this.packUniforms();
-
-    return this.uniforms;
   }
 
   private checkLodTransition(globeRadiusPx: number): void {
@@ -374,32 +333,6 @@ export class GridAnimator {
     this.latLines = this.latLines.filter(l => !l.isDying);
   }
 
-  private packUniforms(): void {
-    // Pack longitude lines
-    this.uniforms.lonCount = this.lonLines.length;
-    for (let i = 0; i < MAX_LINES; i++) {
-      if (i < this.lonLines.length) {
-        this.uniforms.lonDegrees[i] = this.lonLines[i]!.currentDeg;
-        this.uniforms.lonOpacities[i] = this.lonLines[i]!.opacity;
-      } else {
-        this.uniforms.lonDegrees[i] = 0;
-        this.uniforms.lonOpacities[i] = 0;
-      }
-    }
-
-    // Pack latitude lines
-    this.uniforms.latCount = this.latLines.length;
-    for (let i = 0; i < MAX_LINES; i++) {
-      if (i < this.latLines.length) {
-        this.uniforms.latDegrees[i] = this.latLines[i]!.currentDeg;
-        this.uniforms.latOpacities[i] = this.latLines[i]!.opacity;
-      } else {
-        this.uniforms.latDegrees[i] = 0;
-        this.uniforms.latOpacities[i] = 0;
-      }
-    }
-  }
-
   // Easing function
   private easeOutCubic(t: number): number {
     return 1 - Math.pow(1 - t, 3);
@@ -470,9 +403,8 @@ export class GridAnimator {
     view.setUint32(offset + 4, this.latLines.length, true);
     view.setUint32(offset + 8, this.animating ? 1 : 0, true);
     const level = LOD_LEVELS[this.lodLevel]!;
-    view.setFloat32(offset + 12, level.spacing, true);  // lonSpacing
-    view.setFloat32(offset + 16, level.spacing, true);  // latSpacing (same)
-    // offset + 20..31 = padding
+    view.setFloat32(offset + 12, level.spacing, true);
+    // offset + 16..31 = padding
 
     return buffer;
   }

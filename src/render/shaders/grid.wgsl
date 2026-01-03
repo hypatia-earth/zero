@@ -13,9 +13,9 @@ struct GridLines {
   lonCount: u32,                        // active longitude lines
   latCount: u32,                        // active latitude lines
   isAnimating: u32,                     // 1 if transitioning between LoD levels
-  lonSpacing: f32,                      // current LoD longitude spacing in degrees
-  latSpacing: f32,                      // current LoD latitude spacing in degrees
-  _pad1: f32,                           // padding
+  spacing: f32,                         // current LoD spacing in degrees (same for lon/lat)
+  _pad0: f32,                           // padding (was latSpacing, now unused)
+  _pad1: f32,
   _pad2: f32,
   _pad3: f32,
 }
@@ -87,13 +87,13 @@ fn blendGridFast(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
   let lonAaZone = min(aaZone / max(cos(lat), 0.01), 15.0);
 
   // Find nearest longitude line using modulo
-  let nearestLon = round(lonDeg / gridLines.lonSpacing) * gridLines.lonSpacing;
+  let nearestLon = round(lonDeg / gridLines.spacing) * gridLines.spacing;
   var lonDiff = abs(lonDeg - nearestLon);
   if (lonDiff > 180.0) { lonDiff = 360.0 - lonDiff; }
   let lonFactor = 1.0 - smoothstep(lonHalfWidth, lonHalfWidth + lonAaZone, lonDiff);
 
   // Find nearest latitude line using modulo
-  let nearestLat = round(latDeg / gridLines.latSpacing) * gridLines.latSpacing;
+  let nearestLat = round(latDeg / gridLines.spacing) * gridLines.spacing;
   let latDiff = abs(latDeg - nearestLat);
   let latFactor = 1.0 - smoothstep(halfWidth, halfWidth + aaZone, latDiff);
 
