@@ -394,26 +394,23 @@ export class QueueService implements IQueueService {
       return new Date(formatted);
     };
 
-    // Sort by distance from current time, with strategy for ties
+    // Sort by strategy
     this.timestepQueue.sort((a, b) => {
       const tsA = toDate(a.order.timestep);
       const tsB = toDate(b.order.timestep);
       const distA = Math.abs(tsA.getTime() - currentTime.getTime());
       const distB = Math.abs(tsB.getTime() - currentTime.getTime());
-
-      // Primary: closest to current time first
-      if (distA !== distB) return distA - distB;
-
-      // Secondary: by strategy
       const isFutureA = tsA.getTime() >= currentTime.getTime();
       const isFutureB = tsB.getTime() >= currentTime.getTime();
 
       if (strategy === 'future-first') {
-        // Future before past
+        // Primary: all future before all past
         if (isFutureA !== isFutureB) return isFutureA ? -1 : 1;
+        // Secondary: closest first within each group
+        return distA - distB;
       }
-      // 'alternate' or same future/past status: maintain relative order
-      return 0;
+      // 'alternate': closest to current time first
+      return distA - distB;
     });
   }
 
@@ -490,18 +487,17 @@ export class QueueService implements IQueueService {
       const tsB = toDate(b.timestep);
       const distA = Math.abs(tsA.getTime() - currentTime.getTime());
       const distB = Math.abs(tsB.getTime() - currentTime.getTime());
-
-      // Primary: closest to current time first
-      if (distA !== distB) return distA - distB;
-
-      // Secondary: by strategy
       const isFutureA = tsA.getTime() >= currentTime.getTime();
       const isFutureB = tsB.getTime() >= currentTime.getTime();
 
       if (strategy === 'future-first') {
+        // Primary: all future before all past
         if (isFutureA !== isFutureB) return isFutureA ? -1 : 1;
+        // Secondary: closest first within each group
+        return distA - distB;
       }
-      return 0;
+      // 'alternate': closest to current time first
+      return distA - distB;
     });
   }
 
