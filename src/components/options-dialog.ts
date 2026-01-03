@@ -673,8 +673,8 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
             ])
           ]) : null,
 
-          // Advanced group
-          showAdvanced && advancedGroup
+          // Advanced group (only in global view)
+          (!filter || filter === 'global') && showAdvanced && advancedGroup
             ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, true, cores)
             : null
         ].filter(Boolean)),

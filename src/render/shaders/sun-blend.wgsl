@@ -3,7 +3,7 @@
 
 // Atmosphere tuning params
 const ATM_EXPOSURE: f32 = 5.0;            // Tone mapping exposure (higher = brighter)
-const ATM_NIGHT_BRIGHTNESS: f32 = 0.15;   // Night side darkness (0 = black, 1 = same as day)
+const ATM_NIGHT_BRIGHTNESS: f32 = 0.25;   // Night side darkness (0 = black, 1 = same as day)
 
 // Tone mapping (Reinhard with exposure)
 fn toneMap(radiance: vec3f, exposure: f32) -> vec3f {

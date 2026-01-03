@@ -602,6 +602,11 @@
   border-color: var(--color-primary-border-focus);
 }
 
+.dialog.options .select option {
+  background: #1a1a1a;
+  color: #ffffff;
+}
+
 /* Radio group */
 .dialog.options .radio-group {
   display: flex;
