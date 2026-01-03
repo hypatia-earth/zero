@@ -279,7 +279,7 @@ export class OptionsService {
     let overrideCount = 0;
 
     if (stored) {
-      const result = optionsSchema.partial().safeParse(stored);
+      const result = optionsSchema.deepPartial().safeParse(stored);
       if (result.success) {
         merged = deepMerge(merged, result.data as Partial<ZeroOptions>);
         overrideCount = Object.keys(result.data).length;

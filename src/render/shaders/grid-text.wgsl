@@ -180,7 +180,11 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
   let fontSizeWorld = u.gridFontSize * 0.002;  // gridFontSize in globe units
   let dist = length(hitPoint - u.eyePosition);
   let worldUnitsPerPixel = (2.0 * u.tanFov * dist) / u.resolution.y;
-  let screenPxRange = (fontSizeWorld / worldUnitsPerPixel) / DISTANCE_RANGE;
+
+  // Clamp font size when zoomed in past threshold
+  let globeRadiusPx = 1.0 / worldUnitsPerPixel;  // EARTH_RADIUS = 1
+  let fontScale = min(1.0, u.gridLabelMaxRadius / globeRadiusPx);
+  let screenPxRange = (fontSizeWorld * fontScale / worldUnitsPerPixel) / DISTANCE_RANGE;
 
   // Find nearest grid intersection from animated line positions
   let nearestLatInfo = findNearestLat(latDeg);
@@ -189,14 +193,15 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
   let nearestLon = nearestLonInfo.x;
   let labelOpacity = min(nearestLatInfo.y, nearestLonInfo.y);
 
-  // Convert offset to glyph UV space
+  // Convert offset to glyph UV space (use scaled font size)
   let dLat = latDeg - nearestLat;
   let dLon = lonDeg - nearestLon;
   let lonScale = max(cos(lat), 0.01);
   let degToRad = COMMON_PI / 180.0;
+  let scaledFontSize = fontSizeWorld * fontScale;
   let glyphUV = vec2f(
-    (dLon * degToRad * lonScale) / fontSizeWorld,
-    -(dLat * degToRad) / fontSizeWorld
+    (dLon * degToRad * lonScale) / scaledFontSize,
+    -(dLat * degToRad) / scaledFontSize
   );
 
   // Extract coordinate digits (round to integers for label display)

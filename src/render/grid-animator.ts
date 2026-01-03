@@ -291,6 +291,24 @@ export class GridAnimator {
   }
 
   /**
+   * Find nearest position from candidates, preferring inner (closer to 0°) on tie
+   */
+  private findNearest(target: number, candidates: number[]): number {
+    if (candidates.length === 0) return 0;
+    let nearest = candidates[0]!;
+    let nearestDist = Math.abs(target - nearest);
+    for (const pos of candidates) {
+      const dist = Math.abs(target - pos);
+      // Prefer inner (smaller abs) on tie
+      if (dist < nearestDist || (dist === nearestDist && Math.abs(pos) < Math.abs(nearest))) {
+        nearest = pos;
+        nearestDist = dist;
+      }
+    }
+    return nearest;
+  }
+
+  /**
    * Match old lines to new positions for one side of the globe
    * Lines are sorted outermost-first
    */
@@ -300,6 +318,7 @@ export class GridAnimator {
     result: LineState[]
   ): void {
     const maxLen = Math.max(oldLines.length, newPositions.length);
+    const oldPositions = oldLines.map(l => l.currentDeg);
 
     for (let i = 0; i < maxLen; i++) {
       if (i < oldLines.length && i < newPositions.length) {
@@ -315,20 +334,23 @@ export class GridAnimator {
           isDying: false,
         });
       } else if (i < newPositions.length) {
-        // New line born from 0°
+        // New line born from nearest existing line
+        const birthPos = newPositions[i]!;
+        const nearestOld = this.findNearest(birthPos, oldPositions);
         result.push({
-          targetDeg: newPositions[i]!,
-          currentDeg: 0,
-          startDeg: 0,
+          targetDeg: birthPos,
+          currentDeg: nearestOld,
+          startDeg: nearestOld,
           opacity: 1,
           isNew: true,
           isDying: false,
         });
       } else {
-        // Old line dies toward 0°
+        // Old line dies toward nearest surviving line
         const old = oldLines[i]!;
+        const nearestNew = this.findNearest(old.currentDeg, newPositions);
         result.push({
-          targetDeg: 0,
+          targetDeg: nearestNew,
           currentDeg: old.currentDeg,
           startDeg: old.currentDeg,
           opacity: 1,

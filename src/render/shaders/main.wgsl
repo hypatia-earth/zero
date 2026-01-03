@@ -35,7 +35,7 @@ struct Uniforms {
   tempSlot1: u32,         // slot index for time1 in tempData buffer
   gridFontSize: f32, // font size in screen pixels for grid labels
   gridLabelMaxRadius: f32, // max globe radius (px) before labels shrink
-  gridPad: f32, // padding for vec2f alignment
+  gridLineWidth: f32, // line width in screen pixels
   tempPaletteRange: vec2f, // min/max temperature values for palette mapping (Celsius)
   // Additional weather layer opacities
   cloudsOpacity: f32,

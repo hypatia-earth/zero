@@ -38,7 +38,7 @@ struct Uniforms {
   tempSlot1: u32,
   gridFontSize: f32,
   gridLabelMaxRadius: f32,
-  gridPad: f32,
+  gridLineWidth: f32,
   tempPaletteRange: vec2f,
 }
 

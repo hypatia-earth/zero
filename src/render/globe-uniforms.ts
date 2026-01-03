@@ -50,7 +50,7 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['tempSlot1', 'u32'],            // 216
   ['gridFontSize', 'f32'],         // 220
   ['gridLabelMaxRadius', 'f32'],   // 224
-  ['gridPad', 'f32'],              // 228: pad for vec2f alignment
+  ['gridLineWidth', 'f32'],        // 228: line width in screen pixels
   ['tempPaletteRange', 'vec2f'],   // 232
 
   // Additional weather layers
@@ -97,7 +97,7 @@ export const U = GLOBE_UNIFORMS.offsets as {
   tempSlot1: number;
   gridFontSize: number;
   gridLabelMaxRadius: number;
-  gridPad: number;
+  gridLineWidth: number;
   tempPaletteRange: number;
   cloudsOpacity: number;
   humidityOpacity: number;

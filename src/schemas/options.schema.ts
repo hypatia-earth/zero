@@ -596,7 +596,7 @@ export const optionsSchema = z.object({
       }
     ),
     fontSize: opt(
-      z.number().min(2).max(16).default(8),
+      z.number().min(2).max(16).default(12),
       {
         label: 'Label size',
         description: 'Font size for grid coordinate labels',
@@ -607,6 +607,20 @@ export const optionsSchema = z.object({
         min: 2,
         max: 16,
         step: 1,
+      }
+    ),
+    lineWidth: opt(
+      z.number().min(1).max(5).default(1),
+      {
+        label: 'Line width',
+        description: 'Width of grid lines in pixels',
+        group: 'layers',
+        filter: ['global', 'grid'],
+        order: 6,
+        control: 'slider',
+        min: 1,
+        max: 5,
+        step: 0.5,
       }
     ),
   }),
@@ -1055,7 +1069,7 @@ export const defaultOptions: ZeroOptions = {
   },
   earth: { enabled: true, opacity: 1, blend: 0 },
   sun: { enabled: true, opacity: 1 },
-  grid: { enabled: true, opacity: defaultConfig.grid.opacity, fontSize: 8 },
+  grid: { enabled: true, opacity: defaultConfig.grid.opacity, fontSize: 12, lineWidth: 1 },
   temp: { enabled: true, opacity: 0.6, palette: 'ESRI Temperature' },
   rain: { enabled: false, opacity: 1.0 },
   clouds: { enabled: false, opacity: 0.5 },

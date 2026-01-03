@@ -80,11 +80,12 @@ fn blendGrid(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
   let worldUnitsPerPixel = (2.0 * u.tanFov * dist) / u.resolution.y;
   let degreesPerPixel = worldUnitsPerPixel * (180.0 / COMMON_PI);
 
-  let pixelWidth = 3.0;  // Line width in screen pixels
-  let width = pixelWidth * degreesPerPixel;
+  let halfWidth = u.gridLineWidth * 0.5 * degreesPerPixel;
+  let aaZone = degreesPerPixel;  // 1px antialiasing zone
 
   // Longitude width compensation for latitude (clamped to avoid pole artifacts)
-  let lonWidth = min(width / max(cos(lat), 0.01), 30.0);  // Max 30° width
+  let lonHalfWidth = min(halfWidth / max(cos(lat), 0.01), 15.0);
+  let lonAaZone = min(aaZone / max(cos(lat), 0.01), 15.0);
 
   var gridFactor = 0.0;
 
@@ -98,9 +99,8 @@ fn blendGrid(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
     var diff = abs(lonDeg - lineDeg);
     if (diff > 180.0) { diff = 360.0 - diff; }
 
-    // Convert to screen distance accounting for latitude
-    let screenDist = diff;
-    let factor = (1.0 - smoothstep(lonWidth * 0.5, lonWidth, screenDist)) * lineOpacity;
+    // Smoothstep from solid edge to AA edge
+    let factor = (1.0 - smoothstep(lonHalfWidth, lonHalfWidth + lonAaZone, diff)) * lineOpacity;
     gridFactor = max(gridFactor, factor);
   }
 
@@ -114,39 +114,9 @@ fn blendGrid(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
     lineDeg = clamp(lineDeg, -90.0, 90.0);
 
     let diff = abs(latDeg - lineDeg);
-    let factor = (1.0 - smoothstep(width * 0.5, width, diff)) * lineOpacity;
+    let factor = (1.0 - smoothstep(halfWidth, halfWidth + aaZone, diff)) * lineOpacity;
     gridFactor = max(gridFactor, factor);
   }
-
-  if (gridFactor > 0.001) {
-    let gridColor = vec3f(1.0, 1.0, 1.0);
-    return vec4f(mix(color.rgb, gridColor, gridFactor * u.gridOpacity * 0.5), color.a);
-  }
-  return color;
-}
-
-// Legacy fixed-spacing grid (for reference/fallback)
-fn blendGridFixed(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
-  if (u.gridOpacity < 0.01) { return color; }
-
-  let latDeg = degrees(lat);
-  let lonDeg = degrees(lon);
-  let spacing = 15.0;
-
-  let dist = length(hitPoint - u.eyePosition);
-  let worldUnitsPerPixel = (2.0 * u.tanFov * dist) / u.resolution.y;
-  let degreesPerPixel = worldUnitsPerPixel * (180.0 / COMMON_PI);
-
-  let pixelWidth = 3.0;
-  let width = pixelWidth * degreesPerPixel;
-  let lonWidth = width / max(cos(lat), 0.01);
-
-  let latLine = abs(fract(latDeg / spacing + 0.5) - 0.5) * spacing;
-  let lonLine = abs(fract(lonDeg / spacing + 0.5) - 0.5) * spacing;
-
-  let latFactor = 1.0 - smoothstep(width * 0.5, width, latLine);
-  let lonFactor = 1.0 - smoothstep(lonWidth * 0.5, lonWidth, lonLine);
-  let gridFactor = max(latFactor, lonFactor);
 
   if (gridFactor > 0.001) {
     let gridColor = vec3f(1.0, 1.0, 1.0);

@@ -295,6 +295,7 @@ export class RenderService {
       gridOpacity: this.animatedOpacity.grid,
       gridFontSize: this.optionsService.options.value.grid.fontSize,
       gridLabelMaxRadius: this.configService.getConfig().grid.labelMaxRadiusPx,
+      gridLineWidth: this.optionsService.options.value.grid.lineWidth,
     };
   }
 
