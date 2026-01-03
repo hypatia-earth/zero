@@ -49,6 +49,14 @@ export class PhysicsModel {
   public distance: number = 3.0;
   public targetDistance: number = 3.0;
 
+  // Tween for double-click/tap (zoom + rotation)
+  public tween: {
+    startDist: number; endDist: number;
+    startLat: number; endLat: number;
+    startLon: number; endLon: number;
+    startTime: number; duration: number;
+  } | null = null;
+
   // Velocities (degrees per second)
   public latVelocity: number = 0;
   public lonVelocity: number = 0;
@@ -162,10 +170,76 @@ export class PhysicsModel {
   }
 
   /**
-   * Apply zoom damping
+   * Apply zoom damping (skipped if tween active)
    */
   applyZoomDamping(dampingFactor: number): void {
+    if (this.tween) return;
     this.distance += (this.targetDistance - this.distance) * dampingFactor;
+  }
+
+  /**
+   * Start a tween animation (zoom + rotation)
+   */
+  startTween(targetLat: number, targetLon: number, targetDistance: number, durationMs: number): void {
+    // Normalize longitude delta to shortest path
+    let endLon = targetLon;
+    const deltaLon = targetLon - this.lon;
+    if (deltaLon > 180) endLon -= 360;
+    else if (deltaLon < -180) endLon += 360;
+
+    this.tween = {
+      startDist: this.distance,
+      endDist: targetDistance,
+      startLat: this.lat,
+      endLat: targetLat,
+      startLon: this.lon,
+      endLon: endLon,
+      startTime: performance.now(),
+      duration: durationMs,
+    };
+    this.targetDistance = targetDistance;
+    // Stop any existing velocity
+    this.latVelocity = 0;
+    this.lonVelocity = 0;
+  }
+
+  /**
+   * Update tween, returns true if tween is active
+   */
+  updateTween(): boolean {
+    if (!this.tween) return false;
+
+    const elapsed = performance.now() - this.tween.startTime;
+    const t = Math.min(1, elapsed / this.tween.duration);
+
+    // Ease-out cubic
+    const eased = 1 - Math.pow(1 - t, 3);
+
+    this.distance = this.tween.startDist + (this.tween.endDist - this.tween.startDist) * eased;
+    this.lat = this.tween.startLat + (this.tween.endLat - this.tween.startLat) * eased;
+    this.lon = this.tween.startLon + (this.tween.endLon - this.tween.startLon) * eased;
+
+    // Normalize lon
+    while (this.lon > 180) this.lon -= 360;
+    while (this.lon < -180) this.lon += 360;
+
+    if (t >= 1) {
+      this.distance = this.tween.endDist;
+      this.lat = this.tween.endLat;
+      this.lon = this.tween.endLon;
+      while (this.lon > 180) this.lon -= 360;
+      while (this.lon < -180) this.lon += 360;
+      this.tween = null;
+    }
+
+    return true;
+  }
+
+  /**
+   * Cancel any active tween
+   */
+  cancelTween(): void {
+    this.tween = null;
   }
 
   /**

@@ -83,6 +83,64 @@ export class Camera {
     return this.viewProjMatrix;
   }
 
+  /**
+   * Convert screen coordinates to globe lat/lon
+   * Returns null if the point doesn't hit the globe
+   */
+  screenToGlobe(clientX: number, clientY: number, canvasWidth: number, canvasHeight: number): { lat: number; lon: number } | null {
+    this.updateMatrices();
+
+    // Convert to NDC (-1 to 1)
+    const ndcX = (clientX / canvasWidth) * 2 - 1;
+    const ndcY = 1 - (clientY / canvasHeight) * 2;
+
+    // Unproject near and far points using viewProjInverse
+    const inv = this.viewProjInverse;
+
+    // Near point (z=0 in NDC for WebGPU)
+    const nearW = inv[3]! * ndcX + inv[7]! * ndcY + inv[11]! * 0 + inv[15]!;
+    const nearX = (inv[0]! * ndcX + inv[4]! * ndcY + inv[8]! * 0 + inv[12]!) / nearW;
+    const nearY = (inv[1]! * ndcX + inv[5]! * ndcY + inv[9]! * 0 + inv[13]!) / nearW;
+    const nearZ = (inv[2]! * ndcX + inv[6]! * ndcY + inv[10]! * 0 + inv[14]!) / nearW;
+
+    // Far point (z=1 in NDC for WebGPU)
+    const farW = inv[3]! * ndcX + inv[7]! * ndcY + inv[11]! * 1 + inv[15]!;
+    const farX = (inv[0]! * ndcX + inv[4]! * ndcY + inv[8]! * 1 + inv[12]!) / farW;
+    const farY = (inv[1]! * ndcX + inv[5]! * ndcY + inv[9]! * 1 + inv[13]!) / farW;
+    const farZ = (inv[2]! * ndcX + inv[6]! * ndcY + inv[10]! * 1 + inv[14]!) / farW;
+
+    // Ray direction
+    const dx = farX - nearX;
+    const dy = farY - nearY;
+    const dz = farZ - nearZ;
+
+    // Ray origin (camera position)
+    const eye = this.getEyePosition();
+    const ox = eye[0]!, oy = eye[1]!, oz = eye[2]!;
+
+    // Ray-sphere intersection (sphere at origin, radius 1)
+    const a = dx * dx + dy * dy + dz * dz;
+    const b = 2 * (ox * dx + oy * dy + oz * dz);
+    const c = ox * ox + oy * oy + oz * oz - 1;
+
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) return null;
+
+    const t = (-b - Math.sqrt(disc)) / (2 * a);
+    if (t < 0) return null;
+
+    // Hit point on sphere
+    const px = ox + t * dx;
+    const py = oy + t * dy;
+    const pz = oz + t * dz;
+
+    // Convert to lat/lon (Y-up coordinate system)
+    const lat = Math.asin(Math.max(-1, Math.min(1, py))) * 180 / Math.PI;
+    const lon = Math.atan2(px, pz) * 180 / Math.PI;
+
+    return { lat, lon };
+  }
+
   private updateMatrices(): void {
     const eye = this.getEyePosition();
     this.lookAt(this.viewMatrix, eye, [0, 0, 0], [0, 1, 0]);

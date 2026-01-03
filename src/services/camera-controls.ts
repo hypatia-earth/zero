@@ -116,6 +116,7 @@ export function setupCameraControls(
       const speed = opts.mouse.wheel.zoom.speed;
       const invert = opts.mouse.wheel.zoom.invert ? -1 : 1;
 
+      physics.cancelTween();
       const zoomFactor = 1 + deltaY * 0.001 * speed * invert;
       physics.targetDistance = Math.max(minDistance, Math.min(maxDistance, physics.targetDistance * zoomFactor));
     },
@@ -130,9 +131,13 @@ export function setupCameraControls(
       stateService.setTime(newTime);
     },
 
-    onDoubleClick: () => {
-      // Zoom in on double-click
-      physics.targetDistance = Math.max(minDistance, physics.targetDistance * 0.7);
+    onDoubleClick: (clientX: number, clientY: number) => {
+      const clicked = camera.screenToGlobe(clientX, clientY, canvas.clientWidth, canvas.clientHeight);
+      if (!clicked) return;
+
+      // Tween to clicked location with zoom
+      const targetDist = Math.max(minDistance, physics.distance * 0.7);
+      physics.startTween(clicked.lat, clicked.lon, targetDist, 800);
     },
 
     onClick: () => {
@@ -180,6 +185,7 @@ export function setupCameraControls(
         const speed = opts.touch.twoFingerPinch.speed;
         const invert = opts.touch.twoFingerPinch.invert ? -1 : 1;
 
+        physics.cancelTween();
         const zoomFactor = 1 - distanceDelta * 0.005 * speed * invert;
         physics.targetDistance = Math.max(minDistance, Math.min(maxDistance, physics.targetDistance * zoomFactor));
       },
@@ -194,9 +200,13 @@ export function setupCameraControls(
         stateService.setTime(newTime);
       },
 
-      onTap: () => {
-        // Tap to zoom
-        physics.targetDistance = Math.max(minDistance, physics.targetDistance * 0.7);
+      onTap: (clientX: number, clientY: number) => {
+        const clicked = camera.screenToGlobe(clientX, clientY, canvas.clientWidth, canvas.clientHeight);
+        if (!clicked) return;
+
+        // Tween to clicked location with zoom
+        const targetDist = Math.max(minDistance, physics.distance * 0.7);
+        physics.startTween(clicked.lat, clicked.lon, targetDist, 800);
       },
 
       detectTwoFingerGesture: (distanceDelta, panDeltaX, panDeltaY) =>
@@ -267,7 +277,8 @@ export function setupCameraControls(
     // Apply velocity to position
     physics.applyVelocity(deltaTime);
 
-    // Apply zoom damping
+    // Apply tween if active, otherwise normal damping
+    physics.updateTween();
     physics.applyZoomDamping(0.1);
 
     // Apply time momentum
