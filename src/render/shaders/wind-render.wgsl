@@ -149,17 +149,20 @@ fn fragmentMain(in: VertexOutput) -> FragmentOutput {
     discard;
   }
 
-  // Perspective-correct backface culling: discard points behind sphere limb
-  // Skip culling when no texture layers visible (showBackface = 1.0)
-  if (uniforms.showBackface < 0.5) {
-    // For unit sphere, tangent threshold is exactly 1.0: dot(T, E) = 1
-    // Margin scales with lineWidth * camDist (quad expansion in world space)
-    let camDist = length(uniforms.eyePosition);
-    let threshold = 1.0 + uniforms.lineWidth * camDist * camDist * 18.0;
-    let sphereTest = normalize(in.worldPos);
-    if (dot(sphereTest, uniforms.eyePosition) < threshold) {
-      discard;
-    }
+  // Perspective-correct backface culling with animated limb
+  // showBackface: 0.0 = full culling, 1.0 = show everything
+  let camDist = length(uniforms.eyePosition);
+  let threshold = 1.0 + uniforms.lineWidth * camDist * camDist * 18.0;
+  let sphereTest = normalize(in.worldPos);
+  let sphereDot = dot(sphereTest, uniforms.eyePosition);
+
+  // Animated limb: expand visible region as showBackface increases
+  // At showBackface=0: only front hemisphere visible (sphereDot >= threshold)
+  // At showBackface=1: entire sphere visible (sphereDot >= -camDist)
+  let backThreshold = -camDist - threshold;
+  let limbThreshold = mix(threshold, backThreshold, uniforms.showBackface);
+  if (sphereDot < limbThreshold) {
+    discard;
   }
 
   // Linear depth with offset to render slightly in front of globe surface

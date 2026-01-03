@@ -138,15 +138,26 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
   color = blendTemp(color, lat, lon);
   color = blendRain(color, lat, lon);
 
-  // When earth/temp are off, render back-side grid first (visible through transparent front)
-  let showBackGrid = u.earthOpacity < 0.01 && u.tempOpacity < 0.01;
-  if (showBackGrid) {
+  // Animated back-side grid: fades in from limb as surface layers fade out
+  // Only activates when both layers are nearly invisible (below 0.3 opacity)
+  let maxOpacity = max(u.earthOpacity, u.tempOpacity);
+  let fadeAmount = smoothstep(0.3, 0.0, maxOpacity);
+  if (fadeAmount > 0.01) {
     let farHit = raySphereIntersectFar(u.eyePosition, rayDir, EARTH_RADIUS);
     if (farHit.valid) {
+      // How close to limb: 0=center of back hemisphere, 1=at limb
+      let backViewAngle = dot(normalize(farHit.point), -rayDir);
+      let limbFactor = 1.0 - backViewAngle;
+
+      // Fade in from limb inward as fadeAmount increases
+      let backOpacity = smoothstep(1.0 - fadeAmount, 1.0, limbFactor);
+
       let backLat = asin(farHit.point.y);
       let backLon = atan2(farHit.point.x, farHit.point.z);
+      let colorBeforeBack = color;
       color = blendGrid(color, backLat, backLon, farHit.point);
       color = blendGridText(color, backLat, backLon, farHit.point);
+      color = mix(colorBeforeBack, color, backOpacity);
     }
   }
 
@@ -161,7 +172,19 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
   // hit.t is distance from camera to globe surface
   // Normalize against camera distance to globe (gives ~0.5-0.7 for typical views)
   let cameraDistance = length(u.eyePosition);
-  let normalizedDepth = clamp(hit.t / (cameraDistance * 2.0), 0.0, 1.0);
+  var normalizedDepth = clamp(hit.t / (cameraDistance * 2.0), 0.0, 1.0);
+
+  // Animated limb for pressure/wind: push depth toward far plane near limb as layers fade
+  // Uses same fadeAmount logic as back-side grid
+  let depthFadeAmount = smoothstep(0.3, 0.0, max(u.earthOpacity, u.tempOpacity));
+  if (depthFadeAmount > 0.01) {
+    let viewAngle = dot(normalize(hit.point), -rayDir);  // 1=facing camera, 0=at limb
+    let limbFactor = 1.0 - viewAngle;  // 0=center, 1=limb
+    let limbPush = smoothstep(1.0 - depthFadeAmount, 1.0, limbFactor);
+    // At full fade, push entire surface; limb animates first, center follows
+    let depthPush = max(limbPush, depthFadeAmount);
+    normalizedDepth = mix(normalizedDepth, 0.9999, depthPush);
+  }
 
   return FragmentOutput(color, normalizedDepth);
 }

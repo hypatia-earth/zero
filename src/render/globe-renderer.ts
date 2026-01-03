@@ -620,10 +620,11 @@ export class GlobeRenderer {
       // Update layer state (triggers compute when state changes)
       this.windLayer.setState(uniforms.windState);
 
-      // Show backface when no texture layers are visible (transparent globe)
-      const textureOpacity = uniforms.earthOpacity + uniforms.tempOpacity +
-        uniforms.rainOpacity + uniforms.cloudsOpacity + uniforms.humidityOpacity;
-      const showBackface = textureOpacity < 0.01 ? 1.0 : 0.0;
+      // Animated backface: fade in from limb as texture layers fade out
+      // Uses same logic as grid/depth: smoothstep(0.3, 0.0, maxOpacity)
+      const maxOpacity = Math.max(uniforms.earthOpacity, uniforms.tempOpacity);
+      const t = Math.max(0, Math.min(1, (0.3 - maxOpacity) / 0.3));
+      const showBackface = t * t * (3 - 2 * t);  // smoothstep
 
       this.windLayer.updateUniforms({
         viewProj: this.camera.getViewProj(),
