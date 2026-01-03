@@ -48,7 +48,7 @@ export const defaultConfig: ZeroConfig = {
     { id: 'sun', label: 'Sun', buttonLabel: 'Sun', category: 'celestial' },
     { id: 'grid', label: 'Grid', buttonLabel: 'Grid', category: 'reference' },
     {
-      id: 'temp', label: 'Temperature', buttonLabel: 'Temp', category: 'weather',
+      id: 'temp', label: 'Temperature', buttonLabel: 'Temperature', category: 'weather',
       params: ['temperature_2m'],
       defaultSizeEstimate: 8_000_000,
       slabs: [{ name: 'data', sizeMB: 26 }],

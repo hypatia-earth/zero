@@ -119,7 +119,7 @@ async function runBootstrapInner(
     services.stateService!,
     services.configService!
   );
-  await runDataPhase(services.slotService, services.queueService, progress);
+  await runDataPhase(services.slotService, services.queueService, services.configService!, progress);
 
   // Phase 7: Activate
   progress.startStep('ACTIVATE');

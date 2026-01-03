@@ -23,7 +23,7 @@ import { getByPath } from '../utils/object';
 import type { ConfigService } from '../services/config-service';
 import type { DialogService } from '../services/dialog-service';
 import type { CapabilitiesService } from '../services/capabilities-service';
-import { clearCache, nuke, isPeriodicSyncSupported } from '../services/sw-registration';
+import { clearCache, nuke } from '../services/sw-registration';
 import { RadioPaletteControl } from './radio-palette-control';
 import { PressureColorControl } from './pressure-color-control';
 
@@ -177,8 +177,8 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
 
   switch (meta.control) {
     case 'toggle': {
-      // Disable prefetch.enabled if Periodic Sync not supported
-      const disabled = path === 'prefetch.enabled' && !isPeriodicSyncSupported();
+      // Disable prefetch.enabled (feature disabled for now)
+      const disabled = path === 'prefetch.enabled';
       return m('label.toggle', { class: disabled ? 'disabled' : '' }, [
         m('input[type=checkbox]', {
           checked: currentValue as boolean,
