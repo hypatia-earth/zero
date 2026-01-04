@@ -1299,12 +1299,36 @@ export class PressureLayer {
     return data;
   }
 
+  // DEBUG: Read from smoothedNeighborBuffer (pass 1 output when iterations=2)
+  async debugReadSmoothedNeighbors(levelIndex: number, count: number = 50): Promise<Int32Array> {
+    const verticesPerLevel = this.numCells * 4 * 4;
+    const byteOffset = levelIndex * verticesPerLevel * 8;
+    const byteSize = count * 8;
+    const readBuffer = this.device.createBuffer({
+      size: byteSize,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+    const encoder = this.device.createCommandEncoder();
+    encoder.copyBufferToBuffer(this.smoothedNeighborBuffer, byteOffset, readBuffer, 0, byteSize);
+    this.device.queue.submit([encoder.finish()]);
+    await readBuffer.mapAsync(GPUMapMode.READ);
+    const data = new Int32Array(readBuffer.getMappedRange().slice(0));
+    readBuffer.unmap();
+    readBuffer.destroy();
+    return data;
+  }
+
   // DEBUG: Log Chaikin chain for first N segments
   async debugChaikinChain(levelIndex: number, segmentCount: number = 8): Promise<void> {
     const vertexCount = segmentCount * 4;  // 4 vertices per segment after Chaikin
     const vertices = await this.debugReadVertices(levelIndex, vertexCount);
     const neighbors = await this.debugReadNeighbors(levelIndex, vertexCount);
 
+    const smoothedNeighbors = await this.debugReadSmoothedNeighbors(levelIndex, vertexCount);
+
+    console.log(`[Chaikin Debug] Level ${levelIndex}, comparing neighborBuffer vs smoothedNeighborBuffer:`);
+    console.log(`  neighborBuffer = pass 1 output (used as pass 2 input)`);
+    console.log(`  smoothedNeighborBuffer = pass 0 output`);
     console.log(`[Chaikin Debug] Level ${levelIndex}, first ${segmentCount} original segments:`);
     for (let seg = 0; seg < segmentCount; seg++) {
       const base = seg * 4;
@@ -1317,21 +1341,21 @@ export class PressureLayer {
         const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
         const prevN = neighbors[idx * 2];
         const nextN = neighbors[idx * 2 + 1];
+        const sPrevN = smoothedNeighbors[idx * 2];
+        const sNextN = smoothedNeighbors[idx * 2 + 1];
         const label = ['Q', 'R', 'R_dup', 'Q_next'][i];
-        console.log(`    ${idx} (${label}): len=${len.toFixed(3)}, prev=${prevN}, next=${nextN}`);
+        console.log(`    ${idx} (${label}): len=${len.toFixed(3)}, n=[${prevN},${nextN}] s=[${sPrevN},${sNextN}]`);
       }
-      // Check line segment lengths (for line-list pairs)
-      const seg0Len = Math.sqrt(
-        Math.pow(vertices[(base+1)*4] - vertices[base*4], 2) +
-        Math.pow(vertices[(base+1)*4+1] - vertices[base*4+1], 2) +
-        Math.pow(vertices[(base+1)*4+2] - vertices[base*4+2], 2)
-      );
-      const seg1Len = Math.sqrt(
-        Math.pow(vertices[(base+3)*4] - vertices[(base+2)*4], 2) +
-        Math.pow(vertices[(base+3)*4+1] - vertices[(base+2)*4+1], 2) +
-        Math.pow(vertices[(base+3)*4+2] - vertices[(base+2)*4+2], 2)
-      );
-      console.log(`    Line (${base},${base+1}): len=${seg0Len.toFixed(6)}, Line (${base+2},${base+3}): len=${seg1Len.toFixed(6)}`);
+      // Check gap between this segment's Q_next and next segment's Q
+      if (seg < segmentCount - 1) {
+        const nextBase = (seg + 1) * 4;
+        const gap = Math.sqrt(
+          Math.pow(vertices[(base+3)*4] - vertices[nextBase*4], 2) +
+          Math.pow(vertices[(base+3)*4+1] - vertices[nextBase*4+1], 2) +
+          Math.pow(vertices[(base+3)*4+2] - vertices[nextBase*4+2], 2)
+        );
+        console.log(`    Gap Q_next(${base+3}) → Q(${nextBase}): ${gap.toFixed(6)}`);
+      }
     }
   }
 
