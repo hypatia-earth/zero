@@ -46,7 +46,7 @@ export const defaultConfig: ZeroConfig = {
   layers: [
     {
       id: 'earth', label: 'Earth', buttonLabel: 'Earth', category: 'celestial',
-      description: 'Satellite imagery basemap from Natural Earth.',
+      description: 'Global land/ocean mask with ice sheet topography based on RTOPO2.',
     },
     {
       id: 'sun', label: 'Sun', buttonLabel: 'Sun', category: 'celestial',
