@@ -43,7 +43,7 @@ interface LayerPalettes {
 
 const DEFAULT_PALETTES: Record<string, PaletteData> = {
   temp: {
-    name: 'Hypatia Temperature',
+    name: 'Classic Temperature',
     unit: 'F',
     interpolate: false,
     labelMode: 'band-edge',
@@ -332,7 +332,7 @@ export class PaletteService {
    */
   private getDefaultPaletteName(layer: string): string {
     const defaults: Record<string, string> = {
-      temp: 'Hypatia Temperature',
+      temp: 'Classic Temperature',
     };
     return defaults[layer] ?? '';
   }

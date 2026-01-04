@@ -642,7 +642,7 @@ export const optionsSchema = z.object({
       }
     ),
     palette: opt(
-      z.string().default('Hypatia Temperature'),
+      z.string().default('Classic Temperature'),
       {
         label: 'Color palette',
         description: 'Visual color scheme for temperature data',
@@ -1056,7 +1056,7 @@ export const defaultOptions: ZeroOptions = {
   earth: { enabled: true, opacity: 1 },
   sun: { enabled: true, opacity: 1 },
   grid: { enabled: true, opacity: defaultConfig.grid.opacity, fontSize: 12, lineWidth: 2 },
-  temp: { enabled: true, opacity: 0.6, palette: 'Hypatia Temperature' },
+  temp: { enabled: true, opacity: 0.6, palette: 'Classic Temperature' },
   rain: { enabled: false, opacity: 1.0 },
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },
