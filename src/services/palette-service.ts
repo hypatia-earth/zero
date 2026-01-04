@@ -43,7 +43,7 @@ interface LayerPalettes {
 
 const DEFAULT_PALETTES: Record<string, PaletteData> = {
   temp: {
-    name: 'ESRI Temperature',
+    name: 'Hypatia Temperature',
     unit: 'F',
     interpolate: false,
     labelMode: 'band-edge',
@@ -112,7 +112,7 @@ export class PaletteService {
 
   /** Load palette files by trying known suffixes */
   private async loadPalettesDirectly(layer: string): Promise<PaletteData[]> {
-    const knownSuffixes = ['esri', 'gradient', 'hypatia'];
+    const knownSuffixes = ['classic', 'gradient', 'hypatia'];
     const palettes: PaletteData[] = [];
 
     for (const suffix of knownSuffixes) {
@@ -332,7 +332,7 @@ export class PaletteService {
    */
   private getDefaultPaletteName(layer: string): string {
     const defaults: Record<string, string> = {
-      temp: 'ESRI Temperature',
+      temp: 'Hypatia Temperature',
     };
     return defaults[layer] ?? '';
   }

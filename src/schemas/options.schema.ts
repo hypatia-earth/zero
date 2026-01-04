@@ -519,20 +519,6 @@ export const optionsSchema = z.object({
         step: 0.05,
       }
     ),
-    blend: opt(
-      z.number().min(0).max(1).default(0),
-      {
-        label: 'Basemap blend',
-        description: 'Blend between satellite (0) and terrain (1)',
-        group: 'layers',
-        filter: ['global', 'earth'],
-        order: 1,
-        control: 'slider',
-        min: 0,
-        max: 1,
-        step: 0.1,
-      }
-    ),
   }),
 
   // ----------------------------------------------------------
@@ -656,7 +642,7 @@ export const optionsSchema = z.object({
       }
     ),
     palette: opt(
-      z.string().default('ESRI Temperature'),
+      z.string().default('Hypatia Temperature'),
       {
         label: 'Color palette',
         description: 'Visual color scheme for temperature data',
@@ -1067,10 +1053,10 @@ export const defaultOptions: ZeroOptions = {
       twoFingerPan: { invert: false },
     },
   },
-  earth: { enabled: true, opacity: 1, blend: 0 },
+  earth: { enabled: true, opacity: 1 },
   sun: { enabled: true, opacity: 1 },
   grid: { enabled: true, opacity: defaultConfig.grid.opacity, fontSize: 12, lineWidth: 2 },
-  temp: { enabled: true, opacity: 0.6, palette: 'ESRI Temperature' },
+  temp: { enabled: true, opacity: 0.6, palette: 'Hypatia Temperature' },
   rain: { enabled: false, opacity: 1.0 },
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },

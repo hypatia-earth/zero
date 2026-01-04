@@ -1,10 +1,9 @@
 {
-  "name": "ESRI Temperature",
+  "name": "Classic Temperature",
   "description": "Meaningful palette with dark freezing wall at 32°F",
   "unit": "F",
   "interpolate": false,
   "labelMode": "band-edge",
-  "source": "https://www.esri.com/arcgis-blog/products/arcgis-pro/mapping/a-meaningful-temperature-palette",
   "stops": [
     { "value": -60, "color": [209, 219, 224] },
     { "value": -55, "color": [204, 214, 219] },
