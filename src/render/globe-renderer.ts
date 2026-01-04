@@ -1014,7 +1014,7 @@ export class GlobeRenderer {
 
     // Base vertex count per level from marching squares
     const baseVerticesPerLevel = this.pressureLayer.getBaseVerticesPerLevel();
-    // Chaikin doubles per pass, so max expansion is 4× for 2 passes
+    // Chaikin 2× per pass (4 output vertices per 2 input), so max expansion is 4× for 2 passes
     const expansionFactor = smoothingAlgo === 'chaikin' ? Math.pow(2, smoothingIterations) : 1;
     const maxVerticesPerLevel = baseVerticesPerLevel * expansionFactor;
 

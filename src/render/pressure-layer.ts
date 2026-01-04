@@ -329,8 +329,8 @@ export class PressureLayer {
     // Max segments per isobar level (worst case: 2 per cell for saddle points)
     const maxSegmentsPerLevel = this.numCells * 2;
     const maxVerticesPerLevel = maxSegmentsPerLevel * 2;  // 2 vertices per segment
-    // Chaikin doubles vertices per pass, so 2 passes = 4× expansion
-    const maxVerticesWithChaikin = maxVerticesPerLevel * 4;
+    // Chaikin 2× vertices per pass, so 2 passes = 4× expansion
+    const maxVerticesWithChaikin = maxVerticesPerLevel * 4;  // 4× for 2 Chaikin passes (2^2)
 
     // Vertex buffer sized for current level count (with Chaikin expansion room)
     this.vertexBuffer = this.device.createBuffer({
@@ -560,7 +560,7 @@ export class PressureLayer {
     // Recreate vertex buffer (sized for current level count with Chaikin expansion)
     const maxSegmentsPerLevel = this.numCells * 2;
     const maxVerticesPerLevel = maxSegmentsPerLevel * 2;
-    const maxVerticesWithChaikin = maxVerticesPerLevel * 4;  // 4× for 2 Chaikin passes
+    const maxVerticesWithChaikin = maxVerticesPerLevel * 4;  // 4× for 2 Chaikin passes (2^2)
     this.vertexBuffer = this.device.createBuffer({
       size: Math.max(maxVerticesWithChaikin * this.currentLevelCount * 16, 64),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,  // COPY_SRC for debug
@@ -630,7 +630,7 @@ export class PressureLayer {
 
       const maxSegmentsPerLevel = this.numCells * 2;
       const maxVerticesPerLevel = maxSegmentsPerLevel * 2;
-      const maxVerticesWithChaikin = maxVerticesPerLevel * 4;  // 4× for 2 Chaikin passes
+      const maxVerticesWithChaikin = maxVerticesPerLevel * 4;  // 4× for 2 Chaikin passes (2^2)
       this.vertexBuffer = this.device.createBuffer({
         size: Math.max(maxVerticesWithChaikin * this.currentLevelCount * 16, 64),
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,  // COPY_SRC for debug
@@ -1253,7 +1253,7 @@ export class PressureLayer {
 
   // DEBUG: Read vertex buffer for debugging
   async debugReadVertices(levelIndex: number, count: number = 50): Promise<Float32Array> {
-    // Each level gets numCells * 4 * 4 vertices (base * Chaikin 4× expansion)
+    // Each level gets numCells * 4 * 4 vertices (base * Chaikin 4× expansion for 2 passes)
     const verticesPerLevel = this.numCells * 4 * 4;
     const byteOffset = levelIndex * verticesPerLevel * 16;
     const byteSize = count * 16;
