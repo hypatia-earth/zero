@@ -362,10 +362,11 @@ export class PressureLayer {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Chaikin uniform buffer - sized for all levels with dynamic offsets (like contour)
-    // 16 bytes per level: earthRadius, inputCount, inputOffset, outputOffset
+    // Chaikin uniform buffer - sized for all levels × max passes with dynamic offsets
+    // 16 bytes per slot: earthRadius, inputCount, inputOffset, outputOffset
+    const maxChaikinPasses = 2;
     this.chaikinUniformBuffer = this.device.createBuffer({
-      size: this.uniformAlignment * ISOBAR_CONFIG.maxLevels,
+      size: this.uniformAlignment * ISOBAR_CONFIG.maxLevels * maxChaikinPasses,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,  // COPY_SRC for debug
     });
 
@@ -374,7 +375,7 @@ export class PressureLayer {
     const neighborBufferSize = Math.max(maxVerticesWithChaikin * this.currentLevelCount * 8, 64);
     this.neighborBuffer = this.device.createBuffer({
       size: neighborBufferSize,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
     this.smoothedNeighborBuffer = this.device.createBuffer({
       size: neighborBufferSize,
@@ -582,7 +583,7 @@ export class PressureLayer {
     const neighborBufferSize = Math.max(maxVerticesWithChaikin * this.currentLevelCount * 8, 64);
     this.neighborBuffer = this.device.createBuffer({
       size: neighborBufferSize,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
     this.smoothedNeighborBuffer = this.device.createBuffer({
       size: neighborBufferSize,
@@ -642,7 +643,7 @@ export class PressureLayer {
       const neighborBufferSize = Math.max(maxVerticesWithChaikin * this.currentLevelCount * 8, 64);
       this.neighborBuffer = this.device.createBuffer({
         size: neighborBufferSize,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
       });
       this.smoothedNeighborBuffer = this.device.createBuffer({
         size: neighborBufferSize,
@@ -997,16 +998,23 @@ export class PressureLayer {
     let currentCount = vertexCount;
     let currentOffset = vertexOffset;
 
-    // Write uniforms for this level at its dynamic offset (before command recording)
-    const dynamicOffset = levelIndex * this.uniformAlignment;
+    // Write uniforms for ALL passes upfront (queue.writeBuffer is CPU-immediate)
+    // Each pass needs its own uniform slot: level * maxPasses + passIndex
+    const maxPasses = 2;
     const chaikinUniforms = new ArrayBuffer(16);
     const f32 = new Float32Array(chaikinUniforms);
     const u32 = new Uint32Array(chaikinUniforms);
-    f32[0] = EARTH_RADIUS;
-    u32[1] = currentCount;
-    u32[2] = currentOffset;
-    u32[3] = currentOffset;  // outputOffset = inputOffset for iteration 0
-    this.device.queue.writeBuffer(this.chaikinUniformBuffer, dynamicOffset, chaikinUniforms);
+
+    let precomputeCount = currentCount;
+    for (let p = 0; p < iterations; p++) {
+      const dynamicOffset = (levelIndex * maxPasses + p) * this.uniformAlignment;
+      f32[0] = EARTH_RADIUS;
+      u32[1] = precomputeCount;
+      u32[2] = currentOffset;
+      u32[3] = currentOffset;
+      this.device.queue.writeBuffer(this.chaikinUniformBuffer, dynamicOffset, chaikinUniforms);
+      precomputeCount *= 2;  // Next pass has 2× vertices
+    }
 
     // Ping-pong between vertex/neighbor buffer pairs
     let inputVertexBuffer = this.vertexBuffer;
@@ -1015,6 +1023,7 @@ export class PressureLayer {
     let outputNeighborBuffer = this.smoothedNeighborBuffer;
 
     for (let i = 0; i < iterations; i++) {
+      const dynamicOffset = (levelIndex * maxPasses + i) * this.uniformAlignment;
       const numSegments = currentCount / 2;
       const outputCount = currentCount * 2;  // 4 vertices per 2 input = 2× expansion
       const outputOffset = currentOffset;
@@ -1269,6 +1278,61 @@ export class PressureLayer {
     readBuffer.unmap();
     readBuffer.destroy();
     return data;
+  }
+
+  // DEBUG: Read neighbor buffer for debugging Chaikin
+  async debugReadNeighbors(levelIndex: number, count: number = 50): Promise<Int32Array> {
+    const verticesPerLevel = this.numCells * 4 * 4;
+    const byteOffset = levelIndex * verticesPerLevel * 8;  // 8 bytes per neighbor (2 × i32)
+    const byteSize = count * 8;
+    const readBuffer = this.device.createBuffer({
+      size: byteSize,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+    const encoder = this.device.createCommandEncoder();
+    encoder.copyBufferToBuffer(this.neighborBuffer, byteOffset, readBuffer, 0, byteSize);
+    this.device.queue.submit([encoder.finish()]);
+    await readBuffer.mapAsync(GPUMapMode.READ);
+    const data = new Int32Array(readBuffer.getMappedRange().slice(0));
+    readBuffer.unmap();
+    readBuffer.destroy();
+    return data;
+  }
+
+  // DEBUG: Log Chaikin chain for first N segments
+  async debugChaikinChain(levelIndex: number, segmentCount: number = 8): Promise<void> {
+    const vertexCount = segmentCount * 4;  // 4 vertices per segment after Chaikin
+    const vertices = await this.debugReadVertices(levelIndex, vertexCount);
+    const neighbors = await this.debugReadNeighbors(levelIndex, vertexCount);
+
+    console.log(`[Chaikin Debug] Level ${levelIndex}, first ${segmentCount} original segments:`);
+    for (let seg = 0; seg < segmentCount; seg++) {
+      const base = seg * 4;
+      console.log(`  Seg ${seg} (indices ${base}-${base + 3}):`);
+      for (let i = 0; i < 4; i++) {
+        const idx = base + i;
+        const vx = vertices[idx * 4];
+        const vy = vertices[idx * 4 + 1];
+        const vz = vertices[idx * 4 + 2];
+        const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
+        const prevN = neighbors[idx * 2];
+        const nextN = neighbors[idx * 2 + 1];
+        const label = ['Q', 'R', 'R_dup', 'Q_next'][i];
+        console.log(`    ${idx} (${label}): len=${len.toFixed(3)}, prev=${prevN}, next=${nextN}`);
+      }
+      // Check line segment lengths (for line-list pairs)
+      const seg0Len = Math.sqrt(
+        Math.pow(vertices[(base+1)*4] - vertices[base*4], 2) +
+        Math.pow(vertices[(base+1)*4+1] - vertices[base*4+1], 2) +
+        Math.pow(vertices[(base+1)*4+2] - vertices[base*4+2], 2)
+      );
+      const seg1Len = Math.sqrt(
+        Math.pow(vertices[(base+3)*4] - vertices[(base+2)*4], 2) +
+        Math.pow(vertices[(base+3)*4+1] - vertices[(base+2)*4+1], 2) +
+        Math.pow(vertices[(base+3)*4+2] - vertices[(base+2)*4+2], 2)
+      );
+      console.log(`    Line (${base},${base+1}): len=${seg0Len.toFixed(6)}, Line (${base+2},${base+3}): len=${seg1Len.toFixed(6)}`);
+    }
   }
 
   dispose(): void {

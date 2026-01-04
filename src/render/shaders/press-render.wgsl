@@ -29,6 +29,7 @@ struct VertexOutput {
   @builtin(position) position: vec4<f32>,
   @location(0) worldPos: vec3<f32>,
   @location(1) pressure: f32,
+  @location(2) @interpolate(flat) segmentIdx: u32,
 }
 
 struct FragmentOutput {
@@ -47,6 +48,7 @@ fn vertexMain(@builtin(vertex_index) idx: u32) -> VertexOutput {
   out.position = uniforms.viewProj * vec4<f32>(vertex.xyz, 1.0);
   out.worldPos = vertex.xyz;
   out.pressure = vertex.w;
+  out.segmentIdx = idx / 2u;  // 2 vertices per segment
   return out;
 }
 
@@ -76,9 +78,17 @@ fn fragmentMain(in: VertexOutput) -> FragmentOutput {
       let isRef = abs(in.pressure - uniforms.pressureRef) < 100.0;  // within 1 hPa
       color = select(uniforms.color1, uniforms.color0, isRef);
     }
-    case 3u: { // debug: hash pressure to color
-      let h = fract(in.pressure * 0.0001);
-      color = vec4<f32>(h, fract(h * 7.0), fract(h * 13.0), 1.0);
+    case 3u: { // debug: color by segment index (4 colors cycling)
+      let segMod = in.segmentIdx % 4u;  // cycle through 4 colors
+      if (segMod == 0u) {
+        color = vec4<f32>(1.0, 0.0, 0.0, 1.0);  // red
+      } else if (segMod == 1u) {
+        color = vec4<f32>(0.0, 1.0, 0.0, 1.0);  // green
+      } else if (segMod == 2u) {
+        color = vec4<f32>(0.0, 0.0, 1.0, 1.0);  // blue
+      } else {
+        color = vec4<f32>(1.0, 1.0, 0.0, 1.0);  // yellow
+      }
     }
     default: {
       color = vec4<f32>(1.0);

@@ -100,8 +100,8 @@ fn chaikinSubdivide(@builtin(global_invocation_id) id: vec3<u32>) {
     let prevVertexIdx = u32(neighbors0.x);
     let prevLocalIdx = prevVertexIdx - uniforms.inputVertexOffset;
     let prevSegIdx = prevLocalIdx / 2u;
-    // Previous segment's R is at outputOffset + prevSegIdx*4 + 1
-    prevSegmentR = i32(uniforms.outputVertexOffset + prevSegIdx * 4u + 1u);
+    // Previous segment's Q_next is at outputOffset + prevSegIdx*4 + 3 (chain: ...R → Q_next → Q...)
+    prevSegmentR = i32(uniforms.outputVertexOffset + prevSegIdx * 4u + 3u);
   }
 
   if (neighbors1.y >= 0) {
@@ -112,9 +112,10 @@ fn chaikinSubdivide(@builtin(global_invocation_id) id: vec3<u32>) {
     nextSegmentQ = i32(uniforms.outputVertexOffset + nextSegIdx * 4u);
   }
 
-  // Store neighbors: Q connects to prev's R, R connects to next's Q
-  outputNeighbors[outBase + 0u] = vec2<i32>(prevSegmentR, i32(outBase + 1u));  // Q
-  outputNeighbors[outBase + 1u] = vec2<i32>(i32(outBase + 0u), nextSegmentQ);  // R
-  outputNeighbors[outBase + 2u] = vec2<i32>(-1, -1);  // R duplicate (connection segment)
-  outputNeighbors[outBase + 3u] = vec2<i32>(-1, -1);  // Q_next (connection segment)
+  // Store neighbors for all 4 vertices to support multi-pass
+  // Logical chain: Q → R → Q_next → [next seg's Q] (R_dup is just for rendering)
+  outputNeighbors[outBase + 0u] = vec2<i32>(prevSegmentR, i32(outBase + 1u));  // Q: prev=prevSeg's R, next=R
+  outputNeighbors[outBase + 1u] = vec2<i32>(i32(outBase + 0u), i32(outBase + 3u));  // R: prev=Q, next=Q_next (skip R_dup)
+  outputNeighbors[outBase + 2u] = vec2<i32>(i32(outBase + 1u), i32(outBase + 3u));  // R_dup: prev=R, next=Q_next
+  outputNeighbors[outBase + 3u] = vec2<i32>(i32(outBase + 1u), nextSegmentQ);  // Q_next: prev=R, next=nextSeg's Q
 }
