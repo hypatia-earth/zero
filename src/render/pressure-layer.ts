@@ -17,7 +17,11 @@ import pressRegridCode from './shaders/press-regrid.wgsl?raw';
 import pressContourCode from './shaders/press-contour.wgsl?raw';
 import pressPrefixSumCode from './shaders/press-prefix-sum.wgsl?raw';
 import pressSmoothCode from './shaders/press-smooth.wgsl?raw';
+import pressChaikinCode from './shaders/press-chaikin.wgsl?raw';
 import type { PressureColorOption } from '../schemas/options.schema';
+
+/** Smoothing algorithm type */
+export type SmoothingAlgorithm = 'laplacian' | 'chaikin';
 
 /** Isobar configuration */
 export const ISOBAR_CONFIG = {
@@ -82,6 +86,7 @@ export class PressureLayer {
   private regridPipeline!: GPUComputePipeline;
   private countPipeline!: GPUComputePipeline;
   private generatePipeline!: GPUComputePipeline;
+  private buildNeighborsPipeline!: GPUComputePipeline;  // Populates neighbor buffer for Chaikin
   private scanBlocksPipeline!: GPUComputePipeline;
   private addBlockSumsPipeline!: GPUComputePipeline;
   private edgeClearPipeline!: GPUComputePipeline;  // Fills edge buffer with -1
@@ -109,11 +114,18 @@ export class PressureLayer {
   private contourBindGroup: GPUBindGroup | null = null;
   private contourBindGroupSlots: [number, number] = [-1, -1];
 
-  // Smoothing pipeline and buffers
+  // Smoothing pipeline and buffers (Laplacian)
   private smoothPipeline!: GPUComputePipeline;
   private smoothUniformBuffer!: GPUBuffer;
   private edgeToVertexBuffer!: GPUBuffer;      // Edge→vertex index mapping
   private smoothedVertexBuffer!: GPUBuffer;    // Output of smoothing pass
+
+  // Chaikin pipeline and buffers
+  private chaikinPipeline!: GPUComputePipeline;
+  private chaikinBindGroupLayout!: GPUBindGroupLayout;
+  private chaikinUniformBuffer!: GPUBuffer;
+  private neighborBuffer!: GPUBuffer;          // [prevIdx, nextIdx] per vertex for chain traversal
+  private smoothedNeighborBuffer!: GPUBuffer;  // Ping-pong neighbor buffer for Chaikin
 
   // Render pipeline
   private renderPipeline!: GPURenderPipeline;
@@ -169,11 +181,12 @@ export class PressureLayer {
       entries: [
         { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', hasDynamicOffset: true } },
         { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },  // pressureGrid0
-        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // segmentCounts
+        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },  // offsets
+        { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // vertices
         { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },  // pressureGrid1
         { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // edgeToVertex
+        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // neighborBuffer
       ],
     });
 
@@ -212,6 +225,10 @@ export class PressureLayer {
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.contourBindGroupLayout] }),
       compute: { module: contourModule, entryPoint: 'generateSegments' },
     });
+    this.buildNeighborsPipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.contourBindGroupLayout] }),
+      compute: { module: contourModule, entryPoint: 'buildNeighbors' },
+    });
 
     // Prefix sum pipelines
     const prefixSumModule = this.device.createShaderModule({ code: pressPrefixSumCode });
@@ -224,11 +241,28 @@ export class PressureLayer {
       compute: { module: prefixSumModule, entryPoint: 'addBlockSums' },
     });
 
-    // Smoothing pipeline
+    // Smoothing pipeline (Laplacian)
     const smoothModule = this.device.createShaderModule({ code: pressSmoothCode });
     this.smoothPipeline = this.device.createComputePipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.smoothBindGroupLayout] }),
       compute: { module: smoothModule, entryPoint: 'smoothEdges' },
+    });
+
+    // Chaikin pipeline - uses neighbor buffer for chain traversal
+    // Uses dynamic offset for per-level uniforms (like contour)
+    this.chaikinBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', hasDynamicOffset: true } },
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },  // input vertices
+        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },            // output vertices
+        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },  // input neighbors
+        { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },            // output neighbors
+      ],
+    });
+    const chaikinModule = this.device.createShaderModule({ code: pressChaikinCode });
+    this.chaikinPipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.chaikinBindGroupLayout] }),
+      compute: { module: chaikinModule, entryPoint: 'chaikinSubdivide' },
     });
 
     // Edge clear pipeline - fills edge buffer with -1 (GPU-side, can be batched)
@@ -261,7 +295,7 @@ export class PressureLayer {
     // Struct per level: gridWidth, gridHeight, isovalue, earthRadius, vertexOffset, lerp, _pad(vec2)
     this.contourUniformBuffer = this.device.createBuffer({
       size: this.uniformAlignment * ISOBAR_CONFIG.maxLevels,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,  // COPY_SRC for debug
     });
 
     // Grid slot buffers created in setExternalBuffers (need to know slot count)
@@ -295,11 +329,13 @@ export class PressureLayer {
     // Max segments per isobar level (worst case: 2 per cell for saddle points)
     const maxSegmentsPerLevel = this.numCells * 2;
     const maxVerticesPerLevel = maxSegmentsPerLevel * 2;  // 2 vertices per segment
+    // Chaikin doubles vertices per pass, so 2 passes = 4× expansion
+    const maxVerticesWithChaikin = maxVerticesPerLevel * 4;
 
-    // Vertex buffer sized for current level count
+    // Vertex buffer sized for current level count (with Chaikin expansion room)
     this.vertexBuffer = this.device.createBuffer({
-      size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),  // vec4f per vertex
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      size: Math.max(maxVerticesWithChaikin * this.currentLevelCount * 16, 64),  // vec4f per vertex
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,  // COPY_SRC for debug
     });
 
     // Edge→vertex mapping buffer (4 edges per cell, i32 per edge)
@@ -316,7 +352,7 @@ export class PressureLayer {
 
     // Smoothed vertex buffer (same size as vertex buffer, for ping-pong)
     this.smoothedVertexBuffer = this.device.createBuffer({
-      size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),
+      size: Math.max(maxVerticesWithChaikin * this.currentLevelCount * 16, 64),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
 
@@ -324,6 +360,25 @@ export class PressureLayer {
     this.smoothUniformBuffer = this.device.createBuffer({
       size: 16,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    // Chaikin uniform buffer - sized for all levels with dynamic offsets (like contour)
+    // 16 bytes per level: earthRadius, inputCount, inputOffset, outputOffset
+    this.chaikinUniformBuffer = this.device.createBuffer({
+      size: this.uniformAlignment * ISOBAR_CONFIG.maxLevels,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,  // COPY_SRC for debug
+    });
+
+    // Neighbor buffer: [prevIdx, nextIdx] per vertex (2 × i32 = 8 bytes per vertex)
+    // Same vertex count as vertexBuffer (with Chaikin expansion room)
+    const neighborBufferSize = Math.max(maxVerticesWithChaikin * this.currentLevelCount * 8, 64);
+    this.neighborBuffer = this.device.createBuffer({
+      size: neighborBufferSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.smoothedNeighborBuffer = this.device.createBuffer({
+      size: neighborBufferSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
   }
 
@@ -502,12 +557,13 @@ export class PressureLayer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Recreate vertex buffer (sized for current level count)
+    // Recreate vertex buffer (sized for current level count with Chaikin expansion)
     const maxSegmentsPerLevel = this.numCells * 2;
     const maxVerticesPerLevel = maxSegmentsPerLevel * 2;
+    const maxVerticesWithChaikin = maxVerticesPerLevel * 4;  // 4× for 2 Chaikin passes
     this.vertexBuffer = this.device.createBuffer({
-      size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      size: Math.max(maxVerticesWithChaikin * this.currentLevelCount * 16, 64),
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,  // COPY_SRC for debug
     });
 
     // Recreate smoothing buffers
@@ -520,7 +576,16 @@ export class PressureLayer {
       entries: [{ binding: 0, resource: { buffer: this.edgeToVertexBuffer } }],
     });
     this.smoothedVertexBuffer = this.device.createBuffer({
-      size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),
+      size: Math.max(maxVerticesWithChaikin * this.currentLevelCount * 16, 64),
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    });
+    const neighborBufferSize = Math.max(maxVerticesWithChaikin * this.currentLevelCount * 8, 64);
+    this.neighborBuffer = this.device.createBuffer({
+      size: neighborBufferSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.smoothedNeighborBuffer = this.device.createBuffer({
+      size: neighborBufferSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
 
@@ -559,12 +624,29 @@ export class PressureLayer {
       this.contourBindGroupSlots = [-1, -1];
 
       this.vertexBuffer.destroy();
+      this.smoothedVertexBuffer.destroy();
+      this.neighborBuffer.destroy();
+      this.smoothedNeighborBuffer.destroy();
 
       const maxSegmentsPerLevel = this.numCells * 2;
       const maxVerticesPerLevel = maxSegmentsPerLevel * 2;
+      const maxVerticesWithChaikin = maxVerticesPerLevel * 4;  // 4× for 2 Chaikin passes
       this.vertexBuffer = this.device.createBuffer({
-        size: Math.max(maxVerticesPerLevel * this.currentLevelCount * 16, 64),
+        size: Math.max(maxVerticesWithChaikin * this.currentLevelCount * 16, 64),
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,  // COPY_SRC for debug
+      });
+      this.smoothedVertexBuffer = this.device.createBuffer({
+        size: Math.max(maxVerticesWithChaikin * this.currentLevelCount * 16, 64),
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+      });
+      const neighborBufferSize = Math.max(maxVerticesWithChaikin * this.currentLevelCount * 8, 64);
+      this.neighborBuffer = this.device.createBuffer({
+        size: neighborBufferSize,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      this.smoothedNeighborBuffer = this.device.createBuffer({
+        size: neighborBufferSize,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
       });
 
       // Recreate render bind group (references vertexBuffer)
@@ -632,6 +714,14 @@ export class PressureLayer {
   }
 
   /**
+   * Get base vertices per level (before Chaikin expansion)
+   * This is numCells * 4 (max 2 segments per cell, 2 vertices per segment)
+   */
+  getBaseVerticesPerLevel(): number {
+    return this.numCells * 4;
+  }
+
+  /**
    * Prepare contour batch - writes all uniforms and clears buffers once
    * Call before the per-level loop, then call runContourLevel for each level
    * @param slot0 First grid slot index
@@ -688,6 +778,7 @@ export class PressureLayer {
           { binding: 4, resource: { buffer: this.vertexBuffer } },
           { binding: 5, resource: { buffer: this.gridSlotBuffers[slot1]! } },
           { binding: 6, resource: { buffer: this.edgeToVertexBuffer } },
+          { binding: 7, resource: { buffer: this.neighborBuffer } },
         ],
       });
       this.contourBindGroupSlots = [slot0, slot1];
@@ -788,21 +879,57 @@ export class PressureLayer {
       Math.ceil((this.gridHeight - 1) / 8)
     );
     generatePass.end();
+
+    // Pass 4: Build neighbor indices for Chaikin (after edgeToVertex is populated)
+    const buildNeighborsPass = commandEncoder.beginComputePass();
+    buildNeighborsPass.setPipeline(this.buildNeighborsPipeline);
+    buildNeighborsPass.setBindGroup(0, this.contourBindGroup, [dynamicOffset]);
+    buildNeighborsPass.dispatchWorkgroups(
+      Math.ceil(this.gridWidth / 8),
+      Math.ceil((this.gridHeight - 1) / 8)
+    );
+    buildNeighborsPass.end();
   }
 
   /**
-   * Run Chaikin smoothing passes on generated contour vertices
+   * Run smoothing passes on generated contour vertices
    * @param commandEncoder GPU command encoder
+   * @param algorithm 'laplacian' or 'chaikin'
    * @param iterations Number of smoothing iterations (0-2)
    * @param vertexOffset Base vertex index for current level
-   * @param maxVertices Max vertices for current level
+   * @param vertexCount Actual vertex count for current level
+   * @param levelIndex Index of current level (for Chaikin dynamic uniforms)
+   * @returns New vertex count after smoothing (Chaikin doubles per pass)
    */
-  runSmoothing(commandEncoder: GPUCommandEncoder, iterations: number, vertexOffset: number, maxVertices: number): void {
-    if (iterations <= 0 || !this.computeReady) return;
+  runSmoothing(
+    commandEncoder: GPUCommandEncoder,
+    algorithm: SmoothingAlgorithm,
+    iterations: number,
+    vertexOffset: number,
+    vertexCount: number,
+    levelIndex: number
+  ): number {
+    if (iterations <= 0 || !this.computeReady) return vertexCount;
 
-    // Clear the smoothed buffer region using GPU-side clearBuffer
+    if (algorithm === 'laplacian') {
+      return this.runLaplacianSmoothing(commandEncoder, iterations, vertexOffset, vertexCount);
+    } else {
+      return this.runChaikinSmoothing(commandEncoder, iterations, vertexOffset, vertexCount, levelIndex);
+    }
+  }
+
+  /**
+   * Laplacian smoothing - moves vertices toward neighbors, same vertex count
+   */
+  private runLaplacianSmoothing(
+    commandEncoder: GPUCommandEncoder,
+    iterations: number,
+    vertexOffset: number,
+    vertexCount: number
+  ): number {
+    // Clear the smoothed buffer region
     const byteOffset = vertexOffset * 16;
-    const byteSize = maxVertices * 16;  // vec4f = 16 bytes per vertex
+    const byteSize = vertexCount * 16;
     commandEncoder.clearBuffer(this.smoothedVertexBuffer, byteOffset, byteSize);
 
     // Update smoothing uniforms
@@ -844,16 +971,108 @@ export class PressureLayer {
       [inputBuffer, outputBuffer] = [outputBuffer, inputBuffer];
     }
 
-    // If odd iterations, copy current level's result back to vertexBuffer
+    // If odd iterations, copy result back to vertexBuffer
     if (iterations % 2 === 1) {
-      const byteOffset = vertexOffset * 16;  // vec4f = 16 bytes
-      const byteSize = maxVertices * 16;
       commandEncoder.copyBufferToBuffer(
         this.smoothedVertexBuffer, byteOffset,
         this.vertexBuffer, byteOffset,
         byteSize
       );
     }
+
+    return vertexCount;  // Laplacian doesn't change count
+  }
+
+  /**
+   * Chaikin corner-cutting - doubles vertex count per pass
+   * Processes per-segment, outputs 2 corner segments (4 vertices) per input segment (2 vertices)
+   */
+  private runChaikinSmoothing(
+    commandEncoder: GPUCommandEncoder,
+    iterations: number,
+    vertexOffset: number,
+    vertexCount: number,
+    levelIndex: number
+  ): number {
+    let currentCount = vertexCount;
+    let currentOffset = vertexOffset;
+
+    // Write uniforms for this level at its dynamic offset (before command recording)
+    const dynamicOffset = levelIndex * this.uniformAlignment;
+    const chaikinUniforms = new ArrayBuffer(16);
+    const f32 = new Float32Array(chaikinUniforms);
+    const u32 = new Uint32Array(chaikinUniforms);
+    f32[0] = EARTH_RADIUS;
+    u32[1] = currentCount;
+    u32[2] = currentOffset;
+    u32[3] = currentOffset;  // outputOffset = inputOffset for iteration 0
+    this.device.queue.writeBuffer(this.chaikinUniformBuffer, dynamicOffset, chaikinUniforms);
+
+    // Ping-pong between vertex/neighbor buffer pairs
+    let inputVertexBuffer = this.vertexBuffer;
+    let outputVertexBuffer = this.smoothedVertexBuffer;
+    let inputNeighborBuffer = this.neighborBuffer;
+    let outputNeighborBuffer = this.smoothedNeighborBuffer;
+
+    // Create bind group with dynamic offset support
+    const chaikinBindGroup = this.device.createBindGroup({
+      layout: this.chaikinBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.chaikinUniformBuffer, size: this.uniformAlignment } },
+        { binding: 1, resource: { buffer: inputVertexBuffer } },
+        { binding: 2, resource: { buffer: outputVertexBuffer } },
+        { binding: 3, resource: { buffer: inputNeighborBuffer } },
+        { binding: 4, resource: { buffer: outputNeighborBuffer } },
+      ],
+    });
+
+    for (let i = 0; i < iterations; i++) {
+      const numSegments = currentCount / 2;
+      const outputCount = currentCount * 2;  // 4 vertices per 2 input = 2× expansion
+      const outputOffset = currentOffset;
+
+      // Clear output regions (vertices: 16 bytes, neighbors: 8 bytes per vertex)
+      const outVertexByteOffset = outputOffset * 16;
+      const outVertexByteSize = outputCount * 16;
+      const outNeighborByteOffset = outputOffset * 8;
+      const outNeighborByteSize = outputCount * 8;
+      commandEncoder.clearBuffer(outputVertexBuffer, outVertexByteOffset, outVertexByteSize);
+      commandEncoder.clearBuffer(outputNeighborBuffer, outNeighborByteOffset, outNeighborByteSize);
+
+      // Dispatch over segments (workgroup size 256)
+      const chaikinPass = commandEncoder.beginComputePass();
+      chaikinPass.setPipeline(this.chaikinPipeline);
+      chaikinPass.setBindGroup(0, chaikinBindGroup, [dynamicOffset]);
+      chaikinPass.dispatchWorkgroups(Math.ceil(numSegments / 256));
+      chaikinPass.end();
+
+      // Update for next iteration
+      currentCount = outputCount;
+
+      // Swap buffer pairs for next iteration
+      [inputVertexBuffer, outputVertexBuffer] = [outputVertexBuffer, inputVertexBuffer];
+      [inputNeighborBuffer, outputNeighborBuffer] = [outputNeighborBuffer, inputNeighborBuffer];
+    }
+
+    // If odd iterations, copy results back to primary buffers
+    if (iterations % 2 === 1) {
+      const vertexByteOffset = currentOffset * 16;
+      const vertexByteSize = currentCount * 16;
+      const neighborByteOffset = currentOffset * 8;
+      const neighborByteSize = currentCount * 8;
+      commandEncoder.copyBufferToBuffer(
+        this.smoothedVertexBuffer, vertexByteOffset,
+        this.vertexBuffer, vertexByteOffset,
+        vertexByteSize
+      );
+      commandEncoder.copyBufferToBuffer(
+        this.smoothedNeighborBuffer, neighborByteOffset,
+        this.neighborBuffer, neighborByteOffset,
+        neighborByteSize
+      );
+    }
+
+    return currentCount;  // Chaikin returns expanded count
   }
 
   /**
@@ -1031,6 +1250,26 @@ export class PressureLayer {
     console.log(`[Pressure] S.Greenland (65N,40W): ${greenland} hPa`);
   }
 
+  // DEBUG: Read vertex buffer for debugging
+  async debugReadVertices(levelIndex: number, count: number = 50): Promise<Float32Array> {
+    // Each level gets numCells * 4 * 4 vertices (base * Chaikin 4× expansion)
+    const verticesPerLevel = this.numCells * 4 * 4;
+    const byteOffset = levelIndex * verticesPerLevel * 16;
+    const byteSize = count * 16;
+    const readBuffer = this.device.createBuffer({
+      size: byteSize,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+    const encoder = this.device.createCommandEncoder();
+    encoder.copyBufferToBuffer(this.vertexBuffer, byteOffset, readBuffer, 0, byteSize);
+    this.device.queue.submit([encoder.finish()]);
+    await readBuffer.mapAsync(GPUMapMode.READ);
+    const data = new Float32Array(readBuffer.getMappedRange().slice(0));
+    readBuffer.unmap();
+    readBuffer.destroy();
+    return data;
+  }
+
   dispose(): void {
     // Compute buffers
     this.regridUniformBuffer?.destroy();
@@ -1043,8 +1282,11 @@ export class PressureLayer {
 
     // Smoothing buffers
     this.smoothUniformBuffer?.destroy();
+    this.chaikinUniformBuffer?.destroy();
     this.edgeToVertexBuffer?.destroy();
     this.smoothedVertexBuffer?.destroy();
+    this.neighborBuffer?.destroy();
+    this.smoothedNeighborBuffer?.destroy();
 
     // Render buffers
     this.renderUniformBuffer?.destroy();

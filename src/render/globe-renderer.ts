@@ -6,7 +6,7 @@ import { Camera, type CameraConfig } from './camera';
 import shaderCode from './shaders/zero-main.wgsl?raw';
 import postprocessShaderCode from './shaders/zero-post.wgsl?raw';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
-import { PressureLayer, type PressureResolution } from './pressure-layer';
+import { PressureLayer, type PressureResolution, type SmoothingAlgorithm } from './pressure-layer';
 import { WindLayer } from './wind-layer';
 import { GridAnimator, GRID_BUFFER_SIZE } from './grid-animator';
 import { U, UNIFORM_BUFFER_SIZE } from './globe-uniforms';
@@ -990,9 +990,17 @@ export class GlobeRenderer {
    * @param slot1 Second grid slot index (same as slot0 for single mode)
    * @param lerp Interpolation factor (0 = slot0, 1 = slot1)
    * @param levels Isobar levels to compute (hPa values)
-   * @param smoothingIterations Number of Chaikin smoothing passes (0-2)
+   * @param smoothingIterations Number of smoothing passes (0-2)
+   * @param smoothingAlgo Smoothing algorithm ('laplacian' or 'chaikin')
    */
-  runPressureContour(slot0: number, slot1: number, lerp: number, levels: number[], smoothingIterations = 0): void {
+  runPressureContour(
+    slot0: number,
+    slot1: number,
+    lerp: number,
+    levels: number[],
+    smoothingIterations = 0,
+    smoothingAlgo: SmoothingAlgorithm = 'laplacian'
+  ): void {
     if (!this.pressureLayer.isComputeReady()) {
       console.warn('[Globe] Pressure layer not ready');
       return;
@@ -1004,7 +1012,11 @@ export class GlobeRenderer {
       return;
     }
 
-    const maxVerticesPerLevel = 63724;
+    // Base vertex count per level from marching squares
+    const baseVerticesPerLevel = this.pressureLayer.getBaseVerticesPerLevel();
+    // Chaikin doubles per pass, so max expansion is 4× for 2 passes
+    const expansionFactor = smoothingAlgo === 'chaikin' ? Math.pow(2, smoothingIterations) : 1;
+    const maxVerticesPerLevel = baseVerticesPerLevel * expansionFactor;
 
     // Prepare batch: write all uniforms, clear buffers, cache bind group
     this.pressureLayer.prepareContourBatch(slot0, slot1, lerp, levels, maxVerticesPerLevel);
@@ -1015,20 +1027,31 @@ export class GlobeRenderer {
     // Clear vertex buffer using GPU-side clearBuffer
     this.pressureLayer.clearVertexBuffer(commandEncoder);
 
+    let totalVertices = 0;
     for (let i = 0; i < levels.length; i++) {
       // Run contour with dynamic uniform offset
       this.pressureLayer.runContourLevel(commandEncoder, i);
 
       // Run smoothing passes if requested
+      const vertexOffset = i * maxVerticesPerLevel;
       if (smoothingIterations > 0) {
-        const vertexOffset = i * maxVerticesPerLevel;
-        this.pressureLayer.runSmoothing(commandEncoder, smoothingIterations, vertexOffset, maxVerticesPerLevel);
+        const newCount = this.pressureLayer.runSmoothing(
+          commandEncoder,
+          smoothingAlgo,
+          smoothingIterations,
+          vertexOffset,
+          baseVerticesPerLevel,
+          i  // levelIndex for Chaikin dynamic uniforms
+        );
+        totalVertices += newCount;
+      } else {
+        totalVertices += baseVerticesPerLevel;
       }
     }
 
     // Single GPU submit for all levels
     this.device.queue.submit([commandEncoder.finish()]);
-    this.pressureLayer.setVertexCount(levels.length * maxVerticesPerLevel);
+    this.pressureLayer.setVertexCount(totalVertices);
   }
 
   dispose(): void {

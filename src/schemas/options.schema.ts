@@ -860,11 +860,26 @@ export const optionsSchema = z.object({
         ],
       }
     ),
+    smoothingAlgo: opt(
+      z.enum(['laplacian', 'chaikin']).default('laplacian'),
+      {
+        label: 'Smoothing algorithm',
+        description: 'Laplacian averages neighbors, Chaikin subdivides corners',
+        group: 'layers',
+        filter: ['global', 'pressure'],
+        order: 17.8,
+        control: 'radio',
+        options: [
+          { value: 'laplacian', label: 'Laplacian' },
+          { value: 'chaikin', label: 'Chaikin' },
+        ],
+      }
+    ),
     smoothing: opt(
       z.enum(['0', '1', '2']).default('1'),
       {
-        label: 'Line smoothing',
-        description: 'Chaikin subdivision iterations for smoother contours',
+        label: 'Smoothing passes',
+        description: 'Number of smoothing iterations (more = smoother)',
         group: 'layers',
         filter: ['global', 'pressure'],
         order: 18,
@@ -1061,7 +1076,7 @@ export const defaultOptions: ZeroOptions = {
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },
   wind: { enabled: false, seedCount: defaultConfig.wind.seedCount, opacity: defaultConfig.wind.opacity, speed: defaultConfig.wind.animSpeed },
-  pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: '1', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
+  pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothingAlgo: 'laplacian', smoothing: '1', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
   debug: { showPerfPanel: false, batterySaver: false },

@@ -31,6 +31,7 @@ struct Uniforms {
 @group(0) @binding(4) var<storage, read_write> vertices: array<vec4<f32>>;
 @group(0) @binding(5) var<storage, read> pressureGrid1: array<f32>;  // Regridded data slot 1
 @group(0) @binding(6) var<storage, read_write> edgeToVertex: array<i32>;  // Edge→vertex index mapping for smoothing
+@group(0) @binding(7) var<storage, read_write> neighbors: array<vec2<i32>>;  // [prevIdx, nextIdx] per vertex for Chaikin
 
 // Segment count per case (0-15)
 const SEGMENT_COUNT: array<u32, 16> = array<u32, 16>(
@@ -252,5 +253,96 @@ fn generateSegments(@builtin(global_invocation_id) id: vec3<u32>) {
     // Store edge→vertex mapping for smoothing
     edgeToVertex[edgeIdxBase + u32(edges.z)] = i32(baseIdx + 2u);
     edgeToVertex[edgeIdxBase + u32(edges.w)] = i32(baseIdx + 3u);
+  }
+}
+
+// ============================================================
+// Helper: Get adjacent cell's edge that shares this boundary
+// ============================================================
+fn getAdjacentEdge(cellX: u32, cellY: u32, edge: u32) -> vec3<i32> {
+  var adjX = i32(cellX);
+  var adjY = i32(cellY);
+  var adjEdge: u32;
+
+  switch(edge) {
+    case 0u: { adjY -= 1; adjEdge = 2u; }  // bottom → neighbor's top
+    case 1u: { adjX += 1; adjEdge = 3u; }  // right → neighbor's left
+    case 2u: { adjY += 1; adjEdge = 0u; }  // top → neighbor's bottom
+    case 3u: { adjX -= 1; adjEdge = 1u; }  // left → neighbor's right
+    default: { return vec3<i32>(-1); }
+  }
+
+  // Bounds check (latitude)
+  if (adjY < 0 || adjY >= i32(uniforms.gridHeight - 1u)) {
+    return vec3<i32>(-1);
+  }
+
+  // Longitude wraps
+  if (adjX < 0) { adjX += i32(uniforms.gridWidth); }
+  if (adjX >= i32(uniforms.gridWidth)) { adjX -= i32(uniforms.gridWidth); }
+
+  return vec3<i32>(adjX, adjY, i32(adjEdge));
+}
+
+fn getEdgeIndex(cellX: u32, cellY: u32, edge: u32) -> u32 {
+  let cellIdx = cellY * uniforms.gridWidth + cellX;
+  return cellIdx * 4u + edge;
+}
+
+// ============================================================
+// PASS 3: Build neighbor indices for Chaikin smoothing
+// Run AFTER generateSegments completes (edgeToVertex must be populated)
+// ============================================================
+@compute @workgroup_size(8, 8)
+fn buildNeighbors(@builtin(global_invocation_id) id: vec3<u32>) {
+  let x = id.x;
+  let y = id.y;
+
+  if (x >= uniforms.gridWidth || y >= uniforms.gridHeight - 1u) {
+    return;
+  }
+
+  let cellIdx = y * uniforms.gridWidth + x;
+  let edgeIdxBase = cellIdx * 4u;
+
+  // Check all 4 edges of this cell
+  for (var edge = 0u; edge < 4u; edge++) {
+    let vertexIdx = edgeToVertex[edgeIdxBase + edge];
+    if (vertexIdx < 0) {
+      continue;
+    }
+
+    let vIdx = u32(vertexIdx);
+
+    // Find segment partner (vertices come in pairs)
+    // Even index → partner is +1, odd index → partner is -1
+    let partnerIdx = select(vIdx - 1u, vIdx + 1u, (vIdx & 1u) == 0u);
+
+    // Find adjacent cell neighbor via shared edge
+    var adjNeighborIdx: i32 = -1;
+    let adj = getAdjacentEdge(x, y, edge);
+    if (adj.x >= 0) {
+      let adjEdgeIdx = getEdgeIndex(u32(adj.x), u32(adj.y), u32(adj.z));
+      let adjVertexIdx = edgeToVertex[adjEdgeIdx];
+      if (adjVertexIdx >= 0) {
+        // The adjacent vertex's segment partner is our chain neighbor
+        let adjPartnerIdx = select(u32(adjVertexIdx) - 1u, u32(adjVertexIdx) + 1u, (u32(adjVertexIdx) & 1u) == 0u);
+        adjNeighborIdx = i32(adjPartnerIdx);
+      }
+    }
+
+    // Store neighbors in chain order: [prevIdx, nextIdx]
+    // Chain goes: ... - prev - V - next - ...
+    // For segment pair (V_even, V_odd):
+    // - V_even: chain is chainNeighbor → V_even → V_odd (partner)
+    // - V_odd: chain is V_even (partner) → V_odd → chainNeighbor
+    let isOdd = (vIdx & 1u) == 1u;
+    if (isOdd) {
+      // Odd vertex: prev = partner, next = chain neighbor
+      neighbors[vIdx] = vec2<i32>(i32(partnerIdx), adjNeighborIdx);
+    } else {
+      // Even vertex: prev = chain neighbor, next = partner
+      neighbors[vIdx] = vec2<i32>(adjNeighborIdx, i32(partnerIdx));
+    }
   }
 }

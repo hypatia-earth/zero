@@ -129,12 +129,15 @@ export class RenderService {
 
     // Listen for pressure smoothing changes (live update)
     let lastSmoothing = this.optionsService.options.value.pressure.smoothing;
+    let lastSmoothingAlgo = this.optionsService.options.value.pressure.smoothingAlgo;
     effect(() => {
       const newSmoothing = this.optionsService.options.value.pressure.smoothing;
-      if (newSmoothing !== lastSmoothing) {
+      const newSmoothingAlgo = this.optionsService.options.value.pressure.smoothingAlgo;
+      if (newSmoothing !== lastSmoothing || newSmoothingAlgo !== lastSmoothingAlgo) {
         lastSmoothing = newSmoothing;
+        lastSmoothingAlgo = newSmoothingAlgo;
         this.lastPressureMinute = -1;  // Force contour recompute on next frame
-        console.log(`[Render] Pressure smoothing: ${newSmoothing} iterations`);
+        console.log(`[Render] Pressure smoothing: ${newSmoothingAlgo} × ${newSmoothing}`);
       }
     });
 
@@ -215,8 +218,9 @@ export class RenderService {
         if (currentMinute !== this.lastPressureMinute) {
           this.lastPressureMinute = currentMinute;
           const smoothingIterations = parseInt(options.pressure.smoothing, 10);
+          const smoothingAlgo = options.pressure.smoothingAlgo;
           const pSlots = this.activeSlots.get('pressure')!;
-          renderer.runPressureContour(pSlots.slot0, pSlots.slot1, pressureState.lerp, this.isobarLevels, smoothingIterations);
+          renderer.runPressureContour(pSlots.slot0, pSlots.slot1, pressureState.lerp, this.isobarLevels, smoothingIterations, smoothingAlgo);
         }
       }
 
