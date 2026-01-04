@@ -382,25 +382,45 @@ export class TimestepService {
         layer: param,
       });
 
-      // Build map of current manifest URLs → timestep for this model
-      // Only count as "cached" if URL matches current manifest (same model run)
-      const urlToTimestep = new Map<string, TTimestep>();
+      const now = Date.now();
+
+      // Build maps for matching:
+      // 1. Full path → timestep (for future data, must match exact model run)
+      // 2. Past timesteps set (for retention data, any model run is valid)
+      const pathToTimestep = new Map<string, TTimestep>();
+      const pastTimesteps = new Set<TTimestep>();
+
       for (const ts of this.timestepsData[this.defaultModel]) {
-        // Cache key format: https://om-cache/path?range=...
-        // Extract path from full URL for matching
         const urlPath = new URL(ts.url).pathname;
-        urlToTimestep.set(urlPath, ts.timestep);
+        pathToTimestep.set(urlPath, ts.timestep);
+
+        // Check if timestep is in the past (retention/reanalysis data)
+        // Format: "2026-01-04T0000" → Date
+        const tsDate = new Date(ts.timestep.replace(/T(\d{2})(\d{2})$/, 'T$1:$2:00Z'));
+        if (tsDate.getTime() < now) {
+          pastTimesteps.add(ts.timestep);
+        }
       }
 
       for (const item of detail.items) {
-        // Cache URL format: https://om-cache/data_spatial/...?range=...
-        // Extract path for matching
         const cachedPath = new URL(item.url).pathname;
-        const ts = urlToTimestep.get(cachedPath);
+
+        // Try exact path match first (works for current model run)
+        let ts = pathToTimestep.get(cachedPath);
+
+        // For past timesteps, also match by timestep only (any model run is valid)
+        if (!ts) {
+          const match = cachedPath.match(/(\d{4}-\d{2}-\d{2}T\d{4})\.om$/);
+          if (match) {
+            const cachedTimestep = match[1] as TTimestep;
+            if (pastTimesteps.has(cachedTimestep)) {
+              ts = cachedTimestep;
+            }
+          }
+        }
+
         if (ts) {
-          // Count ranges per timestep
           rangeCount.set(ts, (rangeCount.get(ts) ?? 0) + 1);
-          // Parse sizeMB to bytes
           const sizeBytes = parseFloat(item.sizeMB) * 1024 * 1024;
           if (!isNaN(sizeBytes)) {
             sizes.set(ts, (sizes.get(ts) ?? 0) + sizeBytes);
