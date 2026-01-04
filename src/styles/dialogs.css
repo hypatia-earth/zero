@@ -338,12 +338,28 @@
 }
 
 .dialog.options .subsection > .title {
-  margin: 0 0 8px 0;
+  margin: 0 0 4px 0;
   font-size: var(--font-size-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--color-text-muted);
+}
+
+.dialog.options .layer-description {
+  margin: 0 0 8px 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.dialog.options .layer-description .param-link {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.dialog.options .layer-description .param-link:hover {
+  text-decoration: underline;
 }
 
 /* Option row */

@@ -173,11 +173,18 @@ export interface SlabConfig {
   sizeMB: number; // Size in megabytes
 }
 
+export interface ParamLink {
+  param: string;  // Display name (e.g., "U component", "V component")
+  url: string;    // URL to ECMWF parameter database
+}
+
 export interface LayerConfig {
   id: TLayer;
   label: string;              // Full name (e.g., "Temperature")
   buttonLabel: string;        // Short name for UI buttons (e.g., "Temp")
   category: TLayerCategory;
+  description?: string;          // One-sentence description for options dialog
+  links?: ParamLink[];           // Links to ECMWF parameter database (weather layers)
   params?: TParam[];             // ECMWF param names (weather layers)
   defaultSizeEstimate?: number;  // bytes per timestep (weather layers)
   slabs?: SlabConfig[];          // GPU buffer slabs (weather layers only)

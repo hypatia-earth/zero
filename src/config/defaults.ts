@@ -44,41 +44,65 @@ export const defaultConfig: ZeroConfig = {
   },
 
   layers: [
-    { id: 'earth', label: 'Earth', buttonLabel: 'Earth', category: 'celestial' },
-    { id: 'sun', label: 'Sun', buttonLabel: 'Sun', category: 'celestial' },
-    { id: 'grid', label: 'Grid', buttonLabel: 'Grid', category: 'reference' },
+    {
+      id: 'earth', label: 'Earth', buttonLabel: 'Earth', category: 'celestial',
+      description: 'Satellite imagery basemap from Natural Earth.',
+    },
+    {
+      id: 'sun', label: 'Sun', buttonLabel: 'Sun', category: 'celestial',
+      description: 'Real-time sun position with atmosphere scattering.',
+    },
+    {
+      id: 'grid', label: 'Grid', buttonLabel: 'Grid', category: 'reference',
+      description: 'Latitude/longitude graticule with degree labels.',
+    },
     {
       id: 'temp', label: 'Temperature', buttonLabel: 'Temperature', category: 'weather',
+      description: 'Air temperature at 2 meters above ground.',
+      links: [{ param: '2t', url: 'https://codes.ecmwf.int/grib/param-db/?id=167' }],
       params: ['temperature_2m'],
       defaultSizeEstimate: 8_000_000,
       slabs: [{ name: 'data', sizeMB: 26 }],
     },
     {
       id: 'rain', label: 'Precipitation', buttonLabel: 'Rain', category: 'weather',
+      description: 'Total precipitation rate (rain, snow, hail).',
+      links: [{ param: 'tp', url: 'https://codes.ecmwf.int/grib/param-db/?id=228' }],
       params: ['precipitation'],
       defaultSizeEstimate: 8_000_000,
       slabs: [{ name: 'data', sizeMB: 26 }],
     },
     {
       id: 'clouds', label: 'Cloud Cover', buttonLabel: 'Clouds', category: 'weather',
+      description: 'Total cloud cover as fraction of sky.',
+      links: [{ param: 'tcc', url: 'https://codes.ecmwf.int/grib/param-db/?id=164' }],
       params: ['cloud_cover'],
       defaultSizeEstimate: 8_000_000,
       slabs: [{ name: 'data', sizeMB: 26 }],
     },
     {
       id: 'humidity', label: 'Humidity', buttonLabel: 'Humidity', category: 'weather',
+      description: 'Relative humidity at 2 meters above ground.',
+      links: [{ param: 'r', url: 'https://codes.ecmwf.int/grib/param-db/?id=157' }],
       params: ['relative_humidity_2m'],
       defaultSizeEstimate: 8_000_000,
       slabs: [{ name: 'data', sizeMB: 26 }],
     },
     {
       id: 'wind', label: 'Wind', buttonLabel: 'Wind', category: 'weather',
+      description: 'Wind speed and direction at 10 meters above ground.',
+      links: [
+        { param: '10u', url: 'https://codes.ecmwf.int/grib/param-db/?id=165' },
+        { param: '10v', url: 'https://codes.ecmwf.int/grib/param-db/?id=166' },
+      ],
       params: ['wind_u_component_10m', 'wind_v_component_10m'],
       defaultSizeEstimate: 8_200_000,
       slabs: [{ name: 'u', sizeMB: 26 }, { name: 'v', sizeMB: 26 }],
     },
     {
       id: 'pressure', label: 'Pressure', buttonLabel: 'Pressure', category: 'weather',
+      description: 'Atmospheric pressure reduced to mean sea level.',
+      links: [{ param: 'msl', url: 'https://codes.ecmwf.int/grib/param-db/?id=151' }],
       params: ['pressure_msl'],
       defaultSizeEstimate: 2_000_000,
       slabs: [{ name: 'raw', sizeMB: 26 }, { name: 'grid', sizeMB: 1 }],
