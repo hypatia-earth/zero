@@ -1014,18 +1014,6 @@ export class PressureLayer {
     let inputNeighborBuffer = this.neighborBuffer;
     let outputNeighborBuffer = this.smoothedNeighborBuffer;
 
-    // Create bind group with dynamic offset support
-    const chaikinBindGroup = this.device.createBindGroup({
-      layout: this.chaikinBindGroupLayout,
-      entries: [
-        { binding: 0, resource: { buffer: this.chaikinUniformBuffer, size: this.uniformAlignment } },
-        { binding: 1, resource: { buffer: inputVertexBuffer } },
-        { binding: 2, resource: { buffer: outputVertexBuffer } },
-        { binding: 3, resource: { buffer: inputNeighborBuffer } },
-        { binding: 4, resource: { buffer: outputNeighborBuffer } },
-      ],
-    });
-
     for (let i = 0; i < iterations; i++) {
       const numSegments = currentCount / 2;
       const outputCount = currentCount * 2;  // 4 vertices per 2 input = 2× expansion
@@ -1038,6 +1026,18 @@ export class PressureLayer {
       const outNeighborByteSize = outputCount * 8;
       commandEncoder.clearBuffer(outputVertexBuffer, outVertexByteOffset, outVertexByteSize);
       commandEncoder.clearBuffer(outputNeighborBuffer, outNeighborByteOffset, outNeighborByteSize);
+
+      // Create bind group for this iteration (buffers swap for ping-pong)
+      const chaikinBindGroup = this.device.createBindGroup({
+        layout: this.chaikinBindGroupLayout,
+        entries: [
+          { binding: 0, resource: { buffer: this.chaikinUniformBuffer, size: this.uniformAlignment } },
+          { binding: 1, resource: { buffer: inputVertexBuffer } },
+          { binding: 2, resource: { buffer: outputVertexBuffer } },
+          { binding: 3, resource: { buffer: inputNeighborBuffer } },
+          { binding: 4, resource: { buffer: outputNeighborBuffer } },
+        ],
+      });
 
       // Dispatch over segments (workgroup size 256)
       const chaikinPass = commandEncoder.beginComputePass();
