@@ -187,11 +187,9 @@ export class SlotService {
             // Update timestepService GPU state
             this.timestepService.setGpuState(param, new Set(keptMapping.keys()));
 
-            // Deactivate (will re-activate on next tick with correct slots)
-            const activeSlots = this.renderService.getActiveSlots(param);
-            if (activeSlots.slot0 >= 0) {
-              this.deactivateLayer(param);
-            }
+            // Force re-activation by clearing active timesteps (slot indices changed)
+            ps?.setActiveTimesteps([]);
+            this.deactivateLayer(param);
           }
         }
 
