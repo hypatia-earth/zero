@@ -860,32 +860,32 @@ export const optionsSchema = z.object({
         ],
       }
     ),
-    smoothingAlgo: opt(
-      z.enum(['laplacian', 'chaikin']).default('laplacian'),
+    smoothing: opt(
+      z.enum(['none', 'laplacian', 'chaikin']).default('laplacian'),
       {
-        label: 'Smoothing algorithm',
+        label: 'Smoothing',
         description: 'Laplacian averages neighbors, Chaikin subdivides corners',
         group: 'layers',
         filter: ['global', 'pressure'],
         order: 17.8,
         control: 'radio',
         options: [
+          { value: 'none', label: 'None' },
           { value: 'laplacian', label: 'Laplacian' },
           { value: 'chaikin', label: 'Chaikin' },
         ],
       }
     ),
-    smoothing: opt(
-      z.enum(['0', '1', '2']).default('1'),
+    smoothingPasses: opt(
+      z.enum(['1', '2']).default('1'),
       {
         label: 'Smoothing passes',
-        description: 'Number of smoothing iterations (more = smoother)',
+        description: 'Number of iterations (ignored when smoothing is None)',
         group: 'layers',
         filter: ['global', 'pressure'],
         order: 18,
         control: 'radio',
         options: [
-          { value: '0', label: 'None' },
           { value: '1', label: '1 pass' },
           { value: '2', label: '2 passes' },
         ],
@@ -1076,7 +1076,7 @@ export const defaultOptions: ZeroOptions = {
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },
   wind: { enabled: false, seedCount: defaultConfig.wind.seedCount, opacity: defaultConfig.wind.opacity, speed: defaultConfig.wind.animSpeed },
-  pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothingAlgo: 'laplacian', smoothing: '1', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
+  pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: 'laplacian', smoothingPasses: '1', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
   debug: { showPerfPanel: false, batterySaver: false },

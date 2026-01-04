@@ -129,15 +129,15 @@ export class RenderService {
 
     // Listen for pressure smoothing changes (live update)
     let lastSmoothing = this.optionsService.options.value.pressure.smoothing;
-    let lastSmoothingAlgo = this.optionsService.options.value.pressure.smoothingAlgo;
+    let lastSmoothingPasses = this.optionsService.options.value.pressure.smoothingPasses;
     effect(() => {
       const newSmoothing = this.optionsService.options.value.pressure.smoothing;
-      const newSmoothingAlgo = this.optionsService.options.value.pressure.smoothingAlgo;
-      if (newSmoothing !== lastSmoothing || newSmoothingAlgo !== lastSmoothingAlgo) {
+      const newSmoothingPasses = this.optionsService.options.value.pressure.smoothingPasses;
+      if (newSmoothing !== lastSmoothing || newSmoothingPasses !== lastSmoothingPasses) {
         lastSmoothing = newSmoothing;
-        lastSmoothingAlgo = newSmoothingAlgo;
+        lastSmoothingPasses = newSmoothingPasses;
         this.lastPressureMinute = -1;  // Force contour recompute on next frame
-        console.log(`[Render] Pressure smoothing: ${newSmoothingAlgo} × ${newSmoothing}`);
+        console.log(`[Render] Pressure smoothing: ${newSmoothing} × ${newSmoothingPasses}`);
       }
     });
 
@@ -217,8 +217,9 @@ export class RenderService {
         const currentMinute = Math.floor(time.getTime() / 60000);
         if (currentMinute !== this.lastPressureMinute) {
           this.lastPressureMinute = currentMinute;
-          const smoothingIterations = parseInt(options.pressure.smoothing, 10);
-          const smoothingAlgo = options.pressure.smoothingAlgo;
+          const smoothing = options.pressure.smoothing;
+          const smoothingIterations = smoothing === 'none' ? 0 : parseInt(options.pressure.smoothingPasses, 10);
+          const smoothingAlgo = smoothing === 'none' ? 'laplacian' : smoothing;
           const pSlots = this.activeSlots.get('pressure')!;
           renderer.runPressureContour(pSlots.slot0, pSlots.slot1, pressureState.lerp, this.isobarLevels, smoothingIterations, smoothingAlgo);
         }
