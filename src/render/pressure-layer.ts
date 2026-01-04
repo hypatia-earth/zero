@@ -1135,10 +1135,11 @@ export class PressureLayer {
   /**
    * Clear vertex buffer using GPU-side clearBuffer (fast, no CPU→GPU transfer)
    * Called before recomputing contours
+   * @param chaikinExpansion Expansion factor for Chaikin (2^iterations), default 1
    */
-  clearVertexBuffer(commandEncoder: GPUCommandEncoder): void {
+  clearVertexBuffer(commandEncoder: GPUCommandEncoder, chaikinExpansion: number = 1): void {
     const maxSegmentsPerLevel = this.numCells * 2;
-    const maxVerticesPerLevel = maxSegmentsPerLevel * 2;
+    const maxVerticesPerLevel = maxSegmentsPerLevel * 2 * chaikinExpansion;
     const byteSize = maxVerticesPerLevel * this.currentLevelCount * 16;  // vec4f = 16 bytes
     commandEncoder.clearBuffer(this.vertexBuffer, 0, byteSize);
   }

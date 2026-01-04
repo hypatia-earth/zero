@@ -1024,8 +1024,8 @@ export class GlobeRenderer {
     // Batch all levels into a single command encoder
     const commandEncoder = this.device.createCommandEncoder();
 
-    // Clear vertex buffer using GPU-side clearBuffer
-    this.pressureLayer.clearVertexBuffer(commandEncoder);
+    // Clear vertex buffer using GPU-side clearBuffer (include Chaikin expansion)
+    this.pressureLayer.clearVertexBuffer(commandEncoder, expansionFactor);
 
     let totalVertices = 0;
     for (let i = 0; i < levels.length; i++) {
