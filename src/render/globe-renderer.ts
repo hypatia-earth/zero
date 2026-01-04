@@ -893,6 +893,13 @@ export class GlobeRenderer {
     this.pressureLayer.regridSlot(slotIndex, inputBuffer);
   }
 
+  /**
+   * Invalidate all pressure grid slots (called when slot indices are renumbered during shrink)
+   */
+  invalidatePressureGridSlots(): void {
+    this.pressureLayer.invalidateAllGridSlots();
+  }
+
   uploadGaussianLUTs(lats: Float32Array, offsets: Uint32Array): void {
     this.device.queue.writeBuffer(this.gaussianLatsBuffer, 0, lats.buffer, lats.byteOffset, lats.byteLength);
     this.device.queue.writeBuffer(this.ringOffsetsBuffer, 0, offsets.buffer, offsets.byteOffset, offsets.byteLength);

@@ -566,6 +566,13 @@ export class RenderService {
     this.renderer!.triggerPressureRegrid(slotIndex, inputBuffer);
   }
 
+  /**
+   * Invalidate all pressure grid slots (called when slot indices are renumbered during shrink)
+   */
+  invalidatePressureGridSlots(): void {
+    this.renderer?.invalidatePressureGridSlots();
+  }
+
   dispose(): void {
     this.stop();
     this.resizeObserver?.disconnect();

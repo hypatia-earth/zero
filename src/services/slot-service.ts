@@ -169,6 +169,18 @@ export class SlotService {
             const store = this.layerStores.get(param);
             store?.shrinkWithMapping(newTimeslots, keptEntries, evictedSlots);
 
+            // Invalidate pressure grid slots and re-regrid kept slots
+            if (param === 'pressure') {
+              this.renderService.invalidatePressureGridSlots();
+              // Trigger regrid for kept slots (they have raw data at new indices)
+              for (let i = 0; i < keptEntries.length; i++) {
+                const buffer = store?.getSlotBuffer(i, 0);
+                if (buffer) {
+                  this.renderService.triggerPressureRegrid(i, buffer);
+                }
+              }
+            }
+
             // Sync ParamSlots
             ps?.shrink(newTimeslots, keptMapping);
 

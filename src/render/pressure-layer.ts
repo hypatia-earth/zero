@@ -414,6 +414,15 @@ export class PressureLayer {
   }
 
   /**
+   * Invalidate all grid slots (called when slot indices are renumbered during shrink)
+   */
+  invalidateAllGridSlots(): void {
+    for (let i = 0; i < this.gridSlotReady.length; i++) {
+      this.gridSlotReady[i] = false;
+    }
+  }
+
+  /**
    * Check if a grid slot is ready (regridded)
    */
   isGridSlotReady(slotIndex: number): boolean {
