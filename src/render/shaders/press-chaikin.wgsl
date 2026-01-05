@@ -126,9 +126,9 @@ fn chaikinSubdivide(@builtin(global_invocation_id) id: vec3<u32>) {
   }
 
   // Store neighbors for all 4 vertices to support multi-pass
-  // Logical chain: Q → R → Q_next → [next seg's Q] (R_dup is just for rendering)
-  outputNeighbors[outBase + 0u] = vec2<i32>(prevSegmentR, i32(outBase + 1u));  // Q: prev=prevSeg's R, next=R
-  outputNeighbors[outBase + 1u] = vec2<i32>(i32(outBase + 0u), i32(outBase + 3u));  // R: prev=Q, next=Q_next (skip R_dup)
-  outputNeighbors[outBase + 2u] = vec2<i32>(i32(outBase + 1u), i32(outBase + 3u));  // R_dup: prev=R, next=Q_next
-  outputNeighbors[outBase + 3u] = vec2<i32>(i32(outBase + 1u), nextSegmentQ);  // Q_next: prev=R, next=nextSeg's Q
+  // Logical chain: Q → R → R_dup → Q_next → [next seg's Q]
+  outputNeighbors[outBase + 0u] = vec2<i32>(prevSegmentR, i32(outBase + 1u));      // Q: prev=prevSeg's R, next=R
+  outputNeighbors[outBase + 1u] = vec2<i32>(i32(outBase + 0u), i32(outBase + 2u)); // R: prev=Q, next=R_dup
+  outputNeighbors[outBase + 2u] = vec2<i32>(i32(outBase + 1u), i32(outBase + 3u)); // R_dup: prev=R, next=Q_next
+  outputNeighbors[outBase + 3u] = vec2<i32>(i32(outBase + 2u), nextSegmentQ);      // Q_next: prev=R_dup, next=nextSeg's Q
 }
