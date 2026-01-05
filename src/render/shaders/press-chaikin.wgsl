@@ -67,10 +67,23 @@ fn chaikinSubdivide(@builtin(global_invocation_id) id: vec3<u32>) {
   var hasNextSegment = false;
 
   if (neighbors1.y >= 0) {
-    let V2 = inputVertices[u32(neighbors1.y)].xyz;
-    if (length(V2) > 0.1) {
-      // Q_next = 0.75*V1 + 0.25*V2 (Chaikin Q point for edge V1->V2)
-      Q_next = 0.75 * V1 + 0.25 * V2;
+    // neighbors1.y points to the adjacent vertex that shares edge position with V1
+    let nextVertexIdx = u32(neighbors1.y);
+    let nextPartnerIdx = select(nextVertexIdx - 1u, nextVertexIdx + 1u, (nextVertexIdx & 1u) == 0u);
+
+    let V_adj = inputVertices[nextVertexIdx].xyz;    // Adjacent vertex (at shared edge)
+    let V_other = inputVertices[nextPartnerIdx].xyz; // Other end of adjacent segment
+
+    if (length(V_other) > 0.1) {
+      // Compute the Chaikin point of adjacent segment that's near the shared edge
+      // If adjacent is at segment START (even): Q = 0.75*adj + 0.25*other
+      // If adjacent is at segment END (odd): R = 0.25*other + 0.75*adj
+      let isEven = (nextVertexIdx & 1u) == 0u;
+      Q_next = select(
+        0.25 * V_other + 0.75 * V_adj,  // R formula (odd - near end)
+        0.75 * V_adj + 0.25 * V_other,  // Q formula (even - near start)
+        isEven
+      );
       Q_next = normalize(Q_next) * uniforms.earthRadius * 1.002;
       hasNextSegment = true;
     }

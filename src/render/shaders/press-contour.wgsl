@@ -325,9 +325,8 @@ fn buildNeighbors(@builtin(global_invocation_id) id: vec3<u32>) {
       let adjEdgeIdx = getEdgeIndex(u32(adj.x), u32(adj.y), u32(adj.z));
       let adjVertexIdx = edgeToVertex[adjEdgeIdx];
       if (adjVertexIdx >= 0) {
-        // The adjacent vertex's segment partner is our chain neighbor
-        let adjPartnerIdx = select(u32(adjVertexIdx) - 1u, u32(adjVertexIdx) + 1u, (u32(adjVertexIdx) & 1u) == 0u);
-        adjNeighborIdx = i32(adjPartnerIdx);
+        // The adjacent vertex shares the edge position - use it directly for Chaikin
+        adjNeighborIdx = adjVertexIdx;
       }
     }
 
