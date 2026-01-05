@@ -1001,7 +1001,7 @@ export class PressureLayer {
     // Write uniforms for ALL passes upfront (queue.writeBuffer is CPU-immediate)
     // Each pass needs its own uniform slot: level * maxPasses + passIndex
     const maxPasses = 2;
-    const chaikinUniforms = new ArrayBuffer(16);
+    const chaikinUniforms = new ArrayBuffer(32);  // 8 x u32/f32
     const f32 = new Float32Array(chaikinUniforms);
     const u32 = new Uint32Array(chaikinUniforms);
 
@@ -1012,6 +1012,10 @@ export class PressureLayer {
       u32[1] = precomputeCount;
       u32[2] = currentOffset;
       u32[3] = currentOffset;
+      u32[4] = p;  // passNumber: 0 = pass 1, 1 = pass 2
+      u32[5] = 0;  // padding
+      u32[6] = 0;  // padding
+      u32[7] = 0;  // padding
       this.device.queue.writeBuffer(this.chaikinUniformBuffer, dynamicOffset, chaikinUniforms);
       precomputeCount *= 2;  // Next pass has 2× vertices
     }

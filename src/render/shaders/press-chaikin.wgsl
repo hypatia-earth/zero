@@ -11,6 +11,10 @@ struct ChaikinUniforms {
   inputVertexCount: u32,
   inputVertexOffset: u32,
   outputVertexOffset: u32,
+  passNumber: u32,  // 0 = pass 1, 1 = pass 2, etc.
+  _pad: u32,
+  _pad2: u32,
+  _pad3: u32,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: ChaikinUniforms;
@@ -76,14 +80,21 @@ fn chaikinSubdivide(@builtin(global_invocation_id) id: vec3<u32>) {
 
     if (length(V_other) > 0.1) {
       // Compute the Chaikin point of adjacent segment that's near the shared edge
-      // If adjacent is at segment START (even): Q = 0.75*adj + 0.25*other
-      // If adjacent is at segment END (odd): R = 0.25*other + 0.75*adj
       let isEven = (nextVertexIdx & 1u) == 0u;
-      Q_next = select(
+      let nextQ = select(
         0.25 * V_other + 0.75 * V_adj,  // R formula (odd - near end)
         0.75 * V_adj + 0.25 * V_other,  // Q formula (even - near start)
         isEven
       );
+
+      if (uniforms.passNumber == 0u) {
+        // Pass 1: V_adj is at different position from V1, standard Chaikin works
+        Q_next = nextQ;
+      } else {
+        // Pass 2+: V_adj = R_dup = V1, need to blend R (which has V0 influence)
+        // with nextQ to create true corner cutting
+        Q_next = 0.5 * R + 0.5 * nextQ;
+      }
       Q_next = normalize(Q_next) * uniforms.earthRadius * 1.002;
       hasNextSegment = true;
     }
