@@ -169,6 +169,22 @@ async function clearOlderThan(days: number): Promise<number> {
 }
 
 /**
+ * Count cache entries before a timestep
+ */
+export async function countBeforeTimestep(cutoffIso: string): Promise<number> {
+  const result = await sendSWMessage<{ count: number }>({ type: 'COUNT_BEFORE_TIMESTEP', cutoffIso });
+  return result.count;
+}
+
+/**
+ * Clear cache entries before a timestep
+ */
+export async function clearBeforeTimestep(cutoffIso: string): Promise<number> {
+  const result = await sendSWMessage<{ deleted: number }>({ type: 'CLEAR_BEFORE_TIMESTEP', cutoffIso });
+  return result.deleted;
+}
+
+/**
  * Unregister SW, clear cache, and hard refresh
  */
 async function unregister(): Promise<void> {

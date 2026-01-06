@@ -269,6 +269,53 @@ self.addEventListener('message', async (event) => {
     event.ports[0].postMessage({ deleted });
   }
 
+  if (type === 'CLEAR_BEFORE_TIMESTEP') {
+    const { cutoffIso } = event.data;
+    const cutoff = new Date(cutoffIso);
+    const keys = await caches.keys();
+    const layerCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
+    let deleted = 0;
+
+    for (const cacheName of layerCaches) {
+      const cache = await caches.open(cacheName);
+      const requests = await cache.keys();
+
+      for (const request of requests) {
+        const url = new URL(request.url);
+        const validTime = parseValidTime(url);
+        if (validTime && validTime < cutoff) {
+          await cache.delete(request);
+          deleted++;
+        }
+      }
+    }
+
+    event.ports[0].postMessage({ deleted });
+  }
+
+  if (type === 'COUNT_BEFORE_TIMESTEP') {
+    const { cutoffIso } = event.data;
+    const cutoff = new Date(cutoffIso);
+    const keys = await caches.keys();
+    const layerCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
+    let count = 0;
+
+    for (const cacheName of layerCaches) {
+      const cache = await caches.open(cacheName);
+      const requests = await cache.keys();
+
+      for (const request of requests) {
+        const url = new URL(request.url);
+        const validTime = parseValidTime(url);
+        if (validTime && validTime < cutoff) {
+          count++;
+        }
+      }
+    }
+
+    event.ports[0].postMessage({ count });
+  }
+
   if (type === 'SET_PREFETCH_CONFIG') {
     const { config } = event.data;
     prefetchConfig = config;

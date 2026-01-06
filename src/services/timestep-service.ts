@@ -13,6 +13,7 @@ import { isWeatherLayer, type TWeatherLayer, type TTimestep, type TModel, type T
 import type { ConfigService } from './config-service';
 import { parseTimestep, formatTimestep } from '../utils/timestep';
 import { sendSWMessage } from '../utils/sw-message';
+import { countBeforeTimestep, clearBeforeTimestep } from './sw-registration';
 
 const DEBUG = false;
 
@@ -86,7 +87,7 @@ export class TimestepService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   /** Initialize: explore ECMWF and query SW cache */
-  async initialize(onProgress?: (step: 'manifest' | 'runs' | 'cache', detail?: string) => Promise<void>): Promise<void> {
+  async initialize(onProgress?: (step: 'manifest' | 'runs' | 'cache' | 'cleanup', detail?: string) => Promise<void>): Promise<void> {
     const config = this.configService.getDiscovery();
 
     // Discover timesteps for each model
@@ -127,6 +128,15 @@ export class TimestepService {
     const vars = this.variablesData[config.default];
     const fmt = (t: TTimestep) => t.slice(5, 13); // "MM-DDTHH"
     console.log(`[Timestep] ${vars.length} V, ${ts.length} TS, ${fmt(ts[0]!.timestep)} - ${fmt(ts[ts.length - 1]!.timestep)}`);
+
+    // Clean up cache entries older than earliest available timestep
+    const earliest = ts[0]!.timestep;
+    const outdatedCount = await countBeforeTimestep(earliest);
+    if (outdatedCount > 0) {
+      await onProgress?.('cleanup', `Deleting ${outdatedCount} outdated cache entries...`);
+      const deleted = await clearBeforeTimestep(earliest);
+      console.log(`[Timestep] Deleted ${deleted} outdated cache entries (before ${fmt(earliest)})`);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
