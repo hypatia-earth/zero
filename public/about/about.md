@@ -15,9 +15,9 @@ Scrub through up to 2 weeks of weather. Watch storms form and dissolve. Every mi
 ### Layers
 
 - **Temperature** at 2 meters
-- **Precipitation** rate
-- **Clouds** total cover
-- **Humidity** relative
+- **Precipitation** rate *(planned)*
+- **Clouds** total cover *(planned)*
+- **Humidity** relative *(planned)*
 - **Wind** at 10 meters
 - **Pressure** at sea level
 
@@ -38,19 +38,19 @@ Sources: [NWS Wind Warnings](https://www.weather.gov/safety/wind-ww) · [Beaufor
 
 ## Controls
 
-| Action | Mouse | Touch |
-|--------|-------|-------|
-| Rotate | Drag | One finger |
-| Zoom | Scroll | Pinch |
-| Time | Click timebar | Click timebar |
+| Action         | Keyboard      | Mouse             | Touch          |
+| -------------- | ------------- | ----------------- | -------------- |
+| Rotate         |               | Drag              | One finger     |
+| Zoom           |               | Scroll vertical   | Pinch          |
+| Zoom in        |               | Double-click      | Double-tap     |
+| Time ±1 step   | ← / →         |                   |                |
+| Time ±10 min   | Shift + ← / → |                   |                |
+| Time ±1 hour   |               | Scroll horizontal | Two-finger pan |
+| Time ±24 hours | Alt + ← / →   |                   |                |
+| Time select    |               | Click timebar     | Tap timebar    |
+| Fullscreen     | F             |                   |                |
 
-| Keyboard | Step |
-|----------|------|
-| ← / → | Previous/next timestep |
-| Shift + ← / → | ±10 min |
-| Alt + ← / → | ±24 hours |
-| Alt + Shift + ← / → | ±1 min |
-| F | Fullscreen |
+All input sensitivity and invert options are configurable in Settings.
 
 ## Data
 
@@ -87,7 +87,11 @@ For fullscreen experience, install as a Progressive Web App:
 
 **Not all combinations work equally well.** Basemaps and weather layers use different color palettes. Some combinations provide better contrast than others. Experiment with basemap and palette settings to find what works best for the data you're viewing.
 
-## Quirks
+## Known Issues
+
+**Pressure isobars may not close.** Some contour lines appear open at the edges. Under investigation.
+
+**Grid layer is demanding on mobile.** When zoomed in, grid rendering can slow down older mobile devices. Disable the grid layer in Settings if you experience lag.
 
 **Download ETA is approximate.** Caching, bandwidth, and file sizes vary. The estimate improves as downloads progress.
 
@@ -113,6 +117,13 @@ Zero is a human/AI collaboration:
 | Code | 0% |
 
 Thanks to [Claude](https://claude.ai/) and [Gemini](https://gemini.google.com/) for peaceful collaboration.
+
+### Credits
+
+- **ECMWF** — IFS forecast data via [Open Data initiative](https://www.ecmwf.int/en/forecasts/datasets/open-data)
+- **Open-Meteo** — [S3 data mirror](https://open-meteo.com/)
+- **AWI/PANGAEA** — [RTopo-2](https://doi.pangaea.de/10.1594/PANGAEA.856844) basemap topography
+- **ESRI** — [Temperature palette](https://www.esri.com/arcgis-blog/products/arcgis-pro/mapping/a-meaningful-temperature-palette) design inspiration
 
 ### Built With
 

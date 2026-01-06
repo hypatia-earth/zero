@@ -1,7 +1,7 @@
 # Zero
 
 Browser-based weather visualization rendering ECMWF forecast data directly on a 3D globe using WebGPU.
-<img src=".github/Screen-Shot-2025-12-26-at-14.48.14.png" width="800" alt="Zero screenshot">
+<img src=".github/Screen-Shot-2025-12-26-at-14.48.14.png" width="800" alt="Screen Shot 2025-12-26 at 14.48.14">
 
 **Live Demo:** [zero.hypatia.earth](http://zero.hypatia.earth)  
 **Mirror:** [hypatia-earth.github.io/zero](https://hypatia-earth.github.io/zero/?dt=2025-12-26T14h00z&ll=0.0,0.0&alt=14000&layers=earth,sun,temp)
@@ -56,9 +56,9 @@ npm run dev
 
 ## Credits
 
-**Standing on shoulders:**
 - **ECMWF** — IFS forecast data via [Open Data initiative](https://www.ecmwf.int/en/forecasts/datasets/open-data)
 - **Open-Meteo** — [S3 data mirror](https://open-meteo.com/)
+- **AWI/PANGAEA** — [RTopo-2](https://doi.pangaea.de/10.1594/PANGAEA.856844) basemap topography
 - **Cameron Beccario** — [earth.nullschool.net](https://earth.nullschool.net) pioneered browser atmospheric visualization
 - **AWS Open Data** — hosting infrastructure
 
