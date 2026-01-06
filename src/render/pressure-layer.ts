@@ -1339,9 +1339,9 @@ export class PressureLayer {
       console.log(`  Seg ${seg} (indices ${base}-${base + 3}):`);
       for (let i = 0; i < 4; i++) {
         const idx = base + i;
-        const vx = vertices[idx * 4];
-        const vy = vertices[idx * 4 + 1];
-        const vz = vertices[idx * 4 + 2];
+        const vx = vertices[idx * 4] ?? 0;
+        const vy = vertices[idx * 4 + 1] ?? 0;
+        const vz = vertices[idx * 4 + 2] ?? 0;
         const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
         const prevN = neighbors[idx * 2];
         const nextN = neighbors[idx * 2 + 1];
@@ -1354,9 +1354,9 @@ export class PressureLayer {
       if (seg < segmentCount - 1) {
         const nextBase = (seg + 1) * 4;
         const gap = Math.sqrt(
-          Math.pow(vertices[(base+3)*4] - vertices[nextBase*4], 2) +
-          Math.pow(vertices[(base+3)*4+1] - vertices[nextBase*4+1], 2) +
-          Math.pow(vertices[(base+3)*4+2] - vertices[nextBase*4+2], 2)
+          Math.pow((vertices[(base+3)*4] ?? 0) - (vertices[nextBase*4] ?? 0), 2) +
+          Math.pow((vertices[(base+3)*4+1] ?? 0) - (vertices[nextBase*4+1] ?? 0), 2) +
+          Math.pow((vertices[(base+3)*4+2] ?? 0) - (vertices[nextBase*4+2] ?? 0), 2)
         );
         console.log(`    Gap Q_next(${base+3}) → Q(${nextBase}): ${gap.toFixed(6)}`);
       }

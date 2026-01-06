@@ -665,6 +665,12 @@
   color: var(--color-primary);
 }
 
+.dialog.options .radio.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* Pressure Color Control */
 .pressure-color-control {
   display: flex;

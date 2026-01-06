@@ -16,6 +16,7 @@ import {
   type ZeroOptions,
   type FlatOption,
   type PressureColorOption,
+  type RadioMeta,
 } from '../schemas/options.schema';
 import type { OptionsService } from '../services/options-service';
 import type { PaletteService } from '../services/palette-service';
@@ -42,11 +43,6 @@ interface SliderMeta {
 interface SelectMeta {
   control: 'select';
   options: { value: string | number; label: string; localhostOnly?: boolean; maxCores?: number }[];
-}
-
-interface RadioMeta {
-  control: 'radio';
-  options: { value: string | number; label: string; localhostOnly?: boolean }[];
 }
 
 interface LayerToggleMeta {
@@ -148,7 +144,7 @@ function formatValue(value: number, meta: SliderMeta): string {
 // Control renderers
 // ============================================================
 
-function renderControl(opt: FlatOption, currentValue: unknown, optionsService: OptionsService, paletteService: PaletteService, cores: number): m.Children {
+function renderControl(opt: FlatOption, currentValue: unknown, optionsService: OptionsService, paletteService: PaletteService, capabilitiesService: CapabilitiesService): m.Children {
   const { path, meta } = opt;
 
   // Special handling for palette selection
@@ -212,7 +208,7 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
       const selectMeta = meta as SelectMeta;
       const filteredOptions = selectMeta.options.filter(o =>
         (!o.localhostOnly || isLocalhost) &&
-        (!o.maxCores || cores >= o.maxCores)
+        (!o.maxCores || capabilitiesService.hardwareConcurrency >= o.maxCores)
       );
       return m('select.select', {
         value: currentValue,
@@ -228,22 +224,28 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
       const radioMeta = meta as RadioMeta;
       const layerId = path.split('.')[0];
       const isLoading = optionsService.loadingLayers.value.has(layerId ?? '');
+      const groupDisabled = meta.disabled === true;
 
-      return m('div.radio-group', [
+      return m('div.radio-group', { class: groupDisabled ? 'disabled' : '' }, [
         m('span.spinner', { class: isLoading ? 'visible' : '' }),
-        ...radioMeta.options.map(o =>
-          m('label.radio', {
-            class: currentValue === o.value ? 'selected' : ''
+        ...radioMeta.options.map(o => {
+          const isDisabled = groupDisabled;
+          return m('label.radio', {
+            class: [
+              currentValue === o.value ? 'selected' : '',
+              isDisabled ? 'disabled' : ''
+            ].filter(Boolean).join(' ')
           }, [
             m('input[type=radio]', {
               name: path,
               value: o.value,
               checked: currentValue === o.value,
+              disabled: isDisabled,
               onchange: () => setOptionValue(optionsService, path, o.value)
             }),
             m('span', o.label)
-          ])
-        )
+          ]);
+        })
       ]);
     }
 
@@ -301,7 +303,7 @@ function renderPrefetchSizeEstimate(options: ZeroOptions): m.Children {
   ]);
 }
 
-function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: OptionsService, paletteService: PaletteService, cores: number): m.Children {
+function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: OptionsService, paletteService: PaletteService, capabilitiesService: CapabilitiesService): m.Children {
   const currentValue = getByPath(options, opt.path);
   const modified = isModified(opt.path, currentValue);
   const isPalette = opt.path.endsWith('.palette');
@@ -327,7 +329,7 @@ function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: Opt
         onclick: () => optionsService.reset(opt.path),
         style: { visibility: modified ? 'visible' : 'hidden' }
       }, '↺') : null,
-      renderControl(opt, currentValue, optionsService, paletteService, cores)
+      renderControl(opt, currentValue, optionsService, paletteService, capabilitiesService)
     ].filter(Boolean))
   ]);
 }
@@ -375,7 +377,7 @@ function renderGroup(
   paletteService: PaletteService,
   configService: ConfigService,
   showAdvancedOptions: boolean,
-  cores: number,
+  capabilitiesService: CapabilitiesService,
   skipGroupHeader: boolean = false
 ): m.Children {
   const group = optionGroups[groupId as keyof typeof optionGroups];
@@ -423,7 +425,7 @@ function renderGroup(
               ])
             ] : null
           ]) : null,
-          ...opts.map(opt => renderOption(opt, options, optionsService, paletteService, cores))
+          ...opts.map(opt => renderOption(opt, options, optionsService, paletteService, capabilitiesService))
         ]);
       })
     ].filter(Boolean));
@@ -449,7 +451,7 @@ function renderGroup(
       ...sortedSubgroups.map(([subgroupKey, opts]) =>
         m('div.subsection', { key: subgroupKey }, [
           m('h4.title', { key: `${subgroupKey}_title` }, advancedSubgroups[subgroupKey] || subgroupKey),
-          ...opts.map(opt => renderOption(opt, options, optionsService, paletteService, cores))
+          ...opts.map(opt => renderOption(opt, options, optionsService, paletteService, capabilitiesService))
         ])
       )
     ].filter(Boolean));
@@ -470,7 +472,7 @@ function renderGroup(
     return m('div.section', { key: groupId }, [
       !skipGroupHeader ? m('h3.title', { key: '_title' }, group.label) : null,
       !skipGroupHeader && group.description ? m('p.description', { key: '_desc' }, group.description) : null,
-      ...filteredOptions.map(opt => renderOption(opt, options, optionsService, paletteService, cores)),
+      ...filteredOptions.map(opt => renderOption(opt, options, optionsService, paletteService, capabilitiesService)),
       prefetchEnabled ? renderPrefetchSizeEstimate(options) : null,
     ].filter(Boolean));
   }
@@ -496,7 +498,7 @@ function renderGroup(
         ])
       ] : null
     ]) : null,
-    ...visibleOptions.map(opt => renderOption(opt, options, optionsService, paletteService, cores))
+    ...visibleOptions.map(opt => renderOption(opt, options, optionsService, paletteService, capabilitiesService))
   ].filter(Boolean));
 }
 
@@ -516,7 +518,6 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
   return {
     view({ attrs }) {
       const { optionsService, paletteService, dialogService, configService, capabilitiesService } = attrs;
-      const cores = capabilitiesService.hardwareConcurrency;
 
     if (!optionsService.dialogOpen) return null;
 
@@ -664,7 +665,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
           ...sortedGroupIds.map(groupId => {
             const groupOpts = filteredGroups[groupId];
             if (!groupOpts) return null;
-            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, configService, showAdvanced, cores, !!filter && filter !== 'global');
+            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, configService, showAdvanced, capabilitiesService, !!filter && filter !== 'global');
           }).filter(Boolean),
 
           // Danger zone (only in global view)
@@ -708,7 +709,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
 
           // Advanced group (only in global view)
           (!filter || filter === 'global') && showAdvanced && advancedGroup
-            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, configService, true, cores)
+            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, configService, true, capabilitiesService)
             : null
         ].filter(Boolean)),
         m('div.footer', [

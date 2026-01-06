@@ -34,6 +34,7 @@ interface UIMetadata {
   persist?: PersistMode;  // default: 'local'
   advanced?: boolean;
   hidden?: boolean;       // Hide from options dialog (for internal use)
+  disabled?: boolean;     // Show but disable in options dialog
   model?: 'inertia' | 'velocity';
   device?: 'mouse' | 'touch';
   impact?: OptionImpact;
@@ -57,7 +58,7 @@ interface ToggleMeta extends UIMetadata {
 
 interface RadioMeta extends UIMetadata {
   control: 'radio';
-  options: { value: string | number; label: string; localhostOnly?: boolean }[];
+  options: { value: string | number; label: string; localhostOnly?: boolean; minBufferSizeMB?: number }[];
 }
 
 interface PressureColorsMeta extends UIMetadata {
@@ -853,6 +854,7 @@ export const optionsSchema = z.object({
         group: 'layers',
         filter: ['global', 'pressure'],
         order: 17.5,
+        disabled: true,  // 1° grid needs ~350MB buffers, requires device limit changes
         control: 'radio',
         options: [
           { value: '2', label: '2° (fast)' },
@@ -885,6 +887,7 @@ export const optionsSchema = z.object({
         filter: ['global', 'pressure'],
         order: 18,
         control: 'radio',
+        hidden: true,  // Pass 2 doesn't add visible smoothing, disabled for now
         options: [
           { value: '1', label: '1 pass' },
           { value: '2', label: '2 passes' },
@@ -1160,4 +1163,4 @@ export function getOptionMeta(path: string): OptionMeta | undefined {
   return optionMetaCache.get(path);
 }
 
-export type { OptionMeta, OptionFilter, OptionImpact, FlatOption };
+export type { OptionMeta, OptionFilter, OptionImpact, FlatOption, RadioMeta };
