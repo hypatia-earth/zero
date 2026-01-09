@@ -1,6 +1,6 @@
 {
   "name": "hypatia-zero",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "Browser-based weather visualization using WebGPU",
   "license": "MIT",
   "author": "Hypatia Earth",
@@ -24,7 +24,8 @@
     "wiki": "python3 scripts/publish-wiki.py",
     "wiki:push": "python3 scripts/publish-wiki.py --push",
     "repo-docs": "python3 scripts/publish-repo-docs.py",
-    "repo-docs:push": "python3 scripts/publish-repo-docs.py --push"
+    "repo-docs:push": "python3 scripts/publish-repo-docs.py --push",
+    "nlnet:sync": "./scripts/sync-claude-logs.sh"
   },
   "dependencies": {
     "@preact/signals-core": "^1.5.0",
