@@ -129,13 +129,17 @@ export class TimestepService {
     const fmt = (t: TTimestep) => t.slice(5, 13); // "MM-DDTHH"
     console.log(`[Timestep] ${vars.length} V, ${ts.length} TS, ${fmt(ts[0]!.timestep)} - ${fmt(ts[ts.length - 1]!.timestep)}`);
 
-    // Clean up cache entries older than earliest available timestep
-    const earliest = ts[0]!.timestep;
-    const outdatedCount = await countBeforeTimestep(earliest);
-    if (outdatedCount > 0) {
-      await onProgress?.('cleanup', `Deleting ${outdatedCount} outdated cache entries...`);
-      const deleted = await clearBeforeTimestep(earliest);
-      console.log(`[Timestep] Deleted ${deleted} outdated cache entries (before ${fmt(earliest)})`);
+    // Clean up cache entries older than earliest available timestep (non-blocking)
+    try {
+      const earliest = ts[0]!.timestep;
+      const outdatedCount = await countBeforeTimestep(earliest);
+      if (outdatedCount > 0) {
+        await onProgress?.('cleanup', `Deleting ${outdatedCount} outdated cache entries...`);
+        const deleted = await clearBeforeTimestep(earliest);
+        console.log(`[Timestep] Deleted ${deleted} outdated cache entries (before ${fmt(earliest)})`);
+      }
+    } catch (err) {
+      console.warn('[Timestep] Cache cleanup failed:', err);
     }
   }
 
