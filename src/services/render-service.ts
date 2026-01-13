@@ -63,11 +63,15 @@ export class RenderService {
     private configService: ConfigService
   ) {}
 
+  private handleResize = () => this.renderer?.resize();
+
   private setupResizeObserver(): void {
-    this.resizeObserver = new ResizeObserver(() => {
-      this.renderer?.resize();
-    });
+    this.resizeObserver = new ResizeObserver(this.handleResize);
     this.resizeObserver.observe(this.canvas);
+
+    // iOS standalone PWA may not fire ResizeObserver on orientation change
+    window.addEventListener('resize', this.handleResize);
+    window.addEventListener('orientationchange', this.handleResize);
   }
 
   async initialize(gaussianLats: Float32Array, ringOffsets: Uint32Array): Promise<void> {
@@ -582,6 +586,8 @@ export class RenderService {
     this.stop();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    window.removeEventListener('resize', this.handleResize);
+    window.removeEventListener('orientationchange', this.handleResize);
     this.renderer?.dispose();
     this.renderer = null;
   }

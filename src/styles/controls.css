@@ -96,6 +96,12 @@
   margin-bottom: 4px;
 }
 
+@media (max-width: 400px) {
+  .time-date {
+    font-size: var(--font-size-xl);
+  }
+}
+
 .time-time {
   font-size: var(--font-size-mono);
   opacity: 0.8;

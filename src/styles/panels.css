@@ -10,7 +10,7 @@
   position: absolute;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--layout-stack-gap);
   z-index: 20;
   pointer-events: none;
 }
@@ -53,7 +53,8 @@
 }
 
 .panel.logo img {
-  height: 40px;
+  width: var(--layout-logo-width);
+  height: auto;
 }
 
 .panel.layers {
@@ -66,6 +67,7 @@
 .panel.timecircle {
   width: var(--layout-timecircle-size);
   height: var(--layout-timecircle-size);
+  cursor: pointer;
 }
 
 .panel.fullscreen {

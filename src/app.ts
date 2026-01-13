@@ -48,6 +48,7 @@ export const App: m.ClosureComponent = () => {
     view() {
       const state = progress.state.value;
       const ready = state.complete && !state.error;
+      const minimal = ready && services.stateService!.minimalUI.value;
 
       return [
         m(BootstrapModal, {
@@ -69,34 +70,34 @@ export const App: m.ClosureComponent = () => {
           m('.ui-container', [
             m(PanelStack, { side: 'left' }, [
               m(LogoPanel),
-              m(LayersPanel, {
+              !minimal && m(LayersPanel, {
                 configService: services.configService!,
                 optionsService: services.optionsService!,
               }),
             ]),
             m(PanelStack, { side: 'right' }, [
               m(TimeCirclePanel, { stateService: services.stateService! }),
-              services.optionsService!.options.value.debug.showPerfPanel &&
+              !minimal && services.optionsService!.options.value.debug.showPerfPanel &&
                 m(PerfPanel, {
                   renderService: services.renderService!,
                   optionsService: services.optionsService!,
                 }),
-              m(QueuePanel, {
+              !minimal && m(QueuePanel, {
                 queueService: services.queueService!,
                 optionsService: services.optionsService!,
                 slotService: services.slotService!,
               }),
-              m(FullscreenPanel),
-              m(AboutPanel, {
+              !minimal && m(FullscreenPanel),
+              !minimal && m(AboutPanel, {
                 aboutService: services.aboutService!,
                 dialogService: services.dialogService!,
               }),
-              m(OptionsPanel, {
+              !minimal && m(OptionsPanel, {
                 optionsService: services.optionsService!,
                 dialogService: services.dialogService!,
               }),
             ]),
-            m(TimeBarPanel, {
+            !minimal && m(TimeBarPanel, {
               optionsService: services.optionsService!,
               stateService: services.stateService!,
               slotService: services.slotService!,

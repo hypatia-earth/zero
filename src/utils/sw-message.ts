@@ -11,8 +11,16 @@ const SW_TIMEOUT_MS = 5000;
  * Uses MessageChannel for two-way communication with timeout
  */
 export async function sendSWMessage<T>(message: object): Promise<T> {
+  // Old devices may hang indefinitely on serviceWorker.ready
+  const readyWithTimeout = Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('SW ready timeout')), SW_TIMEOUT_MS)
+    ),
+  ]);
+
   const target = navigator.serviceWorker.controller
-    || (await navigator.serviceWorker.ready).active;
+    || (await readyWithTimeout).active;
 
   if (!target) {
     throw new Error('No active Service Worker');

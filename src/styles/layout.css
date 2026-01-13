@@ -24,6 +24,7 @@
   /* Timecircle: 140px native, capped at 44vw on narrow screens */
   --layout-timecircle-size: min(140px, 44vw);
   --layout-panel-gap: 0px;
+  --layout-stack-gap: 16px;
   /* Timebar height = sum of size vars from theme.css */
   --layout-timebar-height: calc(
     var(--size-timebar-top-padding) * 1px +
@@ -36,6 +37,18 @@
   --layout-vh: 100dvh;
 }
 
+/* === Small (narrow phones) === */
+@media (max-width: 400px) {
+  :root {
+    --layout-margin-top: max(8px, env(safe-area-inset-top, 0px));
+    --layout-margin-right: max(8px, env(safe-area-inset-right, 0px));
+    --layout-margin-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    --layout-margin-left: max(8px, env(safe-area-inset-left, 0px));
+    --layout-stack-gap: 8px;
+    --layout-timecircle-size: min(112px, 35vw);
+  }
+}
+
 /* === Large === */
 @media (min-width: 1440px) {
   :root {
@@ -43,6 +56,7 @@
     --layout-margin-right: max(24px, env(safe-area-inset-right, 0px));
     --layout-margin-bottom: max(24px, env(safe-area-inset-bottom, 0px));
     --layout-margin-left: max(24px, env(safe-area-inset-left, 0px));
+    --layout-stack-gap: 24px;
   }
 }
 

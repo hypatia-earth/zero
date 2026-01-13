@@ -17,6 +17,7 @@ export const TimeCirclePanel: m.ClosureComponent<TimeCirclePanelAttrs> = (initia
     oncreate() {
       unsubscribe = effect(() => {
         initialVnode.attrs.stateService.viewState.value;
+        initialVnode.attrs.stateService.minimalUI.value;
         m.redraw();
       });
     },
@@ -35,7 +36,9 @@ export const TimeCirclePanel: m.ClosureComponent<TimeCirclePanelAttrs> = (initia
       const hours = String(time.getUTCHours()).padStart(2, '0');
       const minutes = String(time.getUTCMinutes()).padStart(2, '0');
 
-      return m('.panel.timecircle', [
+      return m('.panel.timecircle', {
+        onclick: () => stateService.toggleMinimalUI(),
+      }, [
         m('.control.circle', [
           m('.time-year', year),
           m('.time-date', `${month} ${day}`),

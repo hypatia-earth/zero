@@ -61,7 +61,7 @@
 }
 
 .dialog.bootstrap .window {
-  width: min(380px, 100vw);
+  width: min(380px, calc(100vw - var(--layout-margin-left) - var(--layout-margin-right)));
   max-width: 100%;
   background: var(--dialog-window-bg);
   border-radius: var(--dialog-window-radius);
@@ -873,7 +873,7 @@
 
 .dialog.about .window {
   width: 90%;
-  max-width: 560px;
+  max-width: 740px;
   animation: scaleIn 0.15s ease-out;
 }
 

@@ -33,6 +33,7 @@ const DEFAULT_VIEW_STATE: ViewState = {
 
 export class StateService {
   readonly viewState = signal<ViewState>({ ...DEFAULT_VIEW_STATE });
+  readonly minimalUI = signal(false);
 
   private urlSyncEnabled = false;
   private debouncedUrlSync = debounceFlush(() => this.syncToUrl(), 300);
@@ -83,6 +84,11 @@ export class StateService {
 
     this.viewState.value = { ...this.viewState.value, lat, lon, altitude };
     this.scheduleUrlSync();
+  }
+
+  /** Toggle minimal UI mode (hide all panels except logo and timecircle) */
+  toggleMinimalUI(): void {
+    this.minimalUI.value = !this.minimalUI.value;
   }
 
   /**
