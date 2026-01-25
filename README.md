@@ -1,18 +1,21 @@
 # Zero
 
 Browser-based weather visualization rendering ECMWF forecast data directly on a 3D globe using WebGPU.
-<img src=".github/Screen-Shot-2025-12-26-at-14.48.14.png" width="800" alt="Screen Shot 2025-12-26 at 14.48.14">
+
+<img src=".github/zero-readme-2026-01-25.gif" width="800" alt="zero-readme-2026-01-25">
 
 **Live Demo:** [zero.hypatia.earth](http://zero.hypatia.earth)  
 **Mirror:** [hypatia-earth.github.io/zero](https://hypatia-earth.github.io/zero/?dt=2025-12-26T14h00z&ll=0.0,0.0&alt=14000&layers=earth,sun,temp)
 
 ## What This Is
 
+**Zero** backend. **Zero** servers. **Zero** cost.
+
 Zero visualizes professional weather hazards for climate adaptation:
-- **Wet-bulb temperature** — actual heat survivability limits in humid conditions
+- **Wet-bulb temperature** — actual heat survivability limits in humid conditions (planned)
 - **Wind** — animated flow lines showing speed and direction
 - **Pressure** — isobar contours revealing storm systems
-- **Precipitation** — rainfall intensity
+- **Precipitation** — rainfall intensity (planned)
 
 Runs entirely in your browser. No backend, no login, no tracking.
 
@@ -41,8 +44,8 @@ WebGPU support required. Mobile browsers work but performance varies.
 ## Development
 
 Built through human/AI collaboration:
-- **Vision & architecture:** 12 years of iteration, domain expertise, design decisions
-- **Implementation:** ~20,000 lines of TypeScript/WGSL written by Claude Code
+- **Vision & architecture:** first prototype in 2017, tech was not ready
+- **Implementation:** 2025, ~20,000 lines of TypeScript/WGSL entirely written by Claude Code
 
 This is an experiment: can domain experts build production software by collaborating with AI? Zero answers that question.
 
