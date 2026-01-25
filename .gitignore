@@ -15,6 +15,3 @@ src/render/shaders/zero-post.wgsl
 
 # External large dependencies (lazy-loaded)
 extern/
-
-# NLNet application materials (private)
-nlnet/
