@@ -16,6 +16,7 @@ import {
   createPaletteService,
   type ServiceContainer,
 } from './service-container';
+import { AuroraProxy } from '../services/aurora-proxy';
 import {
   runCapabilitiesPhase,
   runConfigPhase,
@@ -169,5 +170,6 @@ export function exposeDebugServices(services: ServiceContainer): void {
     aboutService: services.aboutService,
     themeService: services.themeService,
     renderer: services.renderService?.getRenderer(),
+    AuroraProxy,  // Phase 1 testing
   };
 }
