@@ -121,7 +121,7 @@ export class GlobeRenderer {
   // Suppress errors during intentional page unload
   private isDestroying = false;
 
-  constructor(private canvas: HTMLCanvasElement, cameraConfig?: CameraConfig) {
+  constructor(private canvas: HTMLCanvasElement | OffscreenCanvas, cameraConfig?: CameraConfig) {
     this.camera = new Camera({ lat: 30, lon: 0, distance: 3 }, cameraConfig);
   }
 
@@ -162,11 +162,14 @@ export class GlobeRenderer {
 
     // WORKAROUND for Chrome bug 469455157: GPU crash on reload
     // Explicitly destroy device before page unload to prevent SharedImage mailbox race
-    window.addEventListener('beforeunload', () => {
-      this.isDestroying = true;
-      this.canvas.getContext('webgpu')!.unconfigure();
-      this.device.destroy();
-    });
+    // Skip in worker context (cleanup handled via message from main thread)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', () => {
+        this.isDestroying = true;
+        this.canvas.getContext('webgpu')!.unconfigure();
+        this.device.destroy();
+      });
+    }
 
     // Wait for device to be fully ready
     await this.device.queue.onSubmittedWorkDone();
@@ -244,8 +247,9 @@ export class GlobeRenderer {
     // Grid animator for LoD transitions (initialize at correct LoD for globe screen size)
     const distance = this.camera.getState().distance;
     const fov = 2 * Math.atan(this.camera.getTanFov());
-    const heightCss = this.canvas.clientHeight || 800;  // fallback for tests
-    const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightCss / fov);
+    // Use canvas height (already device pixels in worker, CSS pixels on main thread)
+    const heightPx = 'clientHeight' in this.canvas ? (this.canvas.clientHeight || 800) : this.canvas.height;
+    const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightPx / fov);
     this.gridAnimator = new GridAnimator(initialGlobeRadiusPx);
 
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
@@ -283,9 +287,9 @@ export class GlobeRenderer {
     });
 
     // Offscreen textures for two-pass rendering (globe + post-process)
-    const dpr = window.devicePixelRatio;
-    const texWidth = Math.floor(this.canvas.clientWidth * dpr);
-    const texHeight = Math.floor(this.canvas.clientHeight * dpr);
+    // Use canvas.width/height directly (already device pixels in worker)
+    const texWidth = this.canvas.width || 800;
+    const texHeight = this.canvas.height || 600;
 
     // Color texture (globe renders here, post-process reads)
     this.colorTexture = this.device.createTexture({
@@ -444,10 +448,30 @@ export class GlobeRenderer {
     return this.useFloat16Luts;
   }
 
-  resize(): void {
-    const dpr = window.devicePixelRatio;
-    const width = Math.floor(this.canvas.clientWidth * dpr);
-    const height = Math.floor(this.canvas.clientHeight * dpr);
+  /**
+   * Resize canvas and recreate textures
+   * @param explicitWidth Device pixel width (for OffscreenCanvas in worker)
+   * @param explicitHeight Device pixel height (for OffscreenCanvas in worker)
+   */
+  resize(explicitWidth?: number, explicitHeight?: number): void {
+    let width: number;
+    let height: number;
+
+    if (explicitWidth !== undefined && explicitHeight !== undefined) {
+      // Worker mode: dimensions passed explicitly
+      width = explicitWidth;
+      height = explicitHeight;
+    } else if ('clientWidth' in this.canvas) {
+      // Main thread mode: compute from CSS size
+      const dpr = window.devicePixelRatio;
+      width = Math.floor(this.canvas.clientWidth * dpr);
+      height = Math.floor(this.canvas.clientHeight * dpr);
+    } else {
+      // Fallback: use current canvas size
+      width = this.canvas.width;
+      height = this.canvas.height;
+    }
+
     this.canvas.width = width;
     this.canvas.height = height;
     this.camera.setAspect(width, height);
@@ -580,7 +604,9 @@ export class GlobeRenderer {
       uniforms.eyePosition[2]! ** 2
     );
     const fov = 2 * Math.atan(uniforms.tanFov);
-    const heightCss = uniforms.resolution[1]! / devicePixelRatio;
+    // In worker, devicePixelRatio doesn't exist - use 1 as fallback (resolution already in device pixels)
+    const dpr = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1;
+    const heightCss = uniforms.resolution[1]! / dpr;
     const globeRadiusPx = Math.asin(1 / cameraDistance) * (heightCss / fov);
     const gridBuffer = this.gridAnimator.packToBuffer(globeRadiusPx, 16);
     this.device.queue.writeBuffer(this.gridLinesBuffer, 0, gridBuffer);

@@ -11,6 +11,8 @@
 
 import type { CameraConfig } from '../render/camera';
 import type { TWeatherLayer } from '../config/types';
+import { GlobeRenderer, type GlobeUniforms } from '../render/globe-renderer';
+import { PRESSURE_COLOR_DEFAULT } from '../schemas/options.schema';
 
 // ============================================================
 // Asset types for worker transfer
@@ -56,84 +58,102 @@ export type AuroraResponse =
   | { type: 'frameComplete'; timing?: { frame: number } }
   | { type: 'error'; message: string; fatal: boolean };
 
+// ============================================================
 // Worker state
-let device: GPUDevice | null = null;
-let context: GPUCanvasContext | null = null;
+// ============================================================
+
+let renderer: GlobeRenderer | null = null;
 let canvas: OffscreenCanvas | null = null;
-let format: GPUTextureFormat;
-let config: AuroraConfig | null = null;
-let assets: AuroraAssets | null = null;
+
+/**
+ * Create default uniforms for testing (Phase 2)
+ * Will be replaced by proper state forwarding
+ */
+function createDefaultUniforms(): GlobeUniforms {
+  // Get camera matrices from renderer's camera
+  const cam = renderer!.camera;
+  return {
+    viewProjInverse: cam.getViewProjInverse(),
+    eyePosition: cam.getEyePosition(),
+    resolution: new Float32Array([canvas!.width, canvas!.height]),
+    time: performance.now() / 1000,
+    tanFov: cam.getTanFov(),
+    // Sun
+    sunOpacity: 1.0,
+    sunDirection: new Float32Array([0.5, 0.5, 0.707]),
+    sunCoreRadius: 0.005,
+    sunGlowRadius: 0.02,
+    sunCoreColor: new Float32Array([1, 1, 0.9]),
+    sunGlowColor: new Float32Array([1, 0.8, 0.4]),
+    // Grid
+    gridEnabled: false,
+    gridOpacity: 0,
+    gridFontSize: 12,
+    gridLabelMaxRadius: 280,
+    gridLineWidth: 1,
+    // Layers
+    earthOpacity: 1.0,
+    tempOpacity: 0,
+    rainOpacity: 0,
+    cloudsOpacity: 0,
+    humidityOpacity: 0,
+    windOpacity: 0,
+    windLerp: 0,
+    windAnimSpeed: 1,
+    windState: { mode: 'loading', lerp: 0, time: new Date() },
+    pressureOpacity: 0,
+    pressureColors: PRESSURE_COLOR_DEFAULT,
+    // Data state
+    tempDataReady: false,
+    rainDataReady: false,
+    cloudsDataReady: false,
+    humidityDataReady: false,
+    windDataReady: false,
+    tempLerp: 0,
+    tempLoadedPoints: 0,
+    tempSlot0: 0,
+    tempSlot1: 0,
+    tempPaletteRange: new Float32Array([-40, 50]),
+    logoOpacity: 0,
+  };
+}
 
 self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
   const { type } = e.data;
 
   try {
     if (type === 'init') {
+      const { config, assets } = e.data;
       canvas = e.data.canvas;
       canvas.width = e.data.width;
       canvas.height = e.data.height;
-      config = e.data.config;
-      assets = e.data.assets;
 
-      console.log('[Aurora] Init with config:', {
-        timeslotsPerLayer: config.timeslotsPerLayer,
-        pressureResolution: config.pressureResolution,
-        windLineCount: config.windLineCount,
-        readyLayers: config.readyLayers,
-      });
-      console.log('[Aurora] Assets received:', {
-        basemapFaces: assets.basemapFaces.length,
-        fontAtlas: `${assets.fontAtlas.width}x${assets.fontAtlas.height}`,
-        logo: `${assets.logo.width}x${assets.logo.height}`,
-        gaussianLats: assets.gaussianLats.length,
-        ringOffsets: assets.ringOffsets.length,
-        atmosphereLUTs: {
-          transmittance: assets.atmosphereLUTs.transmittance.byteLength,
-          scattering: assets.atmosphereLUTs.scattering.byteLength,
-          irradiance: assets.atmosphereLUTs.irradiance.byteLength,
-        },
-      });
+      console.log('[Aurora] Initializing GlobeRenderer...');
 
-      // Request WebGPU adapter
-      const adapter = await navigator.gpu.requestAdapter();
-      if (!adapter) {
-        self.postMessage({
-          type: 'error',
-          message: 'No WebGPU adapter available',
-          fatal: true,
-        } satisfies AuroraResponse);
-        return;
-      }
+      // Create and initialize renderer
+      renderer = new GlobeRenderer(canvas, config.cameraConfig);
+      await renderer.initialize(
+        config.timeslotsPerLayer,
+        config.pressureResolution,
+        config.windLineCount
+      );
 
-      // Request device
-      device = await adapter.requestDevice();
-      device.lost.then((info) => {
-        self.postMessage({
-          type: 'error',
-          message: `GPU device lost: ${info.reason} - ${info.message}`,
-          fatal: true,
-        } satisfies AuroraResponse);
-      });
+      // Upload assets
+      renderer.createAtmosphereTextures(assets.atmosphereLUTs);
+      await renderer.loadBasemap(assets.basemapFaces);
+      await renderer.loadFontAtlas(assets.fontAtlas);
+      await renderer.loadLogo(assets.logo);
+      renderer.uploadGaussianLUTs(assets.gaussianLats, assets.ringOffsets);
 
-      // Configure canvas context
-      context = canvas.getContext('webgpu');
-      if (!context) {
-        self.postMessage({
-          type: 'error',
-          message: 'Failed to get WebGPU context',
-          fatal: true,
-        } satisfies AuroraResponse);
-        return;
-      }
+      // Finalize renderer (creates bind groups)
+      renderer.finalize();
 
-      format = navigator.gpu.getPreferredCanvasFormat();
-      context.configure({ device, format });
-
+      console.log('[Aurora] GlobeRenderer ready');
       self.postMessage({ type: 'ready' } satisfies AuroraResponse);
     }
 
     if (type === 'render') {
-      if (!device || !context) {
+      if (!renderer) {
         self.postMessage({
           type: 'error',
           message: 'Worker not initialized',
@@ -144,18 +164,10 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       const t0 = performance.now();
 
-      // Render solid color (Phase 1 test)
-      const encoder = device.createCommandEncoder();
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [{
-          view: context.getCurrentTexture().createView(),
-          clearValue: { r: 0.1, g: 0.0, b: 0.2, a: 1.0 },  // Dark purple
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
-      });
-      pass.end();
-      device.queue.submit([encoder.finish()]);
+      // Update uniforms and render
+      const uniforms = createDefaultUniforms();
+      renderer.updateUniforms(uniforms);
+      renderer.render();
 
       const frameTime = performance.now() - t0;
       self.postMessage({
@@ -165,25 +177,23 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
     }
 
     if (type === 'resize') {
-      if (canvas) {
+      if (renderer && canvas) {
         canvas.width = e.data.width;
         canvas.height = e.data.height;
+        renderer.resize(e.data.width, e.data.height);
       }
     }
 
     if (type === 'updatePalette') {
-      // Store palette data for later use (Phase 2: actual GPU upload)
-      console.log('[Aurora] Palette update:', e.data.layer, e.data.min, e.data.max);
+      if (renderer) {
+        renderer.updateTempPalette(e.data.textureData);
+      }
     }
 
     if (type === 'cleanup') {
-      context?.unconfigure();
-      device?.destroy();
-      device = null;
-      context = null;
+      renderer?.dispose();
+      renderer = null;
       canvas = null;
-      config = null;
-      assets = null;
     }
 
   } catch (err) {
