@@ -7,7 +7,10 @@
  * - Render loop coordination via requestAnimationFrame
  */
 
-import type { AuroraRequest, AuroraResponse } from '../workers/aurora.worker';
+import type { AuroraRequest, AuroraResponse, AuroraConfig, AuroraAssets } from '../workers/aurora.worker';
+
+// Re-export types for consumers
+export type { AuroraConfig, AuroraAssets } from '../workers/aurora.worker';
 
 export class AuroraProxy {
   private worker: Worker;
@@ -29,13 +32,29 @@ export class AuroraProxy {
   }
 
   /**
-   * Initialize worker with canvas
+   * Initialize worker with canvas, config, and assets
    */
-  async init(canvas: HTMLCanvasElement): Promise<void> {
+  async init(canvas: HTMLCanvasElement, config: AuroraConfig, assets: AuroraAssets): Promise<void> {
     const offscreen = canvas.transferControlToOffscreen();
     const dpr = window.devicePixelRatio;
     const width = canvas.clientWidth * dpr;
     const height = canvas.clientHeight * dpr;
+
+    // Build transferables list (ownership moves to worker)
+    const transferables: Transferable[] = [
+      offscreen,
+      // Atmosphere LUTs
+      assets.atmosphereLUTs.transmittance,
+      assets.atmosphereLUTs.scattering,
+      assets.atmosphereLUTs.irradiance,
+      // Gaussian LUTs (transfer underlying buffer)
+      assets.gaussianLats.buffer,
+      assets.ringOffsets.buffer,
+      // ImageBitmaps (transferable in modern browsers)
+      ...assets.basemapFaces,
+      assets.fontAtlas,
+      assets.logo,
+    ];
 
     return new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -53,8 +72,15 @@ export class AuroraProxy {
         }
       });
 
-      this.send({ type: 'init', canvas: offscreen, width, height }, [offscreen]);
+      this.send({ type: 'init', canvas: offscreen, width, height, config, assets }, transferables);
     });
+  }
+
+  /**
+   * Update palette texture
+   */
+  updatePalette(layer: 'temp', textureData: Uint8Array, min: number, max: number): void {
+    this.send({ type: 'updatePalette', layer, textureData, min, max }, [textureData.buffer]);
   }
 
   /**
