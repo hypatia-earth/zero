@@ -112,6 +112,33 @@ export async function runActivatePhase(
   window.addEventListener('beforeunload', () => {
     auroraProxy.cleanup();
   });
+
+  // Set up perf panel updates (lazy-cache elements since panel mounts after activate)
+  let perfEls: Record<string, HTMLElement | null> | null = null;
+  auroraProxy.setOnPerfUpdate((stats) => {
+    // Cache elements on first successful query
+    if (!perfEls) {
+      const fps = document.querySelector<HTMLElement>('.perf-fps');
+      if (!fps) return;  // Panel not mounted yet
+      perfEls = {
+        fps,
+        frame: document.querySelector<HTMLElement>('.perf-frame'),
+        pass: document.querySelector<HTMLElement>('.perf-pass'),
+        screen: document.querySelector<HTMLElement>('.perf-screen'),
+        globe: document.querySelector<HTMLElement>('.perf-globe'),
+      };
+    }
+
+    if (perfEls.fps) perfEls.fps.textContent = `${stats.fps.toFixed(0)}`;
+    if (perfEls.frame) perfEls.frame.textContent = `${stats.frameMs.toFixed(1)} ms`;
+    if (perfEls.pass && stats.passMs > 0) perfEls.pass.textContent = `${stats.passMs.toFixed(1)} ms`;
+    if (perfEls.screen) perfEls.screen.textContent = `${canvas.clientWidth}×${canvas.clientHeight}`;
+    if (perfEls.globe) {
+      const fov = 2 * Math.atan(camera.getTanFov());
+      const globeRadiusPx = Math.asin(1 / camera.distance) * (canvas.clientHeight / fov);
+      perfEls.globe.textContent = `${Math.round(globeRadiusPx)} px`;
+    }
+  });
   window.addEventListener('pagehide', () => {
     auroraProxy.cleanup();
   });
