@@ -77,6 +77,20 @@ export class AuroraProxy {
   }
 
   /**
+   * Update camera state
+   * Call this when camera changes (from CameraControls)
+   */
+  updateCamera(viewProjInverse: Float32Array, eye: Float32Array, tanFov: number): void {
+    // Clone buffers to avoid issues with transferring typed array views
+    this.send({
+      type: 'camera',
+      viewProjInverse: new Float32Array(viewProjInverse),
+      eye: new Float32Array(eye),
+      tanFov,
+    });
+  }
+
+  /**
    * Update palette texture
    */
   updatePalette(layer: 'temp', textureData: Uint8Array, min: number, max: number): void {
