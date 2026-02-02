@@ -5,6 +5,7 @@
  * - Worker lifecycle (creation, initialization, cleanup)
  * - Message passing with proper transferables
  * - Render loop coordination via requestAnimationFrame
+ * - Perf panel updates
  */
 
 import type { AuroraRequest, AuroraResponse, AuroraConfig, AuroraAssets } from '../workers/aurora.worker';
@@ -12,11 +13,40 @@ import type { AuroraRequest, AuroraResponse, AuroraConfig, AuroraAssets } from '
 // Re-export types for consumers
 export type { AuroraConfig, AuroraAssets } from '../workers/aurora.worker';
 
+/** Performance statistics emitted each frame */
+export interface PerfStats {
+  fps: number;
+  frameMs: number;
+  passMs: number;
+}
+
+/** Simple rolling average for perf stats */
+class RollingAvg {
+  private values: number[] = [];
+  constructor(private size: number) {}
+  push(v: number) {
+    this.values.push(v);
+    if (this.values.length > this.size) this.values.shift();
+  }
+  avg(): number {
+    if (this.values.length === 0) return 0;
+    return this.values.reduce((a, b) => a + b, 0) / this.values.length;
+  }
+}
+
 export class AuroraProxy {
   private worker: Worker;
   private handlers = new Map<AuroraResponse['type'], (msg: AuroraResponse) => void>();
   private animationId: number | null = null;
   private running = false;
+
+  // Perf stats
+  private frameIntervals = new RollingAvg(60);
+  private frameTimes = new RollingAvg(60);
+  private passTimes = new RollingAvg(60);
+  private lastFrameTime = 0;
+  private frameStartTime = 0;
+  private onPerfUpdate: ((stats: PerfStats) => void) | null = null;
 
   constructor() {
     this.worker = new Worker(
@@ -180,13 +210,33 @@ export class AuroraProxy {
 
     const frame = () => {
       if (!this.running) return;
+
+      // Track frame interval
+      const now = performance.now();
+      if (this.lastFrameTime > 0) {
+        this.frameIntervals.push(now - this.lastFrameTime);
+      }
+      this.lastFrameTime = now;
+      this.frameStartTime = now;
+
       this.onBeforeRender?.();
       this.send({ type: 'render' });
     };
 
     // Wait for frameComplete before scheduling next frame
-    this.handlers.set('frameComplete', () => {
+    this.handlers.set('frameComplete', (msg) => {
       if (this.running) {
+        // Track frame time
+        this.frameTimes.push(performance.now() - this.frameStartTime);
+
+        // Track GPU pass time from worker
+        if ('timing' in msg && msg.timing?.frame) {
+          this.passTimes.push(msg.timing.frame);
+        }
+
+        // Emit perf stats
+        this.emitPerfStats();
+
         this.animationId = requestAnimationFrame(frame);
       }
     });
@@ -204,6 +254,24 @@ export class AuroraProxy {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
     }
+  }
+
+  /**
+   * Set callback for perf stats updates (called each frame)
+   */
+  setOnPerfUpdate(callback: (stats: PerfStats) => void): void {
+    this.onPerfUpdate = callback;
+  }
+
+  private emitPerfStats(): void {
+    if (!this.onPerfUpdate) return;
+
+    const intervalAvg = this.frameIntervals.avg();
+    this.onPerfUpdate({
+      fps: intervalAvg > 0 ? 1000 / intervalAvg : 0,
+      frameMs: this.frameTimes.avg(),
+      passMs: this.passTimes.avg(),
+    });
   }
 
   /**
