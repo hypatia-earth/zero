@@ -109,13 +109,16 @@ export class GlobeRenderer {
   private currentEarthOpacity = 0;
   private currentTempOpacity = 0;
 
+  // Animation timing (shared across grid, wind, etc.)
+  private lastFrameTime = 0;
+  private frameDeltaMs = 0;  // milliseconds since last frame (0 on first frame)
+
   // Wind animation state
   private windAnimPhase = 0;
   private windSnakeLength = defaultConfig.wind.snakeLength;
   private windLineWidth = defaultConfig.wind.lineWidth;
   private windSegments = defaultConfig.wind.segmentsPerLine;
   private windRadius = defaultConfig.wind.radius;
-  private lastAnimTime = 0;
 
   // GPU timing
   private gpuTimestamp: GpuTimestamp | null = null;
@@ -516,6 +519,13 @@ export class GlobeRenderer {
   }
 
   updateUniforms(uniforms: GlobeUniforms): void {
+    // Compute frame delta time for animations
+    const now = performance.now();
+    if (this.lastFrameTime > 0) {
+      this.frameDeltaMs = Math.min(now - this.lastFrameTime, 100);  // Cap at 100ms
+    }
+    this.lastFrameTime = now;
+
     const view = this.uniformView;
     const O = U; // Offsets from layout
 
@@ -610,7 +620,7 @@ export class GlobeRenderer {
     const dpr = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1;
     const heightCss = uniforms.resolution[1]! / dpr;
     const globeRadiusPx = Math.asin(1 / cameraDistance) * (heightCss / fov);
-    const gridBuffer = this.gridAnimator.packToBuffer(globeRadiusPx, 16);
+    const gridBuffer = this.gridAnimator.packToBuffer(globeRadiusPx, this.frameDeltaMs);
     this.device.queue.writeBuffer(this.gridLinesBuffer, 0, gridBuffer);
 
     // Update pressure layer based on opacity
@@ -640,15 +650,11 @@ export class GlobeRenderer {
     this.windLayer.setEnabled(windVisible);
 
     if (windVisible) {
-      // Advance snake animation phase
+      // Advance snake animation phase using shared frame delta
       // Convert updates/sec to cycles/sec: cycles = updates / segments
       const cyclesPerSec = uniforms.windAnimSpeed / this.windSegments;
-      const now = performance.now() / 1000;
-      if (this.lastAnimTime > 0) {
-        const dt = now - this.lastAnimTime;
-        this.windAnimPhase = (this.windAnimPhase + dt * cyclesPerSec) % 1;
-      }
-      this.lastAnimTime = now;
+      const dt = this.frameDeltaMs / 1000;  // Convert ms to seconds
+      this.windAnimPhase = (this.windAnimPhase + dt * cyclesPerSec) % 1;
 
       // Update layer state (triggers compute when state changes)
       this.windLayer.setState(uniforms.windState);

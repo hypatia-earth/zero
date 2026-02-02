@@ -247,11 +247,18 @@ export function setupCameraControls(
   });
 
   // Animation loop
-  let lastTime = performance.now();
+  let lastTime = 0;
 
   /** Update physics and camera - call once per frame from render loop */
   function tick() {
     const now = performance.now();
+
+    // First frame: initialize lastTime, skip physics
+    if (lastTime === 0) {
+      lastTime = now;
+      return;
+    }
+
     const deltaTime = (now - lastTime) / 1000;
     lastTime = now;
 
