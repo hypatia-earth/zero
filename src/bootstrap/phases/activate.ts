@@ -66,13 +66,26 @@ export async function runActivatePhase(
   });
 
   // Forward options updates to worker (reactive)
+  // Track last sent to avoid duplicate messages when viewState changes but options don't
+  let lastOptions = optionsService.options.value;
   effect(() => {
-    auroraProxy.updateOptions(optionsService.options.value);
+    const opts = optionsService.options.value;
+    if (opts !== lastOptions) {
+      lastOptions = opts;
+      auroraProxy.updateOptions(opts);
+    }
   });
 
   // Forward time updates to worker (reactive)
+  // Track last sent to avoid duplicate messages when viewState.position changes but time doesn't
+  let lastTimeMs = stateService.viewState.value.time.getTime();
   effect(() => {
-    auroraProxy.updateTime(stateService.viewState.value.time);
+    const time = stateService.viewState.value.time;
+    const timeMs = time.getTime();
+    if (timeMs !== lastTimeMs) {
+      lastTimeMs = timeMs;
+      auroraProxy.updateTime(time);
+    }
   });
 
   // Handle resize

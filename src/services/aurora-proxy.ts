@@ -172,24 +172,27 @@ export class AuroraProxy {
 
   /**
    * Start render loop
+   * Single synchronized loop: RAF → physics → camera → render → wait frameComplete → repeat
    */
   start(): void {
     if (this.running) return;
     this.running = true;
 
-    // Set up frame callback
+    const frame = () => {
+      if (!this.running) return;
+      this.onBeforeRender?.();
+      this.send({ type: 'render' });
+    };
+
+    // Wait for frameComplete before scheduling next frame
     this.handlers.set('frameComplete', () => {
       if (this.running) {
-        this.animationId = requestAnimationFrame(() => {
-          this.onBeforeRender?.();
-          this.send({ type: 'render' });
-        });
+        this.animationId = requestAnimationFrame(frame);
       }
     });
 
     // Kick off first frame
-    this.onBeforeRender?.();
-    this.send({ type: 'render' });
+    this.animationId = requestAnimationFrame(frame);
   }
 
   /**
