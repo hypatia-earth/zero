@@ -60,12 +60,14 @@ export type AuroraRequest =
   | { type: 'render' }
   | { type: 'resize'; width: number; height: number }
   | { type: 'updatePalette'; layer: 'temp'; textureData: Uint8Array; min: number; max: number }
+  | { type: 'triggerPressureRegrid'; slotIndex: number }
   | { type: 'cleanup' };
 
 export type AuroraResponse =
   | { type: 'ready' }
   | { type: 'uploadComplete'; layer: TWeatherLayer; timestep: string; slotIndex: number }
   | { type: 'frameComplete'; timing?: { frame: number } }
+  | { type: 'deviceLost'; reason: string; message: string }
   | { type: 'error'; message: string; fatal: boolean };
 
 // ============================================================
@@ -211,6 +213,16 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       }
       console.log(`[Aurora] Created ${layerStores.size} LayerStores`);
 
+      // Set up device loss handling
+      device.lost.then((info) => {
+        console.error('[Aurora] GPU device lost:', info.reason, info.message);
+        self.postMessage({
+          type: 'deviceLost',
+          reason: info.reason,
+          message: info.message,
+        } satisfies AuroraResponse);
+      });
+
       // Initialize camera state from renderer's default camera
       const cam = renderer.camera;
       cameraState.viewProjInverse.set(cam.getViewProjInverse());
@@ -343,6 +355,16 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       }
     }
 
+    if (type === 'triggerPressureRegrid') {
+      const store = layerStores.get('pressure');
+      if (renderer && store) {
+        const rawBuffer = store.getSlotBuffer(e.data.slotIndex, 0);
+        if (rawBuffer) {
+          renderer.triggerPressureRegrid(e.data.slotIndex, rawBuffer);
+        }
+      }
+    }
+
     if (type === 'cleanup') {
       // Dispose layer stores
       for (const store of layerStores.values()) {
@@ -351,8 +373,18 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       layerStores.clear();
       slotStates.clear();
 
+      // Get device before disposing renderer
+      const device = renderer?.getDevice();
+
       renderer?.dispose();
       renderer = null;
+
+      // Chrome 143+ WebGPU cleanup bug: must unconfigure context and destroy device
+      if (canvas) {
+        const ctx = canvas.getContext('webgpu');
+        ctx?.unconfigure();
+      }
+      device?.destroy();
       canvas = null;
     }
 
