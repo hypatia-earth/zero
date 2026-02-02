@@ -10,8 +10,9 @@
  */
 
 import type { CameraConfig } from '../render/camera';
-import type { TWeatherLayer } from '../config/types';
+import type { TWeatherLayer, TWeatherTextureLayer, SlabConfig } from '../config/types';
 import { GlobeRenderer, type GlobeUniforms } from '../render/globe-renderer';
+import { LayerStore } from '../services/layer-store';
 import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.schema';
 import { getSunDirection } from '../utils/sun-position';
 
@@ -41,6 +42,8 @@ export interface AuroraConfig {
   pressureResolution: 1 | 2;
   windLineCount: number;
   readyLayers: TWeatherLayer[];
+  /** Layer configs for LayerStore creation (only weather layers with slabs) */
+  layerConfigs: Array<{ id: TWeatherLayer; slabs: SlabConfig[] }>;
 }
 
 // ============================================================
@@ -85,6 +88,19 @@ let currentOptions: ZeroOptions | null = null;
 // Time state (received from main thread)
 let currentTime = Date.now();
 
+// Layer stores for GPU buffer management
+const layerStores = new Map<TWeatherLayer, LayerStore>();
+
+// Slot activation state per layer (for uniform building)
+interface SlotState {
+  slot0: number;
+  slot1: number;
+  lerp: number;
+  loadedPoints: number;
+  dataReady: boolean;
+}
+const slotStates = new Map<TWeatherLayer, SlotState>();
+
 /**
  * Build uniforms from current state
  * Uses camera, options, and time from main thread
@@ -120,21 +136,25 @@ function buildUniforms(): GlobeUniforms {
     cloudsOpacity: opts?.clouds.enabled ? opts.clouds.opacity : 0,
     humidityOpacity: opts?.humidity.enabled ? opts.humidity.opacity : 0,
     windOpacity: opts?.wind.enabled ? opts.wind.opacity : 0,
-    windLerp: 0,
+    windLerp: slotStates.get('wind')?.lerp ?? 0,
     windAnimSpeed: opts?.wind.speed ?? 1,
-    windState: { mode: 'loading', lerp: 0, time },
+    windState: {
+      mode: slotStates.get('wind')?.dataReady ? 'pair' : 'loading',
+      lerp: slotStates.get('wind')?.lerp ?? 0,
+      time,
+    },
     pressureOpacity: opts?.pressure.enabled ? opts.pressure.opacity : 0,
     pressureColors: opts?.pressure.colors ?? PRESSURE_COLOR_DEFAULT,
-    // Data state (TODO: receive from slot activation messages)
-    tempDataReady: false,
-    rainDataReady: false,
-    cloudsDataReady: false,
-    humidityDataReady: false,
-    windDataReady: false,
-    tempLerp: 0,
-    tempLoadedPoints: 0,
-    tempSlot0: 0,
-    tempSlot1: 0,
+    // Data state (from slot activation messages)
+    tempDataReady: slotStates.get('temp')?.dataReady ?? false,
+    rainDataReady: slotStates.get('rain')?.dataReady ?? false,
+    cloudsDataReady: slotStates.get('clouds')?.dataReady ?? false,
+    humidityDataReady: slotStates.get('humidity')?.dataReady ?? false,
+    windDataReady: slotStates.get('wind')?.dataReady ?? false,
+    tempLerp: slotStates.get('temp')?.lerp ?? 0,
+    tempLoadedPoints: slotStates.get('temp')?.loadedPoints ?? 0,
+    tempSlot0: slotStates.get('temp')?.slot0 ?? 0,
+    tempSlot1: slotStates.get('temp')?.slot1 ?? 0,
     tempPaletteRange: new Float32Array([-40, 50]),
     logoOpacity: 0,
   };
@@ -169,6 +189,27 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       // Finalize renderer (creates bind groups)
       renderer.finalize();
+
+      // Create LayerStore instances for each weather layer
+      const device = renderer.getDevice();
+      for (const layerCfg of config.layerConfigs) {
+        const store = new LayerStore(device, {
+          layerId: layerCfg.id,
+          slabs: layerCfg.slabs,
+          timeslots: config.timeslotsPerLayer,
+        });
+        store.initialize();
+        layerStores.set(layerCfg.id, store);
+        // Initialize slot state
+        slotStates.set(layerCfg.id, {
+          slot0: 0,
+          slot1: 0,
+          lerp: 0,
+          loadedPoints: 0,
+          dataReady: false,
+        });
+      }
+      console.log(`[Aurora] Created ${layerStores.size} LayerStores`);
 
       // Initialize camera state from renderer's default camera
       const cam = renderer.camera;
@@ -229,8 +270,17 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
     if (type === 'uploadData') {
       const { layer, timestep, slotIndex, slabIndex, data } = e.data;
-      // TODO: Write to LayerStore GPU buffers
-      // For now, just acknowledge receipt
+      const store = layerStores.get(layer);
+      if (!store) {
+        console.warn(`[Aurora] No LayerStore for ${layer}`);
+        return;
+      }
+
+      // Ensure slot buffers exist
+      store.ensureSlotBuffers(slotIndex);
+
+      // Write data to GPU buffer
+      store.writeToSlab(slabIndex, slotIndex, data);
       console.log(`[Aurora] uploadData: ${layer} slot${slotIndex} slab${slabIndex} (${data.length} floats)`);
 
       self.postMessage({
@@ -242,12 +292,49 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
     }
 
     if (type === 'activateSlots') {
-      const { layer, slot0, slot1, lerp } = e.data;
-      // TODO: Rebind GPU buffers for rendering
-      console.log(`[Aurora] activateSlots: ${layer} slots[${slot0},${slot1}] lerp=${lerp.toFixed(2)}`);
+      const { layer, slot0, slot1, lerp, loadedPoints } = e.data;
+      const store = layerStores.get(layer);
+      if (!store || !renderer) {
+        console.warn(`[Aurora] activateSlots: missing store or renderer for ${layer}`);
+        return;
+      }
 
-      // Update uniform state for this layer
-      // This will be used in buildUniforms() for the next render
+      // Update slot state for uniform building
+      const state = slotStates.get(layer);
+      if (state) {
+        state.slot0 = slot0;
+        state.slot1 = slot1;
+        state.lerp = lerp;
+        if (loadedPoints !== undefined) state.loadedPoints = loadedPoints;
+        state.dataReady = true;
+      }
+
+      // Rebind GPU buffers based on layer type
+      if (layer === 'temp' || layer === 'rain' || layer === 'clouds' || layer === 'humidity') {
+        // Texture layers: single slab (index 0)
+        const buffer0 = store.getSlotBuffer(slot0, 0);
+        const buffer1 = store.getSlotBuffer(slot1, 0);
+        if (buffer0 && buffer1) {
+          renderer.setTextureLayerBuffers(layer as TWeatherTextureLayer, buffer0, buffer1);
+        }
+      } else if (layer === 'wind') {
+        // Wind: 2 slabs (u=0, v=1)
+        const u0 = store.getSlotBuffer(slot0, 0);
+        const v0 = store.getSlotBuffer(slot0, 1);
+        const u1 = store.getSlotBuffer(slot1, 0);
+        const v1 = store.getSlotBuffer(slot1, 1);
+        if (u0 && v0 && u1 && v1) {
+          renderer.setWindLayerBuffers(u0, v0, u1, v1);
+        }
+      } else if (layer === 'pressure') {
+        // Pressure: trigger regrid (raw=0, grid=1)
+        const rawBuffer = store.getSlotBuffer(slot0, 0);
+        if (rawBuffer) {
+          renderer.triggerPressureRegrid(slot0, rawBuffer);
+        }
+      }
+
+      console.log(`[Aurora] activateSlots: ${layer} slots[${slot0},${slot1}] lerp=${lerp.toFixed(2)}`);
     }
 
     if (type === 'updatePalette') {
@@ -257,6 +344,13 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
     }
 
     if (type === 'cleanup') {
+      // Dispose layer stores
+      for (const store of layerStores.values()) {
+        store.dispose();
+      }
+      layerStores.clear();
+      slotStates.clear();
+
       renderer?.dispose();
       renderer = null;
       canvas = null;
