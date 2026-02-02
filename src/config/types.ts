@@ -241,6 +241,8 @@ export interface WindConfig {
   stepFactor: number;
   /** Default line count */
   seedCount: 8192 | 16384 | 32768 | 49152 | 65536;
+  /** Sphere radius for wind particles (earth = 1.0) */
+  radius: number;
 }
 
 export interface AppConfig {

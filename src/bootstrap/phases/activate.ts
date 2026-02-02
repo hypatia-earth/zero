@@ -37,6 +37,7 @@ export async function runActivatePhase(
   auroraProxy.updateOptions(optionsService.options.value);
   auroraProxy.updateTime(stateService.viewState.value.time);
   auroraProxy.updateCamera(
+    camera.getViewProj(),
     camera.getViewProjInverse(),
     camera.getEyePosition(),
     camera.getTanFov()
@@ -51,11 +52,13 @@ export async function runActivatePhase(
   });
 
   // Set up camera controls
-  setupCameraControls(canvas, camera, stateService, configService, optionsService);
+  const cameraControls = setupCameraControls(canvas, camera, stateService, configService, optionsService);
 
-  // Forward camera updates to worker before each frame
+  // Update physics and forward camera to worker before each frame (single RAF loop)
   auroraProxy.setOnBeforeRender(() => {
+    cameraControls.tick();  // Update physics first
     auroraProxy.updateCamera(
+      camera.getViewProj(),
       camera.getViewProjInverse(),
       camera.getEyePosition(),
       camera.getTanFov()

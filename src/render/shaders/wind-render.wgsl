@@ -11,6 +11,7 @@ struct Uniforms {
   lineWidth: f32,      // world units (~0.003 = 20km)
   randomSeed: f32,     // random offset for phase distribution
   showBackface: f32,   // 1.0 = show full geometry (no texture layers visible)
+  radius: f32,         // sphere radius for wind particles (earth = 1.0)
 }
 
 struct LinePoint {
@@ -81,14 +82,18 @@ fn vertexMain(
   let camDist = length(uniforms.eyePosition - p0.position);
   let scaledWidth = uniforms.lineWidth * camDist;
 
+  // Scale positions to wind radius (earth = 1.0, wind particles slightly above)
+  let p0Scaled = p0.position * uniforms.radius;
+  let p1Scaled = p1.position * uniforms.radius;
+
   // Expand to quad corner
   var worldPos: vec3<f32>;
   switch (quadCorner) {
-    case 0u: { worldPos = p0.position + perp * scaledWidth; }
-    case 1u: { worldPos = p0.position - perp * scaledWidth; }
-    case 2u: { worldPos = p1.position + perp * scaledWidth; }
-    case 3u: { worldPos = p1.position - perp * scaledWidth; }
-    default: { worldPos = p0.position; }
+    case 0u: { worldPos = p0Scaled + perp * scaledWidth; }
+    case 1u: { worldPos = p0Scaled - perp * scaledWidth; }
+    case 2u: { worldPos = p1Scaled + perp * scaledWidth; }
+    case 3u: { worldPos = p1Scaled - perp * scaledWidth; }
+    default: { worldPos = p0Scaled; }
   }
 
   // Snake animation: pseudo-random phase offset per line

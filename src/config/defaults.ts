@@ -144,6 +144,7 @@ export const defaultConfig: ZeroConfig = {
     segmentsPerLine: 32,  // trace steps per wind line
     stepFactor: 0.005,    // wind speed to arc distance scale
     seedCount: 8192,      // default line count
+    radius: 1.008,        // sphere radius for wind particles (earth = 1.0)
   },
 
   render: {

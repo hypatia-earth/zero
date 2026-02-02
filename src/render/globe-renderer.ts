@@ -16,6 +16,7 @@ import { defaultConfig } from '../config/defaults';
 import type { PressureColorOption } from '../schemas/options.schema';
 
 export interface GlobeUniforms {
+  viewProj: Float32Array;
   viewProjInverse: Float32Array;
   eyePosition: Float32Array;
   resolution: Float32Array;
@@ -113,6 +114,7 @@ export class GlobeRenderer {
   private windSnakeLength = defaultConfig.wind.snakeLength;
   private windLineWidth = defaultConfig.wind.lineWidth;
   private windSegments = defaultConfig.wind.segmentsPerLine;
+  private windRadius = defaultConfig.wind.radius;
   private lastAnimTime = 0;
 
   // GPU timing
@@ -617,7 +619,7 @@ export class GlobeRenderer {
 
     if (pressureVisible) {
       this.pressureLayer.updateUniforms({
-        viewProj: this.camera.getViewProj(),
+        viewProj: uniforms.viewProj,
         eyePosition: [
           uniforms.eyePosition[0]!,
           uniforms.eyePosition[1]!,
@@ -658,7 +660,7 @@ export class GlobeRenderer {
       const showBackface = t * t * (3 - 2 * t);  // smoothstep
 
       this.windLayer.updateUniforms({
-        viewProj: this.camera.getViewProj(),
+        viewProj: uniforms.viewProj,
         eyePosition: [
           uniforms.eyePosition[0]!,
           uniforms.eyePosition[1]!,
@@ -669,6 +671,7 @@ export class GlobeRenderer {
         snakeLength: this.windSnakeLength,
         lineWidth: this.windLineWidth,
         showBackface,
+        radius: this.windRadius,
       });
     }
   }

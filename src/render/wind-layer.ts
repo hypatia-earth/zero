@@ -25,6 +25,7 @@ interface WindUniforms {
   snakeLength: number;  // fraction of line visible (0-1)
   lineWidth: number;    // screen-space width factor
   showBackface: number; // 1.0 when no texture layers visible (show full geometry)
+  radius: number;       // sphere radius for wind particles (earth = 1.0)
 }
 
 export class WindLayer {
@@ -352,6 +353,8 @@ export class WindLayer {
     floatView[23] = this.randomSeed;
     // showBackface (1 float)
     floatView[24] = uniforms.showBackface;
+    // radius (1 float)
+    floatView[25] = uniforms.radius;
 
     this.device.queue.writeBuffer(this.renderUniformBuffer, 0, uniformData);
   }

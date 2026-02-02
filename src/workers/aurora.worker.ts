@@ -52,11 +52,11 @@ export interface AuroraConfig {
 
 export type AuroraRequest =
   | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; config: AuroraConfig; assets: AuroraAssets }
-  | { type: 'camera'; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }
+  | { type: 'camera'; viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }
   | { type: 'options'; value: ZeroOptions }
   | { type: 'time'; value: number }  // Unix timestamp (Date can't be transferred)
   | { type: 'uploadData'; layer: TWeatherLayer; timestep: string; slotIndex: number; slabIndex: number; data: Float32Array }
-  | { type: 'activateSlots'; layer: TWeatherLayer; slot0: number; slot1: number; lerp: number; loadedPoints?: number }
+  | { type: 'activateSlots'; layer: TWeatherLayer; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
   | { type: 'render' }
   | { type: 'resize'; width: number; height: number }
   | { type: 'updatePalette'; layer: 'temp'; textureData: Uint8Array; min: number; max: number }
@@ -79,6 +79,7 @@ let canvas: OffscreenCanvas | null = null;
 
 // Camera state (received from main thread)
 let cameraState = {
+  viewProj: new Float32Array(16),
   viewProjInverse: new Float32Array(16),
   eye: new Float32Array([0, 0, 3]),
   tanFov: Math.tan(Math.PI / 8),
@@ -97,11 +98,21 @@ const layerStores = new Map<TWeatherLayer, LayerStore>();
 interface SlotState {
   slot0: number;
   slot1: number;
-  lerp: number;
+  t0: number;  // Unix timestamp of slot0
+  t1: number;  // Unix timestamp of slot1
   loadedPoints: number;
   dataReady: boolean;
 }
 const slotStates = new Map<TWeatherLayer, SlotState>();
+
+/** Compute lerp for a layer based on current time and slot times */
+function computeLerp(state: SlotState): number {
+  if (state.t0 === state.t1) return 0;  // Single timestep mode
+  const t = currentTime;
+  if (t <= state.t0) return 0;
+  if (t >= state.t1) return 1;
+  return (t - state.t0) / (state.t1 - state.t0);
+}
 
 /**
  * Build uniforms from current state
@@ -113,39 +124,40 @@ function buildUniforms(): GlobeUniforms {
 
   return {
     // Camera (from main thread)
+    viewProj: cameraState.viewProj,
     viewProjInverse: cameraState.viewProjInverse,
     eyePosition: cameraState.eye,
     resolution: new Float32Array([canvas!.width, canvas!.height]),
     time: performance.now() / 1000,
     tanFov: cameraState.tanFov,
     // Sun (from time and options)
-    sunOpacity: opts?.sun.enabled ? opts.sun.opacity : 1.0,
+    sunOpacity: opts ? (opts.sun.enabled ? opts.sun.opacity : 0) : 1.0,
     sunDirection: getSunDirection(time),
     sunCoreRadius: 0.005,
     sunGlowRadius: 0.02,
     sunCoreColor: new Float32Array([1, 1, 0.9]),
     sunGlowColor: new Float32Array([1, 0.8, 0.4]),
     // Grid (from options)
-    gridEnabled: opts?.grid.enabled ? opts.grid.opacity > 0.01 : false,
-    gridOpacity: opts?.grid.enabled ? opts.grid.opacity : 0,
+    gridEnabled: opts ? (opts.grid.enabled && opts.grid.opacity > 0.01) : false,
+    gridOpacity: opts ? (opts.grid.enabled ? opts.grid.opacity : 0) : 0,
     gridFontSize: opts?.grid.fontSize ?? 12,
     gridLabelMaxRadius: 280,
     gridLineWidth: opts?.grid.lineWidth ?? 1,
     // Layers (from options)
-    earthOpacity: opts?.earth.enabled ? opts.earth.opacity : 1.0,
-    tempOpacity: opts?.temp.enabled ? opts.temp.opacity : 0,
-    rainOpacity: opts?.rain.enabled ? opts.rain.opacity : 0,
-    cloudsOpacity: opts?.clouds.enabled ? opts.clouds.opacity : 0,
-    humidityOpacity: opts?.humidity.enabled ? opts.humidity.opacity : 0,
-    windOpacity: opts?.wind.enabled ? opts.wind.opacity : 0,
-    windLerp: slotStates.get('wind')?.lerp ?? 0,
+    earthOpacity: opts ? (opts.earth.enabled ? opts.earth.opacity : 0) : 1.0,
+    tempOpacity: opts ? (opts.temp.enabled ? opts.temp.opacity : 0) : 0,
+    rainOpacity: opts ? (opts.rain.enabled ? opts.rain.opacity : 0) : 0,
+    cloudsOpacity: opts ? (opts.clouds.enabled ? opts.clouds.opacity : 0) : 0,
+    humidityOpacity: opts ? (opts.humidity.enabled ? opts.humidity.opacity : 0) : 0,
+    windOpacity: opts ? (opts.wind.enabled ? opts.wind.opacity : 0) : 0,
+    windLerp: slotStates.get('wind') ? computeLerp(slotStates.get('wind')!) : 0,
     windAnimSpeed: opts?.wind.speed ?? 1,
     windState: {
       mode: slotStates.get('wind')?.dataReady ? 'pair' : 'loading',
-      lerp: slotStates.get('wind')?.lerp ?? 0,
+      lerp: slotStates.get('wind') ? computeLerp(slotStates.get('wind')!) : 0,
       time,
     },
-    pressureOpacity: opts?.pressure.enabled ? opts.pressure.opacity : 0,
+    pressureOpacity: opts ? (opts.pressure.enabled ? opts.pressure.opacity : 0) : 0,
     pressureColors: opts?.pressure.colors ?? PRESSURE_COLOR_DEFAULT,
     // Data state (from slot activation messages)
     tempDataReady: slotStates.get('temp')?.dataReady ?? false,
@@ -153,7 +165,7 @@ function buildUniforms(): GlobeUniforms {
     cloudsDataReady: slotStates.get('clouds')?.dataReady ?? false,
     humidityDataReady: slotStates.get('humidity')?.dataReady ?? false,
     windDataReady: slotStates.get('wind')?.dataReady ?? false,
-    tempLerp: slotStates.get('temp')?.lerp ?? 0,
+    tempLerp: slotStates.get('temp') ? computeLerp(slotStates.get('temp')!) : 0,
     tempLoadedPoints: slotStates.get('temp')?.loadedPoints ?? 0,
     tempSlot0: slotStates.get('temp')?.slot0 ?? 0,
     tempSlot1: slotStates.get('temp')?.slot1 ?? 0,
@@ -206,7 +218,8 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         slotStates.set(layerCfg.id, {
           slot0: 0,
           slot1: 0,
-          lerp: 0,
+          t0: 0,
+          t1: 0,
           loadedPoints: 0,
           dataReady: false,
         });
@@ -225,6 +238,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       // Initialize camera state from renderer's default camera
       const cam = renderer.camera;
+      cameraState.viewProj.set(cam.getViewProj());
       cameraState.viewProjInverse.set(cam.getViewProjInverse());
       cameraState.eye.set(cam.getEyePosition());
       cameraState.tanFov = cam.getTanFov();
@@ -235,6 +249,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
     if (type === 'camera') {
       // Update camera state from main thread
+      cameraState.viewProj.set(e.data.viewProj);
       cameraState.viewProjInverse.set(e.data.viewProjInverse);
       cameraState.eye.set(e.data.eye);
       cameraState.tanFov = e.data.tanFov;
@@ -305,7 +320,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
     }
 
     if (type === 'activateSlots') {
-      const { layer, slot0, slot1, lerp, loadedPoints } = e.data;
+      const { layer, slot0, slot1, t0, t1, loadedPoints } = e.data;
       const store = layerStores.get(layer);
       if (!store || !renderer) {
         console.warn(`[Aurora] activateSlots: missing store or renderer for ${layer}`);
@@ -317,7 +332,8 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       if (state) {
         state.slot0 = slot0;
         state.slot1 = slot1;
-        state.lerp = lerp;
+        state.t0 = t0;
+        state.t1 = t1;
         if (loadedPoints !== undefined) state.loadedPoints = loadedPoints;
         state.dataReady = true;
       }
@@ -347,7 +363,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         }
       }
 
-      console.log(`[Aurora] activateSlots: ${layer} slots[${slot0},${slot1}] lerp=${lerp.toFixed(2)}`);
+      console.log(`[Aurora] activateSlots: ${layer} slots[${slot0},${slot1}]`);
     }
 
     if (type === 'updatePalette') {
