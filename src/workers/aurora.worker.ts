@@ -52,6 +52,8 @@ export type AuroraRequest =
   | { type: 'camera'; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }
   | { type: 'options'; value: ZeroOptions }
   | { type: 'time'; value: number }  // Unix timestamp (Date can't be transferred)
+  | { type: 'uploadData'; layer: TWeatherLayer; timestep: string; slotIndex: number; slabIndex: number; data: Float32Array }
+  | { type: 'activateSlots'; layer: TWeatherLayer; slot0: number; slot1: number; lerp: number; loadedPoints?: number }
   | { type: 'render' }
   | { type: 'resize'; width: number; height: number }
   | { type: 'updatePalette'; layer: 'temp'; textureData: Uint8Array; min: number; max: number }
@@ -59,6 +61,7 @@ export type AuroraRequest =
 
 export type AuroraResponse =
   | { type: 'ready' }
+  | { type: 'uploadComplete'; layer: TWeatherLayer; timestep: string; slotIndex: number }
   | { type: 'frameComplete'; timing?: { frame: number } }
   | { type: 'error'; message: string; fatal: boolean };
 
@@ -222,6 +225,29 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         canvas.height = e.data.height;
         renderer.resize(e.data.width, e.data.height);
       }
+    }
+
+    if (type === 'uploadData') {
+      const { layer, timestep, slotIndex, slabIndex, data } = e.data;
+      // TODO: Write to LayerStore GPU buffers
+      // For now, just acknowledge receipt
+      console.log(`[Aurora] uploadData: ${layer} slot${slotIndex} slab${slabIndex} (${data.length} floats)`);
+
+      self.postMessage({
+        type: 'uploadComplete',
+        layer,
+        timestep,
+        slotIndex,
+      } satisfies AuroraResponse);
+    }
+
+    if (type === 'activateSlots') {
+      const { layer, slot0, slot1, lerp } = e.data;
+      // TODO: Rebind GPU buffers for rendering
+      console.log(`[Aurora] activateSlots: ${layer} slots[${slot0},${slot1}] lerp=${lerp.toFixed(2)}`);
+
+      // Update uniform state for this layer
+      // This will be used in buildUniforms() for the next render
     }
 
     if (type === 'updatePalette') {
