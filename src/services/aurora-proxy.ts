@@ -150,6 +150,13 @@ export class AuroraProxy {
   }
 
   /**
+   * Trigger pressure regrid for a slot
+   */
+  triggerPressureRegrid(slotIndex: number): void {
+    this.send({ type: 'triggerPressureRegrid', slotIndex });
+  }
+
+  /**
    * Start render loop
    */
   start(): void {
