@@ -262,6 +262,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       // Update uniforms and render
       const uniforms = buildUniforms();
+
       renderer.updateUniforms(uniforms);
       renderer.render();
 
