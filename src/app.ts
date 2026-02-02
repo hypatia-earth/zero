@@ -79,7 +79,6 @@ export const App: m.ClosureComponent = () => {
               m(TimeCirclePanel, { stateService: services.stateService! }),
               !minimal && services.optionsService!.options.value.debug.showPerfPanel &&
                 m(PerfPanel, {
-                  renderService: services.renderService!,
                   optionsService: services.optionsService!,
                 }),
               !minimal && m(QueuePanel, {

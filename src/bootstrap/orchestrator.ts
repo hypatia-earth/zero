@@ -11,12 +11,11 @@ import {
   createFoundationServices,
   createTimestepService,
   createQueueService,
-  createRenderService,
+  createAuroraProxy,
   createSlotService,
   createPaletteService,
   type ServiceContainer,
 } from './service-container';
-import { AuroraProxy } from '../services/aurora-proxy';
 import {
   runCapabilitiesPhase,
   runConfigPhase,
@@ -92,41 +91,40 @@ async function runBootstrapInner(
   );
   const assets = await runAssetsPhase(services.queueService, services.capabilitiesService!, progress);
 
-  // Phase 5: GPU Init
+  // Phase 5: GPU Init (worker-based)
   progress.startStep('GPU_INIT');
-  services.renderService = createRenderService(
-    canvas,
+  services.auroraProxy = createAuroraProxy();
+  services.paletteService = createPaletteService(services.auroraProxy);
+  services.slotService = createSlotService(
+    services.timestepService,
+    services.auroraProxy,
+    services.queueService,
     services.optionsService!,
     services.stateService!,
     services.configService!
   );
-  services.paletteService = createPaletteService(services.renderService);
   await runGpuInitPhase(
-    services.renderService,
+    canvas,
+    services.auroraProxy,
     services.paletteService,
     services.aboutService!,
     services.omService!,
+    services.optionsService!,
+    services.configService!,
+    services.slotService,
     assets,
     progress
   );
 
   // Phase 6: Data
   progress.startStep('DATA');
-  services.slotService = createSlotService(
-    services.timestepService,
-    services.renderService,
-    services.queueService,
-    services.optionsService!,
-    services.stateService!,
-    services.configService!
-  );
   await runDataPhase(services.slotService, services.queueService, services.configService!, progress);
 
   // Phase 7: Activate
   progress.startStep('ACTIVATE');
-  const { keyboardService } = await runActivatePhase(
+  const { keyboardService, camera } = await runActivatePhase(
     canvas,
-    services.renderService,
+    services.auroraProxy,
     services.stateService!,
     services.configService!,
     services.optionsService!,
@@ -145,13 +143,13 @@ async function runBootstrapInner(
   );
 
   // Expose for debugging
-  exposeDebugServices(services as ServiceContainer);
+  exposeDebugServices(services as ServiceContainer, camera);
 }
 
 /**
  * Expose services for debugging (localhost only)
  */
-export function exposeDebugServices(services: ServiceContainer): void {
+export function exposeDebugServices(services: ServiceContainer, camera?: import('../render/camera').Camera): void {
   if (location.hostname !== 'localhost') return;
 
   window.__hypatia = {
@@ -162,14 +160,13 @@ export function exposeDebugServices(services: ServiceContainer): void {
     omService: services.omService,
     timestepService: services.timestepService,
     queueService: services.queueService,
-    renderService: services.renderService,
+    auroraProxy: services.auroraProxy,
     slotService: services.slotService,
     keyboardService: services.keyboardService,
     paletteService: services.paletteService,
     dialogService: services.dialogService,
     aboutService: services.aboutService,
     themeService: services.themeService,
-    renderer: services.renderService?.getRenderer(),
-    AuroraProxy,  // Phase 1 testing
+    camera,
   };
 }

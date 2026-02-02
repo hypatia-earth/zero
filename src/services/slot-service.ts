@@ -7,14 +7,13 @@
  */
 
 import { effect, signal } from '@preact/signals-core';
-import { isWeatherLayer, isWeatherTextureLayer, type TLayer, type TWeatherLayer, type TTimestep, type TimestepOrder, type LayerState } from '../config/types';
+import { isWeatherLayer, type TLayer, type TWeatherLayer, type TTimestep, type TimestepOrder, type LayerState } from '../config/types';
 import type { TimestepService } from './timestep-service';
-import type { RenderService } from './render-service';
+import type { AuroraProxy } from './aurora-proxy';
 import type { QueueService } from './queue-service';
 import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
-import { LayerStore } from './layer-store';
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
 import { generateSyntheticO1280Pressure } from '../utils/synthetic-pressure';
 
@@ -30,13 +29,15 @@ const P = (param: TWeatherLayer) => param.slice(0, 4).toUpperCase();
 
 export class SlotService {
   private paramSlots: Map<TWeatherLayer, ParamSlots> = new Map();
-  private layerStores: Map<TWeatherLayer, LayerStore> = new Map();
   private readyLayers: TLayer[] = [];
   private readyWeatherLayers: TWeatherLayer[] = [];
   private timeslotsPerLayer: number = 8;
   private disposeEffect: (() => void) | null = null;
   private initialized = false;
   private syntheticDataCache = new Map<TWeatherLayer, Float32Array>();
+
+  // Gaussian grid lookup tables (for synthetic data generation)
+  private gaussianLats: Float32Array | null = null;
 
   // Data window boundaries
   private dataWindowStart!: TTimestep;
@@ -47,7 +48,7 @@ export class SlotService {
 
   constructor(
     private timestepService: TimestepService,
-    private renderService: RenderService,
+    private auroraProxy: AuroraProxy,
     private queueService: QueueService,
     private optionsService: OptionsService,
     private stateService: StateService,
@@ -55,38 +56,18 @@ export class SlotService {
   ) {
     // All layers use per-slot buffers with rebinding - no binding size limit
     // Only limited by total VRAM (handled by OOM on allocation)
-    this.timeslotsPerLayer = this.renderService.getMaxSlotsPerLayer();
+    this.timeslotsPerLayer = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
     this.readyLayers = this.configService.getReadyLayers();
     this.readyWeatherLayers = this.readyLayers.filter(isWeatherLayer);
     DEBUG && console.log(`[Slot] ${this.timeslotsPerLayer} timeslots for: ${this.readyWeatherLayers.join(', ')}`);
 
-    // Create LayerStores for weather layers with slab definitions
-    this.initializeLayerStores();
-
     // Create ParamSlots for each slot-based layer
     // slabsCount = number of data fetches (from config params), NOT GPU buffer count
+    // Note: LayerStores are created in the worker, not here
     for (const param of this.readyWeatherLayers) {
       const slabsCount = this.getLayerParams(param).length;
       this.paramSlots.set(param, createParamSlots(param, this.timeslotsPerLayer, slabsCount));
     }
-
-    // Wire up state calculations for ready weather layers
-    for (const layer of this.readyWeatherLayers) {
-      this.renderService.setLayerStateFn(layer, (time) => this.getState(layer, time));
-    }
-
-    // Wire up pressure resolution change callback (re-regrid slots with raw data)
-    this.renderService.setPressureResolutionChangeFn((slotsNeedingRegrid) => {
-      const store = this.layerStores.get('pressure');
-      if (!store) return;
-      for (const slotIndex of slotsNeedingRegrid) {
-        const buffer = store.getSlotBuffer(slotIndex, 0);
-        if (buffer) {
-          this.renderService.triggerPressureRegrid(slotIndex, buffer);
-          DEBUG && console.log(`[Slot] Re-regrid pressure slot ${slotIndex}`);
-        }
-      }
-    });
 
     // Single effect: listen to options, compare what changed, act accordingly
     let last = { time: '', slots: 0, layers: '' };
@@ -118,35 +99,11 @@ export class SlotService {
       if (newTimeslots !== lastTimeslots) {
         this.queueService.clearTasks();
 
-        // Resize LayerStores (grow only - shrink handled per-layer below)
-        const resizedStores: TWeatherLayer[] = [];
-        let failed = false;
-        const toDate = (ts: TTimestep) => this.timestepService.toDate(ts);
-        const isGrowingStore = newTimeslots > lastTimeslots;
-        if (isGrowingStore) {
-          for (const [param, store] of this.layerStores) {
-            try {
-              store.resize(newTimeslots);
-              resizedStores.push(param);
-            } catch (err) {
-              console.error(`[Slot] OOM resizing ${param}:`, err);
-              failed = true;
-              break;
-            }
-          }
-        }
-
-        if (failed) {
-          console.warn(`[Slot] OOM - reverting to ${lastTimeslots}`);
-          for (const param of resizedStores) {
-            try { this.layerStores.get(param)?.resize(lastTimeslots); } catch { /* ignore */ }
-          }
-          this.optionsService.revertOption('gpu.timeslotsPerLayer', String(lastTimeslots));
-          return;
-        }
-
         // Update ParamSlots capacity
+        // Note: Worker manages GPU buffer resize internally
         const isGrowing = newTimeslots > lastTimeslots;
+        const toDate = (ts: TTimestep) => this.timestepService.toDate(ts);
+
         for (const param of this.readyWeatherLayers) {
           if (isGrowing) {
             this.paramSlots.get(param)?.grow(newTimeslots);
@@ -162,24 +119,7 @@ export class SlotService {
               return distA - distB;
             });
             const keptEntries = sorted.slice(0, newTimeslots);
-            const keptMapping = new Map(keptEntries.map(([ts, _], i) => [ts, i])); // Renumber to 0..N-1
-            const evictedSlots = new Set(sorted.slice(newTimeslots).map(([, idx]) => idx));
-
-            // Tell LayerStore which slots to evict and renumber
-            const store = this.layerStores.get(param);
-            store?.shrinkWithMapping(newTimeslots, keptEntries, evictedSlots);
-
-            // Invalidate pressure grid slots and re-regrid kept slots
-            if (param === 'pressure') {
-              this.renderService.invalidatePressureGridSlots();
-              // Trigger regrid for kept slots (they have raw data at new indices)
-              for (let i = 0; i < keptEntries.length; i++) {
-                const buffer = store?.getSlotBuffer(i, 0);
-                if (buffer) {
-                  this.renderService.triggerPressureRegrid(i, buffer);
-                }
-              }
-            }
+            const keptMapping = new Map(keptEntries.map(([ts], i) => [ts, i])); // Renumber to 0..N-1
 
             // Sync ParamSlots
             ps?.shrink(newTimeslots, keptMapping);
@@ -226,10 +166,10 @@ export class SlotService {
     let data = this.syntheticDataCache.get(layer);
     if (data) return data;
 
-    const gaussianLats = this.renderService.getGaussianLats();
-    if (!gaussianLats) {
+    if (!this.gaussianLats) {
       throw new Error(`Cannot generate synthetic data: gaussianLats not available`);
     }
+    const gaussianLats = this.gaussianLats;
 
     if (layer === 'pressure') {
       data = generateSyntheticO1280Pressure(gaussianLats);
@@ -297,9 +237,8 @@ export class SlotService {
         }
         ps.setActiveTimesteps([ts]);
 
-        // Rebind buffers to renderer
-        this.rebindLayerBuffers(param, slot.slotIndex, slot.slotIndex);
-        this.renderService.activateSlots(param, slot.slotIndex, slot.slotIndex, slot.loadedPoints);
+        // Worker handles buffer rebinding on activateSlots
+        this.auroraProxy.activateSlots(param, slot.slotIndex, slot.slotIndex, 0, slot.loadedPoints);
         DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
       } else {
         ps.setActiveTimesteps([]);
@@ -317,9 +256,9 @@ export class SlotService {
         }
         ps.setActiveTimesteps([t0, t1]);
 
-        // Rebind buffers to renderer
-        this.rebindLayerBuffers(param, slot0.slotIndex, slot1.slotIndex);
-        this.renderService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, Math.min(slot0.loadedPoints, slot1.loadedPoints));
+        // Worker handles buffer rebinding on activateSlots
+        const lerp = 0;  // Lerp computed by worker from time
+        this.auroraProxy.activateSlots(param, slot0.slotIndex, slot1.slotIndex, lerp, Math.min(slot0.loadedPoints, slot1.loadedPoints));
         DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(t0)} → ${fmt(t1)}`);
       } else {
         ps.setActiveTimesteps([]);
@@ -327,59 +266,25 @@ export class SlotService {
     }
   }
 
-  /** Rebind layer buffers to renderer (generic for all layer types) */
-  private rebindLayerBuffers(param: TWeatherLayer, slotIndex0: number, slotIndex1: number): void {
-    const store = this.layerStores.get(param);
-    if (!store) return;
-
-    if (isWeatherTextureLayer(param)) {
-      const buffer0 = store.getSlotBuffer(slotIndex0, 0);
-      const buffer1 = store.getSlotBuffer(slotIndex1, 0);
-      if (buffer0 && buffer1) {
-        this.renderService.setTextureLayerBuffers(param, buffer0, buffer1);
-      } else {
-        console.warn(`[Slot] Missing ${param} buffer: slot0=${!!buffer0} slot1=${!!buffer1}`);
-      }
-    } else if (this.getLayerParams(param).length === 2) {
-      // Multi-slab layer (e.g., wind with U/V components)
-      const buf00 = store.getSlotBuffer(slotIndex0, 0);
-      const buf01 = store.getSlotBuffer(slotIndex0, 1);
-      const buf10 = store.getSlotBuffer(slotIndex1, 0);
-      const buf11 = store.getSlotBuffer(slotIndex1, 1);
-      if (buf00 && buf01 && buf10 && buf11) {
-        this.renderService.setWindLayerBuffers(buf00, buf01, buf10, buf11);
-      } else {
-        console.warn(`[Slot] Missing ${param} buffers: [0,0]=${!!buf00} [0,1]=${!!buf01} [1,0]=${!!buf10} [1,1]=${!!buf11}`);
-      }
-    }
-    // Single-param geometry layers (pressure): no buffer rebind needed
-  }
-
-  /** Deactivate layer by rebinding to slot 0 with 0 points */
+  /** Deactivate layer by setting slots to 0 with 0 points */
   private deactivateLayer(param: TWeatherLayer): void {
-    this.layerStores.get(param)?.ensureSlotBuffers(0);
-    this.rebindLayerBuffers(param, 0, 0);
-    this.renderService.activateSlots(param, 0, 0, 0);
+    // Worker handles buffer rebinding on activateSlots
+    this.auroraProxy.activateSlots(param, 0, 0, 0);
   }
 
-  /** Upload data to slot via LayerStore */
-  private uploadData(param: TWeatherLayer, data: Float32Array, slotIndex: number, slabIndex: number = 0): void {
-    const store = this.layerStores.get(param);
-    if (!store) return;
-
+  /** Upload data to slot via worker message */
+  private uploadData(param: TWeatherLayer, timestep: TTimestep, data: Float32Array, slotIndex: number, slabIndex: number = 0): void {
     // Swap with synthetic data if configured
     if (this.usesSynthData(param)) {
       data = this.getSyntheticData(param);
     }
 
-    store.writeToSlab(slabIndex, slotIndex, data);
+    // Send data to worker (transfers ownership of buffer)
+    this.auroraProxy.uploadData(param, timestep, slotIndex, slabIndex, data);
 
-    // Pressure needs regrid after upload (pass the per-slot buffer)
+    // Pressure needs regrid after upload
     if (param === 'pressure' && slabIndex === 0) {
-      const buffer = store.getSlotBuffer(slotIndex, 0);
-      if (buffer) {
-        this.renderService.triggerPressureRegrid(slotIndex, buffer);
-      }
+      this.auroraProxy.triggerPressureRegrid(slotIndex);
     }
   }
 
@@ -398,9 +303,8 @@ export class SlotService {
     const ps = this.paramSlots.get(param);
     if (!ps) return false;
 
-    // Ensure buffer + upload
-    this.layerStores.get(param)?.ensureSlotBuffers(slotIndex);
-    this.uploadData(param, data, slotIndex, slabIndex);
+    // Upload to worker (worker manages GPU buffers)
+    this.uploadData(param, timestep, data, slotIndex, slabIndex);
 
     // Mark loaded (handle multi-slab)
     const slabsCount = this.getLayerParams(param).length;
@@ -503,8 +407,13 @@ export class SlotService {
     // Handle eviction - deactivate if evicted slot was active
     if (result.evicted && result.evictedSlotIndex !== null) {
       this.timestepService.setGpuUnloaded(layer, result.evicted);
-      const activeSlots = this.renderService.getActiveSlots(layer);
-      if (activeSlots.slot0 === result.evictedSlotIndex || activeSlots.slot1 === result.evictedSlotIndex) {
+      // Check if evicted slot was in use by looking at active timesteps
+      const activeTs = ps.getActiveTimesteps();
+      const evictedWasActive = activeTs.some(ts => {
+        const slot = ps.getSlot(ts);
+        return slot?.slotIndex === result.evictedSlotIndex;
+      });
+      if (evictedWasActive) {
         this.deactivateLayer(layer);
       }
     }
@@ -658,50 +567,18 @@ export class SlotService {
     capacityMB: number;
     layers: Map<string, { allocatedMB: number; capacityMB: number }>;
   } {
-    let totalAllocated = 0;
-    let totalCapacity = 0;
-    const layers = new Map<string, { allocatedMB: number; capacityMB: number }>();
-
-    for (const [param, store] of this.layerStores) {
-      const sizeMB = store.timeslotSizeMB;
-      const allocated = store.getAllocatedCount() * sizeMB;
-      const capacity = store.getTimeslotCount() * sizeMB;
-
-      totalAllocated += allocated;
-      totalCapacity += capacity;
-      layers.set(param, { allocatedMB: allocated, capacityMB: capacity });
-    }
-
+    // Stats now tracked by worker - return placeholder
+    // TODO: Add message to query worker stats
     return {
-      allocatedMB: totalAllocated,
-      capacityMB: totalCapacity,
-      layers,
+      allocatedMB: 0,
+      capacityMB: 0,
+      layers: new Map(),
     };
   }
 
-  /** Initialize LayerStores for weather layers with slab definitions */
-  private initializeLayerStores(): void {
-    const device = this.renderService.getDevice();
-    const summary: string[] = [];
-
-    for (const param of this.readyWeatherLayers) {
-      const layer = this.configService.getLayer(param);
-      if (!layer?.slabs || layer.slabs.length === 0) continue;
-
-      const store = new LayerStore(device, {
-        layerId: layer.id,
-        slabs: layer.slabs,
-        timeslots: this.timeslotsPerLayer,
-      });
-      store.initialize();
-
-      this.layerStores.set(param, store);
-      summary.push(`${param.slice(0, 4)}: ${layer.slabs.length}×${this.timeslotsPerLayer}`);
-    }
-
-    if (summary.length > 0) {
-      DEBUG && console.log(`[Slot] Stores: ${summary.join(', ')}`);
-    }
+  /** Set Gaussian LUTs for synthetic data generation */
+  setGaussianLats(lats: Float32Array): void {
+    this.gaussianLats = lats;
   }
 
   dispose(): void {
@@ -711,9 +588,6 @@ export class SlotService {
       ps.dispose();
     }
     this.paramSlots.clear();
-    for (const store of this.layerStores.values()) {
-      store.dispose();
-    }
-    this.layerStores.clear();
+    // Worker manages GPU buffer disposal
   }
 }
