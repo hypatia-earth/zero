@@ -48,6 +48,7 @@ export interface AuroraConfig {
 
 export type AuroraRequest =
   | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; config: AuroraConfig; assets: AuroraAssets }
+  | { type: 'camera'; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }
   | { type: 'render' }
   | { type: 'resize'; width: number; height: number }
   | { type: 'updatePalette'; layer: 'temp'; textureData: Uint8Array; min: number; max: number }
@@ -65,19 +66,25 @@ export type AuroraResponse =
 let renderer: GlobeRenderer | null = null;
 let canvas: OffscreenCanvas | null = null;
 
+// Camera state (received from main thread)
+let cameraState = {
+  viewProjInverse: new Float32Array(16),
+  eye: new Float32Array([0, 0, 3]),
+  tanFov: Math.tan(Math.PI / 8),
+};
+
 /**
- * Create default uniforms for testing (Phase 2)
- * Will be replaced by proper state forwarding
+ * Build uniforms from current state
+ * Camera comes from main thread, other values use defaults for now
  */
-function createDefaultUniforms(): GlobeUniforms {
-  // Get camera matrices from renderer's camera
-  const cam = renderer!.camera;
+function buildUniforms(): GlobeUniforms {
   return {
-    viewProjInverse: cam.getViewProjInverse(),
-    eyePosition: cam.getEyePosition(),
+    // Camera (from main thread)
+    viewProjInverse: cameraState.viewProjInverse,
+    eyePosition: cameraState.eye,
     resolution: new Float32Array([canvas!.width, canvas!.height]),
     time: performance.now() / 1000,
-    tanFov: cam.getTanFov(),
+    tanFov: cameraState.tanFov,
     // Sun
     sunOpacity: 1.0,
     sunDirection: new Float32Array([0.5, 0.5, 0.707]),
@@ -148,8 +155,21 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       // Finalize renderer (creates bind groups)
       renderer.finalize();
 
+      // Initialize camera state from renderer's default camera
+      const cam = renderer.camera;
+      cameraState.viewProjInverse.set(cam.getViewProjInverse());
+      cameraState.eye.set(cam.getEyePosition());
+      cameraState.tanFov = cam.getTanFov();
+
       console.log('[Aurora] GlobeRenderer ready');
       self.postMessage({ type: 'ready' } satisfies AuroraResponse);
+    }
+
+    if (type === 'camera') {
+      // Update camera state from main thread
+      cameraState.viewProjInverse.set(e.data.viewProjInverse);
+      cameraState.eye.set(e.data.eye);
+      cameraState.tanFov = e.data.tanFov;
     }
 
     if (type === 'render') {
@@ -165,7 +185,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       const t0 = performance.now();
 
       // Update uniforms and render
-      const uniforms = createDefaultUniforms();
+      const uniforms = buildUniforms();
       renderer.updateUniforms(uniforms);
       renderer.render();
 
