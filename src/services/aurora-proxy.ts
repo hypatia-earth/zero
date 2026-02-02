@@ -107,6 +107,42 @@ export class AuroraProxy {
   }
 
   /**
+   * Upload weather data to worker
+   * Data is transferred (not copied) for efficiency
+   */
+  uploadData(
+    layer: import('../config/types').TWeatherLayer,
+    timestep: string,
+    slotIndex: number,
+    slabIndex: number,
+    data: Float32Array
+  ): void {
+    this.send(
+      { type: 'uploadData', layer, timestep, slotIndex, slabIndex, data },
+      [data.buffer]  // Transfer ownership
+    );
+  }
+
+  /**
+   * Activate slots for rendering
+   * Tells worker which slots to use for interpolation
+   */
+  activateSlots(
+    layer: import('../config/types').TWeatherLayer,
+    slot0: number,
+    slot1: number,
+    lerp: number,
+    loadedPoints?: number
+  ): void {
+    // Only include loadedPoints if defined
+    if (loadedPoints !== undefined) {
+      this.send({ type: 'activateSlots', layer, slot0, slot1, lerp, loadedPoints });
+    } else {
+      this.send({ type: 'activateSlots', layer, slot0, slot1, lerp });
+    }
+  }
+
+  /**
    * Update palette texture
    */
   updatePalette(layer: 'temp', textureData: Uint8Array, min: number, max: number): void {
