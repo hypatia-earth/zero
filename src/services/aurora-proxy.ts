@@ -91,6 +91,22 @@ export class AuroraProxy {
   }
 
   /**
+   * Update options
+   * Call this when user changes settings
+   */
+  updateOptions(options: import('../schemas/options.schema').ZeroOptions): void {
+    this.send({ type: 'options', value: options });
+  }
+
+  /**
+   * Update current time
+   * Call this when view time changes
+   */
+  updateTime(time: Date): void {
+    this.send({ type: 'time', value: time.getTime() });
+  }
+
+  /**
    * Update palette texture
    */
   updatePalette(layer: 'temp', textureData: Uint8Array, min: number, max: number): void {
