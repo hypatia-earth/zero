@@ -303,6 +303,9 @@ export class SlotService {
     const ps = this.paramSlots.get(param);
     if (!ps) return false;
 
+    // Save length before transfer (buffer becomes detached after upload)
+    const dataLength = data.length;
+
     // Upload to worker (worker manages GPU buffers)
     this.uploadData(param, timestep, data, slotIndex, slabIndex);
 
@@ -310,13 +313,13 @@ export class SlotService {
     const slabsCount = this.getLayerParams(param).length;
 
     if (slabsCount === 1) {
-      ps.markLoaded(timestep, slotIndex, data.length);
+      ps.markLoaded(timestep, slotIndex, dataLength);
       this.timestepService.setGpuLoaded(param, timestep);
       return true;
     } else {
       const slot = ps.getSlot(timestep);
       if (!slot) {
-        ps.markLoaded(timestep, slotIndex, data.length);
+        ps.markLoaded(timestep, slotIndex, dataLength);
       }
       ps.markSlabLoaded(timestep, slabIndex);
 

@@ -33,6 +33,15 @@ export async function runActivatePhase(
   const camera = new Camera(undefined, cameraConfig);
   camera.setAspect(canvas.clientWidth, canvas.clientHeight);
 
+  // Send initial state to worker BEFORE starting render loop
+  auroraProxy.updateOptions(optionsService.options.value);
+  auroraProxy.updateTime(stateService.viewState.value.time);
+  auroraProxy.updateCamera(
+    camera.getViewProjInverse(),
+    camera.getEyePosition(),
+    camera.getTanFov()
+  );
+
   await progress.run('Starting render loop...', 0, async () => {
     auroraProxy.start();
   });
@@ -53,12 +62,12 @@ export async function runActivatePhase(
     );
   });
 
-  // Forward options updates to worker
+  // Forward options updates to worker (reactive)
   effect(() => {
     auroraProxy.updateOptions(optionsService.options.value);
   });
 
-  // Forward time updates to worker
+  // Forward time updates to worker (reactive)
   effect(() => {
     auroraProxy.updateTime(stateService.viewState.value.time);
   });
