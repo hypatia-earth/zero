@@ -238,28 +238,30 @@ export class SlotService {
         ps.setActiveTimesteps([ts]);
 
         // Worker handles buffer rebinding on activateSlots
-        this.auroraProxy.activateSlots(param, slot.slotIndex, slot.slotIndex, 0, slot.loadedPoints);
+        const t = this.timestepService.toDate(ts).getTime();
+        this.auroraProxy.activateSlots(param, slot.slotIndex, slot.slotIndex, t, t, slot.loadedPoints);
         DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
       } else {
         ps.setActiveTimesteps([]);
       }
     } else {
-      const t0 = wanted.priority[0]!;
-      const t1 = wanted.priority[1]!;
-      const slot0 = ps.getSlot(t0);
-      const slot1 = ps.getSlot(t1);
+      const ts0 = wanted.priority[0]!;
+      const ts1 = wanted.priority[1]!;
+      const slot0 = ps.getSlot(ts0);
+      const slot1 = ps.getSlot(ts1);
       if (slot0?.loaded && slot1?.loaded) {
         // Skip if already activated with same pair
-        if (current.length === 2 && current[0] === t0 && current[1] === t1) {
-          DEBUG && console.log(`[Slot] ${pcode} skip (same): ${fmt(t0)} → ${fmt(t1)}`);
+        if (current.length === 2 && current[0] === ts0 && current[1] === ts1) {
+          DEBUG && console.log(`[Slot] ${pcode} skip (same): ${fmt(ts0)} → ${fmt(ts1)}`);
           return;
         }
-        ps.setActiveTimesteps([t0, t1]);
+        ps.setActiveTimesteps([ts0, ts1]);
 
         // Worker handles buffer rebinding on activateSlots
-        const lerp = 0;  // Lerp computed by worker from time
-        this.auroraProxy.activateSlots(param, slot0.slotIndex, slot1.slotIndex, lerp, Math.min(slot0.loadedPoints, slot1.loadedPoints));
-        DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(t0)} → ${fmt(t1)}`);
+        const t0 = this.timestepService.toDate(ts0).getTime();
+        const t1 = this.timestepService.toDate(ts1).getTime();
+        this.auroraProxy.activateSlots(param, slot0.slotIndex, slot1.slotIndex, t0, t1, Math.min(slot0.loadedPoints, slot1.loadedPoints));
+        DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(ts0)} → ${fmt(ts1)}`);
       } else {
         ps.setActiveTimesteps([]);
       }
@@ -269,7 +271,7 @@ export class SlotService {
   /** Deactivate layer by setting slots to 0 with 0 points */
   private deactivateLayer(param: TWeatherLayer): void {
     // Worker handles buffer rebinding on activateSlots
-    this.auroraProxy.activateSlots(param, 0, 0, 0);
+    this.auroraProxy.activateSlots(param, 0, 0, 0, 0);
   }
 
   /** Upload data to slot via worker message */

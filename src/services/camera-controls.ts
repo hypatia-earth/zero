@@ -21,13 +21,18 @@ const EARTH_RADIUS_KM = EARTH_RADIUS / 1000;  // 6371 km
 // Minutes per pixel for time scrolling
 const TIME_MINUTES_PER_PIXEL = 2;
 
+export interface CameraControlsHandle {
+  /** Call each frame to update physics and camera */
+  tick(): void;
+}
+
 export function setupCameraControls(
   canvas: HTMLCanvasElement,
   camera: Camera,
   stateService: StateService,
   configService: ConfigService,
   optionsService: OptionsService
-): void {
+): CameraControlsHandle {
   const cameraConfig = configService.getCameraConfig();
   const minDistance = cameraConfig.minDistance;
   const maxDistance = cameraConfig.maxDistance;
@@ -244,9 +249,8 @@ export function setupCameraControls(
   // Animation loop
   let lastTime = performance.now();
 
-  function animate() {
-    requestAnimationFrame(animate);
-
+  /** Update physics and camera - call once per frame from render loop */
+  function tick() {
     const now = performance.now();
     const deltaTime = (now - lastTime) / 1000;
     lastTime = now;
@@ -298,8 +302,6 @@ export function setupCameraControls(
     updateState();
   }
 
-  animate();
-
   // Initial cursor
   canvas.style.cursor = 'grab';
 
@@ -307,4 +309,6 @@ export function setupCameraControls(
     const altitude = (camera.distance - 1) * EARTH_RADIUS_KM;
     stateService.setPosition(camera.lat, camera.lon, altitude);
   }
+
+  return { tick };
 }

@@ -80,10 +80,11 @@ export class AuroraProxy {
    * Update camera state
    * Call this when camera changes (from CameraControls)
    */
-  updateCamera(viewProjInverse: Float32Array, eye: Float32Array, tanFov: number): void {
+  updateCamera(viewProj: Float32Array, viewProjInverse: Float32Array, eye: Float32Array, tanFov: number): void {
     // Clone buffers to avoid issues with transferring typed array views
     this.send({
       type: 'camera',
+      viewProj: new Float32Array(viewProj),
       viewProjInverse: new Float32Array(viewProjInverse),
       eye: new Float32Array(eye),
       tanFov,
@@ -126,19 +127,22 @@ export class AuroraProxy {
   /**
    * Activate slots for rendering
    * Tells worker which slots to use for interpolation
+   * @param t0 Unix timestamp of slot0
+   * @param t1 Unix timestamp of slot1
    */
   activateSlots(
     layer: import('../config/types').TWeatherLayer,
     slot0: number,
     slot1: number,
-    lerp: number,
+    t0: number,
+    t1: number,
     loadedPoints?: number
   ): void {
     // Only include loadedPoints if defined
     if (loadedPoints !== undefined) {
-      this.send({ type: 'activateSlots', layer, slot0, slot1, lerp, loadedPoints });
+      this.send({ type: 'activateSlots', layer, slot0, slot1, t0, t1, loadedPoints });
     } else {
-      this.send({ type: 'activateSlots', layer, slot0, slot1, lerp });
+      this.send({ type: 'activateSlots', layer, slot0, slot1, t0, t1 });
     }
   }
 
