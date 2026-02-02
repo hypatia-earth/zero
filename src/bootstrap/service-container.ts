@@ -15,7 +15,7 @@ import { ThemeService } from '../services/theme-service';
 import { CapabilitiesService } from '../services/capabilities-service';
 import { TimestepService } from '../services/timestep-service';
 import { QueueService } from '../services/queue-service';
-import { RenderService } from '../services/render-service';
+import { AuroraProxy } from '../services/aurora-proxy';
 import { SlotService } from '../services/slot-service';
 import { PaletteService } from '../services/palette-service';
 import { KeyboardService } from '../services/keyboard-service';
@@ -37,8 +37,8 @@ export interface ServiceContainer {
   // Data management
   queueService: QueueService;
 
-  // Rendering (created later, needs canvas)
-  renderService: RenderService | null;
+  // Rendering (worker-based)
+  auroraProxy: AuroraProxy | null;
   slotService: SlotService | null;
   paletteService: PaletteService | null;
 
@@ -98,15 +98,10 @@ export function createQueueService(
 }
 
 /**
- * Create RenderService (needs canvas element)
+ * Create AuroraProxy (worker-based rendering)
  */
-export function createRenderService(
-  canvas: HTMLCanvasElement,
-  optionsService: OptionsService,
-  stateService: StateService,
-  configService: ConfigService
-): RenderService {
-  return new RenderService(canvas, optionsService, stateService, configService);
+export function createAuroraProxy(): AuroraProxy {
+  return new AuroraProxy();
 }
 
 /**
@@ -114,7 +109,7 @@ export function createRenderService(
  */
 export function createSlotService(
   timestepService: TimestepService,
-  renderService: RenderService,
+  auroraProxy: AuroraProxy,
   queueService: QueueService,
   optionsService: OptionsService,
   stateService: StateService,
@@ -122,7 +117,7 @@ export function createSlotService(
 ): SlotService {
   const slotService = new SlotService(
     timestepService,
-    renderService,
+    auroraProxy,
     queueService,
     optionsService,
     stateService,
@@ -136,10 +131,10 @@ export function createSlotService(
 }
 
 /**
- * Create PaletteService (needs renderService)
+ * Create PaletteService (needs auroraProxy)
  */
-export function createPaletteService(renderService: RenderService): PaletteService {
-  return new PaletteService(renderService);
+export function createPaletteService(auroraProxy: AuroraProxy): PaletteService {
+  return new PaletteService(auroraProxy);
 }
 
 /**

@@ -156,6 +156,16 @@ export class AuroraProxy {
     this.send({ type: 'triggerPressureRegrid', slotIndex });
   }
 
+  private onBeforeRender: (() => void) | null = null;
+
+  /**
+   * Set callback to run before each render frame
+   * Use this to forward camera state updates
+   */
+  setOnBeforeRender(callback: () => void): void {
+    this.onBeforeRender = callback;
+  }
+
   /**
    * Start render loop
    */
@@ -167,12 +177,14 @@ export class AuroraProxy {
     this.handlers.set('frameComplete', () => {
       if (this.running) {
         this.animationId = requestAnimationFrame(() => {
+          this.onBeforeRender?.();
           this.send({ type: 'render' });
         });
       }
     });
 
     // Kick off first frame
+    this.onBeforeRender?.();
     this.send({ type: 'render' });
   }
 
