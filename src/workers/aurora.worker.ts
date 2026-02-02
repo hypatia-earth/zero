@@ -12,7 +12,8 @@
 import type { CameraConfig } from '../render/camera';
 import type { TWeatherLayer } from '../config/types';
 import { GlobeRenderer, type GlobeUniforms } from '../render/globe-renderer';
-import { PRESSURE_COLOR_DEFAULT } from '../schemas/options.schema';
+import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.schema';
+import { getSunDirection } from '../utils/sun-position';
 
 // ============================================================
 // Asset types for worker transfer
@@ -49,6 +50,8 @@ export interface AuroraConfig {
 export type AuroraRequest =
   | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; config: AuroraConfig; assets: AuroraAssets }
   | { type: 'camera'; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }
+  | { type: 'options'; value: ZeroOptions }
+  | { type: 'time'; value: number }  // Unix timestamp (Date can't be transferred)
   | { type: 'render' }
   | { type: 'resize'; width: number; height: number }
   | { type: 'updatePalette'; layer: 'temp'; textureData: Uint8Array; min: number; max: number }
@@ -73,11 +76,20 @@ let cameraState = {
   tanFov: Math.tan(Math.PI / 8),
 };
 
+// Options state (received from main thread)
+let currentOptions: ZeroOptions | null = null;
+
+// Time state (received from main thread)
+let currentTime = Date.now();
+
 /**
  * Build uniforms from current state
- * Camera comes from main thread, other values use defaults for now
+ * Uses camera, options, and time from main thread
  */
 function buildUniforms(): GlobeUniforms {
+  const opts = currentOptions;
+  const time = new Date(currentTime);
+
   return {
     // Camera (from main thread)
     viewProjInverse: cameraState.viewProjInverse,
@@ -85,32 +97,32 @@ function buildUniforms(): GlobeUniforms {
     resolution: new Float32Array([canvas!.width, canvas!.height]),
     time: performance.now() / 1000,
     tanFov: cameraState.tanFov,
-    // Sun
-    sunOpacity: 1.0,
-    sunDirection: new Float32Array([0.5, 0.5, 0.707]),
+    // Sun (from time and options)
+    sunOpacity: opts?.sun.enabled ? opts.sun.opacity : 1.0,
+    sunDirection: getSunDirection(time),
     sunCoreRadius: 0.005,
     sunGlowRadius: 0.02,
     sunCoreColor: new Float32Array([1, 1, 0.9]),
     sunGlowColor: new Float32Array([1, 0.8, 0.4]),
-    // Grid
-    gridEnabled: false,
-    gridOpacity: 0,
-    gridFontSize: 12,
+    // Grid (from options)
+    gridEnabled: opts?.grid.enabled ? opts.grid.opacity > 0.01 : false,
+    gridOpacity: opts?.grid.enabled ? opts.grid.opacity : 0,
+    gridFontSize: opts?.grid.fontSize ?? 12,
     gridLabelMaxRadius: 280,
-    gridLineWidth: 1,
-    // Layers
-    earthOpacity: 1.0,
-    tempOpacity: 0,
-    rainOpacity: 0,
-    cloudsOpacity: 0,
-    humidityOpacity: 0,
-    windOpacity: 0,
+    gridLineWidth: opts?.grid.lineWidth ?? 1,
+    // Layers (from options)
+    earthOpacity: opts?.earth.enabled ? opts.earth.opacity : 1.0,
+    tempOpacity: opts?.temp.enabled ? opts.temp.opacity : 0,
+    rainOpacity: opts?.rain.enabled ? opts.rain.opacity : 0,
+    cloudsOpacity: opts?.clouds.enabled ? opts.clouds.opacity : 0,
+    humidityOpacity: opts?.humidity.enabled ? opts.humidity.opacity : 0,
+    windOpacity: opts?.wind.enabled ? opts.wind.opacity : 0,
     windLerp: 0,
-    windAnimSpeed: 1,
-    windState: { mode: 'loading', lerp: 0, time: new Date() },
-    pressureOpacity: 0,
-    pressureColors: PRESSURE_COLOR_DEFAULT,
-    // Data state
+    windAnimSpeed: opts?.wind.speed ?? 1,
+    windState: { mode: 'loading', lerp: 0, time },
+    pressureOpacity: opts?.pressure.enabled ? opts.pressure.opacity : 0,
+    pressureColors: opts?.pressure.colors ?? PRESSURE_COLOR_DEFAULT,
+    // Data state (TODO: receive from slot activation messages)
     tempDataReady: false,
     rainDataReady: false,
     cloudsDataReady: false,
@@ -170,6 +182,14 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       cameraState.viewProjInverse.set(e.data.viewProjInverse);
       cameraState.eye.set(e.data.eye);
       cameraState.tanFov = e.data.tanFov;
+    }
+
+    if (type === 'options') {
+      currentOptions = e.data.value;
+    }
+
+    if (type === 'time') {
+      currentTime = e.data.value;
     }
 
     if (type === 'render') {
