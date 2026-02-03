@@ -15,7 +15,7 @@ import { ThemeService } from '../services/theme-service';
 import { CapabilitiesService } from '../services/capabilities-service';
 import { TimestepService } from '../services/timestep-service';
 import { QueueService } from '../services/queue-service';
-import { AuroraProxy } from '../services/aurora-proxy';
+import { createAuroraService, type AuroraService } from '../services/aurora-service';
 import { SlotService } from '../services/slot-service';
 import { PaletteService } from '../services/palette-service';
 import { KeyboardService } from '../services/keyboard-service';
@@ -38,7 +38,7 @@ export interface ServiceContainer {
   queueService: QueueService;
 
   // Rendering (worker-based)
-  auroraProxy: AuroraProxy | null;
+  auroraService: AuroraService | null;
   slotService: SlotService | null;
   paletteService: PaletteService | null;
 
@@ -97,19 +97,15 @@ export function createQueueService(
   return new QueueService(omService, optionsService, stateService, configService, timestepService);
 }
 
-/**
- * Create AuroraProxy (worker-based rendering)
- */
-export function createAuroraProxy(): AuroraProxy {
-  return new AuroraProxy();
-}
+// AuroraService is created via createAuroraService from aurora-service.ts
+export { createAuroraService };
 
 /**
  * Create SlotService and wire circular dep with QueueService
  */
 export function createSlotService(
   timestepService: TimestepService,
-  auroraProxy: AuroraProxy,
+  auroraService: AuroraService,
   queueService: QueueService,
   optionsService: OptionsService,
   stateService: StateService,
@@ -117,7 +113,7 @@ export function createSlotService(
 ): SlotService {
   const slotService = new SlotService(
     timestepService,
-    auroraProxy,
+    auroraService,
     queueService,
     optionsService,
     stateService,
@@ -131,10 +127,10 @@ export function createSlotService(
 }
 
 /**
- * Create PaletteService (needs auroraProxy)
+ * Create PaletteService (needs auroraService)
  */
-export function createPaletteService(auroraProxy: AuroraProxy): PaletteService {
-  return new PaletteService(auroraProxy);
+export function createPaletteService(auroraService: AuroraService): PaletteService {
+  return new PaletteService(auroraService);
 }
 
 /**

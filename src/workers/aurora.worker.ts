@@ -52,12 +52,10 @@ export interface AuroraConfig {
 
 export type AuroraRequest =
   | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; config: AuroraConfig; assets: AuroraAssets }
-  | { type: 'camera'; viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }
   | { type: 'options'; value: ZeroOptions }
-  | { type: 'time'; value: number }  // Unix timestamp (Date can't be transferred)
   | { type: 'uploadData'; layer: TWeatherLayer; timestep: string; slotIndex: number; slabIndex: number; data: Float32Array }
   | { type: 'activateSlots'; layer: TWeatherLayer; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
-  | { type: 'render' }
+  | { type: 'render'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number }
   | { type: 'resize'; width: number; height: number }
   | { type: 'updatePalette'; layer: 'temp'; textureData: Uint8Array; min: number; max: number }
   | { type: 'triggerPressureRegrid'; slotIndex: number }
@@ -77,19 +75,8 @@ export type AuroraResponse =
 let renderer: GlobeRenderer | null = null;
 let canvas: OffscreenCanvas | null = null;
 
-// Camera state (received from main thread)
-let cameraState = {
-  viewProj: new Float32Array(16),
-  viewProjInverse: new Float32Array(16),
-  eye: new Float32Array([0, 0, 3]),
-  tanFov: Math.tan(Math.PI / 8),
-};
-
 // Options state (received from main thread)
 let currentOptions: ZeroOptions | null = null;
-
-// Time state (received from main thread)
-let currentTime = Date.now();
 
 // Layer stores for GPU buffer management
 const layerStores = new Map<TWeatherLayer, LayerStore>();
@@ -105,31 +92,35 @@ interface SlotState {
 }
 const slotStates = new Map<TWeatherLayer, SlotState>();
 
-/** Compute lerp for a layer based on current time and slot times */
-function computeLerp(state: SlotState): number {
+/** Compute lerp for a layer based on time and slot times */
+function computeLerp(state: SlotState, timeMs: number): number {
   if (state.t0 === state.t1) return 0;  // Single timestep mode
-  const t = currentTime;
-  if (t <= state.t0) return 0;
-  if (t >= state.t1) return 1;
-  return (t - state.t0) / (state.t1 - state.t0);
+  if (timeMs <= state.t0) return 0;
+  if (timeMs >= state.t1) return 1;
+  return (timeMs - state.t0) / (state.t1 - state.t0);
+}
+
+interface CameraState {
+  viewProj: Float32Array;
+  viewProjInverse: Float32Array;
+  eye: Float32Array;
+  tanFov: number;
 }
 
 /**
- * Build uniforms from current state
- * Uses camera, options, and time from main thread
+ * Build uniforms from render message state
  */
-function buildUniforms(): GlobeUniforms {
+function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
   const opts = currentOptions;
-  const time = new Date(currentTime);
 
   return {
-    // Camera (from main thread)
-    viewProj: cameraState.viewProj,
-    viewProjInverse: cameraState.viewProjInverse,
-    eyePosition: cameraState.eye,
+    // Camera (from render message)
+    viewProj: camera.viewProj,
+    viewProjInverse: camera.viewProjInverse,
+    eyePosition: camera.eye,
     resolution: new Float32Array([canvas!.width, canvas!.height]),
     time: performance.now() / 1000,
-    tanFov: cameraState.tanFov,
+    tanFov: camera.tanFov,
     // Sun (from time and options)
     sunOpacity: opts ? (opts.sun.enabled ? opts.sun.opacity : 0) : 1.0,
     sunDirection: getSunDirection(time),
@@ -150,11 +141,11 @@ function buildUniforms(): GlobeUniforms {
     cloudsOpacity: opts ? (opts.clouds.enabled ? opts.clouds.opacity : 0) : 0,
     humidityOpacity: opts ? (opts.humidity.enabled ? opts.humidity.opacity : 0) : 0,
     windOpacity: opts ? (opts.wind.enabled ? opts.wind.opacity : 0) : 0,
-    windLerp: slotStates.get('wind') ? computeLerp(slotStates.get('wind')!) : 0,
+    windLerp: slotStates.get('wind') ? computeLerp(slotStates.get('wind')!, time.getTime()) : 0,
     windAnimSpeed: opts?.wind.speed ?? 1,
     windState: {
       mode: slotStates.get('wind')?.dataReady ? 'pair' : 'loading',
-      lerp: slotStates.get('wind') ? computeLerp(slotStates.get('wind')!) : 0,
+      lerp: slotStates.get('wind') ? computeLerp(slotStates.get('wind')!, time.getTime()) : 0,
       time,
     },
     pressureOpacity: opts ? (opts.pressure.enabled ? opts.pressure.opacity : 0) : 0,
@@ -165,7 +156,7 @@ function buildUniforms(): GlobeUniforms {
     cloudsDataReady: slotStates.get('clouds')?.dataReady ?? false,
     humidityDataReady: slotStates.get('humidity')?.dataReady ?? false,
     windDataReady: slotStates.get('wind')?.dataReady ?? false,
-    tempLerp: slotStates.get('temp') ? computeLerp(slotStates.get('temp')!) : 0,
+    tempLerp: slotStates.get('temp') ? computeLerp(slotStates.get('temp')!, time.getTime()) : 0,
     tempLoadedPoints: slotStates.get('temp')?.loadedPoints ?? 0,
     tempSlot0: slotStates.get('temp')?.slot0 ?? 0,
     tempSlot1: slotStates.get('temp')?.slot1 ?? 0,
@@ -236,31 +227,12 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         } satisfies AuroraResponse);
       });
 
-      // Initialize camera state from renderer's default camera
-      const cam = renderer.camera;
-      cameraState.viewProj.set(cam.getViewProj());
-      cameraState.viewProjInverse.set(cam.getViewProjInverse());
-      cameraState.eye.set(cam.getEyePosition());
-      cameraState.tanFov = cam.getTanFov();
-
       console.log('[Aurora] GlobeRenderer ready');
       self.postMessage({ type: 'ready' } satisfies AuroraResponse);
     }
 
-    if (type === 'camera') {
-      // Update camera state from main thread
-      cameraState.viewProj.set(e.data.viewProj);
-      cameraState.viewProjInverse.set(e.data.viewProjInverse);
-      cameraState.eye.set(e.data.eye);
-      cameraState.tanFov = e.data.tanFov;
-    }
-
     if (type === 'options') {
       currentOptions = e.data.value;
-    }
-
-    if (type === 'time') {
-      currentTime = e.data.value;
     }
 
     if (type === 'render') {
@@ -274,9 +246,9 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       }
 
       const t0 = performance.now();
+      const { camera, time } = e.data;
 
-      // Update uniforms and render
-      const uniforms = buildUniforms();
+      const uniforms = buildUniforms(camera, new Date(time));
 
       renderer.updateUniforms(uniforms);
       renderer.render();

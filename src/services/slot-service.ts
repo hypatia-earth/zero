@@ -9,7 +9,7 @@
 import { effect, signal } from '@preact/signals-core';
 import { isWeatherLayer, type TLayer, type TWeatherLayer, type TTimestep, type TimestepOrder, type LayerState } from '../config/types';
 import type { TimestepService } from './timestep-service';
-import type { AuroraProxy } from './aurora-proxy';
+import type { AuroraService } from './aurora-service';
 import type { QueueService } from './queue-service';
 import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
@@ -48,7 +48,7 @@ export class SlotService {
 
   constructor(
     private timestepService: TimestepService,
-    private auroraProxy: AuroraProxy,
+    private auroraService: AuroraService,
     private queueService: QueueService,
     private optionsService: OptionsService,
     private stateService: StateService,
@@ -239,7 +239,7 @@ export class SlotService {
 
         // Worker handles buffer rebinding on activateSlots
         const t = this.timestepService.toDate(ts).getTime();
-        this.auroraProxy.activateSlots(param, slot.slotIndex, slot.slotIndex, t, t, slot.loadedPoints);
+        this.auroraService.activateSlots(param, slot.slotIndex, slot.slotIndex, t, t, slot.loadedPoints);
         DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
       } else {
         ps.setActiveTimesteps([]);
@@ -260,7 +260,7 @@ export class SlotService {
         // Worker handles buffer rebinding on activateSlots
         const t0 = this.timestepService.toDate(ts0).getTime();
         const t1 = this.timestepService.toDate(ts1).getTime();
-        this.auroraProxy.activateSlots(param, slot0.slotIndex, slot1.slotIndex, t0, t1, Math.min(slot0.loadedPoints, slot1.loadedPoints));
+        this.auroraService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, t0, t1, Math.min(slot0.loadedPoints, slot1.loadedPoints));
         DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(ts0)} → ${fmt(ts1)}`);
       } else {
         ps.setActiveTimesteps([]);
@@ -271,7 +271,7 @@ export class SlotService {
   /** Deactivate layer by setting slots to 0 with 0 points */
   private deactivateLayer(param: TWeatherLayer): void {
     // Worker handles buffer rebinding on activateSlots
-    this.auroraProxy.activateSlots(param, 0, 0, 0, 0);
+    this.auroraService.activateSlots(param, 0, 0, 0, 0);
   }
 
   /** Upload data to slot via worker message */
@@ -282,11 +282,11 @@ export class SlotService {
     }
 
     // Send data to worker (transfers ownership of buffer)
-    this.auroraProxy.uploadData(param, timestep, slotIndex, slabIndex, data);
+    this.auroraService.uploadData(param, timestep, slotIndex, slabIndex, data);
 
     // Pressure needs regrid after upload
     if (param === 'pressure' && slabIndex === 0) {
-      this.auroraProxy.triggerPressureRegrid(slotIndex);
+      this.auroraService.triggerPressureRegrid(slotIndex);
     }
   }
 
