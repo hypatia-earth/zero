@@ -97,6 +97,8 @@ const slotStates = new Map<TWeatherLayer, SlotState>();
 let isobarLevels: number[] = generateIsobarLevels(4);  // Default 4 hPa spacing
 let lastPressureMinute = -1;
 let lastPressureSpacing = 4;
+let lastSmoothing = 'laplacian';
+let lastSmoothingPasses = '1';
 
 /** Compute lerp for a layer based on time and slot times */
 function computeLerp(state: SlotState, timeMs: number): number {
@@ -265,19 +267,28 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       // Update isobar spacing if changed
       const newSpacing = opts ? parseInt(opts.pressure.spacing, 10) : 4;
-      let spacingChanged = false;
+      let needsContourRecompute = false;
       if (newSpacing !== lastPressureSpacing) {
         lastPressureSpacing = newSpacing;
         isobarLevels = generateIsobarLevels(newSpacing);
         renderer.setPressureLevelCount(isobarLevels.length);
-        spacingChanged = true;
+        needsContourRecompute = true;
       }
 
-      // Recompute pressure contours when time or spacing changes
+      // Check if smoothing settings changed
+      const newSmoothing = opts?.pressure.smoothing ?? 'laplacian';
+      const newSmoothingPasses = opts?.pressure.smoothingPasses ?? '1';
+      if (newSmoothing !== lastSmoothing || newSmoothingPasses !== lastSmoothingPasses) {
+        lastSmoothing = newSmoothing;
+        lastSmoothingPasses = newSmoothingPasses;
+        needsContourRecompute = true;
+      }
+
+      // Recompute pressure contours when time, spacing, or smoothing changes
       const pressureState = slotStates.get('pressure');
       if (opts?.pressure.enabled && pressureState?.dataReady) {
         const currentMinute = Math.floor(time / 60000);
-        if (currentMinute !== lastPressureMinute || spacingChanged) {
+        if (currentMinute !== lastPressureMinute || needsContourRecompute) {
           lastPressureMinute = currentMinute;
           const smoothing = opts.pressure.smoothing;
           const smoothingIterations = smoothing === 'none' ? 0 : parseInt(opts.pressure.smoothingPasses, 10);
