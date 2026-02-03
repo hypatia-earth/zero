@@ -100,6 +100,53 @@ let lastPressureSpacing = 4;
 let lastSmoothing = 'laplacian';
 let lastSmoothingPasses = '1';
 
+// Animated opacity state (smooth transitions ~100ms)
+const animatedOpacity = {
+  earth: 1,
+  sun: 1,
+  grid: 0,
+  temp: 0,
+  rain: 0,
+  clouds: 0,
+  humidity: 0,
+  wind: 0,
+  pressure: 0,
+};
+let lastFrameTime = 0;
+
+/** Update animated opacities toward targets (exponential decay) */
+function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
+  const opts = currentOptions;
+  if (!opts) return;
+
+  const animMs = 100;  // ~100ms transitions
+  const rate = 1000 / animMs;
+  const factor = Math.min(1, dt * rate);
+
+  // Check if data is ready AND current time is within data window
+  const isReady = (layer: TWeatherLayer): boolean => {
+    const state = slotStates.get(layer);
+    if (!state?.dataReady) return false;
+    // Check if current time is within slot time range (with some margin)
+    // t0 and t1 are timestamps, allow some extrapolation margin (30 min)
+    const margin = 30 * 60 * 1000;  // 30 minutes
+    if (state.t0 === 0 && state.t1 === 0) return false;  // No timestamps set
+    return currentTimeMs >= state.t0 - margin && currentTimeMs <= state.t1 + margin;
+  };
+
+  // Decoration layers: just enabled check
+  animatedOpacity.earth += ((opts.earth.enabled ? opts.earth.opacity : 0) - animatedOpacity.earth) * factor;
+  animatedOpacity.sun += ((opts.sun.enabled ? opts.sun.opacity : 0) - animatedOpacity.sun) * factor;
+  animatedOpacity.grid += ((opts.grid.enabled ? opts.grid.opacity : 0) - animatedOpacity.grid) * factor;
+
+  // Weather layers: enabled AND dataReady
+  animatedOpacity.temp += (((opts.temp.enabled && isReady('temp')) ? opts.temp.opacity : 0) - animatedOpacity.temp) * factor;
+  animatedOpacity.rain += (((opts.rain.enabled && isReady('rain')) ? opts.rain.opacity : 0) - animatedOpacity.rain) * factor;
+  animatedOpacity.clouds += (((opts.clouds.enabled && isReady('clouds')) ? opts.clouds.opacity : 0) - animatedOpacity.clouds) * factor;
+  animatedOpacity.humidity += (((opts.humidity.enabled && isReady('humidity')) ? opts.humidity.opacity : 0) - animatedOpacity.humidity) * factor;
+  animatedOpacity.wind += (((opts.wind.enabled && isReady('wind')) ? opts.wind.opacity : 0) - animatedOpacity.wind) * factor;
+  animatedOpacity.pressure += (((opts.pressure.enabled && isReady('pressure')) ? opts.pressure.opacity : 0) - animatedOpacity.pressure) * factor;
+}
 
 /** Compute lerp for a layer based on time and slot times */
 function computeLerp(state: SlotState, timeMs: number): number {
@@ -130,26 +177,26 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     resolution: new Float32Array([canvas!.width, canvas!.height]),
     time: performance.now() / 1000,
     tanFov: camera.tanFov,
-    // Sun (from time and options)
-    sunOpacity: opts ? (opts.sun.enabled ? opts.sun.opacity : 0) : 1.0,
+    // Sun (animated opacity)
+    sunOpacity: animatedOpacity.sun,
     sunDirection: getSunDirection(time),
     sunCoreRadius: 0.005,
     sunGlowRadius: 0.02,
     sunCoreColor: new Float32Array([1, 1, 0.9]),
     sunGlowColor: new Float32Array([1, 0.8, 0.4]),
-    // Grid (from options)
-    gridEnabled: opts ? (opts.grid.enabled && opts.grid.opacity > 0.01) : false,
-    gridOpacity: opts ? (opts.grid.enabled ? opts.grid.opacity : 0) : 0,
+    // Grid (animated opacity)
+    gridEnabled: animatedOpacity.grid > 0.01,
+    gridOpacity: animatedOpacity.grid,
     gridFontSize: opts?.grid.fontSize ?? 12,
     gridLabelMaxRadius: 280,
     gridLineWidth: opts?.grid.lineWidth ?? 1,
-    // Layers (from options)
-    earthOpacity: opts ? (opts.earth.enabled ? opts.earth.opacity : 0) : 1.0,
-    tempOpacity: opts ? (opts.temp.enabled ? opts.temp.opacity : 0) : 0,
-    rainOpacity: opts ? (opts.rain.enabled ? opts.rain.opacity : 0) : 0,
-    cloudsOpacity: opts ? (opts.clouds.enabled ? opts.clouds.opacity : 0) : 0,
-    humidityOpacity: opts ? (opts.humidity.enabled ? opts.humidity.opacity : 0) : 0,
-    windOpacity: opts ? (opts.wind.enabled ? opts.wind.opacity : 0) : 0,
+    // Layers (animated opacities)
+    earthOpacity: animatedOpacity.earth,
+    tempOpacity: animatedOpacity.temp,
+    rainOpacity: animatedOpacity.rain,
+    cloudsOpacity: animatedOpacity.clouds,
+    humidityOpacity: animatedOpacity.humidity,
+    windOpacity: animatedOpacity.wind,
     windLerp: slotStates.get('wind') ? computeLerp(slotStates.get('wind')!, time.getTime()) : 0,
     windAnimSpeed: opts?.wind.speed ?? 1,
     windState: {
@@ -157,7 +204,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
       lerp: slotStates.get('wind') ? computeLerp(slotStates.get('wind')!, time.getTime()) : 0,
       time,
     },
-    pressureOpacity: opts ? (opts.pressure.enabled ? opts.pressure.opacity : 0) : 0,
+    pressureOpacity: animatedOpacity.pressure,
     pressureColors: opts?.pressure.colors ?? PRESSURE_COLOR_DEFAULT,
     // Data state (from slot activation messages)
     tempDataReady: slotStates.get('temp')?.dataReady ?? false,
@@ -265,6 +312,11 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       const t0 = performance.now();
       const { camera, time } = e.data;
       const opts = currentOptions;
+
+      // Compute delta time and update animated opacities
+      const dt = lastFrameTime > 0 ? (t0 - lastFrameTime) / 1000 : 0;
+      lastFrameTime = t0;
+      updateAnimatedOpacities(dt, time);
 
       // Update isobar spacing if changed
       const newSpacing = opts ? parseInt(opts.pressure.spacing, 10) : 4;
