@@ -92,7 +92,12 @@ async function runBootstrapInner(
 
   // Phase 5: GPU Init (worker-based)
   progress.startStep('GPU_INIT');
-  services.auroraService = createAuroraService(services.stateService!, services.perfService!);
+  services.auroraService = createAuroraService(
+    services.stateService!,
+    services.configService!,
+    services.optionsService!,
+    services.perfService!
+  );
   services.paletteService = createPaletteService(services.auroraService);
   services.slotService = createSlotService(
     services.timestepService,
@@ -121,14 +126,10 @@ async function runBootstrapInner(
 
   // Phase 7: Activate
   progress.startStep('ACTIVATE');
-  const { keyboardService, camera } = await runActivatePhase(
-    canvas,
+  const { keyboardService } = await runActivatePhase(
     services.auroraService,
     services.stateService!,
-    services.configService!,
-    services.optionsService!,
     services.timestepService,
-    services.perfService!,
     progress
   );
   services.keyboardService = keyboardService;
@@ -142,13 +143,13 @@ async function runBootstrapInner(
   );
 
   // Expose for debugging
-  exposeDebugServices(services as ServiceContainer, camera);
+  exposeDebugServices(services as ServiceContainer);
 }
 
 /**
  * Expose services for debugging (localhost only)
  */
-export function exposeDebugServices(services: ServiceContainer, camera?: import('../render/camera').Camera): void {
+export function exposeDebugServices(services: ServiceContainer): void {
   if (location.hostname !== 'localhost') return;
 
   window.__hypatia = {
@@ -166,6 +167,7 @@ export function exposeDebugServices(services: ServiceContainer, camera?: import(
     dialogService: services.dialogService,
     aboutService: services.aboutService,
     themeService: services.themeService,
-    camera,
+    perfService: services.perfService,
+    camera: services.auroraService?.getCamera(),
   };
 }
