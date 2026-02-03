@@ -157,7 +157,7 @@ fn fragmentMain(in: VertexOutput) -> FragmentOutput {
   // Perspective-correct backface culling with animated limb
   // showBackface: 0.0 = full culling, 1.0 = show everything
   let camDist = length(uniforms.eyePosition);
-  let threshold = 1.0 + uniforms.lineWidth * camDist * camDist * 18.0;
+  let threshold = uniforms.radius + uniforms.lineWidth * camDist * camDist * 18.0;
   let sphereTest = normalize(in.worldPos);
   let sphereDot = dot(sphereTest, uniforms.eyePosition);
 
