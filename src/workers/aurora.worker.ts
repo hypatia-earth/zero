@@ -391,7 +391,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       // Write data to GPU buffer
       store.writeToSlab(slabIndex, slotIndex, data);
-      console.log(`[Aurora] uploadData: ${layer} slot${slotIndex} slab${slabIndex} (${data.length} floats)`);
 
       self.postMessage({
         type: 'uploadComplete',
@@ -444,8 +443,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
           renderer.triggerPressureRegrid(slot0, rawBuffer);
         }
       }
-
-      console.log(`[Aurora] activateSlots: ${layer} slots[${slot0},${slot1}]`);
     }
 
     if (type === 'updatePalette') {
