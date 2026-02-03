@@ -100,6 +100,7 @@ let lastPressureSpacing = 4;
 let lastSmoothing = 'laplacian';
 let lastSmoothingPasses = '1';
 
+
 /** Compute lerp for a layer based on time and slot times */
 function computeLerp(state: SlotState, timeMs: number): number {
   if (state.t0 === state.t1) return 0;  // Single timestep mode

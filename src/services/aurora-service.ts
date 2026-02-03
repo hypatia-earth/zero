@@ -97,6 +97,11 @@ export function createAuroraService(
   let cameraControls: { tick: () => void } | null = null;
   let canvas: HTMLCanvasElement | null = null;
 
+  // Reusable buffers for render message (avoid GC pressure)
+  const viewProjBuffer = new Float32Array(16);
+  const viewProjInverseBuffer = new Float32Array(16);
+  const eyeBuffer = new Float32Array(3);
+
   // Handle incoming messages
   function handleMessage(msg: AuroraResponse): void {
     const handler = handlers.get(msg.type);
@@ -270,15 +275,20 @@ export function createAuroraService(
         if (!renderInFlight) {
           renderInFlight = true;
           frameStartTime = now;
+          // Reuse buffers to avoid GC pressure
+          viewProjBuffer.set(camera!.getViewProj());
+          viewProjInverseBuffer.set(camera!.getViewProjInverse());
+          eyeBuffer.set(camera!.getEyePosition());
+          const timeMs = stateService.viewState.value.time.getTime();
           send({
             type: 'render',
             camera: {
-              viewProj: new Float32Array(camera!.getViewProj()),
-              viewProjInverse: new Float32Array(camera!.getViewProjInverse()),
-              eye: new Float32Array(camera!.getEyePosition()),
+              viewProj: viewProjBuffer,
+              viewProjInverse: viewProjInverseBuffer,
+              eye: eyeBuffer,
               tanFov: camera!.getTanFov(),
             },
-            time: stateService.viewState.value.time.getTime(),
+            time: timeMs,
           });
         } else {
           droppedFrames++;
