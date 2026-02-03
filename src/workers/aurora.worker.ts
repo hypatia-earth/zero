@@ -232,7 +232,15 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
     }
 
     if (type === 'options') {
+      const prevOptions = currentOptions;
       currentOptions = e.data.value;
+
+      // React to options that require buffer recreation
+      if (renderer && prevOptions) {
+        if (currentOptions.wind.seedCount !== prevOptions.wind.seedCount) {
+          renderer.getWindLayer().setLineCount(currentOptions.wind.seedCount);
+        }
+      }
     }
 
     if (type === 'render') {
