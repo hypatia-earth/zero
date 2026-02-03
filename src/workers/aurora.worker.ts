@@ -12,6 +12,7 @@
 import type { CameraConfig } from '../render/camera';
 import type { TWeatherLayer, TWeatherTextureLayer, SlabConfig } from '../config/types';
 import { GlobeRenderer, type GlobeUniforms } from '../render/globe-renderer';
+import { generateIsobarLevels, type SmoothingAlgorithm } from '../render/pressure-layer';
 import { LayerStore } from '../services/layer-store';
 import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.schema';
 import { getSunDirection } from '../utils/sun-position';
@@ -91,6 +92,11 @@ interface SlotState {
   dataReady: boolean;
 }
 const slotStates = new Map<TWeatherLayer, SlotState>();
+
+// Pressure contour state
+let isobarLevels: number[] = generateIsobarLevels(4);  // Default 4 hPa spacing
+let lastPressureMinute = -1;
+let lastPressureSpacing = 4;
 
 /** Compute lerp for a layer based on time and slot times */
 function computeLerp(state: SlotState, timeMs: number): number {
@@ -255,6 +261,38 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       const t0 = performance.now();
       const { camera, time } = e.data;
+      const opts = currentOptions;
+
+      // Update isobar spacing if changed
+      const newSpacing = opts ? parseInt(opts.pressure.spacing, 10) : 4;
+      let spacingChanged = false;
+      if (newSpacing !== lastPressureSpacing) {
+        lastPressureSpacing = newSpacing;
+        isobarLevels = generateIsobarLevels(newSpacing);
+        renderer.setPressureLevelCount(isobarLevels.length);
+        spacingChanged = true;
+      }
+
+      // Recompute pressure contours when time or spacing changes
+      const pressureState = slotStates.get('pressure');
+      if (opts?.pressure.enabled && pressureState?.dataReady) {
+        const currentMinute = Math.floor(time / 60000);
+        if (currentMinute !== lastPressureMinute || spacingChanged) {
+          lastPressureMinute = currentMinute;
+          const smoothing = opts.pressure.smoothing;
+          const smoothingIterations = smoothing === 'none' ? 0 : parseInt(opts.pressure.smoothingPasses, 10);
+          const smoothingAlgo: SmoothingAlgorithm = smoothing === 'none' ? 'laplacian' : smoothing;
+          const lerp = computeLerp(pressureState, time);
+          renderer.runPressureContour(
+            pressureState.slot0,
+            pressureState.slot1,
+            lerp,
+            isobarLevels,
+            smoothingIterations,
+            smoothingAlgo
+          );
+        }
+      }
 
       const uniforms = buildUniforms(camera, new Date(time));
 
