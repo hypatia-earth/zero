@@ -8,11 +8,15 @@
  * - Perf panel updates
  */
 
+import { effect } from '@preact/signals-core';
 import type { AuroraRequest, AuroraResponse, AuroraConfig, AuroraAssets } from '../workers/aurora.worker';
 import type { StateService } from './state-service';
+import type { ConfigService } from './config-service';
+import type { OptionsService } from './options-service';
 import type { PerfService } from './perf-service';
-import type { ZeroOptions } from '../schemas/options.schema';
 import type { TWeatherLayer } from '../config/types';
+import { Camera } from '../render/camera';
+import { setupCameraControls } from './camera-controls';
 
 // Re-export types for consumers
 export type { AuroraConfig, AuroraAssets } from '../workers/aurora.worker';
@@ -42,23 +46,28 @@ function createRollingAvg(size: number) {
 
 export interface AuroraService {
   init(canvas: HTMLCanvasElement, config: AuroraConfig, assets: AuroraAssets): Promise<void>;
-  updateCamera(viewProj: Float32Array, viewProjInverse: Float32Array, eye: Float32Array, tanFov: number): void;
-  updateOptions(options: ZeroOptions): void;
+  start(): void;
+  stop(): void;
+  cleanup(): void;
+  dispose(): void;
+  // Data
   uploadData(layer: TWeatherLayer, timestep: string, slotIndex: number, slabIndex: number, data: Float32Array): void;
   activateSlots(layer: TWeatherLayer, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
   updatePalette(layer: 'temp', textureData: Uint8Array, min: number, max: number): void;
   triggerPressureRegrid(slotIndex: number): void;
-  setUpdate(callback: () => void): void;
-  start(): void;
-  stop(): void;
-  resize(width: number, height: number): void;
-  cleanup(): void;
-  dispose(): void;
+  // Debug
+  getCamera(): Camera;
+  // Low-level (for advanced use)
   send(msg: AuroraRequest, transfer?: Transferable[]): void;
   onMessage<T extends AuroraResponse['type']>(type: T, handler: (msg: Extract<AuroraResponse, { type: T }>) => void): void;
 }
 
-export function createAuroraService(stateService: StateService, perfService: PerfService): AuroraService {
+export function createAuroraService(
+  stateService: StateService,
+  configService: ConfigService,
+  optionsService: OptionsService,
+  perfService: PerfService
+): AuroraService {
   // Worker
   const worker = new Worker(
     new URL('../workers/aurora.worker.ts', import.meta.url),
@@ -81,17 +90,12 @@ export function createAuroraService(stateService: StateService, perfService: Per
   let lastFrameTime = 0;
   let frameStartTime = 0;
   let perfFrameCount = 0;
+  let globeFrameCount = 0;
 
-  // Camera state for render messages
-  const camera = {
-    viewProj: new Float32Array(16),
-    viewProjInverse: new Float32Array(16),
-    eye: new Float32Array([0, 0, 3]),
-    tanFov: Math.tan(Math.PI / 8),
-  };
-
-  // Update callback
-  let update: () => void = () => {};
+  // Camera (created in init)
+  let camera: Camera | null = null;
+  let cameraControls: { tick: () => void } | null = null;
+  let canvas: HTMLCanvasElement | null = null;
 
   // Handle incoming messages
   function handleMessage(msg: AuroraResponse): void {
@@ -123,7 +127,8 @@ export function createAuroraService(stateService: StateService, perfService: Per
   }
 
   return {
-    async init(canvas: HTMLCanvasElement, config: AuroraConfig, assets: AuroraAssets): Promise<void> {
+    async init(canvasEl: HTMLCanvasElement, config: AuroraConfig, assets: AuroraAssets): Promise<void> {
+      canvas = canvasEl;
       const offscreen = canvas.transferControlToOffscreen();
       const dpr = window.devicePixelRatio;
       const width = canvas.clientWidth * dpr;
@@ -141,7 +146,7 @@ export function createAuroraService(stateService: StateService, perfService: Per
         assets.logo,
       ];
 
-      return new Promise<void>((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Aurora worker init timeout')), 10000);
 
         handlers.set('ready', () => {
@@ -157,17 +162,54 @@ export function createAuroraService(stateService: StateService, perfService: Per
 
         send({ type: 'init', canvas: offscreen, width, height, config, assets }, transferables);
       });
-    },
 
-    updateCamera(viewProj: Float32Array, viewProjInverse: Float32Array, eye: Float32Array, tanFov: number): void {
-      camera.viewProj.set(viewProj);
-      camera.viewProjInverse.set(viewProjInverse);
-      camera.eye.set(eye);
-      camera.tanFov = tanFov;
-    },
+      // Create camera
+      const cameraConfig = configService.getCameraConfig();
+      camera = new Camera(undefined, cameraConfig);
+      camera.setAspect(canvas.clientWidth, canvas.clientHeight);
 
-    updateOptions(options: ZeroOptions): void {
-      send({ type: 'options', value: options });
+      // Set up camera controls
+      cameraControls = setupCameraControls(canvas, camera, stateService, configService, optionsService);
+
+      // Send initial options
+      send({ type: 'options', value: optionsService.options.value });
+
+      // Forward options updates to worker
+      let lastOptions = optionsService.options.value;
+      effect(() => {
+        const opts = optionsService.options.value;
+        if (opts !== lastOptions) {
+          lastOptions = opts;
+          send({ type: 'options', value: opts });
+        }
+      });
+
+      // Handle resize
+      const updateScreen = () => perfService.setScreen(canvas!.clientWidth, canvas!.clientHeight);
+      const resizeObserver = new ResizeObserver(() => {
+        const dpr = window.devicePixelRatio;
+        const w = canvas!.clientWidth * dpr;
+        const h = canvas!.clientHeight * dpr;
+        camera!.setAspect(canvas!.clientWidth, canvas!.clientHeight);
+        send({ type: 'resize', width: w, height: h });
+        updateScreen();
+      });
+      resizeObserver.observe(canvas);
+      updateScreen();
+
+      // iOS standalone PWA resize handlers
+      window.addEventListener('resize', () => {
+        const dpr = window.devicePixelRatio;
+        send({ type: 'resize', width: canvas!.clientWidth * dpr, height: canvas!.clientHeight * dpr });
+      });
+      window.addEventListener('orientationchange', () => {
+        const dpr = window.devicePixelRatio;
+        send({ type: 'resize', width: canvas!.clientWidth * dpr, height: canvas!.clientHeight * dpr });
+      });
+
+      // Cleanup handlers
+      window.addEventListener('beforeunload', () => this.cleanup());
+      window.addEventListener('pagehide', () => this.cleanup());
     },
 
     uploadData(layer: TWeatherLayer, timestep: string, slotIndex: number, slabIndex: number, data: Float32Array): void {
@@ -190,12 +232,11 @@ export function createAuroraService(stateService: StateService, perfService: Per
       send({ type: 'triggerPressureRegrid', slotIndex });
     },
 
-    setUpdate(callback: () => void): void {
-      update = callback;
-    },
-
     start(): void {
       if (running) return;
+      if (!camera || !cameraControls || !canvas) {
+        throw new Error('AuroraService.start() called before init()');
+      }
       running = true;
 
       handlers.set('frameComplete', (msg) => {
@@ -216,7 +257,15 @@ export function createAuroraService(stateService: StateService, perfService: Per
         }
         lastFrameTime = now;
 
-        update();
+        // Update physics and camera
+        cameraControls!.tick();
+
+        // Update globe radius in perf panel (throttled)
+        if (++globeFrameCount % 10 === 0) {
+          const fov = 2 * Math.atan(camera!.getTanFov());
+          const globeRadiusPx = Math.asin(1 / camera!.distance) * (canvas!.clientHeight / fov);
+          perfService.setGlobe(globeRadiusPx);
+        }
 
         if (!renderInFlight) {
           renderInFlight = true;
@@ -224,10 +273,10 @@ export function createAuroraService(stateService: StateService, perfService: Per
           send({
             type: 'render',
             camera: {
-              viewProj: new Float32Array(camera.viewProj),
-              viewProjInverse: new Float32Array(camera.viewProjInverse),
-              eye: new Float32Array(camera.eye),
-              tanFov: camera.tanFov,
+              viewProj: new Float32Array(camera!.getViewProj()),
+              viewProjInverse: new Float32Array(camera!.getViewProjInverse()),
+              eye: new Float32Array(camera!.getEyePosition()),
+              tanFov: camera!.getTanFov(),
             },
             time: stateService.viewState.value.time.getTime(),
           });
@@ -249,9 +298,9 @@ export function createAuroraService(stateService: StateService, perfService: Per
       }
     },
 
-
-    resize(width: number, height: number): void {
-      send({ type: 'resize', width, height });
+    getCamera(): Camera {
+      if (!camera) throw new Error('AuroraService.getCamera() called before init()');
+      return camera;
     },
 
     cleanup(): void {
