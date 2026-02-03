@@ -26,6 +26,8 @@ export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = () => {
           m('span.perf-frame', '—'),
           m('span.label', 'pass'),
           m('span.perf-pass', '—'),
+          m('span.label', 'dropped'),
+          m('span.perf-dropped', '0'),
           m('span.label', 'screen'),
           m('span.perf-screen', '—'),
           m('span.label', 'globe'),

@@ -11,7 +11,7 @@ import {
   createFoundationServices,
   createTimestepService,
   createQueueService,
-  createAuroraProxy,
+  createAuroraService,
   createSlotService,
   createPaletteService,
   type ServiceContainer,
@@ -25,7 +25,6 @@ import {
   runDataPhase,
   runActivatePhase,
 } from './phases';
-import { KeyboardService } from '../services/keyboard-service';
 
 /**
  * Run the full bootstrap sequence
@@ -93,11 +92,11 @@ async function runBootstrapInner(
 
   // Phase 5: GPU Init (worker-based)
   progress.startStep('GPU_INIT');
-  services.auroraProxy = createAuroraProxy();
-  services.paletteService = createPaletteService(services.auroraProxy);
+  services.auroraService = createAuroraService(services.stateService!);
+  services.paletteService = createPaletteService(services.auroraService);
   services.slotService = createSlotService(
     services.timestepService,
-    services.auroraProxy,
+    services.auroraService,
     services.queueService,
     services.optionsService!,
     services.stateService!,
@@ -105,7 +104,7 @@ async function runBootstrapInner(
   );
   await runGpuInitPhase(
     canvas,
-    services.auroraProxy,
+    services.auroraService,
     services.paletteService,
     services.aboutService!,
     services.omService!,
@@ -124,11 +123,10 @@ async function runBootstrapInner(
   progress.startStep('ACTIVATE');
   const { keyboardService, camera } = await runActivatePhase(
     canvas,
-    services.auroraProxy,
+    services.auroraService,
     services.stateService!,
     services.configService!,
     services.optionsService!,
-    KeyboardService,
     services.timestepService,
     progress
   );
@@ -160,7 +158,7 @@ export function exposeDebugServices(services: ServiceContainer, camera?: import(
     omService: services.omService,
     timestepService: services.timestepService,
     queueService: services.queueService,
-    auroraProxy: services.auroraProxy,
+    auroraService: services.auroraService,
     slotService: services.slotService,
     keyboardService: services.keyboardService,
     paletteService: services.paletteService,

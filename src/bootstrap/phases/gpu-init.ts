@@ -5,7 +5,7 @@
  * Worker handles WebGPU initialization.
  */
 
-import type { AuroraProxy, AuroraConfig, AuroraAssets } from '../../services/aurora-proxy';
+import type { AuroraService, AuroraConfig, AuroraAssets } from '../../services/aurora-service';
 import type { PaletteService } from '../../services/palette-service';
 import type { AboutService } from '../../services/about-service';
 import type { OmService } from '../../services/om-service';
@@ -18,7 +18,7 @@ import { isWeatherLayer } from '../../config/types';
 
 export async function runGpuInitPhase(
   canvas: HTMLCanvasElement,
-  auroraProxy: AuroraProxy,
+  auroraService: AuroraService,
   paletteService: PaletteService,
   aboutService: AboutService,
   omService: OmService,
@@ -90,7 +90,7 @@ export async function runGpuInitPhase(
 
     // Initialize worker (transfers assets)
     await progress.run('Initializing GPU worker...', 0.4, async () => {
-      await auroraProxy.init(canvas, config, auroraAssets);
+      await auroraService.init(canvas, config, auroraAssets);
     });
   });
 

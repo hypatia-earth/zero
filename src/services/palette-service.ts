@@ -9,7 +9,7 @@
  */
 
 import { signal, effect } from '@preact/signals-core';
-import type { AuroraProxy } from './aurora-proxy';
+import type { AuroraService } from './aurora-service';
 
 // ============================================================
 // Types
@@ -65,10 +65,10 @@ export class PaletteService {
   /** Signal that increments when any palette changes (for reactivity) */
   readonly paletteChanged = signal<number>(0);
 
-  private auroraProxy: AuroraProxy;
+  private auroraService: AuroraService;
 
-  constructor(auroraProxy: AuroraProxy) {
-    this.auroraProxy = auroraProxy;
+  constructor(auroraService: AuroraService) {
+    this.auroraService = auroraService;
   }
 
   /**
@@ -81,7 +81,7 @@ export class PaletteService {
       const palette = this.getPalette('temp');
       const textureData = this.generateTextureData(palette);
       const range = this.getRange(palette);
-      this.auroraProxy.updatePalette('temp', textureData, range.min, range.max);
+      this.auroraService.updatePalette('temp', textureData, range.min, range.max);
     });
   }
 
