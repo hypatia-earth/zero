@@ -19,6 +19,7 @@ import { createAuroraService, type AuroraService } from '../services/aurora-serv
 import { SlotService } from '../services/slot-service';
 import { PaletteService } from '../services/palette-service';
 import { KeyboardService } from '../services/keyboard-service';
+import { PerfService } from '../services/perf-service';
 
 export interface ServiceContainer {
   // Foundation (no service deps)
@@ -27,6 +28,7 @@ export interface ServiceContainer {
   aboutService: AboutService;
   themeService: ThemeService;
   capabilitiesService: CapabilitiesService;
+  perfService: PerfService;
 
   // Config-dependent
   optionsService: OptionsService;
@@ -52,7 +54,7 @@ export interface ServiceContainer {
 export function createFoundationServices(): Pick<
   ServiceContainer,
   'configService' | 'dialogService' | 'aboutService' | 'themeService' | 'capabilitiesService' |
-  'optionsService' | 'stateService' | 'omService'
+  'optionsService' | 'stateService' | 'omService' | 'perfService'
 > {
   const configService = new ConfigService();
   const optionsService = new OptionsService(configService);
@@ -64,6 +66,7 @@ export function createFoundationServices(): Pick<
   const aboutService = new AboutService();
   const themeService = new ThemeService();
   const capabilitiesService = new CapabilitiesService();
+  const perfService = new PerfService();
 
   return {
     configService,
@@ -74,6 +77,7 @@ export function createFoundationServices(): Pick<
     aboutService,
     themeService,
     capabilitiesService,
+    perfService,
   };
 }
 

@@ -92,7 +92,7 @@ async function runBootstrapInner(
 
   // Phase 5: GPU Init (worker-based)
   progress.startStep('GPU_INIT');
-  services.auroraService = createAuroraService(services.stateService!);
+  services.auroraService = createAuroraService(services.stateService!, services.perfService!);
   services.paletteService = createPaletteService(services.auroraService);
   services.slotService = createSlotService(
     services.timestepService,
@@ -128,6 +128,7 @@ async function runBootstrapInner(
     services.configService!,
     services.optionsService!,
     services.timestepService,
+    services.perfService!,
     progress
   );
   services.keyboardService = keyboardService;

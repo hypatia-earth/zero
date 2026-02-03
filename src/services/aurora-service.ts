@@ -10,6 +10,7 @@
 
 import type { AuroraRequest, AuroraResponse, AuroraConfig, AuroraAssets } from '../workers/aurora.worker';
 import type { StateService } from './state-service';
+import type { PerfService } from './perf-service';
 import type { ZeroOptions } from '../schemas/options.schema';
 import type { TWeatherLayer } from '../config/types';
 
@@ -50,7 +51,6 @@ export interface AuroraService {
   setUpdate(callback: () => void): void;
   start(): void;
   stop(): void;
-  setOnPerfUpdate(callback: (stats: PerfStats) => void): void;
   resize(width: number, height: number): void;
   cleanup(): void;
   dispose(): void;
@@ -58,7 +58,7 @@ export interface AuroraService {
   onMessage<T extends AuroraResponse['type']>(type: T, handler: (msg: Extract<AuroraResponse, { type: T }>) => void): void;
 }
 
-export function createAuroraService(stateService: StateService): AuroraService {
+export function createAuroraService(stateService: StateService, perfService: PerfService): AuroraService {
   // Worker
   const worker = new Worker(
     new URL('../workers/aurora.worker.ts', import.meta.url),
@@ -80,7 +80,7 @@ export function createAuroraService(stateService: StateService): AuroraService {
   const passTimes = createRollingAvg(60);
   let lastFrameTime = 0;
   let frameStartTime = 0;
-  let onPerfUpdate: ((stats: PerfStats) => void) | null = null;
+  let perfFrameCount = 0;
 
   // Camera state for render messages
   const camera = {
@@ -108,14 +108,14 @@ export function createAuroraService(stateService: StateService): AuroraService {
   worker.onerror = (e) => console.error('[Aurora] Worker error:', e.message);
 
   function emitPerfStats(): void {
-    if (!onPerfUpdate) return;
+    // Throttle to every 10 frames
+    if (++perfFrameCount % 10 !== 0) return;
     const intervalAvg = frameIntervals.avg();
-    onPerfUpdate({
-      fps: intervalAvg > 0 ? 1000 / intervalAvg : 0,
-      frameMs: frameTimes.avg(),
-      passMs: passTimes.avg(),
-      dropped: droppedFrames,
-    });
+    const fps = intervalAvg > 0 ? 1000 / intervalAvg : 0;
+    perfService.setFps(fps);
+    perfService.setFrameMs(frameTimes.avg());
+    perfService.setPassMs(passTimes.avg());
+    perfService.setDropped(droppedFrames);
   }
 
   function send(msg: AuroraRequest, transfer?: Transferable[]): void {
@@ -249,9 +249,6 @@ export function createAuroraService(stateService: StateService): AuroraService {
       }
     },
 
-    setOnPerfUpdate(callback: (stats: PerfStats) => void): void {
-      onPerfUpdate = callback;
-    },
 
     resize(width: number, height: number): void {
       send({ type: 'resize', width, height });
