@@ -9,6 +9,7 @@ import { KeyboardService } from '../../services/keyboard-service';
 import type { ConfigService } from '../../services/config-service';
 import type { OptionsService } from '../../services/options-service';
 import type { TimestepService } from '../../services/timestep-service';
+import type { PerfService } from '../../services/perf-service';
 import type { Progress } from '../progress';
 import { Camera } from '../../render/camera';
 import { setupCameraControls } from '../../services/camera-controls';
@@ -25,6 +26,7 @@ export async function runActivatePhase(
   configService: ConfigService,
   optionsService: OptionsService,
   timestepService: TimestepService,
+  perfService: PerfService,
   progress: Progress
 ): Promise<ActivateResult> {
   // Create camera on main thread for input handling
@@ -36,6 +38,7 @@ export async function runActivatePhase(
   const cameraControls = setupCameraControls(canvas, camera, stateService, configService, optionsService);
 
   // Set up update callback (physics + camera sync)
+  let globeFrameCount = 0;
   auroraService.setUpdate(() => {
     cameraControls.tick();
 
@@ -46,6 +49,13 @@ export async function runActivatePhase(
       camera.getEyePosition(),
       camera.getTanFov()
     );
+
+    // Update globe radius in perf panel (throttled)
+    if (++globeFrameCount % 10 === 0) {
+      const fov = 2 * Math.atan(camera.getTanFov());
+      const globeRadiusPx = Math.asin(1 / camera.distance) * (canvas.clientHeight / fov);
+      perfService.setGlobe(globeRadiusPx);
+    }
   });
 
   // Send initial options to worker BEFORE starting render loop
@@ -74,14 +84,19 @@ export async function runActivatePhase(
   // Time is now sent with each render message (no separate effect needed)
 
   // Handle resize
+  const updateScreen = () => {
+    perfService.setScreen(canvas.clientWidth, canvas.clientHeight);
+  };
   const resizeObserver = new ResizeObserver(() => {
     const dpr = window.devicePixelRatio;
     const width = canvas.clientWidth * dpr;
     const height = canvas.clientHeight * dpr;
     camera.setAspect(canvas.clientWidth, canvas.clientHeight);
     auroraService.resize(width, height);
+    updateScreen();
   });
   resizeObserver.observe(canvas);
+  updateScreen();  // Initial value
 
   // iOS standalone PWA may not fire ResizeObserver on orientation change
   window.addEventListener('resize', () => {
@@ -98,38 +113,6 @@ export async function runActivatePhase(
     auroraService.cleanup();
   });
 
-  // Set up perf panel updates (lazy-cache elements, throttle to every 10 frames)
-  let perfEls: Record<string, HTMLElement | null> | null = null;
-  let perfFrameCount = 0;
-  auroraService.setOnPerfUpdate((stats) => {
-    // Only update every 10 frames to reduce DOM work
-    if (++perfFrameCount % 10 !== 0) return;
-
-    // Cache elements on first successful query
-    if (!perfEls) {
-      const fps = document.querySelector<HTMLElement>('.perf-fps');
-      if (!fps) return;  // Panel not mounted yet
-      perfEls = {
-        fps,
-        frame: document.querySelector<HTMLElement>('.perf-frame'),
-        pass: document.querySelector<HTMLElement>('.perf-pass'),
-        dropped: document.querySelector<HTMLElement>('.perf-dropped'),
-        screen: document.querySelector<HTMLElement>('.perf-screen'),
-        globe: document.querySelector<HTMLElement>('.perf-globe'),
-      };
-    }
-
-    if (perfEls.fps) perfEls.fps.textContent = `${stats.fps.toFixed(0)}`;
-    if (perfEls.frame) perfEls.frame.textContent = `${stats.frameMs.toFixed(1)} ms`;
-    if (perfEls.pass && stats.passMs > 0) perfEls.pass.textContent = `${stats.passMs.toFixed(1)} ms`;
-    if (perfEls.dropped) perfEls.dropped.textContent = `${stats.dropped}`;
-    if (perfEls.screen) perfEls.screen.textContent = `${canvas.clientWidth}×${canvas.clientHeight}`;
-    if (perfEls.globe) {
-      const fov = 2 * Math.atan(camera.getTanFov());
-      const globeRadiusPx = Math.asin(1 / camera.distance) * (canvas.clientHeight / fov);
-      perfEls.globe.textContent = `${Math.round(globeRadiusPx)} px`;
-    }
-  });
   window.addEventListener('pagehide', () => {
     auroraService.cleanup();
   });

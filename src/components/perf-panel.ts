@@ -33,9 +33,9 @@ export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = () => {
           m('span.label', 'globe'),
           m('span.perf-globe', '—'),
           m('span.label', 'slots'),
-          m('span', opts.timeslotsPerLayer),
+          m('span.perf-slots', opts.timeslotsPerLayer),
           m('span.label', 'pool'),
-          m('span', opts.workerPoolSize),
+          m('span.perf-pool', opts.workerPoolSize),
         ])
       ]);
     }
