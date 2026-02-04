@@ -76,6 +76,7 @@ export function createAuroraService(
   // Render loop state
   let renderInFlight = false;
   let droppedFrames = 0;
+  let paused = false;
 
   // Frame throttle state
   let lastRafTime = 0;
@@ -218,6 +219,16 @@ export function createAuroraService(
       // Cleanup handlers
       window.addEventListener('beforeunload', () => this.cleanup());
       window.addEventListener('pagehide', () => this.cleanup());
+
+      // Debug: 'p' key pauses rendering (localhost only)
+      if (location.hostname === 'localhost') {
+        window.addEventListener('keydown', (e) => {
+          if (e.key === 'p' && !e.metaKey && !e.ctrlKey) {
+            paused = !paused;
+            console.log(`[Aurora] Rendering ${paused ? 'PAUSED' : 'RESUMED'}`);
+          }
+        });
+      }
     },
 
     uploadData(layer: TWeatherLayer, slotIndex: number, slabIndex: number, data: Float32Array): void {
@@ -262,7 +273,7 @@ export function createAuroraService(
           updatePerfStats();
 
           // --- RENDER ---
-          if (!renderInFlight) {
+          if (!paused && !renderInFlight) {
             renderInFlight = true;
             viewProjBuffer.set(cam.getViewProj());
             viewProjInverseBuffer.set(cam.getViewProjInverse());
@@ -277,7 +288,7 @@ export function createAuroraService(
               },
               time: stateService.viewState.value.time.getTime(),
             });
-          } else {
+          } else if (!paused) {
             droppedFrames++;
           }
         }
