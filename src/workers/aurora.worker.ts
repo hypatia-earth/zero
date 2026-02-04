@@ -65,7 +65,7 @@ export type AuroraRequest =
 export type AuroraResponse =
   | { type: 'ready' }
   | { type: 'uploadComplete'; layer: TWeatherLayer; timestep: string; slotIndex: number }
-  | { type: 'frameComplete'; timing?: { frame: number } }
+  | { type: 'frameComplete'; timing?: { frame: number; pass: number | null } }
   | { type: 'deviceLost'; reason: string; message: string }
   | { type: 'error'; message: string; fatal: boolean };
 
@@ -361,12 +361,12 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       const uniforms = buildUniforms(camera, new Date(time));
 
       renderer.updateUniforms(uniforms);
-      renderer.render();
+      const gpuTimeMs = renderer.render();  // Returns GPU timestamp query result
 
-      const frameTime = performance.now() - t0;
+      const cpuTimeMs = performance.now() - t0;
       self.postMessage({
         type: 'frameComplete',
-        timing: { frame: frameTime },
+        timing: { frame: cpuTimeMs, pass: gpuTimeMs },
       } satisfies AuroraResponse);
     }
 
