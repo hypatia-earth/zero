@@ -158,9 +158,9 @@ export class GlobeRenderer {
       },
     });
 
-    // Handle device loss (suppress during intentional unload)
+    // Handle device loss (suppress during intentional destroy)
     this.device.lost.then((info) => {
-      if (!this.isDestroying) {
+      if (info.reason !== 'destroyed') {
         console.error('[Globe] WebGPU device lost:', info.message, info.reason);
       }
     });

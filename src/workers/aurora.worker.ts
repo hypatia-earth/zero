@@ -100,8 +100,8 @@ let lastSmoothingPasses = '1';
 
 // Animated opacity state (smooth transitions ~100ms)
 const animatedOpacity = {
-  earth: 1,
-  sun: 1,
+  earth: 0,
+  sun: 0,
   grid: 0,
   temp: 0,
   rain: 0,
@@ -271,9 +271,11 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       }
       console.log(`[Aurora] Created ${layerStores.size} LayerStores`);
 
-      // Log device loss (app will fail visibly)
+      // Log unexpected device loss (ignore intentional destroy on cleanup)
       device.lost.then((info) => {
-        console.error('[Aurora] GPU device lost:', info.reason, info.message);
+        if (info.reason !== 'destroyed') {
+          console.error('[Aurora] GPU device lost:', info.reason, info.message);
+        }
       });
 
       console.log('[Aurora] GlobeRenderer ready');
@@ -285,26 +287,15 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       currentOptions = e.data.value;
 
       // React to options that require buffer recreation
-      if (renderer && prevOptions) {
-        if (currentOptions.wind.seedCount !== prevOptions.wind.seedCount) {
-          renderer.getWindLayer().setLineCount(currentOptions.wind.seedCount);
-        }
+      if (prevOptions && currentOptions.wind.seedCount !== prevOptions.wind.seedCount) {
+        renderer!.getWindLayer().setLineCount(currentOptions.wind.seedCount);
       }
     }
 
     if (type === 'render') {
-      if (!renderer) {
-        self.postMessage({
-          type: 'error',
-          message: 'Worker not initialized',
-          fatal: false,
-        } satisfies AuroraResponse);
-        return;
-      }
-
       const t0 = performance.now();
       const { camera, time } = e.data;
-      const opts = currentOptions;
+      const opts = currentOptions!;
 
       // Compute delta time and update animated opacities
       const dt = lastFrameTime > 0 ? (t0 - lastFrameTime) / 1000 : 0;
@@ -312,18 +303,18 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       updateAnimatedOpacities(dt, time);
 
       // Update isobar spacing if changed
-      const newSpacing = opts ? parseInt(opts.pressure.spacing, 10) : 4;
+      const newSpacing = parseInt(opts.pressure.spacing, 10);
       let needsContourRecompute = false;
       if (newSpacing !== lastPressureSpacing) {
         lastPressureSpacing = newSpacing;
         isobarLevels = generateIsobarLevels(newSpacing);
-        renderer.setPressureLevelCount(isobarLevels.length);
+        renderer!.setPressureLevelCount(isobarLevels.length);
         needsContourRecompute = true;
       }
 
       // Check if smoothing settings changed
-      const newSmoothing = opts?.pressure.smoothing ?? 'laplacian';
-      const newSmoothingPasses = opts?.pressure.smoothingPasses ?? '1';
+      const newSmoothing = opts.pressure.smoothing;
+      const newSmoothingPasses = opts.pressure.smoothingPasses;
       if (newSmoothing !== lastSmoothing || newSmoothingPasses !== lastSmoothingPasses) {
         lastSmoothing = newSmoothing;
         lastSmoothingPasses = newSmoothingPasses;
@@ -332,7 +323,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       // Recompute pressure contours when time, spacing, or smoothing changes
       const pressureState = slotStates.get('pressure');
-      if (opts?.pressure.enabled && pressureState?.dataReady) {
+      if (opts.pressure.enabled && pressureState?.dataReady) {
         const currentMinute = Math.floor(time / 60000);
         if (currentMinute !== lastPressureMinute || needsContourRecompute) {
           lastPressureMinute = currentMinute;
@@ -340,7 +331,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
           const smoothingIterations = smoothing === 'none' ? 0 : parseInt(opts.pressure.smoothingPasses, 10);
           const smoothingAlgo: SmoothingAlgorithm = smoothing === 'none' ? 'laplacian' : smoothing;
           const lerp = computeLerp(pressureState, time);
-          renderer.runPressureContour(
+          renderer!.runPressureContour(
             pressureState.slot0,
             pressureState.slot1,
             lerp,
@@ -353,8 +344,8 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       const uniforms = buildUniforms(camera, new Date(time));
 
-      renderer.updateUniforms(uniforms);
-      const gpuTimeMs = renderer.render();  // Returns GPU timestamp query result
+      renderer!.updateUniforms(uniforms);
+      const gpuTimeMs = renderer!.render();  // Returns GPU timestamp query result
 
       const cpuTimeMs = performance.now() - t0;
       self.postMessage({
@@ -364,35 +355,21 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
     }
 
     if (type === 'resize') {
-      if (renderer && canvas) {
-        canvas.width = e.data.width;
-        canvas.height = e.data.height;
-        renderer.resize(e.data.width, e.data.height);
-      }
+      canvas!.width = e.data.width;
+      canvas!.height = e.data.height;
+      renderer!.resize(e.data.width, e.data.height);
     }
 
     if (type === 'uploadData') {
       const { layer, slotIndex, slabIndex, data } = e.data;
-      const store = layerStores.get(layer);
-      if (!store) {
-        console.warn(`[Aurora] No LayerStore for ${layer}`);
-        return;
-      }
-
-      // Ensure slot buffers exist
+      const store = layerStores.get(layer)!;
       store.ensureSlotBuffers(slotIndex);
-
-      // Write data to GPU buffer
       store.writeToSlab(slabIndex, slotIndex, data);
     }
 
     if (type === 'activateSlots') {
       const { layer, slot0, slot1, t0, t1, loadedPoints } = e.data;
-      const store = layerStores.get(layer);
-      if (!store || !renderer) {
-        console.warn(`[Aurora] activateSlots: missing store or renderer for ${layer}`);
-        return;
-      }
+      const store = layerStores.get(layer)!;
 
       // Update slot state for uniform building
       const state = slotStates.get(layer);
@@ -411,7 +388,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         const buffer0 = store.getSlotBuffer(slot0, 0);
         const buffer1 = store.getSlotBuffer(slot1, 0);
         if (buffer0 && buffer1) {
-          renderer.setTextureLayerBuffers(layer as TWeatherTextureLayer, buffer0, buffer1);
+          renderer!.setTextureLayerBuffers(layer as TWeatherTextureLayer, buffer0, buffer1);
         }
       } else if (layer === 'wind') {
         // Wind: 2 slabs (u=0, v=1)
@@ -420,31 +397,25 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         const u1 = store.getSlotBuffer(slot1, 0);
         const v1 = store.getSlotBuffer(slot1, 1);
         if (u0 && v0 && u1 && v1) {
-          renderer.setWindLayerBuffers(u0, v0, u1, v1);
+          renderer!.setWindLayerBuffers(u0, v0, u1, v1);
         }
       } else if (layer === 'pressure') {
         // Pressure: trigger regrid (raw=0, grid=1)
         const rawBuffer = store.getSlotBuffer(slot0, 0);
         if (rawBuffer) {
-          renderer.triggerPressureRegrid(slot0, rawBuffer);
+          renderer!.triggerPressureRegrid(slot0, rawBuffer);
         }
       }
     }
 
     if (type === 'updatePalette') {
-      if (renderer) {
-        renderer.updateTempPalette(e.data.textureData);
-      }
+      renderer!.updateTempPalette(e.data.textureData);
     }
 
     if (type === 'triggerPressureRegrid') {
-      const store = layerStores.get('pressure');
-      if (renderer && store) {
-        const rawBuffer = store.getSlotBuffer(e.data.slotIndex, 0);
-        if (rawBuffer) {
-          renderer.triggerPressureRegrid(e.data.slotIndex, rawBuffer);
-        }
-      }
+      const store = layerStores.get('pressure')!;
+      const rawBuffer = store.getSlotBuffer(e.data.slotIndex, 0)!;
+      renderer!.triggerPressureRegrid(e.data.slotIndex, rawBuffer);
     }
 
     if (type === 'cleanup') {

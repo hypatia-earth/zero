@@ -263,7 +263,7 @@ export function setupCameraControls(
     lastTime = now;
 
     // Skip if delta is too large (tab was inactive)
-    if (deltaTime > 0.1) return;
+    if (deltaTime > 0.5) return;
 
     const opts = getOptions();
 
