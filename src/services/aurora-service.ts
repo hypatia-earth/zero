@@ -81,6 +81,18 @@ export function createAuroraService(
   let lastRafTime = 0;
   let frameDebt = 0;
 
+  function shouldRunFrame(rafTime: number): boolean {
+    const fpsLimit = optionsService.options.value.debug.fpsLimit;
+    if (fpsLimit === 'off') return true;
+    const targetFrameTime = 1000 / parseInt(fpsLimit, 10);
+    const delta = lastRafTime ? rafTime - lastRafTime : targetFrameTime;
+    lastRafTime = rafTime;
+    frameDebt += delta;
+    if (frameDebt < targetFrameTime) return false;
+    frameDebt = Math.min(frameDebt - targetFrameTime, targetFrameTime);
+    return true;
+  }
+
   // Perf stats
   const frameIntervals = createRollingAvg(60);
   const frameTimes = createRollingAvg(60);
@@ -229,6 +241,9 @@ export function createAuroraService(
     },
 
     start(): void {
+      const cam = camera!;
+      const controls = cameraControls!;
+
       onFrameComplete = (timing) => {
         renderInFlight = false;
         frameTimes.push(timing.frame);
@@ -236,48 +251,36 @@ export function createAuroraService(
       };
 
       const frame = (rafTime: number) => {
-        // --- INIT ---
-        const fpsLimit = optionsService.options.value.debug.fpsLimit;
-        if (fpsLimit !== 'off') {
-          const targetFrameTime = 1000 / parseInt(fpsLimit, 10);
-          const delta = lastRafTime ? rafTime - lastRafTime : targetFrameTime;
-          lastRafTime = rafTime;
-          frameDebt += delta;
-          if (frameDebt < targetFrameTime) {
-            requestAnimationFrame(frame);
-            return;
+        if (shouldRunFrame(rafTime)) {
+          const now = performance.now();
+          frameIntervals.push(now - lastFrameTime);
+          lastFrameTime = now;
+
+          // --- UPDATE ---
+          controls.tick();
+          cam.update();
+          updatePerfStats();
+
+          // --- RENDER ---
+          if (!renderInFlight) {
+            renderInFlight = true;
+            viewProjBuffer.set(cam.getViewProj());
+            viewProjInverseBuffer.set(cam.getViewProjInverse());
+            eyeBuffer.set(cam.getEyePosition());
+            send({
+              type: 'render',
+              camera: {
+                viewProj: viewProjBuffer,
+                viewProjInverse: viewProjInverseBuffer,
+                eye: eyeBuffer,
+                tanFov: cam.getTanFov(),
+              },
+              time: stateService.viewState.value.time.getTime(),
+            });
+          } else {
+            droppedFrames++;
           }
-          frameDebt = Math.min(frameDebt - targetFrameTime, targetFrameTime);
         }
-        const now = performance.now();
-        frameIntervals.push(now - lastFrameTime);
-        lastFrameTime = now;
-
-        // --- UPDATE ---
-        cameraControls!.tick();
-        camera!.update();
-        updatePerfStats();
-
-        // --- RENDER ---
-        if (!renderInFlight) {
-          renderInFlight = true;
-          viewProjBuffer.set(camera!.getViewProj());
-          viewProjInverseBuffer.set(camera!.getViewProjInverse());
-          eyeBuffer.set(camera!.getEyePosition());
-          send({
-            type: 'render',
-            camera: {
-              viewProj: viewProjBuffer,
-              viewProjInverse: viewProjInverseBuffer,
-              eye: eyeBuffer,
-              tanFov: camera!.getTanFov(),
-            },
-            time: stateService.viewState.value.time.getTime(),
-          });
-        } else {
-          droppedFrames++;
-        }
-
         requestAnimationFrame(frame);
       };
 
