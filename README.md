@@ -79,6 +79,11 @@ Services like Windy.com and Weather.com excel at polished UX, multi-model compar
 
 Different missions, both valuable.
 
+## Changelog
+
+### 2026-02-04
+- **Worker-based renderer** — GPU operations moved to dedicated Web Worker via OffscreenCanvas. Eliminates main thread blocking during data loading, improving touch responsiveness on older mobile devices.
+
 ## License
 
 MIT — see [LICENSE](LICENSE)
