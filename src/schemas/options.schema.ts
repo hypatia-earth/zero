@@ -1028,15 +1028,20 @@ export const optionsSchema = z.object({
         control: 'toggle',
       }
     ),
-    batterySaver: opt(
-      z.boolean().default(false),
+    fpsLimit: opt(
+      z.enum(['off', '60', '30']).default('off'),
       {
-        label: 'Battery saver',
-        description: 'Limit to 30 fps to save power and reduce heat',
+        label: 'Frame rate limit',
+        description: 'Limit fps to save power and reduce heat',
         group: 'environmental',
         filter: 'global',
         order: 0,
-        control: 'toggle',
+        control: 'radio',
+        options: [
+          { value: 'off', label: 'Off' },
+          { value: '60', label: '60' },
+          { value: '30', label: '30' },
+        ],
       }
     ),
   }),
@@ -1082,7 +1087,7 @@ export const defaultOptions: ZeroOptions = {
   pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: 'laplacian', smoothingPasses: '1', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
-  debug: { showPerfPanel: false, batterySaver: false },
+  debug: { showPerfPanel: false, fpsLimit: 'off' },
 };
 
 // ============================================================
