@@ -83,6 +83,10 @@ export function createAuroraService(
   let renderInFlight = false;
   let droppedFrames = 0;
 
+  // Frame throttle state
+  let lastRafTime = 0;
+  let frameDebt = 0;
+
   // Perf stats
   const frameIntervals = createRollingAvg(60);
   const frameTimes = createRollingAvg(60);
@@ -253,8 +257,22 @@ export function createAuroraService(
         emitPerfStats();
       });
 
-      const frame = () => {
+      const frame = (rafTime: number) => {
         if (!running) return;
+
+        // Frame rate throttle: skip frames to achieve target fps
+        const fpsLimit = optionsService.options.value.debug.fpsLimit;
+        if (fpsLimit !== 'off') {
+          const targetFrameTime = fpsLimit === '30' ? 1000 / 30 : 1000 / 60;
+          const delta = lastRafTime ? rafTime - lastRafTime : targetFrameTime;
+          lastRafTime = rafTime;
+          frameDebt += delta;
+          if (frameDebt < targetFrameTime) {
+            animationId = requestAnimationFrame(frame);
+            return;
+          }
+          frameDebt = Math.min(frameDebt - targetFrameTime, targetFrameTime);
+        }
 
         const now = performance.now();
         if (lastFrameTime > 0) {
