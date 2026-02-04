@@ -92,7 +92,6 @@ export function createAuroraService(
   const frameTimes = createRollingAvg(60);
   const passTimes = createRollingAvg(60);
   let lastFrameTime = 0;
-  let frameStartTime = 0;
   let perfFrameCount = 0;
   let globeFrameCount = 0;
 
@@ -250,9 +249,13 @@ export function createAuroraService(
 
       handlers.set('frameComplete', (msg) => {
         renderInFlight = false;
-        frameTimes.push(performance.now() - frameStartTime);
+        // frame = worker CPU time (prepare + submit)
         if ('timing' in msg && msg.timing?.frame) {
-          passTimes.push(msg.timing.frame);
+          frameTimes.push(msg.timing.frame);
+        }
+        // pass = GPU timestamp query (actual render time)
+        if ('timing' in msg && msg.timing?.pass !== undefined && msg.timing.pass !== null) {
+          passTimes.push(msg.timing.pass);
         }
         emitPerfStats();
       });
@@ -275,6 +278,8 @@ export function createAuroraService(
         }
 
         const now = performance.now();
+
+        // Track intervals between ALL rAF calls (for FPS display)
         if (lastFrameTime > 0) {
           frameIntervals.push(now - lastFrameTime);
         }
@@ -292,7 +297,6 @@ export function createAuroraService(
 
         if (!renderInFlight) {
           renderInFlight = true;
-          frameStartTime = now;
           // Reuse buffers to avoid GC pressure
           viewProjBuffer.set(camera!.getViewProj());
           viewProjInverseBuffer.set(camera!.getViewProjInverse());
