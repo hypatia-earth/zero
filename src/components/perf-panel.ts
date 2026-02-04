@@ -1,8 +1,8 @@
 /**
  * Perf Panel Component
  *
- * Displays frame timing statistics
- * TODO: Get timing from worker frameComplete messages
+ * Displays frame timing statistics.
+ * DOM updated directly by PerfService (not mithril redraw).
  */
 
 import m from 'mithril';
