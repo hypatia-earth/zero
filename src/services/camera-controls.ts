@@ -304,6 +304,7 @@ export function setupCameraControls(
     camera.lat = physics.lat;
     camera.lon = physics.lon;
     camera.distance = physics.distance;
+    camera.markDirty();
 
     // Sync to state
     updateState();

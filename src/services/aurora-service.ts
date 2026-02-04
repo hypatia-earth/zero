@@ -47,19 +47,14 @@ function createRollingAvg(size: number) {
 export interface AuroraService {
   init(canvas: HTMLCanvasElement, config: AuroraConfig, assets: AuroraAssets): Promise<void>;
   start(): void;
-  stop(): void;
   cleanup(): void;
   dispose(): void;
-  // Data
-  uploadData(layer: TWeatherLayer, timestep: string, slotIndex: number, slabIndex: number, data: Float32Array): void;
+  uploadData(layer: TWeatherLayer, slotIndex: number, slabIndex: number, data: Float32Array): void;
   activateSlots(layer: TWeatherLayer, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
   updatePalette(layer: 'temp', textureData: Uint8Array, min: number, max: number): void;
   triggerPressureRegrid(slotIndex: number): void;
-  // Debug
   getCamera(): Camera;
-  // Low-level (for advanced use)
   send(msg: AuroraRequest, transfer?: Transferable[]): void;
-  onMessage<T extends AuroraResponse['type']>(type: T, handler: (msg: Extract<AuroraResponse, { type: T }>) => void): void;
 }
 
 export function createAuroraService(
@@ -74,12 +69,11 @@ export function createAuroraService(
     { type: 'module', name: 'aurora' }
   );
 
-  // Message handlers
-  const handlers = new Map<AuroraResponse['type'], (msg: AuroraResponse) => void>();
+  // Message callbacks
+  let onReady: (() => void) | null = null;
+  let onFrameComplete: ((timing: { frame: number; pass: number }) => void) | null = null;
 
   // Render loop state
-  let animationId: number | null = null;
-  let running = false;
   let renderInFlight = false;
   let droppedFrames = 0;
 
@@ -91,9 +85,8 @@ export function createAuroraService(
   const frameIntervals = createRollingAvg(60);
   const frameTimes = createRollingAvg(60);
   const passTimes = createRollingAvg(60);
-  let lastFrameTime = 0;
+  let lastFrameTime = performance.now();
   let perfFrameCount = 0;
-  let globeFrameCount = 0;
 
   // Camera (created in init)
   let camera: Camera | null = null;
@@ -105,22 +98,23 @@ export function createAuroraService(
   const viewProjInverseBuffer = new Float32Array(16);
   const eyeBuffer = new Float32Array(3);
 
-  // Handle incoming messages
-  function handleMessage(msg: AuroraResponse): void {
-    const handler = handlers.get(msg.type);
-    if (handler) {
-      handler(msg);
+  worker.onmessage = (e: MessageEvent<AuroraResponse>) => {
+    const msg = e.data;
+    switch (msg.type) {
+      case 'ready':
+        onReady?.();
+        break;
+      case 'frameComplete':
+        onFrameComplete?.(msg.timing);
+        break;
+      case 'error':
+        console.error('[Aurora]', msg.message);
+        break;
     }
-    if (msg.type === 'error') {
-      console.error('[Aurora]', msg.message, msg.fatal ? '(fatal)' : '');
-    }
-  }
-
-  worker.onmessage = (e: MessageEvent<AuroraResponse>) => handleMessage(e.data);
+  };
   worker.onerror = (e) => console.error('[Aurora] Worker error:', e.message);
 
-  function emitPerfStats(): void {
-    // Throttle to every 10 frames
+  function updatePerfStats(): void {
     if (++perfFrameCount % 10 !== 0) return;
     const intervalAvg = frameIntervals.avg();
     const fps = intervalAvg > 0 ? 1000 / intervalAvg : 0;
@@ -128,6 +122,12 @@ export function createAuroraService(
     perfService.setFrameMs(frameTimes.avg());
     perfService.setPassMs(passTimes.avg());
     perfService.setDropped(droppedFrames);
+    if (camera && canvas) {
+      const fov = 2 * Math.atan(camera.getTanFov());
+      const globeRadiusPx = Math.asin(1 / camera.distance) * (canvas.clientHeight / fov);
+      perfService.setGlobe(globeRadiusPx);
+      perfService.setScreen(canvas.clientWidth, canvas.clientHeight);
+    }
   }
 
   function send(msg: AuroraRequest, transfer?: Transferable[]): void {
@@ -154,20 +154,8 @@ export function createAuroraService(
         assets.logo,
       ];
 
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Aurora worker init timeout')), 10000);
-
-        handlers.set('ready', () => {
-          clearTimeout(timeout);
-          resolve();
-        });
-        handlers.set('error', (msg) => {
-          if ('fatal' in msg && msg.fatal) {
-            clearTimeout(timeout);
-            reject(new Error('message' in msg ? msg.message : 'Unknown error'));
-          }
-        });
-
+      await new Promise<void>((resolve) => {
+        onReady = () => resolve();
         send({ type: 'init', canvas: offscreen, width, height, config, assets }, transferables);
       });
 
@@ -220,8 +208,8 @@ export function createAuroraService(
       window.addEventListener('pagehide', () => this.cleanup());
     },
 
-    uploadData(layer: TWeatherLayer, timestep: string, slotIndex: number, slabIndex: number, data: Float32Array): void {
-      send({ type: 'uploadData', layer, timestep, slotIndex, slabIndex, data }, [data.buffer]);
+    uploadData(layer: TWeatherLayer, slotIndex: number, slabIndex: number, data: Float32Array): void {
+      send({ type: 'uploadData', layer, slotIndex, slabIndex, data }, [data.buffer]);
     },
 
     activateSlots(layer: TWeatherLayer, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void {
@@ -241,67 +229,41 @@ export function createAuroraService(
     },
 
     start(): void {
-      if (running) return;
-      if (!camera || !cameraControls || !canvas) {
-        throw new Error('AuroraService.start() called before init()');
-      }
-      running = true;
-
-      handlers.set('frameComplete', (msg) => {
+      onFrameComplete = (timing) => {
         renderInFlight = false;
-        // frame = worker CPU time (prepare + submit)
-        if ('timing' in msg && msg.timing?.frame) {
-          frameTimes.push(msg.timing.frame);
-        }
-        // pass = GPU timestamp query (actual render time)
-        if ('timing' in msg && msg.timing?.pass !== undefined && msg.timing.pass !== null) {
-          passTimes.push(msg.timing.pass);
-        }
-        emitPerfStats();
-      });
+        frameTimes.push(timing.frame);
+        passTimes.push(timing.pass);
+      };
 
       const frame = (rafTime: number) => {
-        if (!running) return;
-
-        // Frame rate throttle: skip frames to achieve target fps
+        // --- INIT ---
         const fpsLimit = optionsService.options.value.debug.fpsLimit;
         if (fpsLimit !== 'off') {
-          const targetFrameTime = fpsLimit === '30' ? 1000 / 30 : 1000 / 60;
+          const targetFrameTime = 1000 / parseInt(fpsLimit, 10);
           const delta = lastRafTime ? rafTime - lastRafTime : targetFrameTime;
           lastRafTime = rafTime;
           frameDebt += delta;
           if (frameDebt < targetFrameTime) {
-            animationId = requestAnimationFrame(frame);
+            requestAnimationFrame(frame);
             return;
           }
           frameDebt = Math.min(frameDebt - targetFrameTime, targetFrameTime);
         }
-
         const now = performance.now();
-
-        // Track intervals between ALL rAF calls (for FPS display)
-        if (lastFrameTime > 0) {
-          frameIntervals.push(now - lastFrameTime);
-        }
+        frameIntervals.push(now - lastFrameTime);
         lastFrameTime = now;
 
-        // Update physics and camera
+        // --- UPDATE ---
         cameraControls!.tick();
+        camera!.update();
+        updatePerfStats();
 
-        // Update globe radius in perf panel (throttled)
-        if (++globeFrameCount % 10 === 0) {
-          const fov = 2 * Math.atan(camera!.getTanFov());
-          const globeRadiusPx = Math.asin(1 / camera!.distance) * (canvas!.clientHeight / fov);
-          perfService.setGlobe(globeRadiusPx);
-        }
-
+        // --- RENDER ---
         if (!renderInFlight) {
           renderInFlight = true;
-          // Reuse buffers to avoid GC pressure
           viewProjBuffer.set(camera!.getViewProj());
           viewProjInverseBuffer.set(camera!.getViewProjInverse());
           eyeBuffer.set(camera!.getEyePosition());
-          const timeMs = stateService.viewState.value.time.getTime();
           send({
             type: 'render',
             camera: {
@@ -310,24 +272,16 @@ export function createAuroraService(
               eye: eyeBuffer,
               tanFov: camera!.getTanFov(),
             },
-            time: timeMs,
+            time: stateService.viewState.value.time.getTime(),
           });
         } else {
           droppedFrames++;
         }
 
-        animationId = requestAnimationFrame(frame);
+        requestAnimationFrame(frame);
       };
 
-      animationId = requestAnimationFrame(frame);
-    },
-
-    stop(): void {
-      running = false;
-      if (animationId !== null) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
-      }
+      requestAnimationFrame(frame);
     },
 
     getCamera(): Camera {
@@ -336,7 +290,6 @@ export function createAuroraService(
     },
 
     cleanup(): void {
-      this.stop();
       send({ type: 'cleanup' });
     },
 
@@ -346,9 +299,5 @@ export function createAuroraService(
     },
 
     send,
-
-    onMessage<T extends AuroraResponse['type']>(type: T, handler: (msg: Extract<AuroraResponse, { type: T }>) => void): void {
-      handlers.set(type, handler as (msg: AuroraResponse) => void);
-    },
   };
 }

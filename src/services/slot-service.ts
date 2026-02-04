@@ -275,14 +275,14 @@ export class SlotService {
   }
 
   /** Upload data to slot via worker message */
-  private uploadData(param: TWeatherLayer, timestep: TTimestep, data: Float32Array, slotIndex: number, slabIndex: number = 0): void {
+  private uploadData(param: TWeatherLayer, data: Float32Array, slotIndex: number, slabIndex: number = 0): void {
     // Swap with synthetic data if configured
     if (this.usesSynthData(param)) {
       data = this.getSyntheticData(param);
     }
 
     // Send data to worker (transfers ownership of buffer)
-    this.auroraService.uploadData(param, timestep, slotIndex, slabIndex, data);
+    this.auroraService.uploadData(param, slotIndex, slabIndex, data);
 
     // Pressure needs regrid after upload
     if (param === 'pressure' && slabIndex === 0) {
@@ -309,7 +309,7 @@ export class SlotService {
     const dataLength = data.length;
 
     // Upload to worker (worker manages GPU buffers)
-    this.uploadData(param, timestep, data, slotIndex, slabIndex);
+    this.uploadData(param, data, slotIndex, slabIndex);
 
     // Mark loaded (handle multi-slab)
     const slabsCount = this.getLayerParams(param).length;

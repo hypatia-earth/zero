@@ -54,7 +54,7 @@ export interface AuroraConfig {
 export type AuroraRequest =
   | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; config: AuroraConfig; assets: AuroraAssets }
   | { type: 'options'; value: ZeroOptions }
-  | { type: 'uploadData'; layer: TWeatherLayer; timestep: string; slotIndex: number; slabIndex: number; data: Float32Array }
+  | { type: 'uploadData'; layer: TWeatherLayer; slotIndex: number; slabIndex: number; data: Float32Array }
   | { type: 'activateSlots'; layer: TWeatherLayer; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
   | { type: 'render'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number }
   | { type: 'resize'; width: number; height: number }
@@ -64,9 +64,7 @@ export type AuroraRequest =
 
 export type AuroraResponse =
   | { type: 'ready' }
-  | { type: 'uploadComplete'; layer: TWeatherLayer; timestep: string; slotIndex: number }
-  | { type: 'frameComplete'; timing?: { frame: number; pass: number | null } }
-  | { type: 'deviceLost'; reason: string; message: string }
+  | { type: 'frameComplete'; timing: { frame: number; pass: number } }
   | { type: 'error'; message: string; fatal: boolean };
 
 // ============================================================
@@ -273,14 +271,9 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       }
       console.log(`[Aurora] Created ${layerStores.size} LayerStores`);
 
-      // Set up device loss handling
+      // Log device loss (app will fail visibly)
       device.lost.then((info) => {
         console.error('[Aurora] GPU device lost:', info.reason, info.message);
-        self.postMessage({
-          type: 'deviceLost',
-          reason: info.reason,
-          message: info.message,
-        } satisfies AuroraResponse);
       });
 
       console.log('[Aurora] GlobeRenderer ready');
@@ -379,7 +372,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
     }
 
     if (type === 'uploadData') {
-      const { layer, timestep, slotIndex, slabIndex, data } = e.data;
+      const { layer, slotIndex, slabIndex, data } = e.data;
       const store = layerStores.get(layer);
       if (!store) {
         console.warn(`[Aurora] No LayerStore for ${layer}`);
@@ -391,13 +384,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       // Write data to GPU buffer
       store.writeToSlab(slabIndex, slotIndex, data);
-
-      self.postMessage({
-        type: 'uploadComplete',
-        layer,
-        timestep,
-        slotIndex,
-      } satisfies AuroraResponse);
     }
 
     if (type === 'activateSlots') {

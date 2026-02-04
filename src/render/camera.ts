@@ -23,10 +23,14 @@ export class Camera {
   private projMatrix = new Float32Array(16);
   private viewProjMatrix = new Float32Array(16);
   private viewProjInverse = new Float32Array(16);
+  private eyePosition = new Float32Array(3);
+  private viewInverse = new Float32Array(16);
+  private projInverse = new Float32Array(16);
   private aspect = 1;
   private fov: number;   // radians
   private near: number;
   private far: number;
+  private dirty = true;
 
   constructor(state?: CameraState, config?: CameraConfig) {
     // Apply config (defaults if not provided)
@@ -39,7 +43,7 @@ export class Camera {
       this.lon = state.lon;
       this.distance = state.distance;
     }
-    this.updateMatrices();
+    this.update();
   }
 
   /** Get tan(fov/2) for shader ray generation */
@@ -49,37 +53,33 @@ export class Camera {
 
   setAspect(width: number, height: number): void {
     this.aspect = width / height;
-    this.updateMatrices();
+    this.dirty = true;
   }
 
   setPosition(lat: number, lon: number, distance: number): void {
     this.lat = lat;
     this.lon = lon;
     this.distance = distance;
-    this.updateMatrices();
+    this.dirty = true;
   }
 
   getState(): CameraState {
     return { lat: this.lat, lon: this.lon, distance: this.distance };
   }
 
+  markDirty(): void {
+    this.dirty = true;
+  }
+
   getEyePosition(): Float32Array {
-    const latRad = this.lat * Math.PI / 180;
-    const lonRad = this.lon * Math.PI / 180;
-    return new Float32Array([
-      this.distance * Math.cos(latRad) * Math.sin(lonRad),
-      this.distance * Math.sin(latRad),
-      this.distance * Math.cos(latRad) * Math.cos(lonRad),
-    ]);
+    return this.eyePosition;
   }
 
   getViewProjInverse(): Float32Array {
-    this.updateMatrices();
     return this.viewProjInverse;
   }
 
   getViewProj(): Float32Array {
-    this.updateMatrices();
     return this.viewProjMatrix;
   }
 
@@ -88,8 +88,6 @@ export class Camera {
    * Returns null if the point doesn't hit the globe
    */
   screenToGlobe(clientX: number, clientY: number, canvasWidth: number, canvasHeight: number): { lat: number; lon: number } | null {
-    this.updateMatrices();
-
     // Convert to NDC (-1 to 1)
     const ndcX = (clientX / canvasWidth) * 2 - 1;
     const ndcY = 1 - (clientY / canvasHeight) * 2;
@@ -141,18 +139,26 @@ export class Camera {
     return { lat, lon };
   }
 
-  private updateMatrices(): void {
-    const eye = this.getEyePosition();
-    this.lookAt(this.viewMatrix, eye, [0, 0, 0], [0, 1, 0]);
+  /** Call once per frame to update matrices if dirty */
+  update(): void {
+    if (!this.dirty) return;
+    this.dirty = false;
+
+    // Compute eye position
+    const latRad = this.lat * Math.PI / 180;
+    const lonRad = this.lon * Math.PI / 180;
+    this.eyePosition[0] = this.distance * Math.cos(latRad) * Math.sin(lonRad);
+    this.eyePosition[1] = this.distance * Math.sin(latRad);
+    this.eyePosition[2] = this.distance * Math.cos(latRad) * Math.cos(lonRad);
+
+    this.lookAt(this.viewMatrix, this.eyePosition, [0, 0, 0], [0, 1, 0]);
     this.perspective(this.projMatrix, this.fov, this.aspect, this.near, this.far);
     this.multiply(this.viewProjMatrix, this.projMatrix, this.viewMatrix);
 
     // Compute inverses separately (more stable than inverting combined matrix)
-    const viewInverse = new Float32Array(16);
-    const projInverse = new Float32Array(16);
-    this.invertView(viewInverse, this.viewMatrix, eye);
-    this.invertPerspective(projInverse, this.fov, this.aspect, this.near, this.far);
-    this.multiply(this.viewProjInverse, viewInverse, projInverse);
+    this.invertView(this.viewInverse, this.viewMatrix, this.eyePosition);
+    this.invertPerspective(this.projInverse, this.fov, this.aspect, this.near, this.far);
+    this.multiply(this.viewProjInverse, this.viewInverse, this.projInverse);
   }
 
   private invertView(out: Float32Array, view: Float32Array, eye: Float32Array): void {
