@@ -12,7 +12,7 @@ export class GpuTimestamp {
   private resolveBuffer: GPUBuffer;
   private readBuffers: [GPUBuffer, GPUBuffer];
   private pending: [boolean, boolean] = [false, false];
-  private lastTimeMs: number | null = null;
+  private lastTimeMs = NaN;
   private disposed = false;
   private activeIdx: 0 | 1 | -1 = -1;  // Buffer used this frame
 
@@ -99,7 +99,7 @@ export class GpuTimestamp {
   /**
    * Get last measured GPU time in milliseconds
    */
-  getLastTimeMs(): number | null {
+  getLastTimeMs(): number {
     return this.lastTimeMs;
   }
 

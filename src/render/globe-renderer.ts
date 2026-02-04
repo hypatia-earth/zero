@@ -682,8 +682,8 @@ export class GlobeRenderer {
     }
   }
 
-  render(): number | null {
-    if (this.isDestroying) return null;
+  render(): number {
+    if (this.isDestroying) return NaN;
     const commandEncoder = this.device.createCommandEncoder();
 
     // PASS 1: Render globe to offscreen textures (no atmosphere)
@@ -782,7 +782,7 @@ export class GlobeRenderer {
       this.gpuTimestamp.startReadback();
     }
 
-    return this.gpuTimestamp?.getLastTimeMs() ?? null;
+    return this.gpuTimestamp?.getLastTimeMs() ?? NaN;
   }
 
   async loadBasemap(faces: ImageBitmap[]): Promise<void> {

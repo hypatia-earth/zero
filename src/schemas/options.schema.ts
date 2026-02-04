@@ -1029,7 +1029,7 @@ export const optionsSchema = z.object({
       }
     ),
     fpsLimit: opt(
-      z.enum(['off', '60', '30']).default('off'),
+      z.enum(['off', '60', '30', '5']).default('off'),
       {
         label: 'Frame rate limit',
         description: 'Limit fps to save power and reduce heat',
@@ -1041,6 +1041,7 @@ export const optionsSchema = z.object({
           { value: 'off', label: 'Off' },
           { value: '60', label: '60' },
           { value: '30', label: '30' },
+          { value: '5', label: '5', localhostOnly: true },
         ],
       }
     ),
