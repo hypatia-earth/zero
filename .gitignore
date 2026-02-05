@@ -4,9 +4,9 @@ dist/
 *.log
 
 # Development folders (not part of app)
-docs/
-scripts/
-test/
+/docs/
+/scripts/
+/test/
 DEBUG.md
 
 # Generated shaders (built by wgsl-plus from master-*.wgsl)
