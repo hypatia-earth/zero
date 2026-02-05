@@ -56,6 +56,13 @@ interface LayerDetail {
  * Register the Service Worker
  */
 export async function registerServiceWorker(): Promise<void> {
+  // Skip SW registration if debug=nosw is in URL (for e2e testing)
+  const debugFlags = new URLSearchParams(location.search).get('debug')?.split(',') ?? [];
+  if (debugFlags.includes('nosw')) {
+    console.log('[SW] Skipped (debug=nosw)');
+    return;
+  }
+
   try {
     await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
     await navigator.serviceWorker.ready;

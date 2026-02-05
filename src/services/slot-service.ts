@@ -31,6 +31,7 @@ export class SlotService {
   private paramSlots: Map<TWeatherLayer, ParamSlots> = new Map();
   private readyLayers: TLayer[] = [];
   private readyWeatherLayers: TWeatherLayer[] = [];
+  private testData: Map<TWeatherLayer, Float32Array> = new Map();
   private timeslotsPerLayer: number = 8;
   private disposeEffect: (() => void) | null = null;
   private initialized = false;
@@ -54,6 +55,16 @@ export class SlotService {
     private stateService: StateService,
     private configService: ConfigService,
   ) {
+    // Check for test data set via window.__zeroTestData (for e2e testing)
+    // Must be set before SlotService is created (via page.addInitScript)
+    const globalTestData = (window as unknown as { __zeroTestData?: Record<string, Float32Array> }).__zeroTestData;
+    if (globalTestData) {
+      for (const [layer, data] of Object.entries(globalTestData)) {
+        this.testData.set(layer as TWeatherLayer, data);
+        console.log(`[Slot] Test data from __zeroTestData: ${layer}, ${data.length} points`);
+      }
+    }
+
     // All layers use per-slot buffers with rebinding - no binding size limit
     // Only limited by total VRAM (handled by OOM on allocation)
     this.timeslotsPerLayer = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
@@ -229,16 +240,18 @@ export class SlotService {
     if (wanted.mode === 'single') {
       const ts = wanted.priority[0]!;
       const slot = ps.getSlot(ts);
+      DEBUG && console.log(`[Slot] activateIfReady ${pcode}: ts=${ts}, slot=`, slot);
       if (slot?.loaded) {
         // Skip if already activated with same timestep
         if (current.length === 1 && current[0] === ts) {
-          DEBUG && console.log(`[Slot] ${pcode} skip (same): ${fmt(ts)}`);
+          console.log(`[Slot] ${pcode} skip (same): ${fmt(ts)}`);
           return;
         }
         ps.setActiveTimesteps([ts]);
 
         // Worker handles buffer rebinding on activateSlots
         const t = this.timestepService.toDate(ts).getTime();
+        console.log(`[Slot] activateSlots ${pcode}: slot=${slot.slotIndex}, t=${t}, loadedPoints=${slot.loadedPoints}`);
         this.auroraService.activateSlots(param, slot.slotIndex, slot.slotIndex, t, t, slot.loadedPoints);
         DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
       } else {
@@ -279,6 +292,12 @@ export class SlotService {
     // Swap with synthetic data if configured
     if (this.usesSynthData(param)) {
       data = this.getSyntheticData(param);
+    }
+
+    // Swap with test data if set (for e2e testing)
+    const testData = this.testData.get(param);
+    if (testData) {
+      data = new Float32Array(testData);  // Copy since transfer detaches
     }
 
     // Send data to worker (transfers ownership of buffer)
@@ -584,6 +603,21 @@ export class SlotService {
   /** Set Gaussian LUTs for synthetic data generation */
   setGaussianLats(lats: Float32Array): void {
     this.gaussianLats = lats;
+  }
+
+  /**
+   * Set test data for a layer (for e2e testing).
+   * When set, uploadData will use this instead of real data.
+   * Call BEFORE data loading starts to inject into the normal flow.
+   */
+  setTestData(layer: TWeatherLayer, data: Float32Array): void {
+    this.testData.set(layer, data);
+    console.log(`[Slot] setTestData: ${layer}, ${data.length} points, data[0]=${data[0]}`);
+  }
+
+  /** Clear test data for a layer */
+  clearTestData(layer: TWeatherLayer): void {
+    this.testData.delete(layer);
   }
 
   dispose(): void {

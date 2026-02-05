@@ -24,7 +24,9 @@
     "wiki": "python3 scripts/publish-wiki.py",
     "wiki:push": "python3 scripts/publish-wiki.py --push",
     "repo-docs": "python3 scripts/publish-repo-docs.py",
-    "repo-docs:push": "python3 scripts/publish-repo-docs.py --push"
+    "repo-docs:push": "python3 scripts/publish-repo-docs.py --push",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@preact/signals-core": "^1.5.0",
@@ -34,6 +36,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.1",
     "@types/marked": "^5.0.2",
     "@types/mithril": "^2.2.0",
     "@webgpu/types": "^0.1.0",
