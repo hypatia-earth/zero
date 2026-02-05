@@ -15,3 +15,7 @@ src/render/shaders/zero-post.wgsl
 
 # External large dependencies (lazy-loaded)
 extern/
+
+# Test artifacts
+playwright-report/
+test-results/
