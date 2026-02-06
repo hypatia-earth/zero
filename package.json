@@ -27,7 +27,7 @@
     "repo-docs:push": "python3 scripts/publish-repo-docs.py --push",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:coverage": "npx tsx tools/test-coverage.ts"
+    "test:coverage": "npx tsx tests/e2e/test-coverage.ts"
   },
   "dependencies": {
     "@preact/signals-core": "^1.5.0",
