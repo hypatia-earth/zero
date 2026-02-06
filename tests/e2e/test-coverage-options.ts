@@ -9,7 +9,7 @@
  *   npx ts-node scripts/test-coverage.ts --missing   # Only show untested
  */
 
-import { optionsSchema } from '../src/schemas/options.schema';
+import { optionsSchema } from '../../src/schemas/options.schema';
 
 interface CoverageResult {
   path: string;
