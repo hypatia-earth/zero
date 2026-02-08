@@ -26,6 +26,7 @@
     "repo-docs": "python3 scripts/publish-repo-docs.py",
     "repo-docs:push": "python3 scripts/publish-repo-docs.py --push",
     "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed --reporter=list 2>&1 | sed 's/.*spec.ts:[0-9]*:[0-9]* › //'",
     "test:e2e:ui": "playwright test --ui",
     "test:coverage:options": "npx tsx tests/e2e/test-coverage-options.ts"
   },

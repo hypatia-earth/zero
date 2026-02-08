@@ -1,122 +1,190 @@
 /**
  * Temperature Layer E2E Tests
  *
- * Two test groups:
- *
- * 1. DETERMINISTIC PIXEL TESTS
- *    - Inject uniform fixture data (e.g., all pixels = 55°C)
- *    - Only temp layer enabled (no earth/sun)
- *    - Assert exact RGB from palette lookup
- *    - Tests the full render pipeline: data → palette → shader → pixel
- *
- * 2. BEHAVIORAL TESTS
- *    - Use live server data
- *    - Earth + temp enabled (realistic scenario)
- *    - Assert relative behavior (pixel changes, state persists)
- *    - Tests UI interactions and state management
+ * Single page load - all tests share one bootstrap.
+ * Uses ZeroTestAPI for clean test code.
  */
 
-import { test, expect } from '@playwright/test';
-import { testLayerPixels, waitForAppReady, waitForLayerReady, readCenterPixel } from '../helpers';
+import { test, expect, Page } from '@playwright/test';
+import {
+  createZeroAPI,
+  loadFixture,
+  waitForAppReady,
+  setupTestEnv,
+  expectRgb,
+  expectBackground,
+  blendRgb,
+  type ZeroTestAPI,
+  type RGB,
+} from '../helpers';
 
-/**
- * DETERMINISTIC PIXEL TESTS
- *
- * These test exact RGB output for known input data.
- * Background is clear color (22,22,22) since earth/sun disabled.
- *
- * baseRgb values come from the Classic Temperature palette:
- * - 55°C (above palette max ~52°C) → clamped to last stop [107, 28, 43]
- * - -20°C → palette lookup gives [143, 168, 184]
- *
- * Generate fixtures: python tests/scripts/generate_test_bins.py
- */
-testLayerPixels('temp', [
-  { fixture: 'uniform-55', palette: 'Classic Temperature', baseRgb: [107, 28, 43] },
-  { fixture: 'uniform-minus20', palette: 'Classic Temperature', baseRgb: [143, 168, 184] },
-  { fixture: 'uniform-55', palette: 'Classic Temperature', baseRgb: [107, 28, 43], opacities: [0.5] },
-]);
+// Fixture data
+const FIXTURE_55 = loadFixture('uniform-55');
+const FIXTURE_MINUS20 = loadFixture('uniform-minus20');
 
-/**
- * BEHAVIORAL TESTS
- *
- * These test UI interactions with live data.
- * Earth is enabled to simulate realistic usage.
- * Assertions check relative changes, not exact RGB.
- */
-test.describe('temp.enabled', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+// Expected RGB values from Classic Temperature palette
+const RGB_55: RGB = [107, 28, 43];        // 55°C (above max, clamped)
+const RGB_MINUS20: RGB = [143, 168, 184]; // -20°C
+
+let page: Page;
+let zero: ZeroTestAPI;
+
+test.describe('temp layer', () => {
+  test.beforeAll(async ({ browser }) => {
+    page = await browser.newPage();
+    zero = createZeroAPI(page);
+    await page.goto('https://localhost:5173/?layers=earth');
     await waitForAppReady(page);
+    await setupTestEnv(page);
   });
 
-  test('toggle on shows temperature layer', async ({ page }) => {
-    // Enable earth + temp (realistic scenario)
-    await page.evaluate(() => {
-      (window as any).__hypatia.optionsService.update((d: any) => {
-        d.earth.enabled = true;
-        d.temp.enabled = true;
-        d.temp.opacity = 1.0;
-      });
-    });
-
-    await waitForLayerReady(page, 'temp');
-    await page.waitForTimeout(500);
-
-    // Assert: center pixel is NOT the background color
-    const pixel = await readCenterPixel(page);
-    const isBackground = pixel.r === 22 && pixel.g === 22 && pixel.b === 22;
-    expect(isBackground).toBe(false);
+  test.afterAll(async () => {
+    await page.close();
   });
 
-  test('toggle off hides temperature layer', async ({ page }) => {
-    // Enable earth + temp
-    await page.evaluate(() => {
-      (window as any).__hypatia.optionsService.update((d: any) => {
-        d.earth.enabled = true;
-        d.temp.enabled = true;
-        d.temp.opacity = 1.0;
-      });
-    });
-    await waitForLayerReady(page, 'temp');
-    await page.waitForTimeout(500);
-    const pixelOn = await readCenterPixel(page);
+  test.afterEach(async () => {
+    await zero.OptionsService.toggleLayer('temp', false);
+  });
 
-    // Disable temp
-    await page.evaluate(() => {
-      (window as any).__hypatia.optionsService.update((d: any) => {
-        d.temp.enabled = false;
-      });
-    });
-    await page.waitForTimeout(500);
-    const pixelOff = await readCenterPixel(page);
+  // ============================================================
+  // Pixel Tests - uniform-55 fixture
+  // ============================================================
 
-    // Assert: pixel changed when temp toggled off
-    const changed = pixelOn.r !== pixelOff.r || pixelOn.g !== pixelOff.g || pixelOn.b !== pixelOff.b;
+  test('55°C renders correct RGB at opacity 1.0', async () => {
+    await zero.PaletteService.setPalette('temp', 'Classic Temperature');
+    await zero.OptionsService.toggleLayer('temp', true);
+    await zero.OptionsService.setOpacity('temp', 1.0);
+    await page.waitForTimeout(300);
+    await zero.SlotService.injectTestData('temp', FIXTURE_55);
+    await page.waitForTimeout(300);
+
+    const pixel = await zero.Canvas.readCenterPixel();
+    expectRgb(pixel, RGB_55);
+  });
+
+  test('55°C at opacity 0.5 blends with background', async () => {
+    await zero.PaletteService.setPalette('temp', 'Classic Temperature');
+    await zero.OptionsService.toggleLayer('temp', true);
+    await zero.OptionsService.setOpacity('temp', 0.5);
+    await page.waitForTimeout(300);
+    await zero.SlotService.injectTestData('temp', FIXTURE_55);
+    await page.waitForTimeout(300);
+
+    const pixel = await zero.Canvas.readCenterPixel();
+    expectRgb(pixel, blendRgb(RGB_55, 0.5));
+  });
+
+  test('55°C at opacity 0.0 shows background', async () => {
+    await zero.OptionsService.toggleLayer('temp', true);
+    await zero.OptionsService.setOpacity('temp', 0.0);
+    await page.waitForTimeout(300);
+    await zero.SlotService.injectTestData('temp', FIXTURE_55);
+    await page.waitForTimeout(300);
+
+    const pixel = await zero.Canvas.readCenterPixel();
+    expectBackground(pixel);
+  });
+
+  // ============================================================
+  // Pixel Tests - uniform-minus20 fixture
+  // ============================================================
+
+  test('-20°C renders correct RGB', async () => {
+    await zero.PaletteService.setPalette('temp', 'Classic Temperature');
+    await zero.OptionsService.toggleLayer('temp', true);
+    await zero.OptionsService.setOpacity('temp', 1.0);
+    await page.waitForTimeout(300);
+    await zero.SlotService.injectTestData('temp', FIXTURE_MINUS20);
+    await page.waitForTimeout(300);
+
+    const pixel = await zero.Canvas.readCenterPixel();
+    expectRgb(pixel, RGB_MINUS20);
+  });
+
+  // ============================================================
+  // Toggle Tests
+  // ============================================================
+
+  test('toggle off shows background', async () => {
+    await zero.OptionsService.toggleLayer('temp', true);
+    await page.waitForTimeout(300);
+    await zero.SlotService.injectTestData('temp', FIXTURE_55);
+    await page.waitForTimeout(300);
+
+    // Verify something is rendered
+    let pixel = await zero.Canvas.readCenterPixel();
+    expect(pixel.r).not.toBe(22);
+
+    // Toggle off
+    await zero.OptionsService.toggleLayer('temp', false);
+    await page.waitForTimeout(300);
+
+    pixel = await zero.Canvas.readCenterPixel();
+    expectBackground(pixel);
+  });
+
+  // ============================================================
+  // Palette Tests
+  // ============================================================
+
+  test.skip('palette change affects color', async () => {
+    // TODO: Palette changes don't affect direct GPU injection
+    // Need to investigate how palette lookup works with injectTestData
+    await zero.PaletteService.setPalette('temp', 'Classic Temperature');
+    await zero.OptionsService.toggleLayer('temp', true);
+    await page.waitForTimeout(300);
+    await zero.SlotService.injectTestData('temp', FIXTURE_55);
+    await page.waitForTimeout(300);
+
+    const pixelClassic = await zero.Canvas.readCenterPixel();
+
+    await zero.PaletteService.setPalette('temp', 'Heat');
+    await page.waitForTimeout(300);
+
+    const pixelHeat = await zero.Canvas.readCenterPixel();
+
+    const changed = pixelClassic.r !== pixelHeat.r ||
+                   pixelClassic.g !== pixelHeat.g ||
+                   pixelClassic.b !== pixelHeat.b;
     expect(changed).toBe(true);
   });
+});
 
-  test('temp.enabled persists after reload', async ({ page }) => {
-    // Enable temp
-    await page.evaluate(() => {
-      (window as any).__hypatia.optionsService.update((d: any) => {
-        d.temp.enabled = true;
-      });
-    });
+// ============================================================
+// Persistence Tests (require reload)
+// ============================================================
 
-    const enabledBefore = await page.evaluate(() =>
-      (window as any).__hypatia.optionsService.options.value.temp.enabled
-    );
-    expect(enabledBefore).toBe(true);
+test.describe('temp persistence', () => {
+  test('opacity persists after reload', async ({ page }) => {
+    const zero = createZeroAPI(page);
+    await page.goto('https://localhost:5173/');
+    await waitForAppReady(page);
 
-    // Reload page
+    await zero.OptionsService.setOpacity('temp', 0.7);
+
     await page.reload();
     await waitForAppReady(page);
 
-    // Assert: temp still enabled after reload
-    const enabledAfter = await page.evaluate(() =>
+    const opacity = await page.evaluate(() =>
+      (window as any).__hypatia.optionsService.options.value.temp.opacity
+    );
+    expect(opacity).toBeCloseTo(0.7, 1);
+  });
+
+  test('enabled state persists after reload', async ({ page }) => {
+    const zero = createZeroAPI(page);
+    await page.goto('https://localhost:5173/');
+    await waitForAppReady(page);
+
+    await zero.OptionsService.toggleLayer('temp', false);
+    await page.waitForTimeout(500);  // Wait for URL sync
+
+    await page.reload();
+    await waitForAppReady(page);
+
+    const enabled = await page.evaluate(() =>
       (window as any).__hypatia.optionsService.options.value.temp.enabled
     );
-    expect(enabledAfter).toBe(true);
+    expect(enabled).toBe(false);
   });
 });
