@@ -617,6 +617,12 @@ export class SlotService {
       this.auroraService.uploadData(layer, 0, slabIndex, slabs[slabIndex]!);
     }
     this.auroraService.activateSlots(layer, 0, 0, Date.now(), Date.now(), points);
+
+    // Pressure needs regrid after upload (worker needs buffer in store first)
+    if (layer === 'pressure') {
+      // Small delay to ensure uploadData message is processed before regrid
+      setTimeout(() => this.auroraService.triggerPressureRegrid(0), 100);
+    }
   }
 
   /** Exit test mode for a layer (re-enable real data) */
