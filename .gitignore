@@ -19,3 +19,4 @@ extern/
 # Test artifacts
 playwright-report/
 test-results/
+tests/scripts/
