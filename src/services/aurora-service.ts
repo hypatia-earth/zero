@@ -54,6 +54,7 @@ export interface AuroraService {
   updatePalette(layer: 'temp', textureData: Uint8Array, min: number, max: number): void;
   triggerPressureRegrid(slotIndex: number): void;
   getCamera(): Camera;
+  setCameraPosition(lat: number, lon: number, distance: number): void;
   send(msg: AuroraRequest, transfer?: Transferable[]): void;
 }
 
@@ -103,7 +104,7 @@ export function createAuroraService(
 
   // Camera (created in init)
   let camera: Camera | null = null;
-  let cameraControls: { tick: () => void } | null = null;
+  let cameraControls: { tick: () => void; setPosition: (lat: number, lon: number, distance: number) => void } | null = null;
   let canvas: HTMLCanvasElement | null = null;
 
   // Reusable buffers for render message (avoid GC pressure)
@@ -301,6 +302,11 @@ export function createAuroraService(
     getCamera(): Camera {
       if (!camera) throw new Error('AuroraService.getCamera() called before init()');
       return camera;
+    },
+
+    setCameraPosition(lat: number, lon: number, distance: number): void {
+      if (!cameraControls) throw new Error('AuroraService.setCameraPosition() called before init()');
+      cameraControls.setPosition(lat, lon, distance);
     },
 
     cleanup(): void {

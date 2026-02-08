@@ -24,6 +24,8 @@ const TIME_MINUTES_PER_PIXEL = 2;
 export interface CameraControlsHandle {
   /** Call each frame to update physics and camera */
   tick(): void;
+  /** Set camera position (updates both camera and physics) */
+  setPosition(lat: number, lon: number, distance: number): void;
 }
 
 export function setupCameraControls(
@@ -318,5 +320,10 @@ export function setupCameraControls(
     stateService.setPosition(camera.lat, camera.lon, altitude);
   }
 
-  return { tick };
+  function setPosition(lat: number, lon: number, distance: number): void {
+    camera.setPosition(lat, lon, distance);
+    physics.initFromCamera(lat, lon, distance);
+  }
+
+  return { tick, setPosition };
 }

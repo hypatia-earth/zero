@@ -182,11 +182,10 @@ export function createZeroAPI(page: Page): ZeroTestAPI {
     },
 
     AuroraService: {
-      async setCamera(lon: number, lat: number, altitude: number): Promise<void> {
-        await page.evaluate(({ lon, lat, altitude }) => {
-          const camera = (window as any).__hypatia.auroraService.getCamera();
-          camera.setPosition(lon, lat, altitude);
-        }, { lon, lat, altitude });
+      async setCamera(lon: number, lat: number, distance: number): Promise<void> {
+        await page.evaluate(({ lon, lat, distance }) => {
+          (window as any).__hypatia.auroraService.setCameraPosition(lat, lon, distance);
+        }, { lon, lat, distance });
         await page.waitForTimeout(200);
       },
       async triggerPressureRegrid(): Promise<void> {
