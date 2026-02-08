@@ -28,8 +28,7 @@
     "test:e2e": "playwright test",
     "test:e2e:headed:sed": "playwright test --headed --reporter=list 2>&1 | sed 's/.*spec.ts:[0-9]*:[0-9]* › //'",
     "test:e2e:headed": "playwright test --headed --reporter=list 2>&1",
-    "test:e2e:ui": "playwright test --ui",
-    "test:coverage:options": "npx tsx tests/e2e/test-coverage-options.ts"
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@preact/signals-core": "^1.5.0",
