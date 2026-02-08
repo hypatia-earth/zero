@@ -578,18 +578,17 @@ export class SlotService {
     return [];
   }
 
-  /** Get GPU memory stats across all layer stores */
+  /** Get GPU memory stats from worker */
   getMemoryStats(): {
     allocatedMB: number;
     capacityMB: number;
     layers: Map<string, { allocatedMB: number; capacityMB: number }>;
   } {
-    // Stats now tracked by worker - return placeholder
-    // TODO: Add message to query worker stats
+    const stats = this.auroraService.getMemoryStats();
     return {
-      allocatedMB: 0,
-      capacityMB: 0,
-      layers: new Map(),
+      allocatedMB: stats.allocatedMB,
+      capacityMB: stats.capacityMB,
+      layers: new Map(),  // Per-layer breakdown not available from worker yet
     };
   }
 

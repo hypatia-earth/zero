@@ -64,7 +64,7 @@ export type AuroraRequest =
 
 export type AuroraResponse =
   | { type: 'ready' }
-  | { type: 'frameComplete'; timing: { frame: number; pass: number } }
+  | { type: 'frameComplete'; timing: { frame: number; pass: number }; memoryMB: { allocated: number; capacity: number } }
   | { type: 'error'; message: string; fatal: boolean };
 
 // ============================================================
@@ -348,10 +348,19 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       renderer!.updateUniforms(uniforms);
       const gpuTimeMs = renderer!.render();  // Returns GPU timestamp query result
 
+      // Compute memory stats from layer stores
+      let allocatedMB = 0;
+      let capacityMB = 0;
+      for (const store of layerStores.values()) {
+        allocatedMB += store.getAllocatedCount() * store.timeslotSizeMB;
+        capacityMB += store.getTimeslotCount() * store.timeslotSizeMB;
+      }
+
       const cpuTimeMs = performance.now() - t0;
       self.postMessage({
         type: 'frameComplete',
         timing: { frame: cpuTimeMs, pass: gpuTimeMs },
+        memoryMB: { allocated: Math.round(allocatedMB), capacity: Math.round(capacityMB) },
       } satisfies AuroraResponse);
     }
 

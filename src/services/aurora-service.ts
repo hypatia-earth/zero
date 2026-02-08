@@ -55,6 +55,7 @@ export interface AuroraService {
   triggerPressureRegrid(slotIndex: number): void;
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
+  getMemoryStats(): { allocatedMB: number; capacityMB: number };
   send(msg: AuroraRequest, transfer?: Transferable[]): void;
 }
 
@@ -72,12 +73,15 @@ export function createAuroraService(
 
   // Message callbacks
   let onReady: (() => void) | null = null;
-  let onFrameComplete: ((timing: { frame: number; pass: number }) => void) | null = null;
+  let onFrameComplete: ((timing: { frame: number; pass: number }, memoryMB: { allocated: number; capacity: number }) => void) | null = null;
 
   // Render loop state
   let renderInFlight = false;
   let droppedFrames = 0;
   let paused = false;
+
+  // GPU memory stats (updated each frame from worker)
+  let memoryStats = { allocatedMB: 0, capacityMB: 0 };
 
   // Frame throttle state
   let lastRafTime = 0;
@@ -119,7 +123,7 @@ export function createAuroraService(
         onReady?.();
         break;
       case 'frameComplete':
-        onFrameComplete?.(msg.timing);
+        onFrameComplete?.(msg.timing, msg.memoryMB);
         break;
       case 'error':
         console.error('[Aurora]', msg.message);
@@ -256,10 +260,11 @@ export function createAuroraService(
       const cam = camera!;
       const controls = cameraControls!;
 
-      onFrameComplete = (timing) => {
+      onFrameComplete = (timing, memory) => {
         renderInFlight = false;
         frameTimes.push(timing.frame);
         passTimes.push(timing.pass);
+        memoryStats = { allocatedMB: memory.allocated, capacityMB: memory.capacity };
       };
 
       const frame = (rafTime: number) => {
@@ -307,6 +312,10 @@ export function createAuroraService(
     setCameraPosition(lat: number, lon: number, distance: number): void {
       if (!cameraControls) throw new Error('AuroraService.setCameraPosition() called before init()');
       cameraControls.setPosition(lat, lon, distance);
+    },
+
+    getMemoryStats(): { allocatedMB: number; capacityMB: number } {
+      return memoryStats;
     },
 
     cleanup(): void {
