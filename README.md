@@ -55,6 +55,11 @@ git clone https://github.com/hypatia-earth/zero.git
 cd zero
 npm install
 npm run dev
+
+# E2E tests (requires dev server running)
+npm run test:e2e              # Run all 44 tests
+npm run test:e2e:headed       # Visible browser
+npm run test:e2e:ui           # Playwright UI with time-travel debugging
 ```
 
 ## Credits
@@ -80,6 +85,9 @@ Services like Windy.com and Weather.com excel at polished UX, multi-model compar
 Different missions, both valuable.
 
 ## Changelog
+
+### 2026-02-08
+- **E2E test suite** — 44 Playwright tests covering all active layers (earth, sun, grid, temp, wind, pressure). Screenshot tests with 0% tolerance for visual regression, pixel tests for color accuracy.
 
 ### 2026-02-04
 - **Worker-based renderer** — GPU operations moved to dedicated Web Worker via OffscreenCanvas. Eliminates main thread blocking during data loading, improving touch responsiveness on older mobile devices.
