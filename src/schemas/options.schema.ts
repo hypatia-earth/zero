@@ -38,7 +38,6 @@ interface UIMetadata {
   model?: 'inertia' | 'velocity';
   device?: 'mouse' | 'touch';
   impact?: OptionImpact;
-  test?: string;          // e2e test reference: 'file.spec.ts#testName'
 }
 
 interface SliderMeta extends UIMetadata {
@@ -627,7 +626,6 @@ export const optionsSchema = z.object({
         order: 10,
         control: 'toggle',
         persist: 'url',
-        test: 'temp-layer.spec.ts#toggle',
       }
     ),
     opacity: opt(
@@ -642,7 +640,6 @@ export const optionsSchema = z.object({
         min: 0.05,
         max: 1,
         step: 0.05,
-        test: 'temp-layer.spec.ts#opacity',
       }
     ),
     palette: opt(
@@ -655,7 +652,6 @@ export const optionsSchema = z.object({
         order: 10.3,
         control: 'select',
         options: [],
-        test: 'temp-layer.spec.ts#palette',
       }
     ),
   }),
