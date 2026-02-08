@@ -16,6 +16,7 @@ import {
   createPaletteService,
   type ServiceContainer,
 } from './service-container';
+import { extractOptionsMeta, defaultOptions } from '../schemas/options.schema';
 import {
   runCapabilitiesPhase,
   runConfigPhase,
@@ -169,5 +170,6 @@ export function exposeDebugServices(services: ServiceContainer): void {
     themeService: services.themeService,
     perfService: services.perfService,
     camera: services.auroraService?.getCamera(),
+    schema: { extractOptionsMeta, defaultOptions },
   };
 }

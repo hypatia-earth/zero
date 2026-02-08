@@ -24,7 +24,7 @@ const FIXTURE_MINUS20 = loadFixture('uniform-minus20');
 
 // Expected RGB values from Classic Temperature palette
 const RGB_55: RGB = [107, 28, 43];        // 55°C (above max, clamped)
-const RGB_MINUS20: RGB = [143, 168, 184]; // -20°C
+const RGB_MINUS20: RGB = [112, 143, 166]; // -20°C = -4°F → -5°F band in Classic
 
 let page: Page;
 let zero: ZeroTestAPI;
@@ -127,9 +127,7 @@ test.describe('temp layer', () => {
   // Palette Tests
   // ============================================================
 
-  test.skip('palette change affects color', async () => {
-    // TODO: Palette changes don't affect direct GPU injection
-    // Need to investigate how palette lookup works with injectTestData
+  test('palette change affects color', async () => {
     await zero.PaletteService.setPalette('temp', 'Classic Temperature');
     await zero.OptionsService.toggleLayer('temp', true);
     await page.waitForTimeout(300);
@@ -138,53 +136,15 @@ test.describe('temp layer', () => {
 
     const pixelClassic = await zero.Canvas.readCenterPixel();
 
-    await zero.PaletteService.setPalette('temp', 'Heat');
-    await page.waitForTimeout(300);
+    await zero.PaletteService.setPalette('temp', 'Hypatia Temperature');
+    await page.waitForTimeout(500);  // Extra time for worker palette update
 
-    const pixelHeat = await zero.Canvas.readCenterPixel();
+    const pixelHypatia = await zero.Canvas.readCenterPixel();
 
-    const changed = pixelClassic.r !== pixelHeat.r ||
-                   pixelClassic.g !== pixelHeat.g ||
-                   pixelClassic.b !== pixelHeat.b;
+    const changed = pixelClassic.r !== pixelHypatia.r ||
+                   pixelClassic.g !== pixelHypatia.g ||
+                   pixelClassic.b !== pixelHypatia.b;
     expect(changed).toBe(true);
   });
 });
 
-// ============================================================
-// Persistence Tests (require reload)
-// ============================================================
-
-test.describe('temp persistence', () => {
-  test('opacity persists after reload', async ({ page }) => {
-    const zero = createZeroAPI(page);
-    await page.goto('https://localhost:5173/');
-    await waitForAppReady(page);
-
-    await zero.OptionsService.setOpacity('temp', 0.7);
-
-    await page.reload();
-    await waitForAppReady(page);
-
-    const opacity = await page.evaluate(() =>
-      (window as any).__hypatia.optionsService.options.value.temp.opacity
-    );
-    expect(opacity).toBeCloseTo(0.7, 1);
-  });
-
-  test('enabled state persists after reload', async ({ page }) => {
-    const zero = createZeroAPI(page);
-    await page.goto('https://localhost:5173/');
-    await waitForAppReady(page);
-
-    await zero.OptionsService.toggleLayer('temp', false);
-    await page.waitForTimeout(500);  // Wait for URL sync
-
-    await page.reload();
-    await waitForAppReady(page);
-
-    const enabled = await page.evaluate(() =>
-      (window as any).__hypatia.optionsService.options.value.temp.enabled
-    );
-    expect(enabled).toBe(false);
-  });
-});

@@ -93,6 +93,7 @@ const slotStates = new Map<TWeatherLayer, SlotState>();
 
 // Pressure contour state
 let isobarLevels: number[] = generateIsobarLevels(4);  // Default 4 hPa spacing
+const tempPaletteRange = new Float32Array([-40, 50]);  // Updated by updatePalette message
 let lastPressureMinute = -1;
 let lastPressureSpacing = 4;
 let lastSmoothing = 'laplacian';
@@ -214,7 +215,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     tempLoadedPoints: slotStates.get('temp')?.loadedPoints ?? 0,
     tempSlot0: slotStates.get('temp')?.slot0 ?? 0,
     tempSlot1: slotStates.get('temp')?.slot1 ?? 0,
-    tempPaletteRange: new Float32Array([-40, 50]),
+    tempPaletteRange,
     logoOpacity: 0,
   };
 }
@@ -410,6 +411,8 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
     if (type === 'updatePalette') {
       renderer!.updateTempPalette(e.data.textureData);
+      tempPaletteRange[0] = e.data.min;
+      tempPaletteRange[1] = e.data.max;
     }
 
     if (type === 'triggerPressureRegrid') {

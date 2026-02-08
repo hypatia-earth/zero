@@ -48,6 +48,9 @@ export interface ZeroTestAPI {
     toggleLayer(layer: string, enabled: boolean): Promise<void>;
     setOpacity(layer: string, opacity: number): Promise<void>;
     set(path: string, value: unknown): Promise<void>;
+    setMany(changes: Record<string, unknown>): Promise<void>;
+    get(path: string): Promise<unknown>;
+    getAll(): Promise<Record<string, unknown>>;
   };
   PaletteService: {
     setPalette(layer: string, palette: string): Promise<void>;
@@ -61,6 +64,9 @@ export interface ZeroTestAPI {
   Canvas: {
     readPixel(x: number, y: number): Promise<Pixel>;
     readCenterPixel(): Promise<Pixel>;
+  };
+  Schema: {
+    getMutations(skipPaths: string[]): Promise<Record<string, unknown>>;
   };
 }
 
@@ -112,6 +118,35 @@ export function createZeroAPI(page: Page): ZeroTestAPI {
             obj[parts[parts.length - 1]] = value;
           });
         }, { path: optionPath, value });
+        await page.waitForTimeout(100);
+      },
+
+      async get(optionPath: string): Promise<unknown> {
+        return page.evaluate((path) => {
+          const opts = (window as any).__hypatia.optionsService.options.value;
+          return path.split('.').reduce((obj: any, key: string) => obj?.[key], opts);
+        }, optionPath);
+      },
+
+      async getAll(): Promise<Record<string, unknown>> {
+        return page.evaluate(() =>
+          JSON.parse(JSON.stringify((window as any).__hypatia.optionsService.options.value))
+        );
+      },
+
+      async setMany(changes: Record<string, unknown>): Promise<void> {
+        await page.evaluate((c) => {
+          (window as any).__hypatia.optionsService.update((draft: any) => {
+            for (const [path, value] of Object.entries(c)) {
+              const parts = path.split('.');
+              let obj = draft;
+              for (let i = 0; i < parts.length - 1; i++) {
+                obj = obj[parts[i]];
+              }
+              obj[parts[parts.length - 1]] = value;
+            }
+          });
+        }, changes);
         await page.waitForTimeout(100);
       },
     },
@@ -166,6 +201,51 @@ export function createZeroAPI(page: Page): ZeroTestAPI {
         return this.readPixel(Math.floor(width / 2), Math.floor(height / 2));
       },
     },
+
+    Schema: {
+      async getMutations(skipPaths: string[]): Promise<Record<string, unknown>> {
+        return page.evaluate((skip) => {
+          const { extractOptionsMeta, defaultOptions } = (window as any).__hypatia.schema;
+          const flatOptions = extractOptionsMeta();
+          const changes: Record<string, unknown> = {};
+
+          for (const opt of flatOptions) {
+            if (skip.includes(opt.path)) continue;
+            if (opt.meta.hidden) continue;
+
+            const defaultVal = opt.path.split('.').reduce(
+              (obj: any, key: string) => obj?.[key],
+              defaultOptions
+            );
+
+            switch (opt.meta.control) {
+              case 'toggle':
+              case 'layer-toggle':
+                changes[opt.path] = !defaultVal;
+                break;
+
+              case 'slider': {
+                const { min, max } = opt.meta;
+                const mid = (min + max) / 2;
+                const quarter = min + (max - min) * 0.25;
+                changes[opt.path] = Math.abs(defaultVal - mid) > 0.01 ? mid : quarter;
+                break;
+              }
+
+              case 'select':
+              case 'radio': {
+                const opts = opt.meta.options;
+                const alt = opts.find((o: any) => o.value !== defaultVal);
+                if (alt) changes[opt.path] = alt.value;
+                break;
+              }
+            }
+          }
+
+          return changes;
+        }, skipPaths);
+      },
+    },
   };
 }
 
@@ -197,6 +277,13 @@ export async function waitForAppReady(page: Page): Promise<void> {
   await page.waitForFunction(() => {
     return typeof (window as any).__hypatia !== 'undefined';
   }, { timeout: 60000 });
+
+  // Close bootstrap modal - click Start if visible, otherwise wait for auto-close
+  const startButton = page.locator('.dialog.bootstrap button.btn-primary');
+  if (await startButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await startButton.click();
+  }
+  await page.waitForSelector('.dialog.bootstrap', { state: 'hidden', timeout: 5000 }).catch(() => {});
 }
 
 /**
