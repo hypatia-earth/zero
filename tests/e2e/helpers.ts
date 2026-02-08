@@ -42,7 +42,8 @@ export const BG: RGB = [22, 22, 22];
 
 export interface ZeroTestAPI {
   SlotService: {
-    injectTestData(layer: string, data: Float32Array): Promise<void>;
+    /** Inject test data. For multi-slab layers (wind), pass array of Float32Arrays. */
+    injectTestData(layer: string, data: Float32Array | Float32Array[]): Promise<void>;
   };
   OptionsService: {
     toggleLayer(layer: string, enabled: boolean): Promise<void>;
@@ -68,23 +69,33 @@ export interface ZeroTestAPI {
   Schema: {
     getMutations(skipPaths: string[]): Promise<Record<string, unknown>>;
   };
+  UI: {
+    hide(): Promise<void>;
+    show(): Promise<void>;
+  };
 }
 
 export function createZeroAPI(page: Page): ZeroTestAPI {
   return {
     SlotService: {
-      async injectTestData(layer: string, data: Float32Array): Promise<void> {
-        const buffer = Buffer.from(data.buffer);
-        const base64 = buffer.toString('base64');
-        await page.evaluate(({ layer, b64 }) => {
-          const binary = atob(b64);
-          const bytes = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) {
-            bytes[i] = binary.charCodeAt(i);
-          }
-          const floatData = new Float32Array(bytes.buffer);
-          (window as any).__hypatia.slotService.injectTestData(layer, floatData);
-        }, { layer, b64: base64 });
+      async injectTestData(layer: string, data: Float32Array | Float32Array[]): Promise<void> {
+        const slabs = Array.isArray(data) ? data : [data];
+        const base64Slabs = slabs.map(slab => {
+          const buffer = Buffer.from(slab.buffer);
+          return buffer.toString('base64');
+        });
+        await page.evaluate(({ layer, b64Slabs }) => {
+          const floatSlabs = b64Slabs.map((b64: string) => {
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+            return new Float32Array(bytes.buffer);
+          });
+          const data = floatSlabs.length === 1 ? floatSlabs[0] : floatSlabs;
+          (window as any).__hypatia.slotService.injectTestData(layer, data);
+        }, { layer, b64Slabs: base64Slabs });
       },
     },
 
@@ -244,6 +255,21 @@ export function createZeroAPI(page: Page): ZeroTestAPI {
 
           return changes;
         }, skipPaths);
+      },
+    },
+
+    UI: {
+      async hide(): Promise<void> {
+        await page.evaluate(() => {
+          const el = document.querySelector('.ui-container') as HTMLElement;
+          if (el) el.style.display = 'none';
+        });
+      },
+      async show(): Promise<void> {
+        await page.evaluate(() => {
+          const el = document.querySelector('.ui-container') as HTMLElement;
+          if (el) el.style.display = '';
+        });
       },
     },
   };

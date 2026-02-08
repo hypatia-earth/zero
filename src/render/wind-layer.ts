@@ -68,7 +68,7 @@ export class WindLayer {
 
   // State
   private enabled = false;
-  private randomSeed = Math.random();
+  private randomSeed = 0;  // Fixed for deterministic rendering
 
   // Compute caching: only recompute when state changes
   private lastState: LayerState | null = null;
@@ -418,7 +418,7 @@ export class WindLayer {
 
     DEBUG && console.log(`[Wind] Changing line count: ${this.seedCount} → ${lineCount}`);
     this.seedCount = lineCount;
-    this.randomSeed = Math.random();  // Scramble phase offsets
+    // randomSeed stays 0 for deterministic rendering
     this.needsCompute = true;  // Force recompute with new line count
 
     // Destroy old buffers

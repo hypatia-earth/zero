@@ -7,6 +7,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: 'html',
+  snapshotPathTemplate: '{testDir}/options/screenshots/{testFileName}/{arg}{ext}',
   use: {
     baseURL: 'https://localhost:5173',
     ignoreHTTPSErrors: true,
@@ -19,6 +20,7 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         channel: 'chrome',
         viewport: { width: 1280, height: 960 },
+        deviceScaleFactor: 1,  // Fixed DPR for consistent screenshots
       },
     },
   ],

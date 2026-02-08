@@ -805,17 +805,20 @@ export const optionsSchema = z.object({
       }
     ),
     speed: opt(
-      z.number().min(10).max(60).default(defaultConfig.wind.animSpeed),
+      z.union([z.literal(0), z.literal(15), z.literal(30), z.literal(60)]).default(30),
       {
         label: 'Animation speed',
         description: 'Speed of wind line animation (updates per second)',
         group: 'layers',
         filter: ['global', 'wind'],
         order: 16,
-        control: 'slider',
-        min: 10,
-        max: 60,
-        step: 10,
+        control: 'radio',
+        options: [
+          { value: 0, label: 'Frozen', localhostOnly: true },
+          { value: 15, label: '15' },
+          { value: 30, label: '30' },
+          { value: 60, label: '60' },
+        ],
       }
     ),
   }),
@@ -1088,7 +1091,7 @@ export const defaultOptions: ZeroOptions = {
   rain: { enabled: false, opacity: 1.0 },
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },
-  wind: { enabled: false, seedCount: defaultConfig.wind.seedCount, opacity: defaultConfig.wind.opacity, speed: defaultConfig.wind.animSpeed },
+  wind: { enabled: false, seedCount: defaultConfig.wind.seedCount, opacity: defaultConfig.wind.opacity, speed: 30 },
   pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: 'laplacian', smoothingPasses: '1', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },

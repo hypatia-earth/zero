@@ -43,6 +43,9 @@ export class SlotService {
   private dataWindowStart!: TTimestep;
   private dataWindowEnd!: TTimestep;
 
+  // Test mode: layers with injected fixture data ignore real data
+  private testModeLayers = new Set<TWeatherLayer>();
+
   /** Signal for UI reactivity */
   readonly slotsVersion = signal(0);
 
@@ -389,6 +392,13 @@ export class SlotService {
    */
   receiveData(layer: TWeatherLayer, timestep: TTimestep, slabIndex: number, data: Float32Array): boolean {
     DEBUG && console.log(`[Slot] receiveData: ${layer} ${timestep} slab=${slabIndex}`);
+
+    // Skip if layer is in test mode (fixture data injected)
+    if (this.testModeLayers.has(layer)) {
+      DEBUG && console.log(`[Slot] ${P(layer)} skip (test mode)`);
+      return false;
+    }
+
     const ps = this.paramSlots.get(layer);
     if (!ps) return false;
 
@@ -592,12 +602,26 @@ export class SlotService {
    * Inject test data directly to GPU (for e2e testing).
    * Bypasses queue/fetch, uploads immediately, activates shader.
    * Works after bootstrap - no reload needed.
+   *
+   * For multi-slab layers (wind), pass array of Float32Arrays.
    */
-  injectTestData(layer: TWeatherLayer, data: Float32Array): void {
-    const points = data.length;
-    console.log(`[Slot] injectTestData: ${layer}, ${points} points`);
-    this.auroraService.uploadData(layer, 0, 0, data);
+  injectTestData(layer: TWeatherLayer, data: Float32Array | Float32Array[]): void {
+    const slabs = Array.isArray(data) ? data : [data];
+    const points = slabs[0]!.length;
+    console.log(`[Slot] injectTestData: ${layer}, ${slabs.length} slabs, ${points} points`);
+
+    // Mark layer as test mode - ignore real data from queue
+    this.testModeLayers.add(layer);
+
+    for (let slabIndex = 0; slabIndex < slabs.length; slabIndex++) {
+      this.auroraService.uploadData(layer, 0, slabIndex, slabs[slabIndex]!);
+    }
     this.auroraService.activateSlots(layer, 0, 0, Date.now(), Date.now(), points);
+  }
+
+  /** Exit test mode for a layer (re-enable real data) */
+  exitTestMode(layer: TWeatherLayer): void {
+    this.testModeLayers.delete(layer);
   }
 
   dispose(): void {
