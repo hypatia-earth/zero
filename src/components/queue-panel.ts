@@ -69,11 +69,11 @@ export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = () => {
       const el = dom as HTMLElement;
       effect(() => {
         const stats = attrs.queueService.queueStats.value;
-        const showGpu = attrs.optionsService.options.value.gpu.showGpuStats;
+        const gpuOpts = attrs.optionsService.options.value.gpu;
+        const memStats = attrs.slotService.memoryStats.value;
         let gpuAllocated: number | undefined;
         let gpuCapacity: number | undefined;
-        if (showGpu) {
-          const memStats = attrs.slotService.getMemoryStats();
+        if (gpuOpts.showGpuStats) {
           gpuAllocated = memStats.allocatedMB;
           gpuCapacity = memStats.capacityMB;
         }

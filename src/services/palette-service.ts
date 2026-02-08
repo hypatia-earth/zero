@@ -196,7 +196,6 @@ export class PaletteService {
     entry.activeName = name;
     this.layerPalettes.value = new Map(current);
     this.paletteChanged.value++;
-    console.log(`[Palette] Set '${layer}' palette to '${name}'`);
   }
 
   /**

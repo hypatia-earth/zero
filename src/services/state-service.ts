@@ -120,7 +120,6 @@ export class StateService {
     }
 
     if (changes.length) {
-      console.log(`[State] Sanitized: ${changes.join(', ')}`);
     }
 
     // Update state (without triggering URL sync yet)

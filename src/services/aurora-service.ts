@@ -8,7 +8,7 @@
  * - Perf panel updates
  */
 
-import { effect } from '@preact/signals-core';
+import { effect, signal, type Signal } from '@preact/signals-core';
 import type { AuroraRequest, AuroraResponse, AuroraConfig, AuroraAssets } from '../workers/aurora.worker';
 import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
@@ -55,7 +55,7 @@ export interface AuroraService {
   triggerPressureRegrid(slotIndex: number): void;
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
-  getMemoryStats(): { allocatedMB: number; capacityMB: number };
+  memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
   send(msg: AuroraRequest, transfer?: Transferable[]): void;
 }
 
@@ -81,7 +81,7 @@ export function createAuroraService(
   let paused = false;
 
   // GPU memory stats (updated each frame from worker)
-  let memoryStats = { allocatedMB: 0, capacityMB: 0 };
+  const memoryStats = signal({ allocatedMB: 0, capacityMB: 0 });
 
   // Frame throttle state
   let lastRafTime = 0;
@@ -264,7 +264,7 @@ export function createAuroraService(
         renderInFlight = false;
         frameTimes.push(timing.frame);
         passTimes.push(timing.pass);
-        memoryStats = { allocatedMB: memory.allocated, capacityMB: memory.capacity };
+        memoryStats.value = { allocatedMB: memory.allocated, capacityMB: memory.capacity };
       };
 
       const frame = (rafTime: number) => {
@@ -314,9 +314,7 @@ export function createAuroraService(
       cameraControls.setPosition(lat, lon, distance);
     },
 
-    getMemoryStats(): { allocatedMB: number; capacityMB: number } {
-      return memoryStats;
-    },
+    memoryStats,
 
     cleanup(): void {
       send({ type: 'cleanup' });

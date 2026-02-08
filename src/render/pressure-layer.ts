@@ -497,7 +497,6 @@ export class PressureLayer {
     }
 
     const slotCount = this.gridSlotBuffers.length;
-    console.log(`[Pressure] Changing resolution: ${this.resolution}° → ${resolution}°`);
     this.resolution = resolution;
 
     // Update dimensions
@@ -599,13 +598,10 @@ export class PressureLayer {
       ],
     });
 
-    const totalKB = (gridSlotSize * slotCount / 1024).toFixed(0);
-
     // Return slots that need regrid (have raw data)
     const needsRegrid = this.hasRawData
       .map((has, i) => has ? i : -1)
       .filter(i => i >= 0);
-    console.log(`[Pressure] New grid: ${this.gridWidth}×${this.gridHeight}, ~${totalKB} KB (${needsRegrid.length} slots need regrid)`);
     return needsRegrid;
   }
 
@@ -659,7 +655,6 @@ export class PressureLayer {
         ],
       });
 
-      console.log(`[Pressure] Vertex buffer resized for ${levelCount} levels`);
     }
   }
 
@@ -1186,181 +1181,6 @@ export class PressureLayer {
 
   isComputeReady(): boolean {
     return this.computeReady;
-  }
-
-  /** Debug: read back regridded pressure data to check values */
-  async debugReadGrid(slotIndex: number): Promise<void> {
-    if (!this.gridSlotReady[slotIndex]) {
-      console.log('[Pressure] Slot not ready');
-      return;
-    }
-
-    const buffer = this.gridSlotBuffers[slotIndex]!;
-    const size = this.gridWidth * this.gridHeight * 4;
-
-    const readBuffer = this.device.createBuffer({
-      size,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-
-    const encoder = this.device.createCommandEncoder();
-    encoder.copyBufferToBuffer(buffer, 0, readBuffer, 0, size);
-    this.device.queue.submit([encoder.finish()]);
-
-    await readBuffer.mapAsync(GPUMapMode.READ);
-    const data = new Float32Array(readBuffer.getMappedRange().slice(0));
-    readBuffer.unmap();
-    readBuffer.destroy();
-
-    // Find min/max and their locations
-    let min = Infinity, max = -Infinity;
-    let minIdx = 0, maxIdx = 0;
-    for (let i = 0; i < data.length; i++) {
-      if (data[i]! < min) { min = data[i]!; minIdx = i; }
-      if (data[i]! > max) { max = data[i]!; maxIdx = i; }
-    }
-
-    // Convert index to lat/lon
-    const w = this.gridWidth;
-    const h = this.gridHeight;
-    const idxToLatLon = (idx: number) => {
-      const x = idx % w;
-      const y = Math.floor(idx / w);
-      const lat = 90 - y * (180 / h);
-      const lon = -180 + x * (360 / w);
-      return `${lat.toFixed(0)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(0)}°${lon >= 0 ? 'E' : 'W'}`;
-    };
-
-    console.log(`[Pressure] LOW: ${(min/100).toFixed(0)} hPa at ${idxToLatLon(minIdx)}`);
-    console.log(`[Pressure] HIGH: ${(max/100).toFixed(0)} hPa at ${idxToLatLon(maxIdx)}`);
-
-    // Sample at known geographic points
-    // Grid: y=0 is 90°N, y=h-1 is 90°S
-    // Grid: x=0 is 180°W, x=w-1 is ~180°E
-    // latToY: y = (90 - lat) * h / 180
-    // lonToX: x = (lon + 180) * w / 360
-    const latLonToIdx = (lat: number, lon: number) => {
-      const y = Math.round((90 - lat) * h / 180);
-      const x = Math.round((lon + 180) * w / 360) % w;
-      return y * w + x;
-    };
-    const sampleLatLon = (lat: number, lon: number) => (data[latLonToIdx(lat, lon)]! / 100).toFixed(0);
-
-    // Find lowest in North Atlantic region (30-60N, 80W-0E)
-    let naMin = Infinity, naMinLat = 0, naMinLon = 0;
-    for (let lat = 30; lat <= 60; lat += 2) {
-      for (let lon = -80; lon <= 0; lon += 2) {
-        const p = data[latLonToIdx(lat, lon)]!;
-        if (p < naMin) { naMin = p; naMinLat = lat; naMinLon = lon; }
-      }
-    }
-    console.log(`[Pressure] N.Atlantic LOW: ${(naMin/100).toFixed(0)} hPa at ${naMinLat}°N, ${Math.abs(naMinLon)}°W`);
-
-    // Sample east of New York (where windy shows low)
-    const nyEast = sampleLatLon(40, -65);
-    const greenland = sampleLatLon(65, -40);
-
-    console.log(`[Pressure] East of NY (40N,65W): ${nyEast} hPa`);
-    console.log(`[Pressure] S.Greenland (65N,40W): ${greenland} hPa`);
-  }
-
-  // DEBUG: Read vertex buffer for debugging
-  async debugReadVertices(levelIndex: number, count: number = 50): Promise<Float32Array> {
-    // Each level gets numCells * 4 * 4 vertices (base * Chaikin 4× expansion for 2 passes)
-    const verticesPerLevel = this.numCells * 4 * 4;
-    const byteOffset = levelIndex * verticesPerLevel * 16;
-    const byteSize = count * 16;
-    const readBuffer = this.device.createBuffer({
-      size: byteSize,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-    const encoder = this.device.createCommandEncoder();
-    encoder.copyBufferToBuffer(this.vertexBuffer, byteOffset, readBuffer, 0, byteSize);
-    this.device.queue.submit([encoder.finish()]);
-    await readBuffer.mapAsync(GPUMapMode.READ);
-    const data = new Float32Array(readBuffer.getMappedRange().slice(0));
-    readBuffer.unmap();
-    readBuffer.destroy();
-    return data;
-  }
-
-  // DEBUG: Read neighbor buffer for debugging Chaikin
-  async debugReadNeighbors(levelIndex: number, count: number = 50): Promise<Int32Array> {
-    const verticesPerLevel = this.numCells * 4 * 4;
-    const byteOffset = levelIndex * verticesPerLevel * 8;  // 8 bytes per neighbor (2 × i32)
-    const byteSize = count * 8;
-    const readBuffer = this.device.createBuffer({
-      size: byteSize,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-    const encoder = this.device.createCommandEncoder();
-    encoder.copyBufferToBuffer(this.neighborBuffer, byteOffset, readBuffer, 0, byteSize);
-    this.device.queue.submit([encoder.finish()]);
-    await readBuffer.mapAsync(GPUMapMode.READ);
-    const data = new Int32Array(readBuffer.getMappedRange().slice(0));
-    readBuffer.unmap();
-    readBuffer.destroy();
-    return data;
-  }
-
-  // DEBUG: Read from smoothedNeighborBuffer (pass 1 output when iterations=2)
-  async debugReadSmoothedNeighbors(levelIndex: number, count: number = 50): Promise<Int32Array> {
-    const verticesPerLevel = this.numCells * 4 * 4;
-    const byteOffset = levelIndex * verticesPerLevel * 8;
-    const byteSize = count * 8;
-    const readBuffer = this.device.createBuffer({
-      size: byteSize,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-    const encoder = this.device.createCommandEncoder();
-    encoder.copyBufferToBuffer(this.smoothedNeighborBuffer, byteOffset, readBuffer, 0, byteSize);
-    this.device.queue.submit([encoder.finish()]);
-    await readBuffer.mapAsync(GPUMapMode.READ);
-    const data = new Int32Array(readBuffer.getMappedRange().slice(0));
-    readBuffer.unmap();
-    readBuffer.destroy();
-    return data;
-  }
-
-  // DEBUG: Log Chaikin chain for first N segments
-  async debugChaikinChain(levelIndex: number, segmentCount: number = 8): Promise<void> {
-    const vertexCount = segmentCount * 4;  // 4 vertices per segment after Chaikin
-    const vertices = await this.debugReadVertices(levelIndex, vertexCount);
-    const neighbors = await this.debugReadNeighbors(levelIndex, vertexCount);
-
-    const smoothedNeighbors = await this.debugReadSmoothedNeighbors(levelIndex, vertexCount);
-
-    console.log(`[Chaikin Debug] Level ${levelIndex}, comparing neighborBuffer vs smoothedNeighborBuffer:`);
-    console.log(`  neighborBuffer = pass 1 output (used as pass 2 input)`);
-    console.log(`  smoothedNeighborBuffer = pass 0 output`);
-    console.log(`[Chaikin Debug] Level ${levelIndex}, first ${segmentCount} original segments:`);
-    for (let seg = 0; seg < segmentCount; seg++) {
-      const base = seg * 4;
-      console.log(`  Seg ${seg} (indices ${base}-${base + 3}):`);
-      for (let i = 0; i < 4; i++) {
-        const idx = base + i;
-        const vx = vertices[idx * 4] ?? 0;
-        const vy = vertices[idx * 4 + 1] ?? 0;
-        const vz = vertices[idx * 4 + 2] ?? 0;
-        const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
-        const prevN = neighbors[idx * 2];
-        const nextN = neighbors[idx * 2 + 1];
-        const sPrevN = smoothedNeighbors[idx * 2];
-        const sNextN = smoothedNeighbors[idx * 2 + 1];
-        const label = ['Q', 'R', 'R_dup', 'Q_next'][i];
-        console.log(`    ${idx} (${label}): len=${len.toFixed(3)}, n=[${prevN},${nextN}] s=[${sPrevN},${sNextN}]`);
-      }
-      // Check gap between this segment's Q_next and next segment's Q
-      if (seg < segmentCount - 1) {
-        const nextBase = (seg + 1) * 4;
-        const gap = Math.sqrt(
-          Math.pow((vertices[(base+3)*4] ?? 0) - (vertices[nextBase*4] ?? 0), 2) +
-          Math.pow((vertices[(base+3)*4+1] ?? 0) - (vertices[nextBase*4+1] ?? 0), 2) +
-          Math.pow((vertices[(base+3)*4+2] ?? 0) - (vertices[nextBase*4+2] ?? 0), 2)
-        );
-        console.log(`    Gap Q_next(${base+3}) → Q(${nextBase}): ${gap.toFixed(6)}`);
-      }
-    }
   }
 
   dispose(): void {

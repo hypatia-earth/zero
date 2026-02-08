@@ -55,7 +55,6 @@ export function generateSyntheticO1280Pressure(
   // LOW at 45°S, 180°E (opposite side - Pacific)
   applyPressureCenter(data, gaussianLats, -45, 180, LOW_PRESSURE, 20);
 
-  console.log('[SyntheticPressure] Test pattern: HIGH at 45°N,0°E / LOW at 45°S,180°E');
 
   return data;
 }

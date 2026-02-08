@@ -131,16 +131,3 @@ export function validateBufferSize(layout: StructLayout, buffer: ArrayBuffer): v
   }
 }
 
-/**
- * Debug helper: print layout with offsets
- */
-export function printLayout(layout: StructLayout): void {
-  console.log('Struct Layout (size: ' + layout.size + ' bytes)');
-  console.log('─'.repeat(50));
-  for (const field of layout.fields) {
-    const end = field.offset + field.size;
-    console.log(
-      `  ${field.offset.toString().padStart(4)} - ${end.toString().padStart(4)}  ${field.type.padEnd(8)} ${field.name}`
-    );
-  }
-}

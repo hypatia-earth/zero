@@ -180,7 +180,6 @@ export class SlotService {
       throw new Error(`No synthetic data generator for layer: ${layer}`);
     }
 
-    console.log(`[Slot] Generated synthetic data for ${layer}: ${(data.byteLength / 1024 / 1024).toFixed(1)} MB`);
     this.syntheticDataCache.set(layer, data);
     return data;
   }
@@ -236,14 +235,12 @@ export class SlotService {
       if (slot?.loaded) {
         // Skip if already activated with same timestep
         if (current.length === 1 && current[0] === ts) {
-          console.log(`[Slot] ${pcode} skip (same): ${fmt(ts)}`);
           return;
         }
         ps.setActiveTimesteps([ts]);
 
         // Worker handles buffer rebinding on activateSlots
         const t = this.timestepService.toDate(ts).getTime();
-        console.log(`[Slot] activateSlots ${pcode}: slot=${slot.slotIndex}, t=${t}, loadedPoints=${slot.loadedPoints}`);
         this.auroraService.activateSlots(param, slot.slotIndex, slot.slotIndex, t, t, slot.loadedPoints);
         DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
       } else {
@@ -578,18 +575,9 @@ export class SlotService {
     return [];
   }
 
-  /** Get GPU memory stats from worker */
-  getMemoryStats(): {
-    allocatedMB: number;
-    capacityMB: number;
-    layers: Map<string, { allocatedMB: number; capacityMB: number }>;
-  } {
-    const stats = this.auroraService.getMemoryStats();
-    return {
-      allocatedMB: stats.allocatedMB,
-      capacityMB: stats.capacityMB,
-      layers: new Map(),  // Per-layer breakdown not available from worker yet
-    };
+  /** GPU memory stats signal from worker */
+  get memoryStats() {
+    return this.auroraService.memoryStats;
   }
 
   /** Set Gaussian LUTs for synthetic data generation */
@@ -607,7 +595,6 @@ export class SlotService {
   injectTestData(layer: TWeatherLayer, data: Float32Array | Float32Array[]): void {
     const slabs = Array.isArray(data) ? data : [data];
     const points = slabs[0]!.length;
-    console.log(`[Slot] injectTestData: ${layer}, ${slabs.length} slabs, ${points} points`);
 
     // Mark layer as test mode - ignore real data from queue
     this.testModeLayers.add(layer);

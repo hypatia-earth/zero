@@ -230,8 +230,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       canvas.width = e.data.width;
       canvas.height = e.data.height;
 
-      console.log('[Aurora] Initializing GlobeRenderer...');
-
       // Create and initialize renderer
       renderer = new GlobeRenderer(canvas, config.cameraConfig);
       await renderer.initialize(
@@ -270,7 +268,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
           dataReady: false,
         });
       }
-      console.log(`[Aurora] Created ${layerStores.size} LayerStores`);
 
       // Log unexpected device loss (ignore intentional destroy on cleanup)
       device.lost.then((info) => {
@@ -279,7 +276,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         }
       });
 
-      console.log('[Aurora] GlobeRenderer ready');
       self.postMessage({ type: 'ready' } satisfies AuroraResponse);
     }
 
@@ -349,12 +345,15 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       const gpuTimeMs = renderer!.render();  // Returns GPU timestamp query result
 
       // Compute memory stats from layer stores
+      // Allocated = actual buffers filled, Capacity = option × total slab sizes
       let allocatedMB = 0;
-      let capacityMB = 0;
+      let totalSlabSizeMB = 0;
       for (const store of layerStores.values()) {
         allocatedMB += store.getAllocatedCount() * store.timeslotSizeMB;
-        capacityMB += store.getTimeslotCount() * store.timeslotSizeMB;
+        totalSlabSizeMB += store.timeslotSizeMB;
       }
+      const timeslots = parseInt(currentOptions!.gpu.timeslotsPerLayer, 10);
+      const capacityMB = totalSlabSizeMB * timeslots;
 
       const cpuTimeMs = performance.now() - t0;
       self.postMessage({
