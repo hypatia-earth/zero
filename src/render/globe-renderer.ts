@@ -10,7 +10,10 @@ import { PressureLayer, type PressureResolution, type SmoothingAlgorithm } from 
 import { WindLayer } from './wind-layer';
 import { GridAnimator, GRID_BUFFER_SIZE } from './grid-animator';
 import { U, UNIFORM_BUFFER_SIZE } from './globe-uniforms';
-import { GpuTimestamp } from './gpu-timestamp';
+import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
+
+// Re-export for consumers
+export type { PassTimings } from './gpu-timestamp';
 import type { TWeatherTextureLayer, LayerState } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import type { PressureColorOption } from '../schemas/options.schema';
@@ -682,8 +685,8 @@ export class GlobeRenderer {
     }
   }
 
-  render(): number {
-    if (this.isDestroying) return NaN;
+  render(): PassTimings {
+    if (this.isDestroying) return { pass1Ms: NaN, pass2Ms: NaN, pass3Ms: NaN };
     const commandEncoder = this.device.createCommandEncoder();
 
     // PASS 1: Render globe to offscreen textures (no atmosphere)
@@ -705,7 +708,7 @@ export class GlobeRenderer {
 
     // Add timestampWrites if supported
     if (this.gpuTimestamp) {
-      globePassDescriptor.timestampWrites = this.gpuTimestamp.getTimestampWrites();
+      globePassDescriptor.timestampWrites = this.gpuTimestamp.getPass1TimestampWrites();
     }
 
     const globePass = commandEncoder.beginRenderPass(globePassDescriptor);
@@ -723,47 +726,56 @@ export class GlobeRenderer {
 
     // PASS 2: Geometry layers (pressure contours, wind, etc.)
     // Renders to same color/depth textures, depth-tested against globe
+    // Always run pass for timestamp consistency (even if empty)
     const hasPressure = this.pressureLayer.isEnabled() && this.pressureLayer.getVertexCount() > 0;
+    const useGlobeDepth = this.currentEarthOpacity > 0.01 || this.currentTempOpacity > 0.01;
 
-    if (hasPressure || hasWind) {
-      // Use depth test only when earth or temp layers are visible
-      const useGlobeDepth = this.currentEarthOpacity > 0.01 || this.currentTempOpacity > 0.01;
+    const geometryPassDescriptor: GPURenderPassDescriptor = {
+      colorAttachments: [{
+        view: this.colorTexture.createView(),
+        loadOp: 'load',  // Preserve globe render
+        storeOp: 'store',
+      }],
+      depthStencilAttachment: {
+        view: this.depthTexture.createView(),
+        depthClearValue: 1.0,
+        depthLoadOp: useGlobeDepth ? 'load' : 'clear',
+        depthStoreOp: 'store',
+      },
+    };
 
-      const geometryPass = commandEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: this.colorTexture.createView(),
-          loadOp: 'load',  // Preserve globe render
-          storeOp: 'store',
-        }],
-        depthStencilAttachment: {
-          view: this.depthTexture.createView(),
-          depthClearValue: 1.0,
-          depthLoadOp: useGlobeDepth ? 'load' : 'clear',  // Clear = render full geometry
-          depthStoreOp: 'store',
-        },
-      });
-
-      if (hasPressure) {
-        this.pressureLayer.render(geometryPass);
-      }
-
-      if (hasWind) {
-        this.windLayer.render(geometryPass);
-      }
-
-      geometryPass.end();
+    if (this.gpuTimestamp) {
+      geometryPassDescriptor.timestampWrites = this.gpuTimestamp.getPass2TimestampWrites();
     }
+
+    const geometryPass = commandEncoder.beginRenderPass(geometryPassDescriptor);
+
+    if (hasPressure) {
+      this.pressureLayer.render(geometryPass);
+    }
+
+    if (hasWind) {
+      this.windLayer.render(geometryPass);
+    }
+
+    geometryPass.end();
 
     // PASS 3: Post-process - apply atmosphere to final output
     const canvasView = this.context.getCurrentTexture().createView();
-    const postProcessPass = commandEncoder.beginRenderPass({
+    const postProcessDescriptor: GPURenderPassDescriptor = {
       colorAttachments: [{
         view: canvasView,
         clearValue: { r: 0, g: 0, b: 0, a: 1 },
         loadOp: 'clear',
         storeOp: 'store',
       }],
-    });
+    };
+
+    if (this.gpuTimestamp) {
+      postProcessDescriptor.timestampWrites = this.gpuTimestamp.getPass3TimestampWrites();
+    }
+
+    const postProcessPass = commandEncoder.beginRenderPass(postProcessDescriptor);
 
     postProcessPass.setPipeline(this.postProcessPipeline);
     postProcessPass.setBindGroup(0, this.postProcessBindGroup);
@@ -782,7 +794,7 @@ export class GlobeRenderer {
       this.gpuTimestamp.startReadback();
     }
 
-    return this.gpuTimestamp?.getLastTimeMs() ?? NaN;
+    return this.gpuTimestamp?.getLastTimings() ?? { pass1Ms: NaN, pass2Ms: NaN, pass3Ms: NaN };
   }
 
   async loadBasemap(faces: ImageBitmap[]): Promise<void> {

@@ -64,7 +64,7 @@ export type AuroraRequest =
 
 export type AuroraResponse =
   | { type: 'ready' }
-  | { type: 'frameComplete'; timing: { frame: number; pass: number }; memoryMB: { allocated: number; capacity: number } }
+  | { type: 'frameComplete'; timing: { frame: number; pass1: number; pass2: number; pass3: number }; memoryMB: { allocated: number; capacity: number } }
   | { type: 'error'; message: string; fatal: boolean };
 
 // ============================================================
@@ -342,7 +342,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       const uniforms = buildUniforms(camera, new Date(time));
 
       renderer!.updateUniforms(uniforms);
-      const gpuTimeMs = renderer!.render();  // Returns GPU timestamp query result
+      const passTimings = renderer!.render();  // Returns GPU timestamp query results
 
       // Compute memory stats from layer stores
       // Allocated = actual buffers filled, Capacity = option × total slab sizes
@@ -358,7 +358,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       const cpuTimeMs = performance.now() - t0;
       self.postMessage({
         type: 'frameComplete',
-        timing: { frame: cpuTimeMs, pass: gpuTimeMs },
+        timing: { frame: cpuTimeMs, pass1: passTimings.pass1Ms, pass2: passTimings.pass2Ms, pass3: passTimings.pass3Ms },
         memoryMB: { allocated: Math.round(allocatedMB), capacity: Math.round(capacityMB) },
       } satisfies AuroraResponse);
     }

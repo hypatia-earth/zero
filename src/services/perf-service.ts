@@ -8,7 +8,9 @@ export class PerfService {
   private els: {
     fps: HTMLElement | null;
     frame: HTMLElement | null;
-    pass: HTMLElement | null;
+    pass1: HTMLElement | null;
+    pass2: HTMLElement | null;
+    pass3: HTMLElement | null;
     dropped: HTMLElement | null;
     screen: HTMLElement | null;
     globe: HTMLElement | null;
@@ -23,7 +25,9 @@ export class PerfService {
     this.els = {
       fps,
       frame: document.querySelector<HTMLElement>('.perf-frame'),
-      pass: document.querySelector<HTMLElement>('.perf-pass'),
+      pass1: document.querySelector<HTMLElement>('.perf-pass1'),
+      pass2: document.querySelector<HTMLElement>('.perf-pass2'),
+      pass3: document.querySelector<HTMLElement>('.perf-pass3'),
       dropped: document.querySelector<HTMLElement>('.perf-dropped'),
       screen: document.querySelector<HTMLElement>('.perf-screen'),
       globe: document.querySelector<HTMLElement>('.perf-globe'),
@@ -43,9 +47,19 @@ export class PerfService {
     if (this.els!.frame) this.els!.frame.textContent = `${value.toFixed(1)} ms`;
   }
 
-  setPassMs(value: number): void {
+  setPass1Ms(value: number): void {
     if (!this.ensureElements()) return;
-    if (this.els!.pass) this.els!.pass.textContent = `${value.toFixed(1)} ms`;
+    if (this.els!.pass1) this.els!.pass1.textContent = isNaN(value) ? '—' : `${value.toFixed(2)}`;
+  }
+
+  setPass2Ms(value: number): void {
+    if (!this.ensureElements()) return;
+    if (this.els!.pass2) this.els!.pass2.textContent = isNaN(value) ? '—' : `${value.toFixed(2)}`;
+  }
+
+  setPass3Ms(value: number): void {
+    if (!this.ensureElements()) return;
+    if (this.els!.pass3) this.els!.pass3.textContent = isNaN(value) ? '—' : `${value.toFixed(2)}`;
   }
 
   setDropped(value: number): void {

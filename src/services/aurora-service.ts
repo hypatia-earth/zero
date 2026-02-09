@@ -73,7 +73,7 @@ export function createAuroraService(
 
   // Message callbacks
   let onReady: (() => void) | null = null;
-  let onFrameComplete: ((timing: { frame: number; pass: number }, memoryMB: { allocated: number; capacity: number }) => void) | null = null;
+  let onFrameComplete: ((timing: { frame: number; pass1: number; pass2: number; pass3: number }, memoryMB: { allocated: number; capacity: number }) => void) | null = null;
 
   // Render loop state
   let renderInFlight = false;
@@ -102,7 +102,9 @@ export function createAuroraService(
   // Perf stats
   const frameIntervals = createRollingAvg(60);
   const frameTimes = createRollingAvg(60);
-  const passTimes = createRollingAvg(60);
+  const pass1Times = createRollingAvg(60);
+  const pass2Times = createRollingAvg(60);
+  const pass3Times = createRollingAvg(60);
   let lastFrameTime = performance.now();
   let perfFrameCount = 0;
 
@@ -138,7 +140,9 @@ export function createAuroraService(
     const fps = intervalAvg > 0 ? 1000 / intervalAvg : 0;
     perfService.setFps(fps);
     perfService.setFrameMs(frameTimes.avg());
-    perfService.setPassMs(passTimes.avg());
+    perfService.setPass1Ms(pass1Times.avg());
+    perfService.setPass2Ms(pass2Times.avg());
+    perfService.setPass3Ms(pass3Times.avg());
     perfService.setDropped(droppedFrames);
     if (camera && canvas) {
       const fov = 2 * Math.atan(camera.getTanFov());
@@ -263,7 +267,9 @@ export function createAuroraService(
       onFrameComplete = (timing, memory) => {
         renderInFlight = false;
         frameTimes.push(timing.frame);
-        passTimes.push(timing.pass);
+        pass1Times.push(timing.pass1);
+        pass2Times.push(timing.pass2);
+        pass3Times.push(timing.pass3);
         memoryStats.value = { allocatedMB: memory.allocated, capacityMB: memory.capacity };
       };
 
