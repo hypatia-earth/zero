@@ -102,6 +102,9 @@ export async function runGpuInitPhase(
   // Load palettes
   await progress.run('Loading color palettes...', 0.75, async () => {
     await paletteService.loadPalettes('temp');
+    // Apply persisted palette from options
+    const persistedPalette = optionsService.options.value.temp.palette;
+    paletteService.setPalette('temp', persistedPalette);
   });
 
   // Initialize palette reactivity now that worker is ready
