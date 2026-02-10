@@ -80,7 +80,8 @@ export class ShaderComposer {
     // 3. Layer blend functions (sorted by render order)
     const sortedLayers = [...surfaceLayers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     for (const layer of sortedLayers) {
-      const shaderCode = this.mainShaders.get(layer.id);
+      // Prefer inline shader from declaration, fall back to shader-loader
+      const shaderCode = layer.shaders?.main ?? this.mainShaders.get(layer.id);
       if (shaderCode) {
         parts.push(`// --- Layer: ${layer.id} ---`);
         parts.push(shaderCode);
@@ -88,7 +89,8 @@ export class ShaderComposer {
     }
 
     // 4. Grid shader (special - always included for back-side grid logic)
-    const gridShader = this.mainShaders.get('grid');
+    const gridLayer = _allLayers.find(l => l.id === 'grid');
+    const gridShader = gridLayer?.shaders?.main ?? this.mainShaders.get('grid');
     if (gridShader) {
       parts.push('// --- Layer: grid ---');
       parts.push(gridShader);

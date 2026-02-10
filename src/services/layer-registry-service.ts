@@ -12,6 +12,13 @@ export type LayerType = 'decoration' | 'texture' | 'geometry' | 'solid';
 export type ComputeTrigger = 'data-ready' | 'time-change';
 export type RenderPass = 'surface' | 'geometry' | 'post';
 
+export interface LayerShaders {
+  main?: string;               // Main pass blend shader (WGSL code)
+  post?: string;               // Post-process shader
+  compute?: string[];          // Compute shaders
+  render?: string;             // Geometry pass render shader
+}
+
 export interface LayerDeclaration {
   id: string;
   type: LayerType;
@@ -19,6 +26,7 @@ export interface LayerDeclaration {
   options?: string[];          // Option paths to watch (e.g., ['temp.enabled'])
   blendFn?: string;            // Fragment shader blend function name
   postFn?: string;             // Post-process function name
+  shaders?: LayerShaders;      // Inline shader code
   triggers?: Record<string, ComputeTrigger>;  // Compute stage triggers
   topology?: 'triangle-list' | 'line-list';
   pass?: RenderPass;

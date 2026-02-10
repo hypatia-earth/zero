@@ -11,7 +11,7 @@
  *   );
  */
 
-import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass } from '../services/layer-registry-service';
+import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders } from '../services/layer-registry-service';
 
 export interface LayerFeature {
   apply(declaration: Partial<LayerDeclaration>): Partial<LayerDeclaration>;
@@ -95,5 +95,20 @@ export function withSolidColor(): LayerFeature {
 export function asBuiltIn(): LayerFeature {
   return {
     apply: (d) => ({ ...d, isBuiltIn: true }),
+  };
+}
+
+/** Add shader code to layer declaration */
+export function withShader(type: keyof LayerShaders, code: string): LayerFeature {
+  return {
+    apply: (d) => {
+      const shaders = { ...d.shaders } as LayerShaders;
+      if (type === 'compute') {
+        shaders.compute = [...(shaders.compute || []), code];
+      } else {
+        shaders[type] = code;
+      }
+      return { ...d, shaders };
+    },
   };
 }
