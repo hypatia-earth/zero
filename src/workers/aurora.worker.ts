@@ -16,6 +16,10 @@ import { generateIsobarLevels, type SmoothingAlgorithm } from '../render/pressur
 import { LayerStore } from '../services/layer-store';
 import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.schema';
 import { getSunDirection } from '../utils/sun-position';
+import { USE_DECLARATIVE_LAYERS } from '../config/feature-flags';
+import { shaderComposer } from '../render/shader-composer';
+import { LayerRegistryService } from '../services/layer-registry-service';
+import { registerBuiltInLayers } from '../render/built-in-layers';
 
 // ============================================================
 // Palette types for temp layer
@@ -358,10 +362,22 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       // Create and initialize renderer
       renderer = new GlobeRenderer(canvas, config.cameraConfig);
+
+      // Compose shaders dynamically when declarative layers enabled
+      let composedShaders;
+      if (USE_DECLARATIVE_LAYERS) {
+        const registry = new LayerRegistryService();
+        registerBuiltInLayers(registry);
+        const layers = registry.getAll();
+        composedShaders = shaderComposer.compose(layers);
+        console.log('[Aurora] Using composed shaders for', layers.length, 'layers');
+      }
+
       await renderer.initialize(
         config.timeslotsPerLayer,
         config.pressureResolution,
-        config.windLineCount
+        config.windLineCount,
+        composedShaders
       );
 
       // Upload assets

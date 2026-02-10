@@ -3,7 +3,7 @@ import { defineLayer, withType, withOptions, withBlend, withRender, asBuiltIn } 
 export const layer = defineLayer('earth',
   withType('decoration'),
   withOptions(['earth.enabled', 'earth.opacity']),
-  withBlend('blendBase'),
+  withBlend('blendBasemap'),
   withRender({ pass: 'surface', order: 0 }),
   asBuiltIn(),
 );
