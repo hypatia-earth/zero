@@ -11,12 +11,13 @@ import { LAYER_CATEGORIES, LAYER_CATEGORY_LABELS, type TLayer } from '../config/
 interface LayersPanelAttrs {
   configService: ConfigService;
   optionsService: OptionsService;
+  onCreateLayer?: () => void;
 }
 
 export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
   return {
     view({ attrs }) {
-      const { configService, optionsService } = attrs;
+      const { configService, optionsService, onCreateLayer } = attrs;
       const readyLayerIds = new Set(configService.getReadyLayers());
       const layers = configService.getLayers().filter(l => readyLayerIds.has(l.id));
       const opts = optionsService.options.value;
@@ -39,6 +40,13 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
             ),
           ]);
         }),
+        // Add layer button
+        onCreateLayer && m('.group', [
+          m('button.add-layer', {
+            onclick: onCreateLayer,
+            title: 'Create custom layer',
+          }, '+ Add Layer'),
+        ]),
       ]);
     },
   };

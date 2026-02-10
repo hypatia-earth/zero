@@ -22,6 +22,7 @@ import { LogoPanel } from './components/logo-panel';
 import { OptionsPanel } from './components/options-panel';
 import { FullscreenPanel } from './components/fullscreen-panel';
 import { PanelStack } from './components/panel-stack';
+import { CreateLayerDialog } from './components/create-layer-dialog';
 
 export const App: m.ClosureComponent = () => {
   // Progress state for bootstrap modal (created early for subscription)
@@ -29,6 +30,9 @@ export const App: m.ClosureComponent = () => {
 
   // Services - populated during bootstrap
   const services: Partial<ServiceContainer> = {};
+
+  // Dialog state
+  let showCreateLayer = false;
 
   return {
     async oninit() {
@@ -67,12 +71,17 @@ export const App: m.ClosureComponent = () => {
             aboutService: services.aboutService!,
             dialogService: services.dialogService!,
           }),
+          showCreateLayer && m(CreateLayerDialog, {
+            layerRegistry: services.layerRegistryService!,
+            onClose: () => { showCreateLayer = false; m.redraw(); },
+          }),
           m('.ui-container', [
             m(PanelStack, { side: 'left' }, [
               m(LogoPanel),
               !minimal && m(LayersPanel, {
                 configService: services.configService!,
                 optionsService: services.optionsService!,
+                onCreateLayer: () => { showCreateLayer = true; },
               }),
             ]),
             m(PanelStack, { side: 'right' }, [
