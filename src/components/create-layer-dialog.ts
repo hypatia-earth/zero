@@ -78,9 +78,10 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       return;
     }
 
-    // Check for duplicate
-    if (registry.get(state.id)) {
-      state.error = `Layer "${state.id}" already exists`;
+    // Check for duplicate (unless it's a try layer being saved)
+    const existing = registry.get(state.id);
+    if (existing && existing.isBuiltIn) {
+      state.error = `Cannot override built-in layer "${state.id}"`;
       return;
     }
 
@@ -91,8 +92,16 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       return;
     }
 
-    // Create layer declaration
-    const layer = defineLayer(state.id,
+    // If already registered (from Try), just keep it
+    if (existing) {
+      console.log(`[CreateLayer] Saved user layer: ${state.id} (index ${existing.userLayerIndex})`);
+      // TODO: persist to IDB
+      onClose();
+      return;
+    }
+
+    // Create layer declaration (without userLayerIndex - registry assigns it)
+    const declaration = defineLayer(state.id,
       withType('texture'),
       withParams([state.param]),
       withOptions([`${state.id}.enabled`, `${state.id}.opacity`]),
@@ -101,10 +110,15 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       withRender({ pass: 'surface', order: state.order }),
     );
 
-    // Register the layer
-    registry.register(layer);
-    console.log(`[CreateLayer] Registered user layer: ${state.id}`);
+    // Register with auto-assigned index
+    const layer = registry.registerUserLayer(declaration);
+    if (!layer) {
+      state.error = 'No free layer slots (max 32 user layers)';
+      return;
+    }
 
+    console.log(`[CreateLayer] Saved user layer: ${state.id} (index ${layer.userLayerIndex})`);
+    // TODO: persist to IDB
     onClose();
   }
 
@@ -123,13 +137,20 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       return;
     }
 
-    // If layer already exists, unregister it first (for re-try)
-    if (registry.get(state.id)) {
-      registry.unregister(state.id);
+    // Check if layer already exists
+    const existing = registry.get(state.id);
+    if (existing) {
+      // Update shader code in existing layer
+      if (existing.shaders) {
+        existing.shaders.main = state.shaderCode;
+      }
+      // TODO: trigger recompilation
+      console.log(`[CreateLayer] Updated layer: ${state.id} (index ${existing.userLayerIndex})`);
+      return;
     }
 
-    // Create and register layer
-    const layer = defineLayer(state.id,
+    // Create layer declaration
+    const declaration = defineLayer(state.id,
       withType('texture'),
       withParams([state.param]),
       withOptions([`${state.id}.enabled`, `${state.id}.opacity`]),
@@ -138,14 +159,23 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       withRender({ pass: 'surface', order: state.order }),
     );
 
-    registry.register(layer);
-    console.log(`[CreateLayer] Try layer: ${state.id}`);
+    // Register with auto-assigned index
+    const layer = registry.registerUserLayer(declaration);
+    if (!layer) {
+      state.error = 'No free layer slots (max 32 user layers)';
+      return;
+    }
+
+    console.log(`[CreateLayer] Try layer: ${state.id} (index ${layer.userLayerIndex})`);
+    // TODO: trigger shader recompilation in worker
   }
 
   function deleteLayer(registry: LayerRegistryService, onClose: () => void) {
-    if (state.id && registry.get(state.id)) {
-      registry.unregister(state.id);
+    const layer = state.id ? registry.get(state.id) : null;
+    if (layer && !layer.isBuiltIn) {
+      registry.unregisterUserLayer(state.id);
       console.log(`[CreateLayer] Deleted layer: ${state.id}`);
+      // TODO: remove from IDB, trigger recompilation
     }
     onClose();
   }

@@ -32,11 +32,15 @@ export interface LayerDeclaration {
   pass?: RenderPass;
   order?: number;              // Render order within pass
   isBuiltIn?: boolean;         // true for core layers, false for user layers
+  userLayerIndex?: number;     // 0-31 for user layers (uniform slot index)
 }
+
+const MAX_USER_LAYERS = 32;
 
 export class LayerRegistryService {
   private layers: Map<string, LayerDeclaration> = new Map();
   private changeSignal: Signal<number> = signal(0);
+  private usedUserIndices: Set<number> = new Set();
 
   /** Signal that increments when registry changes */
   get changed(): ReadonlySignal<number> {
@@ -87,5 +91,48 @@ export class LayerRegistryService {
       layer.params?.forEach(p => params.add(p));
     }
     return Array.from(params);
+  }
+
+  /** Allocate next available user layer index (0-31) */
+  allocateUserIndex(): number | null {
+    for (let i = 0; i < MAX_USER_LAYERS; i++) {
+      if (!this.usedUserIndices.has(i)) {
+        this.usedUserIndices.add(i);
+        return i;
+      }
+    }
+    return null;  // All slots full
+  }
+
+  /** Free a user layer index */
+  freeUserIndex(index: number): void {
+    this.usedUserIndices.delete(index);
+  }
+
+  /** Register with automatic index allocation for user layers */
+  registerUserLayer(declaration: Omit<LayerDeclaration, 'userLayerIndex'>): LayerDeclaration | null {
+    const index = this.allocateUserIndex();
+    if (index === null) {
+      console.error('[LayerRegistry] No free user layer slots (max 32)');
+      return null;
+    }
+
+    const fullDeclaration: LayerDeclaration = {
+      ...declaration,
+      userLayerIndex: index,
+      isBuiltIn: false,
+    };
+
+    this.register(fullDeclaration);
+    return fullDeclaration;
+  }
+
+  /** Unregister and free user layer index */
+  unregisterUserLayer(id: string): void {
+    const layer = this.layers.get(id);
+    if (layer?.userLayerIndex !== undefined) {
+      this.freeUserIndex(layer.userLayerIndex);
+    }
+    this.unregister(id);
   }
 }
