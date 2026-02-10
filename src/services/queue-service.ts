@@ -82,11 +82,12 @@ export class QueueService implements IQueueService {
   /** Reactive parameters for queue management */
   readonly qsParams = computed(() => {
     const opts = this.optionsService.options.value;
-    // Get weather layers from registry (those with params)
+    // Get built-in weather layers from registry (those with params)
+    // User layers piggyback on existing data, don't need separate queue entries
     const registeredLayers = this.layerRegistryService.getAll()
-      .filter(l => l.params && l.params.length > 0)
+      .filter(l => l.params && l.params.length > 0 && l.isBuiltIn)
       .map(l => l.id as TWeatherLayer);
-    const activeLayers = registeredLayers.filter(p => opts[p].enabled);
+    const activeLayers = registeredLayers.filter(p => opts[p]?.enabled);
 
     return {
       time: this.stateService.viewState.value.time,
