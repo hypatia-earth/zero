@@ -9,11 +9,13 @@
  */
 
 import m from 'mithril';
-import type { LayerRegistryService } from '../services/layer-registry-service';
+import type { LayerRegistryService, LayerDeclaration } from '../services/layer-registry-service';
+import type { AuroraService } from '../services/aurora-service';
 import { defineLayer, withType, withParams, withOptions, withBlend, withShader, withRender } from '../render/layer-builder';
 
 interface CreateLayerDialogAttrs {
   layerRegistry: LayerRegistryService;
+  auroraService: AuroraService;
   onClose: () => void;
 }
 
@@ -78,7 +80,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
-  function validateAndCreate(registry: LayerRegistryService, onClose: () => void) {
+  function validateAndCreate(registry: LayerRegistryService, aurora: AuroraService, onClose: () => void) {
     state.error = null;
 
     // Validate ID
@@ -129,19 +131,22 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       withRender({ pass: 'surface', order: state.order }),
     );
 
-    const layer: import('../services/layer-registry-service').LayerDeclaration = {
+    const layer: LayerDeclaration = {
       ...declaration,
       userLayerIndex: index,
       isBuiltIn: false,
     };
     registry.register(layer);
 
+    // Send to worker for shader recompilation
+    aurora.send({ type: 'registerUserLayer', layer });
+
     console.log(`[CreateLayer] Saved user layer: ${state.id} (index ${index})`);
     // TODO: persist to IDB
     onClose();
   }
 
-  function tryLayer(registry: LayerRegistryService) {
+  function tryLayer(registry: LayerRegistryService, aurora: AuroraService) {
     state.error = null;
 
     if (!state.id) {
@@ -192,30 +197,33 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     );
 
     // Register layer (index already allocated)
-    const layer: import('../services/layer-registry-service').LayerDeclaration = {
+    const layer: LayerDeclaration = {
       ...declaration,
       userLayerIndex: index,
       isBuiltIn: false,
     };
     registry.register(layer);
 
+    // Send to worker for shader recompilation
+    aurora.send({ type: 'registerUserLayer', layer });
+
     console.log(`[CreateLayer] Try layer: ${state.id} (index ${index})`);
-    // TODO: trigger shader recompilation in worker
   }
 
-  function deleteLayer(registry: LayerRegistryService, onClose: () => void) {
+  function deleteLayer(registry: LayerRegistryService, aurora: AuroraService, onClose: () => void) {
     const layer = state.id ? registry.get(state.id) : null;
     if (layer && !layer.isBuiltIn) {
       registry.unregisterUserLayer(state.id);
+      aurora.send({ type: 'unregisterUserLayer', layerId: state.id });
       console.log(`[CreateLayer] Deleted layer: ${state.id}`);
-      // TODO: remove from IDB, trigger recompilation
+      // TODO: remove from IDB
     }
     onClose();
   }
 
   return {
     view({ attrs }) {
-      const { layerRegistry, onClose } = attrs;
+      const { layerRegistry, auroraService, onClose } = attrs;
       const exists = state.id && layerRegistry.get(state.id);
 
       return m('.dialog.create-layer', [
@@ -289,16 +297,16 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
           m('.footer', [
             m('.left', [
               m('button', {
-                onclick: () => tryLayer(layerRegistry),
+                onclick: () => tryLayer(layerRegistry, auroraService),
               }, 'Try'),
               exists && m('button.danger', {
-                onclick: () => deleteLayer(layerRegistry, onClose),
+                onclick: () => deleteLayer(layerRegistry, auroraService, onClose),
               }, 'Delete'),
             ]),
             m('.right', [
               m('button', { onclick: onClose }, 'Cancel'),
               m('button.primary', {
-                onclick: () => validateAndCreate(layerRegistry, onClose),
+                onclick: () => validateAndCreate(layerRegistry, auroraService, onClose),
               }, 'Save'),
             ]),
           ]),

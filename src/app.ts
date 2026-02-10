@@ -73,6 +73,7 @@ export const App: m.ClosureComponent = () => {
           }),
           showCreateLayer && m(CreateLayerDialog, {
             layerRegistry: services.layerRegistryService!,
+            auroraService: services.auroraService!,
             onClose: () => { showCreateLayer = false; m.redraw(); },
           }),
           m('.ui-container', [
