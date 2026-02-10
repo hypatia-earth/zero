@@ -17,6 +17,7 @@ import type { ConfigService } from './config-service';
 import type { StateService } from './state-service';
 import type { TimestepService } from './timestep-service';
 import type { SlotService } from './slot-service';
+import type { LayerRegistryService } from './layer-registry-service';
 
 const DEBUG = false;
 
@@ -81,8 +82,11 @@ export class QueueService implements IQueueService {
   /** Reactive parameters for queue management */
   readonly qsParams = computed(() => {
     const opts = this.optionsService.options.value;
-    const readyWeatherLayers = this.configService.getReadyLayers().filter(isWeatherLayer);
-    const activeLayers = readyWeatherLayers.filter(p => opts[p].enabled);
+    // Get weather layers from registry (those with params)
+    const registeredLayers = this.layerRegistryService.getAll()
+      .filter(l => l.params && l.params.length > 0)
+      .map(l => l.id as TWeatherLayer);
+    const activeLayers = registeredLayers.filter(p => opts[p].enabled);
 
     return {
       time: this.stateService.viewState.value.time,
@@ -98,7 +102,8 @@ export class QueueService implements IQueueService {
     private optionsService: OptionsService,
     private stateService: StateService,
     private configService: ConfigService,
-    private timestepService: TimestepService
+    private timestepService: TimestepService,
+    private layerRegistryService: LayerRegistryService
   ) {}
 
   /** Set SlotService reference (avoids circular dependency) */

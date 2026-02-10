@@ -60,6 +60,13 @@ export async function runGpuInitPhase(
     layerConfigs,
   };
 
+  // Load palettes first (needed for worker assets)
+  await progress.run('Loading color palettes...', 0.05, async () => {
+    await paletteService.loadPalettes('temp');
+    const persistedPalette = optionsService.options.value.temp.palette;
+    paletteService.setPalette('temp', persistedPalette);
+  });
+
   // Prepare assets for transfer to worker
   await progress.run('Processing textures...', 0.1, async () => {
     // Decode images on main thread (ImageBitmap is transferable)
@@ -75,6 +82,11 @@ export async function runGpuInitPhase(
       new Blob([assets.logoBuffer], { type: 'image/png' })
     );
 
+    // Convert palettes array to Record for worker
+    const tempPalettes = Object.fromEntries(
+      paletteService.getPalettes('temp').map(p => [p.name, p])
+    );
+
     const auroraAssets: AuroraAssets = {
       atmosphereLUTs: {
         transmittance: assets.lutBuffers[0]!,
@@ -86,6 +98,7 @@ export async function runGpuInitPhase(
       basemapFaces,
       fontAtlas,
       logo,
+      tempPalettes,
     };
 
     // Initialize worker (transfers assets)
@@ -98,17 +111,6 @@ export async function runGpuInitPhase(
   await progress.run('Initializing data decoder...', 0.6, async () => {
     await omService.init(assets.wasmBuffer);
   });
-
-  // Load palettes
-  await progress.run('Loading color palettes...', 0.75, async () => {
-    await paletteService.loadPalettes('temp');
-    // Apply persisted palette from options
-    const persistedPalette = optionsService.options.value.temp.palette;
-    paletteService.setPalette('temp', persistedPalette);
-  });
-
-  // Initialize palette reactivity now that worker is ready
-  paletteService.init();
 
   // Load about content
   await progress.run('Loading about content...', 0.9, async () => {

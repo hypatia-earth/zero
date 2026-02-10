@@ -20,9 +20,12 @@ import { SlotService } from '../services/slot-service';
 import { PaletteService } from '../services/palette-service';
 import { KeyboardService } from '../services/keyboard-service';
 import { PerfService } from '../services/perf-service';
+import { LayerRegistryService } from '../services/layer-registry-service';
+import { registerBuiltInLayers } from '../render/built-in-layers';
 
 export interface ServiceContainer {
   // Foundation (no service deps)
+  layerRegistryService: LayerRegistryService;
   configService: ConfigService;
   dialogService: DialogService;
   aboutService: AboutService;
@@ -53,9 +56,10 @@ export interface ServiceContainer {
  */
 export function createFoundationServices(): Pick<
   ServiceContainer,
-  'configService' | 'dialogService' | 'aboutService' | 'themeService' | 'capabilitiesService' |
+  'layerRegistryService' | 'configService' | 'dialogService' | 'aboutService' | 'themeService' | 'capabilitiesService' |
   'optionsService' | 'stateService' | 'omService' | 'perfService'
 > {
+  const layerRegistryService = new LayerRegistryService();
   const configService = new ConfigService();
   const optionsService = new OptionsService(configService);
   // StateService uses effect-based decoupling: watches optionsService.options signal
@@ -68,7 +72,11 @@ export function createFoundationServices(): Pick<
   const capabilitiesService = new CapabilitiesService();
   const perfService = new PerfService();
 
+  // Register built-in layers
+  registerBuiltInLayers(layerRegistryService);
+
   return {
+    layerRegistryService,
     configService,
     optionsService,
     stateService,
@@ -96,9 +104,10 @@ export function createQueueService(
   optionsService: OptionsService,
   stateService: StateService,
   configService: ConfigService,
-  timestepService: TimestepService
+  timestepService: TimestepService,
+  layerRegistryService: LayerRegistryService
 ): QueueService {
-  return new QueueService(omService, optionsService, stateService, configService, timestepService);
+  return new QueueService(omService, optionsService, stateService, configService, timestepService, layerRegistryService);
 }
 
 // AuroraService is created via createAuroraService from aurora-service.ts
@@ -131,10 +140,10 @@ export function createSlotService(
 }
 
 /**
- * Create PaletteService (needs auroraService)
+ * Create PaletteService
  */
-export function createPaletteService(auroraService: AuroraService): PaletteService {
-  return new PaletteService(auroraService);
+export function createPaletteService(): PaletteService {
+  return new PaletteService();
 }
 
 /**

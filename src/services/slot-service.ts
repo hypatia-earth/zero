@@ -285,11 +285,6 @@ export class SlotService {
 
     // Send data to worker (transfers ownership of buffer)
     this.auroraService.uploadData(param, slotIndex, slabIndex, data);
-
-    // Pressure needs regrid after upload
-    if (param === 'pressure' && slabIndex === 0) {
-      this.auroraService.triggerPressureRegrid(slotIndex);
-    }
   }
 
   /**
@@ -603,12 +598,6 @@ export class SlotService {
       this.auroraService.uploadData(layer, 0, slabIndex, slabs[slabIndex]!);
     }
     this.auroraService.activateSlots(layer, 0, 0, Date.now(), Date.now(), points);
-
-    // Pressure needs regrid after upload (worker needs buffer in store first)
-    if (layer === 'pressure') {
-      // Small delay to ensure uploadData message is processed before regrid
-      setTimeout(() => this.auroraService.triggerPressureRegrid(0), 100);
-    }
   }
 
   /** Exit test mode for a layer (re-enable real data) */

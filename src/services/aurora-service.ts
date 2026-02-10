@@ -51,8 +51,6 @@ export interface AuroraService {
   dispose(): void;
   uploadData(layer: TWeatherLayer, slotIndex: number, slabIndex: number, data: Float32Array): void;
   activateSlots(layer: TWeatherLayer, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
-  updatePalette(layer: 'temp', textureData: Uint8Array, min: number, max: number): void;
-  triggerPressureRegrid(slotIndex: number): void;
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
@@ -250,14 +248,6 @@ export function createAuroraService(
       } else {
         send({ type: 'activateSlots', layer, slot0, slot1, t0, t1 });
       }
-    },
-
-    updatePalette(layer: 'temp', textureData: Uint8Array, min: number, max: number): void {
-      send({ type: 'updatePalette', layer, textureData, min, max }, [textureData.buffer]);
-    },
-
-    triggerPressureRegrid(slotIndex: number): void {
-      send({ type: 'triggerPressureRegrid', slotIndex });
     },
 
     start(): void {

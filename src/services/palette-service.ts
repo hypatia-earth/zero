@@ -8,8 +8,7 @@
  * - Support for both linear and non-linear (log-spaced) palettes
  */
 
-import { signal, effect } from '@preact/signals-core';
-import type { AuroraService } from './aurora-service';
+import { signal } from '@preact/signals-core';
 
 // ============================================================
 // Types
@@ -64,26 +63,6 @@ export class PaletteService {
 
   /** Signal that increments when any palette changes (for reactivity) */
   readonly paletteChanged = signal<number>(0);
-
-  private auroraService: AuroraService;
-
-  constructor(auroraService: AuroraService) {
-    this.auroraService = auroraService;
-  }
-
-  /**
-   * Initialize palette reactivity (call after renderer is ready)
-   */
-  init(): void {
-    // Wire up palette reactivity - updates GPU texture when palette changes
-    effect(() => {
-      void this.paletteChanged.value;
-      const palette = this.getPalette('temp');
-      const textureData = this.generateTextureData(palette);
-      const range = this.getRange(palette);
-      this.auroraService.updatePalette('temp', textureData, range.min, range.max);
-    });
-  }
 
   /**
    * Load palette JSON files for a layer from /images/palettes/{layer}-*.json

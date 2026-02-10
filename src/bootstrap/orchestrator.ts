@@ -87,7 +87,8 @@ async function runBootstrapInner(
     services.optionsService!,
     services.stateService!,
     services.configService!,
-    services.timestepService
+    services.timestepService,
+    services.layerRegistryService!
   );
   const assets = await runAssetsPhase(services.queueService, services.capabilitiesService!, progress);
 
@@ -99,7 +100,7 @@ async function runBootstrapInner(
     services.optionsService!,
     services.perfService!
   );
-  services.paletteService = createPaletteService(services.auroraService);
+  services.paletteService = createPaletteService();
   services.slotService = createSlotService(
     services.timestepService,
     services.auroraService,

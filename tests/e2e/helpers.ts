@@ -61,7 +61,6 @@ export interface ZeroTestAPI {
   };
   AuroraService: {
     setCamera(lon: number, lat: number, altitude: number): Promise<void>;
-    triggerPressureRegrid(): Promise<void>;
   };
   Canvas: {
     readPixel(x: number, y: number): Promise<Pixel>;
@@ -187,12 +186,6 @@ export function createZeroAPI(page: Page): ZeroTestAPI {
           (window as any).__hypatia.auroraService.setCameraPosition(lat, lon, distance);
         }, { lon, lat, distance });
         await page.waitForTimeout(200);
-      },
-      async triggerPressureRegrid(): Promise<void> {
-        await page.evaluate(() => {
-          (window as any).__hypatia.auroraService.triggerPressureRegrid(0);
-        });
-        await page.waitForTimeout(100);
       },
     },
 
