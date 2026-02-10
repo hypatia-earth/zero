@@ -6,48 +6,86 @@ import m from 'mithril';
 import { GearIcon } from './gear-icon';
 import type { ConfigService } from '../services/config-service';
 import type { OptionsService } from '../services/options-service';
+import type { LayerRegistryService } from '../services/layer-registry-service';
+import type { AuroraService } from '../services/aurora-service';
 import { LAYER_CATEGORIES, LAYER_CATEGORY_LABELS, type TLayer } from '../config/types';
 
 interface LayersPanelAttrs {
   configService: ConfigService;
   optionsService: OptionsService;
+  layerRegistry: LayerRegistryService;
+  auroraService: AuroraService;
   onCreateLayer?: () => void;
+  onEditLayer?: (layerId: string) => void;
 }
 
 export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
   return {
     view({ attrs }) {
-      const { configService, optionsService, onCreateLayer } = attrs;
+      const { configService, optionsService, layerRegistry, auroraService, onCreateLayer, onEditLayer } = attrs;
       const readyLayerIds = new Set(configService.getReadyLayers());
       const layers = configService.getLayers().filter(l => readyLayerIds.has(l.id));
       const opts = optionsService.options.value;
 
-      return m('.panel.layers', [
-        LAYER_CATEGORIES.map(category => {
-          const categoryLayers = layers.filter(l => l.category === category);
-          if (categoryLayers.length === 0) return null;
+      // Get user layers from registry (exclude preview)
+      const userLayers = layerRegistry.getUserLayers().filter(l => l.id !== '_preview');
 
-          return m('.group', { key: category }, [
-            m('h4', LAYER_CATEGORY_LABELS[category]),
-            categoryLayers.map(layer =>
-              m(LayerWidget, {
-                key: layer.id,
-                layer,
-                active: opts[layer.id].enabled,
-                onToggle: () => optionsService.update(draft => { draft[layer.id].enabled = !draft[layer.id].enabled; }),
-                onOptions: () => optionsService.openDialog(layer.id),
-              })
-            ),
-          ]);
-        }),
-        // Add layer button
-        onCreateLayer && m('.group', [
+      // Build groups array without holes
+      const groups: m.Vnode[] = [];
+
+      // Built-in categories (celestial, weather, reference)
+      for (const category of LAYER_CATEGORIES) {
+        if (category === 'custom') continue;
+        const categoryLayers = layers.filter(l => l.category === category);
+        if (categoryLayers.length === 0) continue;
+
+        groups.push(m('.group', { key: category }, [
+          m('h4', LAYER_CATEGORY_LABELS[category]),
+          categoryLayers.map(layer =>
+            m(LayerWidget, {
+              key: layer.id,
+              layer,
+              active: opts[layer.id].enabled,
+              onToggle: () => optionsService.update(draft => { draft[layer.id].enabled = !draft[layer.id].enabled; }),
+              onOptions: () => optionsService.openDialog(layer.id),
+            })
+          ),
+        ]));
+      }
+
+      // Custom category: user layers from registry
+      if (userLayers.length > 0) {
+        groups.push(m('.group', { key: 'custom' }, [
+          m('h4', LAYER_CATEGORY_LABELS.custom),
+          userLayers.map(layer =>
+            m(LayerWidget, {
+              key: layer.id,
+              layer: { id: layer.id as TLayer, label: layer.id, buttonLabel: layer.id },
+              active: layerRegistry.isUserLayerEnabled(layer.id),
+              onToggle: () => {
+                const enabled = layerRegistry.toggleUserLayer(layer.id);
+                if (layer.userLayerIndex !== undefined) {
+                  const opacity = enabled ? layerRegistry.getUserLayerOpacity(layer.id) : 0;
+                  auroraService.send({ type: 'setUserLayerOpacity', layerIndex: layer.userLayerIndex, opacity });
+                }
+              },
+              onOptions: () => onEditLayer?.(layer.id),
+            })
+          ),
+        ]));
+      }
+
+      // Add layer button
+      if (onCreateLayer) {
+        groups.push(m('.group', { key: 'add-layer' }, [
           m('button.add-layer', {
             onclick: onCreateLayer,
             title: 'Create custom layer',
           }, '+ Add Layer'),
-        ]),
-      ]);
+        ]));
+      }
+
+      return m('.panel.layers', groups);
     },
   };
 };

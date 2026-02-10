@@ -9,6 +9,7 @@
  */
 
 import m from 'mithril';
+import { effect } from '@preact/signals-core';
 import type { LayerRegistryService, LayerDeclaration } from '../services/layer-registry-service';
 import type { AuroraService } from '../services/aurora-service';
 import { defineLayer, withType, withParams, withOptions, withBlend, withShader, withRender } from '../render/layer-builder';
@@ -16,6 +17,7 @@ import { defineLayer, withType, withParams, withOptions, withBlend, withShader, 
 interface CreateLayerDialogAttrs {
   layerRegistry: LayerRegistryService;
   auroraService: AuroraService;
+  editLayerId?: string | null;
   onClose: () => void;
 }
 
@@ -50,6 +52,7 @@ interface FormState {
   param: string;
   shaderCode: string;
   order: number;
+  opacity: number;
   userLayerIndex: number | null;  // Assigned on first Try/Save
   error: string | null;
 }
@@ -60,9 +63,26 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     param: 'temp_2m',
     shaderCode: SHADER_TEMPLATE,
     order: 50,
+    opacity: 1.0,
     userLayerIndex: null,
     error: null,
   };
+
+  let initialized = false;
+  // Track layer suspended for preview (to restore on cancel)
+  let suspendedLayer: LayerDeclaration | null = null;
+
+  function initFromLayer(registry: LayerRegistryService, layerId: string) {
+    const layer = registry.get(layerId);
+    if (!layer) return;
+
+    state.id = layer.id;
+    state.param = layer.params?.[0] ?? 'temp_2m';
+    state.shaderCode = layer.shaders?.main ?? SHADER_TEMPLATE;
+    state.order = layer.order ?? 50;
+    state.opacity = registry.getUserLayerOpacity(layerId);
+    state.userLayerIndex = layer.userLayerIndex ?? null;
+  }
 
   function updateShaderTemplate() {
     const blendName = capitalize(state.id || 'Custom');
@@ -89,9 +109,9 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       return;
     }
 
-    // Check for duplicate (unless it's a try layer being saved)
+    // Check for duplicate with built-in
     const existing = registry.get(state.id);
-    if (existing && existing.isBuiltIn) {
+    if (existing?.isBuiltIn) {
       state.error = `Cannot override built-in layer "${state.id}"`;
       return;
     }
@@ -103,25 +123,25 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       return;
     }
 
-    // If already registered (from Try), just save to IDB
-    if (existing) {
-      console.log(`[CreateLayer] Saved user layer: ${state.id} (index ${existing.userLayerIndex})`);
-      // TODO: persist to IDB
-      onClose();
-      return;
+    // Unregister preview from worker first
+    if (registry.hasPreview()) {
+      aurora.send({ type: 'unregisterUserLayer', layerId: '_preview' });
     }
 
-    // Allocate index first
+    // Allocate permanent index
     const index = registry.allocateUserIndex();
     if (index === null) {
-      state.error = 'No free layer slots (max 32 user layers)';
+      state.error = 'No free layer slots (max 31 user layers)';
       return;
     }
 
-    // Finalize shader code with index
+    // Finalize shader code with permanent index
     const finalizedCode = finalizeShaderCode(index);
 
-    // Create and register layer
+    // Unregister preview from registry
+    registry.unregisterPreview();
+
+    // Create and register permanent layer
     const declaration = defineLayer(state.id,
       withType('texture'),
       withParams([state.param]),
@@ -137,11 +157,15 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       isBuiltIn: false,
     };
     registry.register(layer);
+    registry.setUserLayerOpacity(state.id, state.opacity);
 
     // Send to worker for shader recompilation
     aurora.send({ type: 'registerUserLayer', layer });
+    // Set initial opacity
+    aurora.send({ type: 'setUserLayerOpacity', layerIndex: index, opacity: state.opacity });
 
-    console.log(`[CreateLayer] Saved user layer: ${state.id} (index ${index})`);
+    console.log(`[CreateLayer] Saved: ${state.id} (index ${index})`);
+    suspendedLayer = null;  // Don't restore old layer - new one saved
     // TODO: persist to IDB
     onClose();
   }
@@ -161,78 +185,186 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       return;
     }
 
-    // Check if layer already exists
-    const existing = registry.get(state.id);
-    if (existing && existing.userLayerIndex !== undefined) {
-      // Update shader code in existing layer with finalized index
-      const finalizedCode = finalizeShaderCode(existing.userLayerIndex);
-      if (existing.shaders) {
-        existing.shaders.main = finalizedCode;
-      }
-      state.userLayerIndex = existing.userLayerIndex;
-      // TODO: trigger recompilation in worker
-      console.log(`[CreateLayer] Updated layer: ${state.id} (index ${existing.userLayerIndex})`);
-      return;
+    // If editing existing layer, unregister it from worker to avoid duplicate blend function
+    const existingLayer = registry.get(state.id);
+    if (existingLayer && !existingLayer.isBuiltIn) {
+      suspendedLayer = existingLayer;  // Save for restore on cancel
+      aurora.send({ type: 'unregisterUserLayer', layerId: state.id });
     }
 
-    // Allocate index first so we can finalize shader
-    const index = registry.allocateUserIndex();
-    if (index === null) {
-      state.error = 'No free layer slots (max 32 user layers)';
-      return;
-    }
-    state.userLayerIndex = index;
+    // Finalize shader code with preview index (31)
+    const finalizedCode = finalizeShaderCode(31);
 
-    // Finalize shader code with actual index
-    const finalizedCode = finalizeShaderCode(index);
-
-    // Create layer declaration with finalized shader
-    const declaration = defineLayer(state.id,
+    // Create preview layer declaration
+    const declaration = defineLayer('_preview',
       withType('texture'),
       withParams([state.param]),
-      withOptions([`${state.id}.enabled`, `${state.id}.opacity`]),
+      withOptions([]),  // Preview has no options
       withBlend(blendFn),
       withShader('main', finalizedCode),
       withRender({ pass: 'surface', order: state.order }),
     );
 
-    // Register layer (index already allocated)
-    const layer: LayerDeclaration = {
-      ...declaration,
-      userLayerIndex: index,
-      isBuiltIn: false,
-    };
-    registry.register(layer);
+    // Register as preview (replaces any existing preview)
+    const layer = registry.registerPreview(declaration);
 
     // Send to worker for shader recompilation
     aurora.send({ type: 'registerUserLayer', layer });
 
-    console.log(`[CreateLayer] Try layer: ${state.id} (index ${index})`);
+    console.log(`[CreateLayer] Preview: ${state.id} (index 31)`);
+    m.redraw();  // Update UI (enables Save button)
   }
 
   function deleteLayer(registry: LayerRegistryService, aurora: AuroraService, onClose: () => void) {
+    // Delete permanent layer if exists
     const layer = state.id ? registry.get(state.id) : null;
     if (layer && !layer.isBuiltIn) {
       registry.unregisterUserLayer(state.id);
       aurora.send({ type: 'unregisterUserLayer', layerId: state.id });
-      console.log(`[CreateLayer] Deleted layer: ${state.id}`);
+      console.log(`[CreateLayer] Deleted: ${state.id}`);
       // TODO: remove from IDB
+    }
+    suspendedLayer = null;  // Don't restore - layer was deleted
+    // Also clean up preview
+    cleanupPreview(registry, aurora);
+    onClose();
+  }
+
+  function cleanupPreview(registry: LayerRegistryService, aurora: AuroraService) {
+    if (registry.hasPreview()) {
+      registry.unregisterPreview();
+      aurora.send({ type: 'unregisterUserLayer', layerId: '_preview' });
+      console.log('[CreateLayer] Preview cleaned up');
+    }
+  }
+
+  function handleClose(registry: LayerRegistryService, aurora: AuroraService, onClose: () => void) {
+    cleanupPreview(registry, aurora);
+    // Restore suspended layer if user cancels during edit
+    if (suspendedLayer) {
+      aurora.send({ type: 'registerUserLayer', layer: suspendedLayer });
+      console.log(`[CreateLayer] Restored: ${suspendedLayer.id}`);
+      suspendedLayer = null;
     }
     onClose();
   }
 
-  return {
-    view({ attrs }) {
-      const { layerRegistry, auroraService, onClose } = attrs;
-      const exists = state.id && layerRegistry.get(state.id);
+  let disposeErrorEffect: (() => void) | null = null;
 
-      return m('.dialog.create-layer', [
-        m('.backdrop', { onclick: onClose }),
-        m('.window', [
+  // Drag state
+  const drag = {
+    isFloating: false,
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    offsetX: 0,
+    offsetY: 0,
+  };
+
+  function resetDrag() {
+    drag.isDragging = false;
+    drag.offsetX = 0;
+    drag.offsetY = 0;
+  }
+
+  function resetState() {
+    state.id = '';
+    state.param = 'temp_2m';
+    state.shaderCode = SHADER_TEMPLATE;
+    state.order = 50;
+    state.opacity = 1.0;
+    state.userLayerIndex = null;
+    state.error = null;
+    initialized = false;
+    suspendedLayer = null;
+  }
+
+  return {
+    oncreate({ attrs }) {
+      // Reset state when dialog opens
+      resetState();
+      attrs.auroraService.userLayerError.value = null;
+
+      // Watch for shader compilation errors from worker
+      disposeErrorEffect = effect(() => {
+        const err = attrs.auroraService.userLayerError.value;
+        if (err && err.layerId === '_preview') {
+          state.error = `Shader error: ${err.error}`;
+          m.redraw();
+        }
+      });
+    },
+
+    onremove() {
+      disposeErrorEffect?.();
+    },
+
+    view({ attrs }) {
+      const { layerRegistry, auroraService, editLayerId, onClose } = attrs;
+      const isEditing = !!editLayerId;
+
+      // Initialize from existing layer on first render
+      if (!initialized && editLayerId) {
+        initFromLayer(layerRegistry, editLayerId);
+        initialized = true;
+      }
+
+      const exists = state.id && layerRegistry.get(state.id);
+      const close = () => { resetDrag(); handleClose(layerRegistry, auroraService, onClose); };
+
+      // Desktop detection
+      const isDesktop = window.innerWidth >= 768;
+
+      // Drag handlers
+      const onMouseDown = (e: MouseEvent) => {
+        if (!isDesktop || !drag.isFloating) return;
+        if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+        drag.isDragging = true;
+        drag.startX = e.clientX - drag.offsetX;
+        drag.startY = e.clientY - drag.offsetY;
+
+        const onMouseMove = (ev: MouseEvent) => {
+          if (!drag.isDragging) return;
+          drag.offsetX = ev.clientX - drag.startX;
+          drag.offsetY = ev.clientY - drag.startY;
+          m.redraw();
+        };
+
+        const onMouseUp = () => {
+          drag.isDragging = false;
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      };
+
+      const windowStyle = drag.isFloating && (drag.offsetX || drag.offsetY)
+        ? `transform: translate(${drag.offsetX}px, ${drag.offsetY}px)`
+        : '';
+
+      return m('.dialog.create-layer', { class: drag.isFloating ? 'floating' : '' }, [
+        m('.backdrop', { onclick: close }),
+        m('.window', {
+          class: drag.isDragging ? 'dragging' : '',
+          style: windowStyle,
+        }, [
           // Header
-          m('.header', [
-            m('h2', 'Create Layer'),
-            m('button.close', { onclick: onClose }, '×'),
+          m('.header', { onmousedown: onMouseDown }, [
+            m('h2', isEditing ? 'Edit Layer' : 'Create Layer'),
+            m('.bar', [
+              isDesktop && m('button.float-toggle', {
+                onclick: (e: Event) => {
+                  e.stopPropagation();
+                  drag.isFloating = !drag.isFloating;
+                  if (!drag.isFloating) resetDrag();
+                  m.redraw();
+                },
+                title: drag.isFloating ? 'Disable floating' : 'Keep floating',
+              }, drag.isFloating ? '◎' : '○'),
+              m('button.close', { onclick: close }, '×'),
+            ]),
           ]),
 
           // Content
@@ -242,6 +374,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
               m('label', 'Layer ID'),
               m('input[type=text]', {
                 placeholder: 'e.g., mytemp',
+                disabled: isEditing,
                 value: state.id,
                 oninput: (e: Event) => {
                   state.id = (e.target as HTMLInputElement).value.toLowerCase();
@@ -278,6 +411,25 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
               m('.hint', 'Lower = behind, higher = on top (earth=0, temp=10)'),
             ]),
 
+            // Opacity slider (only active after Try or when editing)
+            m('.field', [
+              m('label', `Opacity: ${Math.round(state.opacity * 100)}%`),
+              m('input[type=range]', {
+                min: 0,
+                max: 100,
+                value: state.opacity * 100,
+                disabled: !layerRegistry.hasPreview() && !isEditing,
+                oninput: (e: Event) => {
+                  state.opacity = parseInt((e.target as HTMLInputElement).value) / 100;
+                  // Send to worker in real-time
+                  const index = isEditing ? layerRegistry.get(editLayerId!)?.userLayerIndex : 31;
+                  if (index !== undefined) {
+                    auroraService.send({ type: 'setUserLayerOpacity', layerIndex: index, opacity: state.opacity });
+                  }
+                },
+              }),
+            ]),
+
             // Shader code
             m('.field.shader', [
               m('label', 'Blend Shader (WGSL)'),
@@ -304,8 +456,9 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
               }, 'Delete'),
             ]),
             m('.right', [
-              m('button', { onclick: onClose }, 'Cancel'),
+              m('button', { onclick: close }, 'Cancel'),
               m('button.primary', {
+                disabled: !layerRegistry.hasPreview(),
                 onclick: () => validateAndCreate(layerRegistry, auroraService, onClose),
               }, 'Save'),
             ]),

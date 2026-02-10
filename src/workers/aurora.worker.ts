@@ -83,12 +83,14 @@ export type AuroraRequest =
   | { type: 'resize'; width: number; height: number }
   | { type: 'registerUserLayer'; layer: import('../services/layer-registry-service').LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
+  | { type: 'setUserLayerOpacity'; layerIndex: number; opacity: number }
   | { type: 'cleanup' };
 
 export type AuroraResponse =
   | { type: 'ready' }
   | { type: 'frameComplete'; timing: { frame: number; pass1: number; pass2: number; pass3: number }; memoryMB: { allocated: number; capacity: number } }
-  | { type: 'error'; message: string; fatal: boolean };
+  | { type: 'error'; message: string; fatal: boolean }
+  | { type: 'userLayerResult'; layerId: string; success: boolean; error?: string };
 
 // ============================================================
 // Worker state
@@ -600,8 +602,21 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       // Recompose shaders and recreate pipeline
       const layers = layerRegistry.getAll();
       const composedShaders = shaderComposer.compose(layers);
-      renderer.recreatePipeline(composedShaders);
-      console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
+      renderer.recreatePipeline(composedShaders)
+        .then(() => {
+          console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
+          self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: true });
+        })
+        .catch((err) => {
+          // Rollback: remove the layer from registry
+          layerRegistry!.unregister(layer.id);
+          if (layer.userLayerIndex !== undefined) {
+            userLayerOpacities.delete(layer.userLayerIndex);
+          }
+          const message = err instanceof Error ? err.message : String(err);
+          console.error('[Aurora] Shader compilation failed:', message);
+          self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: false, error: message });
+        });
     }
 
     if (type === 'unregisterUserLayer') {
@@ -628,8 +643,14 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       // Recompose shaders and recreate pipeline
       const layers = layerRegistry.getAll();
       const composedShaders = shaderComposer.compose(layers);
-      renderer.recreatePipeline(composedShaders);
-      console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
+      renderer.recreatePipeline(composedShaders)
+        .then(() => console.log('[Aurora] Pipeline recreated with', layers.length, 'layers'))
+        .catch((err) => console.error('[Aurora] Pipeline recreation failed:', err));
+    }
+
+    if (type === 'setUserLayerOpacity') {
+      const { layerIndex, opacity } = e.data;
+      userLayerOpacities.set(layerIndex, opacity);
     }
 
     if (type === 'cleanup') {

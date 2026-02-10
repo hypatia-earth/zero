@@ -480,10 +480,22 @@ export class GlobeRenderer {
    * Recreate render pipeline with new shader code
    * Used when user layers are added/removed
    */
-  recreatePipeline(composedShaders: ComposedShaders): void {
+  async recreatePipeline(composedShaders: ComposedShaders): Promise<void> {
     // Create new shader modules
     const shaderModule = this.device.createShaderModule({ code: composedShaders.main });
     const postProcessModule = this.device.createShaderModule({ code: composedShaders.post });
+
+    // Check for shader compilation errors
+    const [mainInfo, postInfo] = await Promise.all([
+      shaderModule.getCompilationInfo(),
+      postProcessModule.getCompilationInfo(),
+    ]);
+
+    const errors = [...mainInfo.messages, ...postInfo.messages].filter(m => m.type === 'error');
+    if (errors.length > 0) {
+      const errorMsg = errors.map(e => `Line ${e.lineNum}: ${e.message}`).join('\n');
+      throw new Error(errorMsg);
+    }
 
     // Recreate main pipeline (same layout, new shader)
     this.pipeline = this.device.createRenderPipeline({

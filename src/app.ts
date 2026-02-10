@@ -33,6 +33,7 @@ export const App: m.ClosureComponent = () => {
 
   // Dialog state
   let showCreateLayer = false;
+  let editLayerId: string | null = null;
 
   return {
     async oninit() {
@@ -74,7 +75,8 @@ export const App: m.ClosureComponent = () => {
           showCreateLayer && m(CreateLayerDialog, {
             layerRegistry: services.layerRegistryService!,
             auroraService: services.auroraService!,
-            onClose: () => { showCreateLayer = false; m.redraw(); },
+            editLayerId,
+            onClose: () => { showCreateLayer = false; editLayerId = null; m.redraw(); },
           }),
           m('.ui-container', [
             m(PanelStack, { side: 'left' }, [
@@ -82,7 +84,10 @@ export const App: m.ClosureComponent = () => {
               !minimal && m(LayersPanel, {
                 configService: services.configService!,
                 optionsService: services.optionsService!,
-                onCreateLayer: () => { showCreateLayer = true; },
+                layerRegistry: services.layerRegistryService!,
+                auroraService: services.auroraService!,
+                onCreateLayer: () => { showCreateLayer = true; editLayerId = null; },
+                onEditLayer: (id) => { showCreateLayer = true; editLayerId = id; },
               }),
             ]),
             m(PanelStack, { side: 'right' }, [

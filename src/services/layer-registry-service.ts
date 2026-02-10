@@ -35,12 +35,16 @@ export interface LayerDeclaration {
   userLayerIndex?: number;     // 0-31 for user layers (uniform slot index)
 }
 
-const MAX_USER_LAYERS = 32;
+const MAX_USER_LAYERS = 31;  // 0-30, index 31 reserved for preview
+const PREVIEW_INDEX = 31;
+const PREVIEW_ID = '_preview';
 
 export class LayerRegistryService {
   private layers: Map<string, LayerDeclaration> = new Map();
   private changeSignal: Signal<number> = signal(0);
   private usedUserIndices: Set<number> = new Set();
+  private userLayerEnabled: Map<string, boolean> = new Map();
+  private userLayerOpacity: Map<string, number> = new Map();
 
   /** Signal that increments when registry changes */
   get changed(): ReadonlySignal<number> {
@@ -134,5 +138,91 @@ export class LayerRegistryService {
       this.freeUserIndex(layer.userLayerIndex);
     }
     this.unregister(id);
+  }
+
+  /** Register preview layer (uses reserved slot 31) */
+  registerPreview(declaration: Omit<LayerDeclaration, 'id' | 'userLayerIndex'>): LayerDeclaration {
+    // Unregister existing preview if any
+    this.unregisterPreview();
+
+    const fullDeclaration: LayerDeclaration = {
+      ...declaration,
+      id: PREVIEW_ID,
+      userLayerIndex: PREVIEW_INDEX,
+      isBuiltIn: false,
+    };
+
+    this.register(fullDeclaration);
+    return fullDeclaration;
+  }
+
+  /** Unregister preview layer */
+  unregisterPreview(): boolean {
+    if (this.layers.has(PREVIEW_ID)) {
+      this.unregister(PREVIEW_ID);
+      return true;
+    }
+    return false;
+  }
+
+  /** Check if preview exists */
+  hasPreview(): boolean {
+    return this.layers.has(PREVIEW_ID);
+  }
+
+  /** Get preview layer */
+  getPreview(): LayerDeclaration | undefined {
+    return this.layers.get(PREVIEW_ID);
+  }
+
+  /** Promote preview to permanent layer with given ID */
+  promotePreview(id: string): LayerDeclaration | null {
+    const preview = this.layers.get(PREVIEW_ID);
+    if (!preview) return null;
+
+    // Allocate permanent index
+    const index = this.allocateUserIndex();
+    if (index === null) return null;
+
+    // Create permanent layer
+    const permanent: LayerDeclaration = {
+      ...preview,
+      id,
+      userLayerIndex: index,
+    };
+
+    // Remove preview, add permanent
+    this.unregister(PREVIEW_ID);
+    this.register(permanent);
+
+    return permanent;
+  }
+
+  /** Check if user layer is enabled (defaults to true) */
+  isUserLayerEnabled(id: string): boolean {
+    return this.userLayerEnabled.get(id) ?? true;
+  }
+
+  /** Set user layer enabled state */
+  setUserLayerEnabled(id: string, enabled: boolean): void {
+    this.userLayerEnabled.set(id, enabled);
+    this.changeSignal.value++;
+  }
+
+  /** Toggle user layer enabled state */
+  toggleUserLayer(id: string): boolean {
+    const current = this.isUserLayerEnabled(id);
+    this.setUserLayerEnabled(id, !current);
+    return !current;
+  }
+
+  /** Get user layer opacity (defaults to 1.0) */
+  getUserLayerOpacity(id: string): number {
+    return this.userLayerOpacity.get(id) ?? 1.0;
+  }
+
+  /** Set user layer opacity */
+  setUserLayerOpacity(id: string, opacity: number): void {
+    this.userLayerOpacity.set(id, opacity);
   }
 }

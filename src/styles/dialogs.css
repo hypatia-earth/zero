@@ -1246,6 +1246,23 @@
   white-space: nowrap;
 }
 
+.dialog.create-layer .header .bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.dialog.create-layer.floating .header {
+  cursor: grab;
+}
+
+.dialog.create-layer .window.dragging .header {
+  cursor: grabbing;
+}
+
 .dialog.create-layer .close {
   background: none;
   border: none;
