@@ -45,6 +45,34 @@ struct Uniforms {
   windDataReady: u32,
   logoOpacity: f32,       // computed from all layer opacities
   logoPad: f32,           // padding for alignment
+  // User layer slots (32 max) - packed as vec4s for alignment
+  userLayerOpacity: array<vec4<f32>, 8>,   // 32 opacity values
+  userLayerDataReady: array<vec4<u32>, 8>, // 32 data ready flags
+}
+
+// Helper to get user layer opacity by index
+fn getUserLayerOpacity(index: u32) -> f32 {
+  let vecIdx = index / 4u;
+  let compIdx = index % 4u;
+  let v = u.userLayerOpacity[vecIdx];
+  switch compIdx {
+    case 0u: { return v.x; }
+    case 1u: { return v.y; }
+    case 2u: { return v.z; }
+    default: { return v.w; }
+  }
+}
+
+fn getUserLayerDataReady(index: u32) -> bool {
+  let vecIdx = index / 4u;
+  let compIdx = index % 4u;
+  let v = u.userLayerDataReady[vecIdx];
+  switch compIdx {
+    case 0u: { return v.x != 0u; }
+    case 1u: { return v.y != 0u; }
+    case 2u: { return v.z != 0u; }
+    default: { return v.w != 0u; }
+  }
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

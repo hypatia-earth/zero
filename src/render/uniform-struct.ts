@@ -11,7 +11,7 @@
  *   mat4x4f:       16-byte aligned (64 bytes total)
  */
 
-type WGSLType = 'f32' | 'u32' | 'i32' | 'vec2f' | 'vec3f' | 'vec4f' | 'mat4x4f';
+type WGSLType = 'f32' | 'u32' | 'i32' | 'vec2f' | 'vec3f' | 'vec4f' | 'vec4u' | 'mat4x4f';
 
 const ALIGN: Record<WGSLType, number> = {
   f32: 4,
@@ -20,6 +20,7 @@ const ALIGN: Record<WGSLType, number> = {
   vec2f: 8,
   vec3f: 16,
   vec4f: 16,
+  vec4u: 16,
   mat4x4f: 16,
 };
 
@@ -30,6 +31,7 @@ const SIZE: Record<WGSLType, number> = {
   vec2f: 8,
   vec3f: 12,
   vec4f: 16,
+  vec4u: 16,
   mat4x4f: 64,
 };
 

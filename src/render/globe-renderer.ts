@@ -201,7 +201,7 @@ export class GlobeRenderer {
     }
 
     this.uniformBuffer = this.device.createBuffer({
-      size: 384,  // Includes padding for vec2f alignment + weather layers
+      size: UNIFORM_BUFFER_SIZE,  // Calculated from GLOBE_UNIFORMS layout
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
