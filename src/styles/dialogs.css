@@ -1180,56 +1180,100 @@
    Create Layer Dialog
    ============================================================ */
 
-.dialog-backdrop {
+.dialog.create-layer {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
+  pointer-events: none;
 }
 
-.dialog.create-layer {
+.dialog.create-layer .backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--dialog-backdrop);
+  pointer-events: auto;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.dialog.create-layer .window {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
   background: var(--dialog-window-bg);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--dialog-window-radius);
   box-shadow: 0 20px 60px var(--color-shadow-strong);
-  width: min(480px, 90vw);
+  width: 90%;
+  max-width: 520px;
   max-height: 85vh;
-  display: flex;
-  flex-direction: column;
+  animation: scaleIn 0.15s ease-out;
 }
 
-.dialog.create-layer .dialog-header {
+/* Mobile: slide up from bottom */
+@media (max-width: 639px) {
+  .dialog.create-layer {
+    align-items: flex-end;
+  }
+  .dialog.create-layer .window {
+    width: 100%;
+    max-width: 100%;
+    max-height: 90vh;
+    border-radius: 16px 16px 0 0;
+    animation: slideUp 0.25s ease-out;
+  }
+}
+
+/* Header */
+.dialog.create-layer .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 2rem;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
-.dialog.create-layer .dialog-header h2 {
+.dialog.create-layer .header h2 {
   margin: 0;
   font-size: var(--font-size-lg);
   font-weight: 500;
   color: var(--color-text-primary);
+  white-space: nowrap;
 }
 
-.dialog.create-layer .dialog-header .close {
+.dialog.create-layer .close {
   background: none;
   border: none;
-  font-size: 24px;
-  color: var(--color-text-secondary);
+  color: var(--color-glow);
+  font-size: var(--font-size-xl);
   cursor: pointer;
   padding: 0;
-  line-height: 1;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
 }
 
-.dialog.create-layer .dialog-body {
-  padding: 20px;
-  overflow-y: auto;
+@media (hover: hover) {
+  .dialog.create-layer .close:hover {
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+  }
+}
+
+/* Content */
+.dialog.create-layer .content {
   flex: 1;
+  overflow-y: auto;
+  padding: 20px;
 }
 
 .dialog.create-layer .field {
@@ -1269,7 +1313,7 @@
 
 .dialog.create-layer .field.shader textarea {
   width: 100%;
-  height: 280px;
+  height: 240px;
   padding: 12px;
   background: #0d0d0d;
   border: 1px solid var(--color-border-subtle);
@@ -1296,38 +1340,62 @@
   margin-top: 8px;
 }
 
-.dialog.create-layer .dialog-footer {
+/* Footer */
+.dialog.create-layer .footer {
   display: flex;
-  justify-content: flex-end;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 8px;
   padding: 16px 20px;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border-light);
 }
 
-.dialog.create-layer .dialog-footer button {
+.dialog.create-layer .footer .left {
+  display: flex;
+  gap: 8px;
+}
+
+.dialog.create-layer .footer .right {
+  display: flex;
+  gap: 8px;
+}
+
+.dialog.create-layer .footer button {
   padding: 8px 16px;
   border-radius: 6px;
   font-size: var(--font-size-sm);
   cursor: pointer;
   transition: all 0.15s;
-}
-
-.dialog.create-layer .dialog-footer button.secondary {
-  background: transparent;
+  background: var(--color-surface);
   border: 1px solid var(--color-border-subtle);
   color: var(--color-text-secondary);
 }
 
-.dialog.create-layer .dialog-footer button.secondary:hover {
-  background: var(--color-surface);
+@media (hover: hover) {
+  .dialog.create-layer .footer button:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
+  }
 }
 
-.dialog.create-layer .dialog-footer button.primary {
+.dialog.create-layer .footer button.primary {
   background: var(--color-primary-bg);
   border: 1px solid var(--color-primary-border);
   color: var(--color-text-primary);
 }
 
-.dialog.create-layer .dialog-footer button.primary:hover {
-  background: var(--color-primary-bg-hover);
+@media (hover: hover) {
+  .dialog.create-layer .footer button.primary:hover {
+    background: var(--color-primary-bg-hover);
+  }
+}
+
+.dialog.create-layer .footer button.danger {
+  color: #f87171;
+}
+
+@media (hover: hover) {
+  .dialog.create-layer .footer button.danger:hover {
+    background: rgba(220, 38, 38, 0.15);
+    border-color: rgba(220, 38, 38, 0.3);
+  }
 }

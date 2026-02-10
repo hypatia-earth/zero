@@ -108,22 +108,64 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     onClose();
   }
 
+  function tryLayer(registry: LayerRegistryService) {
+    state.error = null;
+
+    if (!state.id) {
+      state.error = 'Layer ID is required';
+      return;
+    }
+
+    // Validate shader has blend function
+    const blendFn = `blend${capitalize(state.id)}`;
+    if (!state.shaderCode.includes(`fn ${blendFn}`)) {
+      state.error = `Shader must define function: fn ${blendFn}(...)`;
+      return;
+    }
+
+    // If layer already exists, unregister it first (for re-try)
+    if (registry.get(state.id)) {
+      registry.unregister(state.id);
+    }
+
+    // Create and register layer
+    const layer = defineLayer(state.id,
+      withType('texture'),
+      withParams([state.param]),
+      withOptions([`${state.id}.enabled`, `${state.id}.opacity`]),
+      withBlend(blendFn),
+      withShader('main', state.shaderCode),
+      withRender({ pass: 'surface', order: state.order }),
+    );
+
+    registry.register(layer);
+    console.log(`[CreateLayer] Try layer: ${state.id}`);
+  }
+
+  function deleteLayer(registry: LayerRegistryService, onClose: () => void) {
+    if (state.id && registry.get(state.id)) {
+      registry.unregister(state.id);
+      console.log(`[CreateLayer] Deleted layer: ${state.id}`);
+    }
+    onClose();
+  }
+
   return {
     view({ attrs }) {
       const { layerRegistry, onClose } = attrs;
+      const exists = state.id && layerRegistry.get(state.id);
 
-      return m('.dialog-backdrop', { onclick: onClose }, [
-        m('.dialog.create-layer', {
-          onclick: (e: Event) => e.stopPropagation(),
-        }, [
+      return m('.dialog.create-layer', [
+        m('.backdrop', { onclick: onClose }),
+        m('.window', [
           // Header
-          m('.dialog-header', [
+          m('.header', [
             m('h2', 'Create Layer'),
             m('button.close', { onclick: onClose }, '×'),
           ]),
 
-          // Body
-          m('.dialog-body', [
+          // Content
+          m('.content', [
             // Layer ID
             m('.field', [
               m('label', 'Layer ID'),
@@ -169,7 +211,6 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
             m('.field.shader', [
               m('label', 'Blend Shader (WGSL)'),
               m('textarea', {
-                rows: 15,
                 value: state.shaderCode,
                 oninput: (e: Event) => {
                   state.shaderCode = (e.target as HTMLTextAreaElement).value;
@@ -182,11 +223,21 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
           ]),
 
           // Footer
-          m('.dialog-footer', [
-            m('button.secondary', { onclick: onClose }, 'Cancel'),
-            m('button.primary', {
-              onclick: () => validateAndCreate(layerRegistry, onClose),
-            }, 'Create Layer'),
+          m('.footer', [
+            m('.left', [
+              m('button', {
+                onclick: () => tryLayer(layerRegistry),
+              }, 'Try'),
+              exists && m('button.danger', {
+                onclick: () => deleteLayer(layerRegistry, onClose),
+              }, 'Delete'),
+            ]),
+            m('.right', [
+              m('button', { onclick: onClose }, 'Cancel'),
+              m('button.primary', {
+                onclick: () => validateAndCreate(layerRegistry, onClose),
+              }, 'Save'),
+            ]),
           ]),
         ]),
       ]);
