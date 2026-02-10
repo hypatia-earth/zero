@@ -466,6 +466,39 @@ export class GlobeRenderer {
   }
 
   /**
+   * Recreate render pipeline with new shader code
+   * Used when user layers are added/removed
+   */
+  recreatePipeline(composedShaders: ComposedShaders): void {
+    // Create new shader modules
+    const shaderModule = this.device.createShaderModule({ code: composedShaders.main });
+    const postProcessModule = this.device.createShaderModule({ code: composedShaders.post });
+
+    // Recreate main pipeline (same layout, new shader)
+    this.pipeline = this.device.createRenderPipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
+      vertex: { module: shaderModule, entryPoint: 'vs_main' },
+      fragment: { module: shaderModule, entryPoint: 'fs_main', targets: [{ format: this.format }] },
+      primitive: { topology: 'triangle-list' },
+      depthStencil: {
+        format: 'depth32float',
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+      },
+    });
+
+    // Recreate post-process pipeline
+    this.postProcessPipeline = this.device.createRenderPipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.postProcessBindGroupLayout] }),
+      vertex: { module: postProcessModule, entryPoint: 'vs_main' },
+      fragment: { module: postProcessModule, entryPoint: 'fs_main', targets: [{ format: this.format }] },
+      primitive: { topology: 'triangle-list' },
+    });
+
+    console.log('[GlobeRenderer] Pipeline recreated');
+  }
+
+  /**
    * Resize canvas and recreate textures
    * @param explicitWidth Device pixel width (for OffscreenCanvas in worker)
    * @param explicitHeight Device pixel height (for OffscreenCanvas in worker)

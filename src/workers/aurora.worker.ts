@@ -81,6 +81,8 @@ export type AuroraRequest =
   | { type: 'activateSlots'; layer: TWeatherLayer; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
   | { type: 'render'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number }
   | { type: 'resize'; width: number; height: number }
+  | { type: 'registerUserLayer'; layer: import('../services/layer-registry-service').LayerDeclaration }
+  | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'cleanup' };
 
 export type AuroraResponse =
@@ -97,6 +99,9 @@ let canvas: OffscreenCanvas | null = null;
 
 // Options state (received from main thread)
 let currentOptions: ZeroOptions | null = null;
+
+// Layer registry (for declarative mode)
+let layerRegistry: LayerRegistryService | null = null;
 
 // Layer stores for GPU buffer management
 const layerStores = new Map<TWeatherLayer, LayerStore>();
@@ -366,9 +371,9 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       // Compose shaders dynamically when declarative layers enabled
       let composedShaders;
       if (USE_DECLARATIVE_LAYERS) {
-        const registry = new LayerRegistryService();
-        registerBuiltInLayers(registry);
-        const layers = registry.getAll();
+        layerRegistry = new LayerRegistryService();
+        registerBuiltInLayers(layerRegistry);
+        const layers = layerRegistry.getAll();
         composedShaders = shaderComposer.compose(layers);
         console.log('[Aurora] Using composed shaders for', layers.length, 'layers');
       }
@@ -569,6 +574,42 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
           renderer!.triggerPressureRegrid(slot0, rawBuffer);
         }
       }
+    }
+
+    if (type === 'registerUserLayer') {
+      const { layer } = e.data;
+      if (!layerRegistry || !renderer) {
+        console.warn('[Aurora] Cannot register user layer: not initialized');
+        return;
+      }
+
+      // Add to registry
+      layerRegistry.register(layer);
+      console.log(`[Aurora] Registered user layer: ${layer.id} (index ${layer.userLayerIndex})`);
+
+      // Recompose shaders and recreate pipeline
+      const layers = layerRegistry.getAll();
+      const composedShaders = shaderComposer.compose(layers);
+      renderer.recreatePipeline(composedShaders);
+      console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
+    }
+
+    if (type === 'unregisterUserLayer') {
+      const { layerId } = e.data;
+      if (!layerRegistry || !renderer) {
+        console.warn('[Aurora] Cannot unregister user layer: not initialized');
+        return;
+      }
+
+      // Remove from registry
+      layerRegistry.unregister(layerId);
+      console.log(`[Aurora] Unregistered user layer: ${layerId}`);
+
+      // Recompose shaders and recreate pipeline
+      const layers = layerRegistry.getAll();
+      const composedShaders = shaderComposer.compose(layers);
+      renderer.recreatePipeline(composedShaders);
+      console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
     }
 
     if (type === 'cleanup') {

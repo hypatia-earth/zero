@@ -27,17 +27,19 @@ const DATA_PARAMS = [
 ];
 
 // Template shader for new layers
-const SHADER_TEMPLATE = `// Custom blend function
-// Available: color (input), lat, lon (radians), u.{layerId}Opacity
+// Uses getUserLayerOpacity(index) for user layer uniform access
+const SHADER_TEMPLATE = `// Custom blend function for user layer
+// Uses getUserLayerOpacity(index) to access opacity uniform
 fn blend{BlendName}(color: vec4f, lat: f32, lon: f32) -> vec4f {
-  if (u.{layerId}Opacity <= 0.0) { return color; }
+  let opacity = getUserLayerOpacity({userLayerIndex}u);
+  if (opacity <= 0.0) { return color; }
 
   // Your visualization logic here
   // Example: simple lat-based gradient
   let t = (lat + 1.5708) / 3.1416;  // Normalize lat to 0-1
   let layerColor = vec3f(t, 0.5, 1.0 - t);
 
-  return vec4f(mix(color.rgb, layerColor, u.{layerId}Opacity), color.a);
+  return vec4f(mix(color.rgb, layerColor, opacity), color.a);
 }
 `;
 
@@ -46,6 +48,7 @@ interface FormState {
   param: string;
   shaderCode: string;
   order: number;
+  userLayerIndex: number | null;  // Assigned on first Try/Save
   error: string | null;
 }
 
@@ -55,14 +58,20 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     param: 'temp_2m',
     shaderCode: SHADER_TEMPLATE,
     order: 50,
+    userLayerIndex: null,
     error: null,
   };
 
   function updateShaderTemplate() {
     const blendName = capitalize(state.id || 'Custom');
+    // Keep {userLayerIndex} placeholder - replaced when index is assigned
     state.shaderCode = SHADER_TEMPLATE
-      .replace(/{BlendName}/g, blendName)
-      .replace(/{layerId}/g, state.id || 'custom');
+      .replace(/{BlendName}/g, blendName);
+  }
+
+  /** Replace index placeholder in shader code with actual index */
+  function finalizeShaderCode(index: number): string {
+    return state.shaderCode.replace(/{userLayerIndex}/g, String(index));
   }
 
   function capitalize(s: string): string {
@@ -92,7 +101,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       return;
     }
 
-    // If already registered (from Try), just keep it
+    // If already registered (from Try), just save to IDB
     if (existing) {
       console.log(`[CreateLayer] Saved user layer: ${state.id} (index ${existing.userLayerIndex})`);
       // TODO: persist to IDB
@@ -100,24 +109,34 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       return;
     }
 
-    // Create layer declaration (without userLayerIndex - registry assigns it)
+    // Allocate index first
+    const index = registry.allocateUserIndex();
+    if (index === null) {
+      state.error = 'No free layer slots (max 32 user layers)';
+      return;
+    }
+
+    // Finalize shader code with index
+    const finalizedCode = finalizeShaderCode(index);
+
+    // Create and register layer
     const declaration = defineLayer(state.id,
       withType('texture'),
       withParams([state.param]),
       withOptions([`${state.id}.enabled`, `${state.id}.opacity`]),
       withBlend(blendFn),
-      withShader('main', state.shaderCode),
+      withShader('main', finalizedCode),
       withRender({ pass: 'surface', order: state.order }),
     );
 
-    // Register with auto-assigned index
-    const layer = registry.registerUserLayer(declaration);
-    if (!layer) {
-      state.error = 'No free layer slots (max 32 user layers)';
-      return;
-    }
+    const layer: import('../services/layer-registry-service').LayerDeclaration = {
+      ...declaration,
+      userLayerIndex: index,
+      isBuiltIn: false,
+    };
+    registry.register(layer);
 
-    console.log(`[CreateLayer] Saved user layer: ${state.id} (index ${layer.userLayerIndex})`);
+    console.log(`[CreateLayer] Saved user layer: ${state.id} (index ${index})`);
     // TODO: persist to IDB
     onClose();
   }
@@ -139,34 +158,48 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
     // Check if layer already exists
     const existing = registry.get(state.id);
-    if (existing) {
-      // Update shader code in existing layer
+    if (existing && existing.userLayerIndex !== undefined) {
+      // Update shader code in existing layer with finalized index
+      const finalizedCode = finalizeShaderCode(existing.userLayerIndex);
       if (existing.shaders) {
-        existing.shaders.main = state.shaderCode;
+        existing.shaders.main = finalizedCode;
       }
-      // TODO: trigger recompilation
+      state.userLayerIndex = existing.userLayerIndex;
+      // TODO: trigger recompilation in worker
       console.log(`[CreateLayer] Updated layer: ${state.id} (index ${existing.userLayerIndex})`);
       return;
     }
 
-    // Create layer declaration
+    // Allocate index first so we can finalize shader
+    const index = registry.allocateUserIndex();
+    if (index === null) {
+      state.error = 'No free layer slots (max 32 user layers)';
+      return;
+    }
+    state.userLayerIndex = index;
+
+    // Finalize shader code with actual index
+    const finalizedCode = finalizeShaderCode(index);
+
+    // Create layer declaration with finalized shader
     const declaration = defineLayer(state.id,
       withType('texture'),
       withParams([state.param]),
       withOptions([`${state.id}.enabled`, `${state.id}.opacity`]),
       withBlend(blendFn),
-      withShader('main', state.shaderCode),
+      withShader('main', finalizedCode),
       withRender({ pass: 'surface', order: state.order }),
     );
 
-    // Register with auto-assigned index
-    const layer = registry.registerUserLayer(declaration);
-    if (!layer) {
-      state.error = 'No free layer slots (max 32 user layers)';
-      return;
-    }
+    // Register layer (index already allocated)
+    const layer: import('../services/layer-registry-service').LayerDeclaration = {
+      ...declaration,
+      userLayerIndex: index,
+      isBuiltIn: false,
+    };
+    registry.register(layer);
 
-    console.log(`[CreateLayer] Try layer: ${state.id} (index ${layer.userLayerIndex})`);
+    console.log(`[CreateLayer] Try layer: ${state.id} (index ${index})`);
     // TODO: trigger shader recompilation in worker
   }
 
