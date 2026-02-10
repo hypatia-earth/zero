@@ -109,6 +109,9 @@ const layerStores = new Map<TWeatherLayer, LayerStore>();
 // Palette data (received at init)
 let tempPalettes: Record<string, PaletteData> = {};
 
+// User layer state (opacity defaults to 1.0 when registered)
+const userLayerOpacities = new Map<number, number>();  // index -> opacity
+
 // Slot activation state per layer (for uniform building)
 interface SlotState {
   slot0: number;
@@ -501,6 +504,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       const uniforms = buildUniforms(camera, new Date(time));
 
       renderer!.updateUniforms(uniforms);
+      renderer!.setUserLayerOpacities(userLayerOpacities);
       const passTimings = renderer!.render();  // Returns GPU timestamp query results
 
       // Compute memory stats from layer stores
@@ -585,6 +589,12 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       // Add to registry
       layerRegistry.register(layer);
+
+      // Set default opacity to 1.0
+      if (layer.userLayerIndex !== undefined) {
+        userLayerOpacities.set(layer.userLayerIndex, 1.0);
+      }
+
       console.log(`[Aurora] Registered user layer: ${layer.id} (index ${layer.userLayerIndex})`);
 
       // Recompose shaders and recreate pipeline
@@ -601,8 +611,18 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         return;
       }
 
+      // Get index before removing
+      const layer = layerRegistry.get(layerId);
+      const index = layer?.userLayerIndex;
+
       // Remove from registry
       layerRegistry.unregister(layerId);
+
+      // Remove opacity
+      if (index !== undefined) {
+        userLayerOpacities.delete(index);
+      }
+
       console.log(`[Aurora] Unregistered user layer: ${layerId}`);
 
       // Recompose shaders and recreate pipeline

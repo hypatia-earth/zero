@@ -10,7 +10,7 @@ import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } fro
 import { PressureLayer, type PressureResolution, type SmoothingAlgorithm } from './pressure-layer';
 import { WindLayer } from './wind-layer';
 import { GridAnimator, GRID_BUFFER_SIZE } from './grid-animator';
-import { U, UNIFORM_BUFFER_SIZE } from './globe-uniforms';
+import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 
 // Re-export for consumers
@@ -463,6 +463,17 @@ export class GlobeRenderer {
    */
   getUseFloat16Luts(): boolean {
     return this.useFloat16Luts;
+  }
+
+  /**
+   * Set user layer opacity uniforms
+   * Called each frame with current opacity values
+   */
+  setUserLayerOpacities(opacities: Map<number, number>): void {
+    for (const [index, opacity] of opacities) {
+      const offset = getUserLayerOpacityOffset(index);
+      this.uniformView.setFloat32(offset, opacity, true);
+    }
   }
 
   /**
