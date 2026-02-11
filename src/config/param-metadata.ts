@@ -19,8 +19,8 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
   // ============================================================
   'temperature_2m': {
     label: 'Temperature (2m)',
-    unit: 'K',
-    range: [233, 323],  // -40°C to 50°C
+    unit: '°C',
+    range: [-40, 50],  // Data stored in Celsius
     palette: 'thermal',
   },
   'temperature_2m_max': {

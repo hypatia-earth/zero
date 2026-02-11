@@ -15,6 +15,7 @@ import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
 import { defineLayer, withType, withParams, withOptions, withBlend, withShader, withRender } from '../render/layer-builder';
 import { DialogHeader } from './dialog-header';
+import { PARAM_METADATA, getParamMeta, type ParamMeta } from '../config/param-metadata';
 
 interface CreateLayerDialogAttrs {
   layerRegistry: LayerRegistryService;
@@ -22,27 +23,44 @@ interface CreateLayerDialogAttrs {
   dialogService: DialogService;
 }
 
-// Available data parameters for user layers
-const DATA_PARAMS = [
-  { value: 'temp_2m', label: 'Temperature (2m)' },
-  { value: 'rain', label: 'Precipitation' },
-  { value: 'pressure_msl', label: 'Pressure (MSL)' },
-  { value: 'wind_u_10m', label: 'Wind U (10m)' },
-  { value: 'wind_v_10m', label: 'Wind V (10m)' },
+// Allowed params for user layers (current layers + albedo + cloud_cover)
+const ALLOWED_PARAMS: (keyof typeof PARAM_METADATA)[] = [
+  'temperature_2m',
+  'precipitation',
+  'pressure_msl',
+  'cloud_cover',
+  'albedo',
 ];
 
+const DEFAULT_PARAM = 'temperature_2m' satisfies keyof typeof PARAM_METADATA;
+
+// Build DATA_PARAMS from metadata
+const DATA_PARAMS = ALLOWED_PARAMS.map(p => ({
+  value: p,
+  label: PARAM_METADATA[p]!.label
+}));
+
 // Template shader for new layers
-// Uses getUserLayerOpacity(index) for user layer uniform access
-const SHADER_TEMPLATE = `// Custom blend function for user layer
-// Uses getUserLayerOpacity(index) to access opacity uniform
+// Placeholders: {BlendName}, {userLayerIndex}, {paletteMin}, {paletteMax}
+const SHADER_TEMPLATE = `// Custom blend function - red-green palette
 fn blend{BlendName}(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let opacity = getUserLayerOpacity({userLayerIndex}u);
   if (opacity <= 0.0) { return color; }
 
-  // Your visualization logic here
-  // Example: simple lat-based gradient
-  let t = (lat + 1.5708) / 3.1416;  // Normalize lat to 0-1
-  let layerColor = vec3f(t, 0.5, 1.0 - t);
+  // Sample data at this location
+  let cell = tempLatLonToCell(lat, lon);
+  let value = tempData0[cell];
+
+  // Values outside data range → blue (for debugging)
+  let vMin = {paletteMin};
+  let vMax = {paletteMax};
+  if (value < vMin || value > vMax) {
+    return vec4f(mix(color.rgb, vec3f(0.2, 0.3, 0.8), opacity), color.a);
+  }
+
+  // Normalize to 0-1 and apply red-green palette
+  let t = (value - vMin) / (vMax - vMin);
+  let layerColor = vec3f(1.0 - t, t, 0.0);  // red → green
 
   return vec4f(mix(color.rgb, layerColor, opacity), color.a);
 }
@@ -51,6 +69,7 @@ fn blend{BlendName}(color: vec4f, lat: f32, lon: f32) -> vec4f {
 interface FormState {
   id: string;
   param: string;
+  paramMeta: ParamMeta;
   shaderCode: string;
   order: number;
   opacity: number;
@@ -61,7 +80,8 @@ interface FormState {
 export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () => {
   const state: FormState = {
     id: '',
-    param: 'temp_2m',
+    param: DEFAULT_PARAM,
+    paramMeta: getParamMeta(DEFAULT_PARAM),
     shaderCode: SHADER_TEMPLATE,
     order: 50,
     opacity: 1.0,
@@ -78,7 +98,8 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     if (!layer) return;
 
     state.id = layer.id;
-    state.param = layer.params?.[0] ?? 'temp_2m';
+    state.param = layer.params?.[0] ?? DEFAULT_PARAM;
+    state.paramMeta = getParamMeta(state.param);
     state.shaderCode = layer.shaders?.main ?? SHADER_TEMPLATE;
     state.order = layer.order ?? 50;
     state.opacity = registry.getUserLayerOpacity(layerId);
@@ -87,9 +108,12 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
   function updateShaderTemplate() {
     const blendName = capitalize(state.id || 'Custom');
+    const [min, max] = state.paramMeta.range;
     // Keep {userLayerIndex} placeholder - replaced when index is assigned
     state.shaderCode = SHADER_TEMPLATE
-      .replace(/{BlendName}/g, blendName);
+      .replace(/{BlendName}/g, blendName)
+      .replace(/{paletteMin}/g, min.toFixed(1))
+      .replace(/{paletteMax}/g, max.toFixed(1));
   }
 
   /** Replace index placeholder in shader code with actual index */
@@ -260,14 +284,16 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
   function resetState() {
     state.id = '';
-    state.param = 'temp_2m';
-    state.shaderCode = SHADER_TEMPLATE;
+    state.param = DEFAULT_PARAM;
+    state.paramMeta = getParamMeta(DEFAULT_PARAM);
     state.order = 50;
     state.opacity = 1.0;
     state.userLayerIndex = null;
     state.error = null;
     initialized = false;
     suspendedLayer = null;
+    // Generate initial shader with default param's range
+    updateShaderTemplate();
   }
 
   let wasOpen = false;
@@ -380,10 +406,13 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                 value: state.param,
                 onchange: (e: Event) => {
                   state.param = (e.target as HTMLSelectElement).value;
+                  state.paramMeta = getParamMeta(state.param);
+                  updateShaderTemplate();
                 },
               }, DATA_PARAMS.map(p =>
                 m('option', { value: p.value }, p.label)
               )),
+              m('.hint', `Range: ${state.paramMeta.range[0]} – ${state.paramMeta.range[1]} ${state.paramMeta.unit}`),
             ]),
 
             // Render order
