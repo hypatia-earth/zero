@@ -28,6 +28,7 @@ import type { CapabilitiesService } from '../services/capabilities-service';
 import { clearCache, nuke } from '../services/sw-registration';
 import { RadioPaletteControl } from './radio-palette-control';
 import { PressureColorControl } from './pressure-color-control';
+import { DialogHeader } from './dialog-header';
 
 // ============================================================
 // Type guards for control types
@@ -86,22 +87,6 @@ function calculatePrefetchSizeMB(days: string, layers: { temp: boolean; pressure
 function formatSize(mb: number): string {
   if (mb >= 1000) return `${(mb / 1000).toFixed(1)} GB`;
   return `${Math.round(mb)} MB`;
-}
-
-// ============================================================
-// Drag state (persists across redraws)
-// ============================================================
-
-let dragState = {
-  isDragging: false,
-  startX: 0,
-  startY: 0,
-  offsetX: 0,
-  offsetY: 0,
-};
-
-function resetDragState(): void {
-  dragState = { isDragging: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 };
 }
 
 // Module-level state for advanced toggle
@@ -515,16 +500,20 @@ export interface OptionsDialogAttrs {
 }
 
 export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
+  let windowEl: HTMLElement | null = null;
+
   return {
     view({ attrs }) {
       const { optionsService, paletteService, dialogService, configService, capabilitiesService } = attrs;
 
-    if (!optionsService.dialogOpen) return null;
+    if (!dialogService.isOpen('options')) return null;
 
     const isFloating = dialogService.isFloating('options');
     const isTop = dialogService.isTop('options');
+    const isDragging = dialogService.isDragging('options');
+    const dragOffset = dialogService.getDragOffset('options');
 
-    const filter = optionsService.dialogFilter;
+    const filter = dialogService.getPayload('options')?.filter;
     const options = optionsService.options.value;
 
     // Only show options for ready layers
@@ -583,84 +572,41 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
       ? `${filterTitles[filter] ?? layerLabels[filter] ?? filter} Options`
       : 'Options';
 
-    const isDesktop = window.innerWidth > 600;
-
-    // Drag handlers
-    const onMouseDown = (e: MouseEvent) => {
-      dialogService.bringToFront('options');
-      if (!isDesktop) return;
-      if ((e.target as HTMLElement).tagName === 'BUTTON') return;
-      dragState.isDragging = true;
-      dragState.startX = e.clientX - dragState.offsetX;
-      dragState.startY = e.clientY - dragState.offsetY;
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
-    };
-
-    const onMouseMove = (e: MouseEvent) => {
-      if (!dragState.isDragging) return;
-      const win = document.querySelector<HTMLElement>('.dialog.options .window');
-      if (!win) return;
-      // Get base rect without current transform
-      const baseX = (window.innerWidth - win.offsetWidth) / 2;
-      const baseY = (window.innerHeight - win.offsetHeight) / 2;
-      const headerHeight = 56;
-      // Clamp so header stays in viewport
-      const minX = -baseX;
-      const maxX = window.innerWidth - baseX - win.offsetWidth;
-      const minY = -baseY;
-      const maxY = window.innerHeight - baseY - headerHeight;
-      dragState.offsetX = Math.max(minX, Math.min(maxX, e.clientX - dragState.startX));
-      dragState.offsetY = Math.max(minY, Math.min(maxY, e.clientY - dragState.startY));
-      m.redraw();
-    };
-
-    const onMouseUp = () => {
-      dragState.isDragging = false;
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-
     const windowStyle: Record<string, string> = {};
-    if (dragState.offsetX !== 0 || dragState.offsetY !== 0) {
-      windowStyle.transform = `translate(${dragState.offsetX}px, ${dragState.offsetY}px)`;
+    if (dragOffset.x !== 0 || dragOffset.y !== 0) {
+      windowStyle.transform = `translate(${dragOffset.x}px, ${dragOffset.y}px)`;
     }
 
     const floatingClass = isFloating ? (isTop ? 'floating top' : 'floating behind') : '';
-    const closingClass = optionsService.dialogClosing ? 'closing' : '';
+    const closingClass = dialogService.isClosing('options') ? 'closing' : '';
+
+    const close = () => {
+      dialogService.resetDragState('options');
+      dialogService.close('options');
+    };
 
     return m('div.dialog.options', { class: `${floatingClass} ${closingClass}` }, [
       m('div.backdrop', {
         onclick: () => {
           if (dialogService.shouldCloseOnBackdrop('options')) {
-            resetDragState();
-            optionsService.closeDialog();
+            close();
           }
         }
       }),
       m('div.window', {
-        class: dragState.isDragging ? 'dragging' : '',
+        class: isDragging ? 'dragging' : '',
         style: windowStyle,
-        onmousedown: () => dialogService.bringToFront('options')
+        onmousedown: () => dialogService.bringToFront('options'),
+        oncreate: (vnode) => { windowEl = vnode.dom as HTMLElement; },
+        onupdate: (vnode) => { windowEl = vnode.dom as HTMLElement; },
       }, [
-        m('div.header', { onmousedown: onMouseDown }, [
-          m('h2', dialogTitle),
-          m('div.bar', [
-            dialogService.isDesktop ? m('button.float-toggle', {
-              onclick: (e: Event) => {
-                e.stopPropagation();
-                dialogService.toggleFloating('options');
-              },
-              title: isFloating ? 'Disable floating' : 'Keep floating'
-            }, isFloating ? '◎' : '○') : null,
-            m('button.close', {
-              onclick: () => {
-                resetDragState();
-                optionsService.closeDialog();
-              }
-            }, '×')
-          ])
-        ]),
+        m(DialogHeader, {
+          dialogId: 'options',
+          title: dialogTitle,
+          dialogService,
+          windowEl,
+          onClose: close,
+        }),
         m('div.content', [
           ...sortedGroupIds.map(groupId => {
             const groupOpts = filteredGroups[groupId];
@@ -721,12 +667,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
             optionsService.needsReload.value ? m('button.btn.btn-secondary', {
               onclick: () => location.reload()
             }, 'Reload') : null,
-            m('button.btn.btn-secondary', {
-              onclick: () => {
-                resetDragState();
-                optionsService.closeDialog();
-              }
-            }, 'Close')
+            m('button.btn.btn-secondary', { onclick: close }, 'Close')
           ])
         ])
       ])

@@ -9,19 +9,7 @@
 import m from 'mithril';
 import type { AboutService } from '../services/about-service';
 import type { DialogService } from '../services/dialog-service';
-
-// Drag state (persists across redraws)
-let dragState = {
-  isDragging: false,
-  startX: 0,
-  startY: 0,
-  offsetX: 0,
-  offsetY: 0,
-};
-
-function resetDragState(): void {
-  dragState = { isDragging: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 };
-}
+import { DialogHeader } from './dialog-header';
 
 export interface AboutDialogAttrs {
   aboutService: AboutService;
@@ -29,91 +17,65 @@ export interface AboutDialogAttrs {
 }
 
 export const AboutDialog: m.ClosureComponent<AboutDialogAttrs> = () => {
+  let wasOpen = false;
+  let windowEl: HTMLElement | null = null;
+
   return {
     view({ attrs }) {
       const { aboutService, dialogService } = attrs;
 
-      if (!aboutService.dialogOpen) return null;
+      if (!dialogService.isOpen('about')) {
+        wasOpen = false;
+        return null;
+      }
+
+      // Load content on open transition
+      if (!wasOpen) {
+        wasOpen = true;
+        const payload = dialogService.getPayload('about');
+        aboutService.loadPage(payload?.page ?? 'about');
+      }
 
       const isFloating = dialogService.isFloating('about');
       const isTop = dialogService.isTop('about');
-      const isDesktop = dialogService.isDesktop;
-
-      // Drag handlers (desktop only)
-      const onMouseDown = (e: MouseEvent) => {
-        dialogService.bringToFront('about');
-        if (!isDesktop) return;
-        dragState.isDragging = true;
-        dragState.startX = e.clientX - dragState.offsetX;
-        dragState.startY = e.clientY - dragState.offsetY;
-
-        const onMouseMove = (e: MouseEvent) => {
-          if (!dragState.isDragging) return;
-          const win = document.querySelector<HTMLElement>('.dialog.about .window');
-          if (!win) return;
-          // Get base rect without current transform
-          const baseX = (window.innerWidth - win.offsetWidth) / 2;
-          const baseY = (window.innerHeight - win.offsetHeight) / 2;
-          const headerHeight = 56;
-          // Clamp so header stays in viewport
-          const minX = -baseX;
-          const maxX = window.innerWidth - baseX - win.offsetWidth;
-          const minY = -baseY;
-          const maxY = window.innerHeight - baseY - headerHeight;
-          dragState.offsetX = Math.max(minX, Math.min(maxX, e.clientX - dragState.startX));
-          dragState.offsetY = Math.max(minY, Math.min(maxY, e.clientY - dragState.startY));
-          m.redraw();
-        };
-
-        const onMouseUp = () => {
-          dragState.isDragging = false;
-          document.removeEventListener('mousemove', onMouseMove);
-          document.removeEventListener('mouseup', onMouseUp);
-        };
-
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-      };
+      const isDragging = dialogService.isDragging('about');
+      const dragOffset = dialogService.getDragOffset('about');
 
       const windowStyle: Record<string, string> = {};
-      if (dragState.offsetX !== 0 || dragState.offsetY !== 0) {
-        windowStyle.transform = `translate(${dragState.offsetX}px, ${dragState.offsetY}px)`;
+      if (dragOffset.x !== 0 || dragOffset.y !== 0) {
+        windowStyle.transform = `translate(${dragOffset.x}px, ${dragOffset.y}px)`;
       }
 
       const floatingClass = isFloating ? (isTop ? 'floating top' : 'floating behind') : '';
+      const closingClass = dialogService.isClosing('about') ? 'closing' : '';
 
-      return m('div.dialog.about', { class: floatingClass }, [
+      const close = () => {
+        dialogService.resetDragState('about');
+        dialogService.close('about');
+      };
+
+      return m('div.dialog.about', { class: `${floatingClass} ${closingClass}` }, [
         m('div.backdrop', {
           onclick: () => {
             if (dialogService.shouldCloseOnBackdrop('about')) {
-              resetDragState();
-              aboutService.closeDialog();
+              close();
             }
           }
         }),
         m('div.window', {
-          class: dragState.isDragging ? 'dragging' : '',
+          class: isDragging ? 'dragging' : '',
           style: windowStyle,
-          onmousedown: () => dialogService.bringToFront('about')
+          onmousedown: () => dialogService.bringToFront('about'),
+          oncreate: (vnode) => { windowEl = vnode.dom as HTMLElement; },
+          onupdate: (vnode) => { windowEl = vnode.dom as HTMLElement; },
         }, [
-          m('div.header', { onmousedown: onMouseDown }, [
-            m('h2', 'About Hypatia Zero'),
-            m('div.bar', [
-              isDesktop ? m('button.float-toggle', {
-                onclick: (e: Event) => {
-                  e.stopPropagation();
-                  dialogService.toggleFloating('about');
-                },
-                title: isFloating ? 'Disable floating' : 'Keep floating'
-              }, isFloating ? '◎' : '○') : null,
-              m('button.close', {
-                onclick: () => {
-                  resetDragState();
-                  aboutService.closeDialog();
-                }
-              }, '×')
-            ])
-          ]),
+          m(DialogHeader, {
+            dialogId: 'about',
+            title: 'About Hypatia Zero',
+            dialogService,
+            windowEl,
+            onClose: close,
+          }),
           m('div.content.markdown', [
             aboutService.error
               ? m('div.error', aboutService.error)
@@ -128,12 +90,7 @@ export const AboutDialog: m.ClosureComponent<AboutDialogAttrs> = () => {
                   content?.scrollTo({ top: 0, behavior: 'smooth' });
                 }
               }, 'Top'),
-              m('button.btn.btn-secondary', {
-                onclick: () => {
-                  resetDragState();
-                  aboutService.closeDialog();
-                }
-              }, 'Close')
+              m('button.btn.btn-secondary', { onclick: close }, 'Close')
             ])
           ])
         ])

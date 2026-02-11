@@ -8,6 +8,7 @@ import type { ConfigService } from '../services/config-service';
 import type { OptionsService } from '../services/options-service';
 import type { LayerRegistryService } from '../services/layer-registry-service';
 import type { AuroraService } from '../services/aurora-service';
+import type { DialogService } from '../services/dialog-service';
 import { LAYER_CATEGORIES, LAYER_CATEGORY_LABELS, type TLayer } from '../config/types';
 
 interface LayersPanelAttrs {
@@ -15,14 +16,13 @@ interface LayersPanelAttrs {
   optionsService: OptionsService;
   layerRegistry: LayerRegistryService;
   auroraService: AuroraService;
-  onCreateLayer?: () => void;
-  onEditLayer?: (layerId: string) => void;
+  dialogService: DialogService;
 }
 
 export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
   return {
     view({ attrs }) {
-      const { configService, optionsService, layerRegistry, auroraService, onCreateLayer, onEditLayer } = attrs;
+      const { configService, optionsService, layerRegistry, auroraService, dialogService } = attrs;
       const readyLayerIds = new Set(configService.getReadyLayers());
       const layers = configService.getLayers().filter(l => readyLayerIds.has(l.id));
       const opts = optionsService.options.value;
@@ -47,7 +47,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
               layer,
               active: opts[layer.id].enabled,
               onToggle: () => optionsService.update(draft => { draft[layer.id].enabled = !draft[layer.id].enabled; }),
-              onOptions: () => optionsService.openDialog(layer.id),
+              onOptions: () => dialogService.open('options', { filter: layer.id }),
             })
           ),
         ]));
@@ -69,21 +69,19 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
                   auroraService.send({ type: 'setUserLayerOpacity', layerIndex: layer.userLayerIndex, opacity });
                 }
               },
-              onOptions: () => onEditLayer?.(layer.id),
+              onOptions: () => dialogService.open('create-layer', { editLayerId: layer.id }),
             })
           ),
         ]));
       }
 
       // Add layer button
-      if (onCreateLayer) {
-        groups.push(m('.group', { key: 'add-layer' }, [
-          m('button.add-layer', {
-            onclick: onCreateLayer,
-            title: 'Create custom layer',
-          }, '+ Add Layer'),
-        ]));
-      }
+      groups.push(m('.group', { key: 'add-layer' }, [
+        m('button.add-layer', {
+          onclick: () => dialogService.open('create-layer', {}),
+          title: 'Create custom layer',
+        }, '+ Add Layer'),
+      ]));
 
       return m('.panel.layers', groups);
     },

@@ -1,5 +1,5 @@
 /**
- * AboutService - Manages about dialog state and markdown content
+ * AboutService - Manages about dialog markdown content
  */
 
 import m from 'mithril';
@@ -9,7 +9,6 @@ import { marked } from 'marked';
 const ABOUT_PAGES = ['about'] as const;
 
 export class AboutService {
-  dialogOpen = false;
   currentPage = 'about';
   content = '';
   error: string | null = null;
@@ -52,18 +51,6 @@ export class AboutService {
       const html = await marked.parse(markdown);
       this.cache.set(page, html);
     }
-  }
-
-  openDialog(page = 'about'): void {
-    this.dialogOpen = true;
-    this.currentPage = page;
-    this.error = null;
-    this.loadPage(page);
-  }
-
-  closeDialog(): void {
-    this.dialogOpen = false;
-    m.redraw();
   }
 
   loadPage(page: string): void {

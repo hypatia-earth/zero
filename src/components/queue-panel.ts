@@ -12,11 +12,13 @@ import { throttle } from '../utils/debounce';
 import type { IQueueService } from '../config/types';
 import type { OptionsService } from '../services/options-service';
 import type { SlotService } from '../services/slot-service';
+import type { DialogService } from '../services/dialog-service';
 
 export interface QueuePanelAttrs {
   queueService: IQueueService;
   optionsService: OptionsService;
   slotService: SlotService;
+  dialogService: DialogService;
 }
 
 export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = () => {
@@ -85,7 +87,7 @@ export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = () => {
       return m('div.queue.panel.grid', [
         m('button.control.pill', {
           title: 'Download queue',
-          onclick: () => attrs.optionsService.openDialog('queue')
+          onclick: () => attrs.dialogService.open('options', { filter: 'queue' })
         }, [
           m('span.label', '↓'),
           m('span.queue-dl-info', 'idle'),

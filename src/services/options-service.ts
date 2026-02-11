@@ -5,7 +5,6 @@
  * - Preact signals for reactivity
  * - Immer for immutable updates
  * - IndexedDB persistence (override-only storage)
- * - Dialog state management with filtering
  * - Path-based reset
  */
 
@@ -17,7 +16,6 @@ import {
   defaultOptions,
   extractOptionsMeta,
   type ZeroOptions,
-  type OptionFilter,
 } from '../schemas/options.schema';
 import { deepMerge, getByPath, setByPath } from '../utils/object';
 import { debounceFlush } from '../utils/debounce-flush';
@@ -186,11 +184,6 @@ export class OptionsService {
 
   /** Initial values of recreate-impact options (captured at init) */
   private recreateInitialValues: Record<string, unknown> = {};
-
-  /** Dialog state */
-  dialogOpen = false;
-  dialogClosing = false;
-  dialogFilter: OptionFilter | undefined = undefined;
 
   /** First time user detection */
   isFirstTimeUser = false;
@@ -460,31 +453,6 @@ export class OptionsService {
     }
 
     return overrides as Partial<ZeroOptions>;
-  }
-
-  // ----------------------------------------------------------
-  // Dialog management
-  // ----------------------------------------------------------
-
-  /**
-   * Open options dialog
-   * @param filter - Optional filter to show only specific options
-   */
-  openDialog(filter?: OptionFilter): void {
-    this.dialogOpen = true;
-    this.dialogFilter = filter;
-    m.redraw();
-  }
-
-  closeDialog(): void {
-    this.dialogClosing = true;
-    m.redraw();
-    setTimeout(() => {
-      this.dialogOpen = false;
-      this.dialogClosing = false;
-      this.dialogFilter = undefined;
-      m.redraw();
-    }, 250);
   }
 
   // ----------------------------------------------------------

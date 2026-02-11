@@ -34,6 +34,92 @@
   user-select: text;
 }
 
+/* =============================================================================
+   Generic Dialog Header (shared by all dialogs)
+   ============================================================================= */
+
+.dialog .header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.dialog .header h2 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.dialog .header .bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.dialog .close {
+  background: none;
+  border: none;
+  color: var(--color-glow);
+  font-size: var(--font-size-xl);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+@media (hover: hover) {
+  .dialog .close:hover {
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+  }
+}
+
+/* Draggable header on desktop */
+@media (min-width: 640px) {
+  .dialog .header {
+    cursor: move;
+    user-select: none;
+  }
+  .dialog .header h2,
+  .dialog .header button {
+    cursor: default;
+  }
+  .dialog .window.dragging {
+    transition: none;
+  }
+}
+
+/* Generic footer */
+.dialog .footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.dialog .footer .actions {
+  display: flex;
+  gap: 12px;
+}
+
+.dialog .footer .btn-secondary {
+  padding: 8px 24px;
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -188,24 +274,7 @@
   animation: scaleIn 0.15s ease-out;
 }
 
-/* Draggable header on desktop */
-/* Should align with --breakpoint-desktop in layout.css */
-@media (min-width: 640px) {
-  .dialog.options .header {
-    cursor: move;
-    user-select: none;
-  }
-  .dialog.options .header h2,
-  .dialog.options .header button {
-    cursor: default;
-  }
-  .dialog.options .window.dragging {
-    transition: none;
-  }
-}
-
 /* Mobile: slide up from bottom */
-/* Should align with --breakpoint-desktop in layout.css */
 @media (max-width: 639px) {
   .dialog.options {
     align-items: flex-end;
@@ -230,67 +299,17 @@
 }
 
 /* Desktop: fade out on close */
-.dialog.options.closing .backdrop {
+.dialog.closing .backdrop {
   animation: fadeOut 0.25s ease-out forwards;
 }
-.dialog.options.closing .window {
+.dialog.closing .window {
   animation: scaleOut 0.25s ease-out forwards;
 }
 
 /* Mobile: slide down on close (overrides desktop) */
 @media (max-width: 639px) {
-  .dialog.options.closing .window {
+  .dialog.closing .window {
     animation: slideDown 0.25s ease-out forwards;
-  }
-}
-
-/* Header */
-.dialog.options .header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.dialog.options .header h2 {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: 500;
-  color: var(--color-text-primary);
-  white-space: nowrap;
-}
-
-.dialog.options .header .bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  width: auto;
-  flex-shrink: 0;
-}
-
-.dialog.options .close {
-  background: none;
-  border: none;
-  color: var(--color-glow);
-  font-size: var(--font-size-xl);
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  transition: background 0.15s, color 0.15s;
-}
-
-@media (hover: hover) {
-  .dialog.options .close:hover {
-    background: var(--color-surface);
-    color: var(--color-text-primary);
   }
 }
 
@@ -846,23 +865,6 @@
   color: var(--color-text-secondary);
 }
 
-.dialog.options .footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-top: 1px solid var(--color-border-light);
-}
-
-.dialog.options .footer .actions {
-  display: flex;
-  gap: 12px;
-}
-
-.dialog.options .footer .btn-secondary {
-  padding: 8px 24px;
-}
-
 /* =============================================================================
    Info Dialog - Markdown content modal
    ============================================================================= */
@@ -871,30 +873,25 @@
   animation: fadeIn 0.15s ease-out;
 }
 
+.dialog.about.closing .backdrop {
+  animation: fadeOut 0.25s ease-out forwards;
+}
+.dialog.about.closing .window {
+  animation: scaleOut 0.25s ease-out forwards;
+}
+@media (max-width: 639px) {
+  .dialog.about.closing .window {
+    animation: slideDown 0.25s ease-out forwards;
+  }
+}
+
 .dialog.about .window {
   width: 90%;
   max-width: 740px;
   animation: scaleIn 0.15s ease-out;
 }
 
-/* Draggable header on desktop */
-/* Should align with --breakpoint-desktop in layout.css */
-@media (min-width: 640px) {
-  .dialog.about .header {
-    cursor: move;
-    user-select: none;
-  }
-  .dialog.about .header h2,
-  .dialog.about .header button {
-    cursor: default;
-  }
-  .dialog.about .window.dragging {
-    transition: none;
-  }
-}
-
 /* Mobile: slide up from bottom */
-/* Should align with --breakpoint-desktop in layout.css */
 @media (max-width: 639px) {
   .dialog.about {
     align-items: flex-end;
@@ -905,56 +902,6 @@
     max-height: 85vh;
     border-radius: 16px 16px 0 0;
     animation: slideUp 0.25s ease-out;
-  }
-}
-
-/* Header */
-.dialog.about .header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.dialog.about .header h2 {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: 500;
-  color: var(--color-text-primary);
-  white-space: nowrap;
-}
-
-.dialog.about .header .bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  width: auto;
-  flex-shrink: 0;
-}
-
-.dialog.about .close {
-  background: none;
-  border: none;
-  color: var(--color-glow);
-  font-size: var(--font-size-xl);
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  transition: background 0.15s, color 0.15s;
-}
-
-@media (hover: hover) {
-  .dialog.about .close:hover {
-    background: var(--color-surface);
-    color: var(--color-text-primary);
   }
 }
 
@@ -1110,24 +1057,6 @@
   color: var(--color-danger);
 }
 
-/* Footer */
-.dialog.about .footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-top: 1px solid var(--color-border-light);
-}
-
-.dialog.about .footer .actions {
-  display: flex;
-  gap: 12px;
-}
-
-.dialog.about .footer .btn-secondary {
-  padding: 8px 24px;
-}
-
 /* =============================================================================
    Floating Dialog Mode (desktop only)
    ============================================================================= */
@@ -1180,34 +1109,23 @@
    Create Layer Dialog
    ============================================================ */
 
-.dialog.create-layer {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  pointer-events: none;
-}
-
 .dialog.create-layer .backdrop {
-  position: absolute;
-  inset: 0;
-  background: var(--dialog-backdrop);
-  pointer-events: auto;
   animation: fadeIn 0.15s ease-out;
 }
 
+.dialog.create-layer.closing .backdrop {
+  animation: fadeOut 0.25s ease-out forwards;
+}
+.dialog.create-layer.closing .window {
+  animation: scaleOut 0.25s ease-out forwards;
+}
+@media (max-width: 639px) {
+  .dialog.create-layer.closing .window {
+    animation: slideDown 0.25s ease-out forwards;
+  }
+}
+
 .dialog.create-layer .window {
-  position: relative;
-  z-index: 1;
-  pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  background: var(--dialog-window-bg);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--dialog-window-radius);
-  box-shadow: 0 20px 60px var(--color-shadow-strong);
   width: 90%;
   max-width: 520px;
   max-height: 85vh;
@@ -1225,64 +1143,6 @@
     max-height: 90vh;
     border-radius: 16px 16px 0 0;
     animation: slideUp 0.25s ease-out;
-  }
-}
-
-/* Header */
-.dialog.create-layer .header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.dialog.create-layer .header h2 {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: 500;
-  color: var(--color-text-primary);
-  white-space: nowrap;
-}
-
-.dialog.create-layer .header .bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  width: auto;
-  flex-shrink: 0;
-}
-
-.dialog.create-layer.floating .header {
-  cursor: grab;
-}
-
-.dialog.create-layer .window.dragging .header {
-  cursor: grabbing;
-}
-
-.dialog.create-layer .close {
-  background: none;
-  border: none;
-  color: var(--color-glow);
-  font-size: var(--font-size-xl);
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  transition: background 0.15s, color 0.15s;
-}
-
-@media (hover: hover) {
-  .dialog.create-layer .close:hover {
-    background: var(--color-surface);
-    color: var(--color-text-primary);
   }
 }
 
@@ -1357,20 +1217,8 @@
   margin-top: 8px;
 }
 
-/* Footer */
-.dialog.create-layer .footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--color-border-light);
-}
-
-.dialog.create-layer .footer .left {
-  display: flex;
-  gap: 8px;
-}
-
+/* Footer - layout overrides for left/right groups */
+.dialog.create-layer .footer .left,
 .dialog.create-layer .footer .right {
   display: flex;
   gap: 8px;

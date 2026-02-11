@@ -31,10 +31,6 @@ export const App: m.ClosureComponent = () => {
   // Services - populated during bootstrap
   const services: Partial<ServiceContainer> = {};
 
-  // Dialog state
-  let showCreateLayer = false;
-  let editLayerId: string | null = null;
-
   return {
     async oninit() {
       // Hide preload message now that app is taking over
@@ -72,11 +68,10 @@ export const App: m.ClosureComponent = () => {
             aboutService: services.aboutService!,
             dialogService: services.dialogService!,
           }),
-          showCreateLayer && m(CreateLayerDialog, {
+          m(CreateLayerDialog, {
             layerRegistry: services.layerRegistryService!,
             auroraService: services.auroraService!,
-            editLayerId,
-            onClose: () => { showCreateLayer = false; editLayerId = null; m.redraw(); },
+            dialogService: services.dialogService!,
           }),
           m('.ui-container', [
             m(PanelStack, { side: 'left' }, [
@@ -86,8 +81,7 @@ export const App: m.ClosureComponent = () => {
                 optionsService: services.optionsService!,
                 layerRegistry: services.layerRegistryService!,
                 auroraService: services.auroraService!,
-                onCreateLayer: () => { showCreateLayer = true; editLayerId = null; },
-                onEditLayer: (id) => { showCreateLayer = true; editLayerId = id; },
+                dialogService: services.dialogService!,
               }),
             ]),
             m(PanelStack, { side: 'right' }, [
@@ -100,14 +94,13 @@ export const App: m.ClosureComponent = () => {
                 queueService: services.queueService!,
                 optionsService: services.optionsService!,
                 slotService: services.slotService!,
+                dialogService: services.dialogService!,
               }),
               !minimal && m(FullscreenPanel),
               !minimal && m(AboutPanel, {
-                aboutService: services.aboutService!,
                 dialogService: services.dialogService!,
               }),
               !minimal && m(OptionsPanel, {
-                optionsService: services.optionsService!,
                 dialogService: services.dialogService!,
               }),
             ]),

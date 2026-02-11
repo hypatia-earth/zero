@@ -12,13 +12,14 @@ import m from 'mithril';
 import { effect } from '@preact/signals-core';
 import type { LayerRegistryService, LayerDeclaration } from '../services/layer-registry-service';
 import type { AuroraService } from '../services/aurora-service';
+import type { DialogService } from '../services/dialog-service';
 import { defineLayer, withType, withParams, withOptions, withBlend, withShader, withRender } from '../render/layer-builder';
+import { DialogHeader } from './dialog-header';
 
 interface CreateLayerDialogAttrs {
   layerRegistry: LayerRegistryService;
   auroraService: AuroraService;
-  editLayerId?: string | null;
-  onClose: () => void;
+  dialogService: DialogService;
 }
 
 // Available data parameters for user layers
@@ -106,6 +107,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     // Validate ID
     if (!state.id || !/^[a-z][a-z0-9_]*$/.test(state.id)) {
       state.error = 'ID must start with lowercase letter, contain only a-z, 0-9, _';
+      m.redraw();
       return;
     }
 
@@ -113,6 +115,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const existing = registry.get(state.id);
     if (existing?.isBuiltIn) {
       state.error = `Cannot override built-in layer "${state.id}"`;
+      m.redraw();
       return;
     }
 
@@ -120,6 +123,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const blendFn = `blend${capitalize(state.id)}`;
     if (!state.shaderCode.includes(`fn ${blendFn}`)) {
       state.error = `Shader must define function: fn ${blendFn}(...)`;
+      m.redraw();
       return;
     }
 
@@ -132,6 +136,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const index = registry.allocateUserIndex();
     if (index === null) {
       state.error = 'No free layer slots (max 31 user layers)';
+      m.redraw();
       return;
     }
 
@@ -175,6 +180,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
     if (!state.id) {
       state.error = 'Layer ID is required';
+      m.redraw();
       return;
     }
 
@@ -182,6 +188,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const blendFn = `blend${capitalize(state.id)}`;
     if (!state.shaderCode.includes(`fn ${blendFn}`)) {
       state.error = `Shader must define function: fn ${blendFn}(...)`;
+      m.redraw();
       return;
     }
 
@@ -251,22 +258,6 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
   let disposeErrorEffect: (() => void) | null = null;
 
-  // Drag state
-  const drag = {
-    isFloating: false,
-    isDragging: false,
-    startX: 0,
-    startY: 0,
-    offsetX: 0,
-    offsetY: 0,
-  };
-
-  function resetDrag() {
-    drag.isDragging = false;
-    drag.offsetX = 0;
-    drag.offsetY = 0;
-  }
-
   function resetState() {
     state.id = '';
     state.param = 'temp_2m';
@@ -279,93 +270,91 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     suspendedLayer = null;
   }
 
+  let wasOpen = false;
+  let windowEl: HTMLElement | null = null;
+
   return {
-    oncreate({ attrs }) {
-      // Reset state when dialog opens
-      resetState();
-      attrs.auroraService.userLayerError.value = null;
-
-      // Watch for shader compilation errors from worker
-      disposeErrorEffect = effect(() => {
-        const err = attrs.auroraService.userLayerError.value;
-        if (err && err.layerId === '_preview') {
-          state.error = `Shader error: ${err.error}`;
-          m.redraw();
-        }
-      });
-    },
-
-    onremove() {
-      disposeErrorEffect?.();
-    },
-
     view({ attrs }) {
-      const { layerRegistry, auroraService, editLayerId, onClose } = attrs;
+      const { layerRegistry, auroraService, dialogService } = attrs;
+
+      if (!dialogService.isOpen('create-layer')) {
+        // Clean up on close
+        if (wasOpen) {
+          wasOpen = false;
+          disposeErrorEffect?.();
+          disposeErrorEffect = null;
+        }
+        return null;
+      }
+
+      const payload = dialogService.getPayload('create-layer');
+      const editLayerId = payload?.editLayerId;
       const isEditing = !!editLayerId;
 
-      // Initialize from existing layer on first render
+      // Initialize on open transition
+      if (!wasOpen) {
+        wasOpen = true;
+        resetState();
+        auroraService.userLayerError.value = null;
+
+        // Watch for shader compilation errors from worker
+        disposeErrorEffect = effect(() => {
+          const err = auroraService.userLayerError.value;
+          if (err && err.layerId === '_preview') {
+            state.error = `Shader error: ${err.error}`;
+            m.redraw();
+          }
+        });
+      }
+
+      // Initialize from existing layer on first render when editing
       if (!initialized && editLayerId) {
         initFromLayer(layerRegistry, editLayerId);
         initialized = true;
       }
 
       const exists = state.id && layerRegistry.get(state.id);
-      const close = () => { resetDrag(); handleClose(layerRegistry, auroraService, onClose); };
 
-      // Desktop detection
-      const isDesktop = window.innerWidth >= 768;
+      const isFloating = dialogService.isFloating('create-layer');
+      const isTop = dialogService.isTop('create-layer');
+      const isDragging = dialogService.isDragging('create-layer');
+      const dragOffset = dialogService.getDragOffset('create-layer');
 
-      // Drag handlers
-      const onMouseDown = (e: MouseEvent) => {
-        if (!isDesktop || !drag.isFloating) return;
-        if ((e.target as HTMLElement).tagName === 'BUTTON') return;
-        drag.isDragging = true;
-        drag.startX = e.clientX - drag.offsetX;
-        drag.startY = e.clientY - drag.offsetY;
-
-        const onMouseMove = (ev: MouseEvent) => {
-          if (!drag.isDragging) return;
-          drag.offsetX = ev.clientX - drag.startX;
-          drag.offsetY = ev.clientY - drag.startY;
-          m.redraw();
-        };
-
-        const onMouseUp = () => {
-          drag.isDragging = false;
-          document.removeEventListener('mousemove', onMouseMove);
-          document.removeEventListener('mouseup', onMouseUp);
-        };
-
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
+      const close = () => {
+        dialogService.resetDragState('create-layer');
+        handleClose(layerRegistry, auroraService, () => dialogService.close('create-layer'));
       };
 
-      const windowStyle = drag.isFloating && (drag.offsetX || drag.offsetY)
-        ? `transform: translate(${drag.offsetX}px, ${drag.offsetY}px)`
-        : '';
+      const windowStyle: Record<string, string> = {};
+      if (dragOffset.x !== 0 || dragOffset.y !== 0) {
+        windowStyle.transform = `translate(${dragOffset.x}px, ${dragOffset.y}px)`;
+      }
 
-      return m('.dialog.create-layer', { class: drag.isFloating ? 'floating' : '' }, [
-        m('.backdrop', { onclick: close }),
+      const floatingClass = isFloating ? (isTop ? 'floating top' : 'floating behind') : '';
+      const closingClass = dialogService.isClosing('create-layer') ? 'closing' : '';
+
+      return m('.dialog.create-layer', { class: `${floatingClass} ${closingClass}` }, [
+        m('.backdrop', {
+          onclick: () => {
+            if (dialogService.shouldCloseOnBackdrop('create-layer')) {
+              close();
+            }
+          }
+        }),
         m('.window', {
-          class: drag.isDragging ? 'dragging' : '',
+          class: isDragging ? 'dragging' : '',
           style: windowStyle,
+          onmousedown: () => dialogService.bringToFront('create-layer'),
+          oncreate: (vnode) => { windowEl = vnode.dom as HTMLElement; },
+          onupdate: (vnode) => { windowEl = vnode.dom as HTMLElement; },
         }, [
-          // Header
-          m('.header', { onmousedown: onMouseDown }, [
-            m('h2', isEditing ? 'Edit Layer' : 'Create Layer'),
-            m('.bar', [
-              isDesktop && m('button.float-toggle', {
-                onclick: (e: Event) => {
-                  e.stopPropagation();
-                  drag.isFloating = !drag.isFloating;
-                  if (!drag.isFloating) resetDrag();
-                  m.redraw();
-                },
-                title: drag.isFloating ? 'Disable floating' : 'Keep floating',
-              }, drag.isFloating ? '◎' : '○'),
-              m('button.close', { onclick: close }, '×'),
-            ]),
-          ]),
+          m(DialogHeader, {
+            dialogId: 'create-layer',
+            title: isEditing ? 'Edit Layer' : 'Create Layer',
+            dialogService,
+            windowEl,
+            onClose: close,
+          }),
 
           // Content
           m('.content', [
@@ -452,14 +441,14 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                 onclick: () => tryLayer(layerRegistry, auroraService),
               }, 'Try'),
               exists && m('button.danger', {
-                onclick: () => deleteLayer(layerRegistry, auroraService, onClose),
+                onclick: () => deleteLayer(layerRegistry, auroraService, close),
               }, 'Delete'),
             ]),
             m('.right', [
               m('button', { onclick: close }, 'Cancel'),
               m('button.primary', {
                 disabled: !layerRegistry.hasPreview(),
-                onclick: () => validateAndCreate(layerRegistry, auroraService, onClose),
+                onclick: () => validateAndCreate(layerRegistry, auroraService, close),
               }, 'Save'),
             ]),
           ]),
