@@ -165,7 +165,12 @@ export function createZeroAPI(page: Page): ZeroTestAPI {
     PaletteService: {
       async setPalette(layer: string, palette: string): Promise<void> {
         await page.evaluate(({ layer, palette }) => {
-          (window as any).__hypatia.paletteService.setPalette(layer, palette);
+          const h = (window as any).__hypatia;
+          // Update both paletteService and options (worker reads from options)
+          h.paletteService.setPalette(layer, palette);
+          h.optionsService.update((draft: any) => {
+            if (draft[layer]) draft[layer].palette = palette;
+          });
         }, { layer, palette });
         await page.waitForTimeout(100);
       },
