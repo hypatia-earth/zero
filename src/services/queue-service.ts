@@ -82,18 +82,31 @@ export class QueueService implements IQueueService {
   /** Reactive parameters for queue management */
   readonly qsParams = computed(() => {
     const opts = this.optionsService.options.value;
-    // Get built-in weather layers from registry (those with params)
-    // User layers piggyback on existing data, don't need separate queue entries
-    const registeredLayers = this.layerRegistryService.getAll()
-      .filter(l => l.params && l.params.length > 0 && l.isBuiltIn)
+    // Trigger recompute when layer registry changes
+    this.layerRegistryService.changed.value;
+
+    // Get built-in weather layers that are enabled
+    const builtInLayers = this.layerRegistryService.getBuiltIn()
+      .filter(l => l.params && l.params.length > 0)
       .map(l => l.id as TWeatherLayer);
-    const activeLayers = registeredLayers.filter(p => opts[p]?.enabled);
+    const activeLayers = new Set(builtInLayers.filter(p => opts[p]?.enabled));
+
+    // Add layers required by enabled user layers
+    for (const userLayer of this.layerRegistryService.getUserLayers()) {
+      if (!this.layerRegistryService.isUserLayerEnabled(userLayer.id)) continue;
+      for (const param of userLayer.params ?? []) {
+        const builtInLayer = this.configService.getLayerForParam(param);
+        if (builtInLayer && isWeatherLayer(builtInLayer)) {
+          activeLayers.add(builtInLayer);
+        }
+      }
+    }
 
     return {
       time: this.stateService.viewState.value.time,
       poolSize: parseInt(opts.gpu.workerPoolSize, 10),
       numSlots: parseInt(opts.gpu.timeslotsPerLayer, 10),
-      activeLayers,
+      activeLayers: Array.from(activeLayers),
       strategy: opts.dataCache.cacheStrategy,
     };
   });

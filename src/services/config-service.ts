@@ -79,4 +79,10 @@ export class ConfigService {
   getEarthRadius(): number {
     return EARTH_RADIUS;
   }
+
+  /** Find which layer provides a given param (e.g., "temperature_2m" → "temp") */
+  getLayerForParam(param: string): TLayer | undefined {
+    const layer = this.config.layers.find(l => l.params?.some(p => p === param));
+    return layer?.id as TLayer | undefined;
+  }
 }

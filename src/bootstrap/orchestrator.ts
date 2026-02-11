@@ -170,6 +170,7 @@ export function exposeDebugServices(services: ServiceContainer): void {
     aboutService: services.aboutService,
     themeService: services.themeService,
     perfService: services.perfService,
+    layerRegistryService: services.layerRegistryService,
     camera: services.auroraService?.getCamera(),
     schema: { extractOptionsMeta, defaultOptions },
   };
