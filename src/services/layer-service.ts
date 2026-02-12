@@ -24,7 +24,7 @@ export interface LayerShaders {
 export interface LayerDeclaration {
   id: string;
   type: LayerType;
-  params?: string[];           // Data params to fetch (e.g., ['temp_2m'])
+  params?: string[];           // Data params to fetch (e.g., ['temperature_2m'])
   options?: string[];          // Option paths to watch (e.g., ['temp.enabled'])
   blendFn?: string;            // Fragment shader blend function name
   postFn?: string;             // Post-process function name

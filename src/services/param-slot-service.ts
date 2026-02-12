@@ -247,7 +247,6 @@ export class ParamSlotService {
     // Map common params to their original layer names
     const paramLayerMap: Record<string, TWeatherLayer> = {
       'temperature_2m': 'temp',
-      'temp_2m': 'temp',
       'precipitation': 'rain',
       'pressure_msl': 'pressure',
       'wind_u_10m': 'wind',

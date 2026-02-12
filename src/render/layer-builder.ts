@@ -3,7 +3,7 @@
  *
  * Usage:
  *   const tempLayer = defineLayer('temp',
- *     withParams(['temp_2m']),
+ *     withParams(['temperature_2m']),
  *     withOptions(['temp.enabled', 'temp.opacity', 'temp.palette']),
  *     withPalette({ source: 'temp.palette', range: [-40, 50] }),
  *     withInterpolation('lerp'),

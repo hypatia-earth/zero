@@ -3,7 +3,7 @@ import shaderCode from './temp.wgsl?raw';
 
 export const layer = defineLayer('temp',
   withType('texture'),
-  withParams(['temp_2m']),
+  withParams(['temperature_2m']),
   withOptions(['temp.enabled', 'temp.opacity', 'temp.palette']),
   withBlend('blendTemp'),
   withShader('main', shaderCode),
