@@ -11,7 +11,7 @@ import type { AboutService } from '../../services/about-service';
 import type { OmService } from '../../services/om-service';
 import type { OptionsService } from '../../services/options-service';
 import type { ConfigService } from '../../services/config-service';
-import type { SlotService } from '../../services/slot-service';
+import type { ISlotService } from '../../services/queue-service';
 import type { Progress } from '../progress';
 import type { LoadedAssets } from './assets';
 import { isWeatherLayer } from '../../config/types';
@@ -24,7 +24,7 @@ export async function runGpuInitPhase(
   omService: OmService,
   optionsService: OptionsService,
   configService: ConfigService,
-  slotService: SlotService,
+  slotService: ISlotService,
   assets: LoadedAssets,
   progress: Progress
 ): Promise<void> {

@@ -108,7 +108,8 @@ async function runBootstrapInner(
     services.queueService,
     services.optionsService!,
     services.stateService!,
-    services.configService!
+    services.configService!,
+    services.layerService!
   );
   await runGpuInitPhase(
     canvas,

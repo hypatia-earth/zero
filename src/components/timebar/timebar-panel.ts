@@ -11,7 +11,7 @@
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
 import { isWeatherLayer, type TWeatherLayer } from '../../config/types';
-import type { SlotService } from '../../services/slot-service';
+import type { ISlotService } from '../../services/queue-service';
 import type { TimestepService } from '../../services/timestep-service';
 import type { OptionsService } from '../../services/options-service';
 import type { ConfigService } from '../../services/config-service';
@@ -23,7 +23,7 @@ import { renderTimebar, getTimebarHeight } from './timebar-renderer';
 interface TimeBarPanelAttrs {
   optionsService: OptionsService;
   stateService: StateService;
-  slotService: SlotService;
+  slotService: ISlotService;
   timestepService: TimestepService;
   configService: ConfigService;
   themeService: ThemeService;

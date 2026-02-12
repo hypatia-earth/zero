@@ -14,14 +14,16 @@ import { AboutService } from '../services/about-service';
 import { ThemeService } from '../services/theme-service';
 import { CapabilitiesService } from '../services/capabilities-service';
 import { TimestepService } from '../services/timestep-service';
-import { QueueService } from '../services/queue-service';
+import { QueueService, type ISlotService } from '../services/queue-service';
 import { createAuroraService, type AuroraService } from '../services/aurora-service';
 import { SlotService } from '../services/slot-service';
+import { ParamSlotService } from '../services/param-slot-service';
 import { PaletteService } from '../services/palette-service';
 import { KeyboardService } from '../services/keyboard-service';
 import { PerfService } from '../services/perf-service';
 import { LayerService } from '../services/layer-service';
 import { registerBuiltInLayers } from '../render/built-in-layers';
+import { USE_PARAM_SLOTS } from '../config/feature-flags';
 
 export interface ServiceContainer {
   // Foundation (no service deps)
@@ -44,7 +46,7 @@ export interface ServiceContainer {
 
   // Rendering (worker-based)
   auroraService: AuroraService | null;
-  slotService: SlotService | null;
+  slotService: ISlotService | null;
   paletteService: PaletteService | null;
 
   // Input (created after rendering)
@@ -114,7 +116,7 @@ export function createQueueService(
 export { createAuroraService };
 
 /**
- * Create SlotService and wire circular dep with QueueService
+ * Create SlotService (or ParamSlotService) and wire circular dep with QueueService
  */
 export function createSlotService(
   timestepService: TimestepService,
@@ -122,16 +124,32 @@ export function createSlotService(
   queueService: QueueService,
   optionsService: OptionsService,
   stateService: StateService,
-  configService: ConfigService
-): SlotService {
-  const slotService = new SlotService(
-    timestepService,
-    auroraService,
-    queueService,
-    optionsService,
-    stateService,
-    configService
-  );
+  configService: ConfigService,
+  layerService: LayerService
+): ISlotService {
+  let slotService: ISlotService;
+
+  if (USE_PARAM_SLOTS) {
+    slotService = new ParamSlotService(
+      timestepService,
+      auroraService,
+      queueService,
+      optionsService,
+      stateService,
+      configService,
+      layerService
+    );
+    console.log('[ServiceContainer] Using ParamSlotService (param-centric)');
+  } else {
+    slotService = new SlotService(
+      timestepService,
+      auroraService,
+      queueService,
+      optionsService,
+      stateService,
+      configService
+    );
+  }
 
   // Wire circular dep: QueueService needs to deliver data to SlotService
   queueService.setSlotService(slotService);

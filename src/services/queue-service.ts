@@ -16,8 +16,21 @@ import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { StateService } from './state-service';
 import type { TimestepService } from './timestep-service';
-import type { SlotService } from './slot-service';
 import type { LayerService } from './layer-service';
+
+/** Common interface for slot services (SlotService and ParamSlotService) */
+export interface ISlotReceiver {
+  receiveData(param: TWeatherLayer | string, timestep: TTimestep, slabIndex: number, data: Float32Array): boolean;
+}
+
+/** Extended interface for slot services used in bootstrap phases */
+export interface ISlotService extends ISlotReceiver {
+  setGaussianLats(lats: Float32Array): void;
+  initialize(onProgress?: (param: TWeatherLayer | string, index: number, total: number) => Promise<void>): Promise<void>;
+  getActiveTimesteps(param: TWeatherLayer | string): TTimestep[];
+  readonly slotsVersion: import('@preact/signals-core').Signal<number>;
+  readonly memoryStats: import('@preact/signals-core').ReadonlySignal<{ allocatedMB: number; capacityMB: number }>;
+}
 
 const DEBUG = false;
 
@@ -76,7 +89,7 @@ export class QueueService implements IQueueService {
   // Reactive queue (Phase 3)
   private taskQueue: QueueTask[] = [];
   private inFlight: Map<string, InFlightTask> = new Map(); // key: `${param}:${timestep}:${slabIndex}`
-  private slotService: SlotService | null = null;
+  private slotService: ISlotReceiver | null = null;
   private disposeEffect: (() => void) | null = null;
 
   /** Reactive parameters for queue management */
@@ -121,7 +134,7 @@ export class QueueService implements IQueueService {
   ) {}
 
   /** Set SlotService reference (avoids circular dependency) */
-  setSlotService(ss: SlotService): void {
+  setSlotService(ss: ISlotReceiver): void {
     this.slotService = ss;
   }
 
