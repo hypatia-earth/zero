@@ -11,7 +11,7 @@
  *   );
  */
 
-import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders } from '../services/layer-registry-service';
+import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders } from '../services/layer-service';
 
 export interface LayerFeature {
   apply(declaration: Partial<LayerDeclaration>): Partial<LayerDeclaration>;

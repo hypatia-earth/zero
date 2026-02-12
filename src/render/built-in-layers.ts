@@ -2,10 +2,10 @@
  * Built-in Layer Declarations
  *
  * Imports layer declarations from layer folders.
- * These are registered in LayerRegistryService at bootstrap.
+ * These are registered in LayerService at bootstrap.
  */
 
-import type { LayerRegistryService } from '../services/layer-registry-service';
+import type { LayerService } from '../services/layer-service';
 import { shaderComposer } from './shader-composer';
 import { USE_DECLARATIVE_LAYERS } from '../config/feature-flags';
 
@@ -33,7 +33,7 @@ export const builtInLayers = [
 ];
 
 /** Register all built-in layers in the registry */
-export function registerBuiltInLayers(registry: LayerRegistryService): void {
+export function registerBuiltInLayers(registry: LayerService): void {
   for (const layer of builtInLayers) {
     registry.register(layer);
   }

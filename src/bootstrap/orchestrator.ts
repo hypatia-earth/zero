@@ -74,6 +74,7 @@ async function runBootstrapInner(
   // Phase 2: Config
   progress.startStep('CONFIG');
   await runConfigPhase(services.optionsService!, progress);
+  await services.layerService!.loadUserLayers();
 
   // Phase 3: Discovery
   progress.startStep('DISCOVERY');
@@ -88,7 +89,7 @@ async function runBootstrapInner(
     services.stateService!,
     services.configService!,
     services.timestepService,
-    services.layerRegistryService!
+    services.layerService!
   );
   const assets = await runAssetsPhase(services.queueService, services.capabilitiesService!, progress);
 
@@ -121,6 +122,11 @@ async function runBootstrapInner(
     assets,
     progress
   );
+
+  // Send user layers to worker (loaded from IDB in config phase)
+  for (const layer of services.layerService!.getUserLayers()) {
+    services.auroraService.send({ type: 'registerUserLayer', layer });
+  }
 
   // Phase 6: Data
   progress.startStep('DATA');
@@ -170,7 +176,7 @@ export function exposeDebugServices(services: ServiceContainer): void {
     aboutService: services.aboutService,
     themeService: services.themeService,
     perfService: services.perfService,
-    layerRegistryService: services.layerRegistryService,
+    layerService: services.layerService,
     camera: services.auroraService?.getCamera(),
     schema: { extractOptionsMeta, defaultOptions },
   };

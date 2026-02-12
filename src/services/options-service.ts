@@ -27,7 +27,7 @@ import { updatePrefetchConfig } from './sw-registration';
 const DEBUG = false;
 
 const DB_NAME = 'hypatia-zero';
-const DB_VERSION = 3;
+const DB_VERSION = 4;  // Bumped for user-layers store
 const STORE_NAME = 'options';
 const OPTIONS_KEY = 'user-options';
 const USAGE_STORE = 'usage';
@@ -57,6 +57,10 @@ async function openDB(): Promise<{ db: IDBDatabase; isNewDB: boolean }> {
       }
       if (!db.objectStoreNames.contains(USAGE_STORE)) {
         db.createObjectStore(USAGE_STORE);
+      }
+      // V4: user-layers store (shared with LayerService)
+      if (!db.objectStoreNames.contains('user-layers')) {
+        db.createObjectStore('user-layers');
       }
     };
   });

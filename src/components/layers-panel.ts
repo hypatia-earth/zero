@@ -6,7 +6,7 @@ import m from 'mithril';
 import { GearIcon } from './gear-icon';
 import type { ConfigService } from '../services/config-service';
 import type { OptionsService } from '../services/options-service';
-import type { LayerRegistryService } from '../services/layer-registry-service';
+import type { LayerService } from '../services/layer-service';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
 import { LAYER_CATEGORIES, LAYER_CATEGORY_LABELS, type TLayer } from '../config/types';
@@ -14,7 +14,7 @@ import { LAYER_CATEGORIES, LAYER_CATEGORY_LABELS, type TLayer } from '../config/
 interface LayersPanelAttrs {
   configService: ConfigService;
   optionsService: OptionsService;
-  layerRegistry: LayerRegistryService;
+  layerRegistry: LayerService;
   auroraService: AuroraService;
   dialogService: DialogService;
 }
@@ -68,6 +68,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
                   const opacity = enabled ? layerRegistry.getUserLayerOpacity(layer.id) : 0;
                   auroraService.send({ type: 'setUserLayerOpacity', layerIndex: layer.userLayerIndex, opacity });
                 }
+                m.redraw();
               },
               onOptions: () => dialogService.open('create-layer', { editLayerId: layer.id }),
             })

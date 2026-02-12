@@ -69,7 +69,7 @@ export const App: m.ClosureComponent = () => {
             dialogService: services.dialogService!,
           }),
           m(CreateLayerDialog, {
-            layerRegistry: services.layerRegistryService!,
+            layerRegistry: services.layerService!,
             auroraService: services.auroraService!,
             dialogService: services.dialogService!,
           }),
@@ -79,7 +79,7 @@ export const App: m.ClosureComponent = () => {
               !minimal && m(LayersPanel, {
                 configService: services.configService!,
                 optionsService: services.optionsService!,
-                layerRegistry: services.layerRegistryService!,
+                layerRegistry: services.layerService!,
                 auroraService: services.auroraService!,
                 dialogService: services.dialogService!,
               }),

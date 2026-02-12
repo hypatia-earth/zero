@@ -10,7 +10,7 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import type { LayerRegistryService, LayerDeclaration } from '../services/layer-registry-service';
+import type { LayerService, LayerDeclaration } from '../services/layer-service';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
 import { defineLayer, withType, withParams, withOptions, withBlend, withShader, withRender } from '../render/layer-builder';
@@ -18,7 +18,7 @@ import { DialogHeader } from './dialog-header';
 import { PARAM_METADATA, getParamMeta, type ParamMeta } from '../config/param-metadata';
 
 interface CreateLayerDialogAttrs {
-  layerRegistry: LayerRegistryService;
+  layerRegistry: LayerService;
   auroraService: AuroraService;
   dialogService: DialogService;
 }
@@ -84,7 +84,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     paramMeta: getParamMeta(DEFAULT_PARAM),
     shaderCode: SHADER_TEMPLATE,
     order: 50,
-    opacity: 1.0,
+    opacity: 0.5,
     userLayerIndex: null,
     error: null,
   };
@@ -93,7 +93,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
   // Track layer suspended for preview (to restore on cancel)
   let suspendedLayer: LayerDeclaration | null = null;
 
-  function initFromLayer(registry: LayerRegistryService, layerId: string) {
+  function initFromLayer(registry: LayerService, layerId: string) {
     const layer = registry.get(layerId);
     if (!layer) return;
 
@@ -125,7 +125,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
-  function validateAndCreate(registry: LayerRegistryService, aurora: AuroraService, onClose: () => void) {
+  function validateAndCreate(registry: LayerService, aurora: AuroraService, onClose: () => void) {
     state.error = null;
 
     // Validate ID
@@ -195,11 +195,11 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
     console.log(`[CreateLayer] Saved: ${state.id} (index ${index})`);
     suspendedLayer = null;  // Don't restore old layer - new one saved
-    // TODO: persist to IDB
+    void registry.saveUserLayer(state.id);
     onClose();
   }
 
-  function tryLayer(registry: LayerRegistryService, aurora: AuroraService) {
+  function tryLayer(registry: LayerService, aurora: AuroraService) {
     state.error = null;
 
     if (!state.id) {
@@ -246,14 +246,14 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     m.redraw();  // Update UI (enables Save button)
   }
 
-  function deleteLayer(registry: LayerRegistryService, aurora: AuroraService, onClose: () => void) {
+  function deleteLayer(registry: LayerService, aurora: AuroraService, onClose: () => void) {
     // Delete permanent layer if exists
     const layer = state.id ? registry.get(state.id) : null;
     if (layer && !layer.isBuiltIn) {
       registry.unregisterUserLayer(state.id);
       aurora.send({ type: 'unregisterUserLayer', layerId: state.id });
       console.log(`[CreateLayer] Deleted: ${state.id}`);
-      // TODO: remove from IDB
+      void registry.deleteUserLayer(state.id);
     }
     suspendedLayer = null;  // Don't restore - layer was deleted
     // Also clean up preview
@@ -261,7 +261,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     onClose();
   }
 
-  function cleanupPreview(registry: LayerRegistryService, aurora: AuroraService) {
+  function cleanupPreview(registry: LayerService, aurora: AuroraService) {
     if (registry.hasPreview()) {
       registry.unregisterPreview();
       aurora.send({ type: 'unregisterUserLayer', layerId: '_preview' });
@@ -269,7 +269,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     }
   }
 
-  function handleClose(registry: LayerRegistryService, aurora: AuroraService, onClose: () => void) {
+  function handleClose(registry: LayerService, aurora: AuroraService, onClose: () => void) {
     cleanupPreview(registry, aurora);
     // Restore suspended layer if user cancels during edit
     if (suspendedLayer) {
@@ -287,7 +287,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     state.param = DEFAULT_PARAM;
     state.paramMeta = getParamMeta(DEFAULT_PARAM);
     state.order = 50;
-    state.opacity = 1.0;
+    state.opacity = 0.5;
     state.userLayerIndex = null;
     state.error = null;
     initialized = false;
@@ -322,6 +322,15 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
         wasOpen = true;
         resetState();
         auroraService.userLayerError.value = null;
+
+        // Generate unique ID for new layers
+        if (!editLayerId) {
+          const existing = new Set(layerRegistry.getUserLayers().map(l => l.id));
+          let n = 1;
+          while (existing.has(`layer${n}`)) n++;
+          state.id = `layer${n}`;
+          updateShaderTemplate();
+        }
 
         // Watch for shader compilation errors from worker
         disposeErrorEffect = effect(() => {

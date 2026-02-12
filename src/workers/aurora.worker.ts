@@ -18,7 +18,7 @@ import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.sch
 import { getSunDirection } from '../utils/sun-position';
 import { USE_DECLARATIVE_LAYERS } from '../config/feature-flags';
 import { shaderComposer } from '../render/shader-composer';
-import { LayerRegistryService } from '../services/layer-registry-service';
+import { LayerService } from '../services/layer-service';
 import { registerBuiltInLayers } from '../render/built-in-layers';
 
 // ============================================================
@@ -81,7 +81,7 @@ export type AuroraRequest =
   | { type: 'activateSlots'; layer: TWeatherLayer; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
   | { type: 'render'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number }
   | { type: 'resize'; width: number; height: number }
-  | { type: 'registerUserLayer'; layer: import('../services/layer-registry-service').LayerDeclaration }
+  | { type: 'registerUserLayer'; layer: import('../services/layer-service').LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'setUserLayerOpacity'; layerIndex: number; opacity: number }
   | { type: 'cleanup' };
@@ -103,7 +103,7 @@ let canvas: OffscreenCanvas | null = null;
 let currentOptions: ZeroOptions | null = null;
 
 // Layer registry (for declarative mode)
-let layerRegistry: LayerRegistryService | null = null;
+let layerRegistry: LayerService | null = null;
 
 // Layer stores for GPU buffer management
 const layerStores = new Map<TWeatherLayer, LayerStore>();
@@ -376,7 +376,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       // Compose shaders dynamically when declarative layers enabled
       let composedShaders;
       if (USE_DECLARATIVE_LAYERS) {
-        layerRegistry = new LayerRegistryService();
+        layerRegistry = new LayerService();
         registerBuiltInLayers(layerRegistry);
         const layers = layerRegistry.getAll();
         composedShaders = shaderComposer.compose(layers);

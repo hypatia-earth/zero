@@ -17,7 +17,7 @@ import type { ConfigService } from './config-service';
 import type { StateService } from './state-service';
 import type { TimestepService } from './timestep-service';
 import type { SlotService } from './slot-service';
-import type { LayerRegistryService } from './layer-registry-service';
+import type { LayerService } from './layer-service';
 
 const DEBUG = false;
 
@@ -83,17 +83,17 @@ export class QueueService implements IQueueService {
   readonly qsParams = computed(() => {
     const opts = this.optionsService.options.value;
     // Trigger recompute when layer registry changes
-    this.layerRegistryService.changed.value;
+    this.layerService.changed.value;
 
     // Get built-in weather layers that are enabled
-    const builtInLayers = this.layerRegistryService.getBuiltIn()
+    const builtInLayers = this.layerService.getBuiltIn()
       .filter(l => l.params && l.params.length > 0)
       .map(l => l.id as TWeatherLayer);
     const activeLayers = new Set(builtInLayers.filter(p => opts[p]?.enabled));
 
     // Add layers required by enabled user layers
-    for (const userLayer of this.layerRegistryService.getUserLayers()) {
-      if (!this.layerRegistryService.isUserLayerEnabled(userLayer.id)) continue;
+    for (const userLayer of this.layerService.getUserLayers()) {
+      if (!this.layerService.isUserLayerEnabled(userLayer.id)) continue;
       for (const param of userLayer.params ?? []) {
         const builtInLayer = this.configService.getLayerForParam(param);
         if (builtInLayer && isWeatherLayer(builtInLayer)) {
@@ -117,7 +117,7 @@ export class QueueService implements IQueueService {
     private stateService: StateService,
     private configService: ConfigService,
     private timestepService: TimestepService,
-    private layerRegistryService: LayerRegistryService
+    private layerService: LayerService
   ) {}
 
   /** Set SlotService reference (avoids circular dependency) */
