@@ -82,6 +82,7 @@ export type AuroraRequest =
   // Param-centric API (USE_PARAM_SLOTS=true)
   | { type: 'uploadData'; param: string; slotIndex: number; data: Float32Array }
   | { type: 'activateSlots'; param: string; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
+  | { type: 'deactivateSlots'; param: string }
   // Legacy layer-based API (USE_PARAM_SLOTS=false) - DEPRECATED
   | { type: 'uploadDataLegacy'; layer: TWeatherLayer; slotIndex: number; slabIndex: number; data: Float32Array }
   | { type: 'activateSlotsLegacy'; layer: TWeatherLayer; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
@@ -684,6 +685,25 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         if (rawBuffer) {
           renderer!.triggerPressureRegrid(slot0, rawBuffer);
           if (layerState) layerState.dataReady = true;
+        }
+      }
+    }
+
+    if (type === 'deactivateSlots') {
+      const { param } = e.data;
+
+      // Clear param slot state
+      const state = paramSlotStates.get(param);
+      if (state) {
+        state.dataReady = false;
+      }
+
+      // Also clear legacy slotStates for uniform building
+      const layer = paramToLayerMap[param] as TWeatherLayer | undefined;
+      if (layer) {
+        const layerState = slotStates.get(layer);
+        if (layerState) {
+          layerState.dataReady = false;
         }
       }
     }

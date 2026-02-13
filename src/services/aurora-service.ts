@@ -52,6 +52,7 @@ export interface AuroraService {
   // Param-centric API (USE_PARAM_SLOTS=true)
   uploadData(param: string, slotIndex: number, data: Float32Array): void;
   activateSlots(param: string, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
+  deactivateSlots(param: string): void;
   // Legacy layer-based API (USE_PARAM_SLOTS=false) - DEPRECATED
   uploadDataLegacy(layer: TWeatherLayer, slotIndex: number, slabIndex: number, data: Float32Array): void;
   activateSlotsLegacy(layer: TWeatherLayer, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
@@ -264,6 +265,10 @@ export function createAuroraService(
       } else {
         send({ type: 'activateSlots', param, slot0, slot1, t0, t1 });
       }
+    },
+
+    deactivateSlots(param: string): void {
+      send({ type: 'deactivateSlots', param });
     },
 
     // Legacy layer-based API (USE_PARAM_SLOTS=false) - DEPRECATED

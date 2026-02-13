@@ -216,7 +216,11 @@ export class ParamSlotService {
         this.auroraService.activateSlots(param, slot.slotIndex, slot.slotIndex, t, t, slot.loadedPoints);
         DEBUG && console.log(`[ParamSlot] ${pcode} activated: ${fmt(ts)}`);
       } else {
-        ps.setActiveTimesteps([]);
+        if (current.length > 0) {
+          ps.setActiveTimesteps([]);
+          this.deactivateParam(param);
+          DEBUG && console.log(`[ParamSlot] ${pcode} deactivated (single slot not loaded)`);
+        }
       }
     } else {
       const ts0 = wanted.priority[0]!;
@@ -233,9 +237,18 @@ export class ParamSlotService {
         this.auroraService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, t0, t1, Math.min(slot0.loadedPoints, slot1.loadedPoints));
         DEBUG && console.log(`[ParamSlot] ${pcode} activated: ${fmt(ts0)} → ${fmt(ts1)}`);
       } else {
-        ps.setActiveTimesteps([]);
+        if (current.length > 0) {
+          ps.setActiveTimesteps([]);
+          this.deactivateParam(param);
+          DEBUG && console.log(`[ParamSlot] ${pcode} deactivated (pair slots not loaded)`);
+        }
       }
     }
+  }
+
+  /** Deactivate param by signaling to worker that data is not ready */
+  private deactivateParam(param: string): void {
+    this.auroraService.deactivateSlots(param);
   }
 
   /** Map param → layer (backwards compat with Aurora API that expects layer names) */
@@ -316,11 +329,14 @@ export class ParamSlotService {
       }
     }
 
+    // Capture length BEFORE upload (buffer is transferred and detached)
+    const dataLength = data.length;
+
     // Upload to worker with param name directly (param-centric API)
     this.auroraService.uploadData(param, result.slotIndex, data);
 
     // Mark loaded
-    ps.markLoaded(timestep, result.slotIndex, data.length);
+    ps.markLoaded(timestep, result.slotIndex, dataLength);
 
     // Update timestep service (still tracks by layer for timebar UI)
     const layer = this.paramToLayer(param);
