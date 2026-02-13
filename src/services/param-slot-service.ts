@@ -239,34 +239,54 @@ export class ParamSlotService {
     }
   }
 
-  /**
-   * Map param name to weather layer (temporary bridge to old aurora API)
-   * TODO: Aurora should accept params directly
-   */
-  private paramToLayer(param: string): TWeatherLayer | null {
-    // Map common params to their original layer names
-    const paramLayerMap: Record<string, TWeatherLayer> = {
-      'temperature_2m': 'temp',
-      'precipitation': 'rain',
-      'pressure_msl': 'pressure',
-      'wind_u_10m': 'wind',
-      'wind_v_10m': 'wind',
-      'cloud_cover': 'clouds',
-      'relative_humidity_2m': 'humidity',
-    };
-    return paramLayerMap[param] ?? null;
+  /** Map param → layer (backwards compat with Aurora API that expects layer names) */
+  private readonly paramLayerMap: Record<string, string> = {
+    'temperature_2m': 'temp',
+    'precipitation': 'rain',
+    'pressure_msl': 'pressure',
+    'wind_u_component_10m': 'wind',
+    'wind_v_component_10m': 'wind',
+    'cloud_cover': 'clouds',
+    'relative_humidity_2m': 'humidity',
+  };
+
+  /** Map layer → params (for reactive queue which sends layer names) */
+  private readonly layerParamMap: Record<string, string[]> = {
+    'temp': ['temperature_2m'],
+    'rain': ['precipitation'],
+    'pressure': ['pressure_msl'],
+    'wind': ['wind_u_component_10m', 'wind_v_component_10m'],
+    'clouds': ['cloud_cover'],
+    'humidity': ['relative_humidity_2m'],
+  };
+
+  private paramToLayer(param: string): string | null {
+    return this.paramLayerMap[param] ?? null;
+  }
+
+  private layerToParams(layer: string): string[] {
+    return this.layerParamMap[layer] ?? [];
   }
 
   /**
    * Receive and process downloaded data for a param/timestep.
    * Called by QueueService when data download completes.
+   * Note: QueueService sends layer name (temp), we need to map to param (temperature_2m)
    */
-  receiveData(param: string, timestep: TTimestep, slabIndex: number, data: Float32Array): boolean {
-    DEBUG && console.log(`[ParamSlot] receiveData: ${param} ${timestep} slab=${slabIndex}`);
+  receiveData(layerOrParam: string, timestep: TTimestep, slabIndex: number, data: Float32Array): boolean {
+    DEBUG && console.log(`[ParamSlot] receiveData: ${layerOrParam} ${timestep} slab=${slabIndex}`);
 
-    const ps = this.paramSlots.get(param);
+    // Try as param first, then map from layer
+    let param = layerOrParam;
+    let ps = this.paramSlots.get(param);
     if (!ps) {
-      DEBUG && console.log(`[ParamSlot] No slots for param: ${param}`);
+      // Map layer name to params and use slabIndex to pick the right one
+      const params = this.layerToParams(layerOrParam);
+      param = params[slabIndex] ?? params[0] ?? layerOrParam;
+      ps = this.paramSlots.get(param);
+    }
+    if (!ps) {
+      DEBUG && console.log(`[ParamSlot] No slots for param: ${param} (from ${layerOrParam})`);
       return false;
     }
 
