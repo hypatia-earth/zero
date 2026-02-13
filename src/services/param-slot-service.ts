@@ -251,33 +251,17 @@ export class ParamSlotService {
     this.auroraService.deactivateSlots(param);
   }
 
-  /** Map param → layer (backwards compat with Aurora API that expects layer names) */
-  private readonly paramLayerMap: Record<string, string> = {
-    'temperature_2m': 'temp',
-    'precipitation': 'rain',
-    'pressure_msl': 'pressure',
-    'wind_u_component_10m': 'wind',
-    'wind_v_component_10m': 'wind',
-    'cloud_cover': 'clouds',
-    'relative_humidity_2m': 'humidity',
-  };
-
-  /** Map layer → params (for reactive queue which sends layer names) */
-  private readonly layerParamMap: Record<string, string[]> = {
-    'temp': ['temperature_2m'],
-    'rain': ['precipitation'],
-    'pressure': ['pressure_msl'],
-    'wind': ['wind_u_component_10m', 'wind_v_component_10m'],
-    'clouds': ['cloud_cover'],
-    'humidity': ['relative_humidity_2m'],
-  };
-
+  /** Get first built-in layer that uses this param (for TimestepService updates) */
   private paramToLayer(param: string): TWeatherLayer | null {
-    return (this.paramLayerMap[param] as TWeatherLayer) ?? null;
+    const layers = this.layerService.getLayersForParam(param);
+    const builtIn = layers.find(l => l.isBuiltIn);
+    return (builtIn?.id as TWeatherLayer) ?? null;
   }
 
+  /** Get params for a layer (for legacy layer→param conversion) */
   private layerToParams(layer: string): string[] {
-    return this.layerParamMap[layer] ?? [];
+    const decl = this.layerService.getBuiltIn().find(l => l.id === layer);
+    return decl?.params ?? [];
   }
 
   /**
