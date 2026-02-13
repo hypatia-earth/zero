@@ -9,6 +9,7 @@
 import { signal, computed, effect } from '@preact/signals-core';
 import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TWeatherLayer, TTimestep, QueueTask } from '../config/types';
 import { isWeatherLayer } from '../config/types';
+import { USE_PARAM_SLOTS } from '../config/feature-flags';
 import { fetchStreaming } from '../utils/fetch';
 import { calcBandwidth, calcEta, pruneSamples, type Sample } from '../utils/bandwidth';
 import type { OmService } from './om-service';
@@ -588,7 +589,9 @@ export class QueueService implements IQueueService {
       async (slice) => {
         // Only process when all data is received
         if (slice.done && this.slotService) {
-          this.slotService.receiveData(task.param, task.timestep, task.slabIndex, slice.data);
+          // USE_PARAM_SLOTS: pass omParam (param name), otherwise pass layer name
+          const paramKey = USE_PARAM_SLOTS ? task.omParam : task.param;
+          this.slotService.receiveData(paramKey, task.timestep, task.slabIndex, slice.data);
         }
       },
       (bytes) => {

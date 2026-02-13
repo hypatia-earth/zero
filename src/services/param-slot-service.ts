@@ -20,7 +20,7 @@ import type { ConfigService } from './config-service';
 import type { LayerService } from './layer-service';
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
 
-const DEBUG = true;
+const DEBUG = false;
 
 /** Short timestep format for logs: "MM-DDTHH" */
 const fmt = (ts: TTimestep) => ts.slice(5, 13);

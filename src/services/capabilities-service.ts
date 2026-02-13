@@ -5,7 +5,7 @@
  * Adapter is discarded after check - RenderService requests its own.
  */
 
-const DEBUG = true;
+const DEBUG = false;
 
 export class CapabilitiesService {
   float32_filterable = false;
