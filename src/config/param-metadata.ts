@@ -11,6 +11,7 @@ export interface ParamMeta {
   range: [number, number];  // [min, max] for palette mapping
   palette: string;          // suggested palette name
   description?: string;
+  sizeEstimate?: number;    // compressed bytes per timestep (for queue ETA)
 }
 
 export const PARAM_METADATA: Record<string, ParamMeta> = {
@@ -22,6 +23,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     unit: '°C',
     range: [-40, 50],  // Data stored in Celsius
     palette: 'thermal',
+    sizeEstimate: 8_000_000,
   },
   'temperature_2m_max': {
     label: 'Max Temperature (2m)',
@@ -84,6 +86,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     unit: 'mm',
     range: [0, 50],  // 0-50mm/hr (heavy rain)
     palette: 'rain',
+    sizeEstimate: 8_000_000,
   },
   'showers': {
     label: 'Showers',
@@ -158,6 +161,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     unit: '%',
     range: [0, 100],
     palette: 'clouds',
+    sizeEstimate: 8_000_000,
   },
   'cloud_cover_low': {
     label: 'Low Clouds',
@@ -192,12 +196,14 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     unit: 'm/s',
     range: [-50, 50],
     palette: 'diverging',
+    sizeEstimate: 4_100_000,  // ~half of 8.2MB combined
   },
   'wind_v_component_10m': {
     label: 'Wind V (10m)',
     unit: 'm/s',
     range: [-50, 50],
     palette: 'diverging',
+    sizeEstimate: 4_100_000,
   },
   'wind_u_component_100m': {
     label: 'Wind U (100m)',
@@ -238,6 +244,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     unit: 'Pa',
     range: [97000, 105000],  // 970-1050 hPa
     palette: 'pressure',
+    sizeEstimate: 2_000_000,
   },
 
   // ============================================================

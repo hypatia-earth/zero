@@ -15,6 +15,7 @@ import type { LayerService } from './layer-service';
 import { parseTimestep, formatTimestep } from '../utils/timestep';
 import { sendSWMessage } from '../utils/sw-message';
 import { countBeforeTimestep, clearBeforeTimestep } from './sw-registration';
+import { PARAM_METADATA } from '../config/param-metadata';
 
 const DEBUG = false;
 
@@ -701,7 +702,6 @@ export class TimestepService {
     for (const layer of activeLayers) {
       const layerConfig = this.configService.getLayer(layer);
       const omParams = layerConfig?.params ?? [layer];
-      const defaultSize = layerConfig?.defaultSizeEstimate ?? 0;
 
       for (const timestep of window) {
         // Create one task per param (slab)
@@ -713,6 +713,8 @@ export class TimestepService {
           if (paramState?.gpu.has(timestep)) continue;  // Skip if already on GPU
 
           const isFast = paramState?.cache.has(timestep) ?? false;
+          // Size: known from cache, or estimate from PARAM_METADATA
+          const defaultSize = PARAM_METADATA[omParam]?.sizeEstimate ?? 0;
           const sizeEstimate = paramState?.sizes.get(timestep) ?? defaultSize;
           const url = this.url(timestep);
 
