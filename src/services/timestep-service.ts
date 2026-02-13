@@ -698,30 +698,30 @@ export class TimestepService {
     const window = this.getWindow(time, numSlots);
     const tasks: QueueTask[] = [];
 
-    for (const param of activeLayers) {
-      const paramState = this.state.value.params.get(param);
-      if (!paramState) continue;
-
-      const layerConfig = this.configService.getLayer(param);
-      const omParams = layerConfig?.params ?? [param];
+    for (const layer of activeLayers) {
+      const layerConfig = this.configService.getLayer(layer);
+      const omParams = layerConfig?.params ?? [layer];
       const defaultSize = layerConfig?.defaultSizeEstimate ?? 0;
 
       for (const timestep of window) {
-        // Skip if already on GPU
-        if (paramState.gpu.has(timestep)) continue;
-
-        const isFast = paramState.cache.has(timestep);
-        const sizeEstimate = paramState.sizes.get(timestep) ?? defaultSize;
-        const url = this.url(timestep);
-
-        // Create one task per slab
+        // Create one task per param (slab)
         for (let slabIndex = 0; slabIndex < omParams.length; slabIndex++) {
+          const omParam = omParams[slabIndex]!;
+
+          // Check GPU state using param name (state is keyed by param)
+          const paramState = this.state.value.params.get(omParam);
+          if (paramState?.gpu.has(timestep)) continue;  // Skip if already on GPU
+
+          const isFast = paramState?.cache.has(timestep) ?? false;
+          const sizeEstimate = paramState?.sizes.get(timestep) ?? defaultSize;
+          const url = this.url(timestep);
+
           tasks.push({
             url,
-            param,
+            param: layer,  // QueueTask.param is layer name
             timestep,
             sizeEstimate,
-            omParam: omParams[slabIndex]!,
+            omParam,
             slabIndex,
             isFast,
           });

@@ -118,39 +118,41 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       }
 
       const readyWeatherLayers = configService.getReadyLayers().filter(isWeatherLayer);
-      const cachedMap = new Map<TWeatherLayer, Set<string>>();
-      const gpuMap = new Map<TWeatherLayer, Set<string>>();
-      const activeMap = new Map<TWeatherLayer, Set<string>>();
+      const layerParamsMap = new Map<TWeatherLayer, string[]>();
+      const cachedMap = new Map<string, Set<string>>();  // param → timesteps
+      const gpuMap = new Map<string, Set<string>>();     // param → timesteps
+      const activeMap = new Map<string, Set<string>>();  // param → timesteps
 
       for (const layer of readyWeatherLayers) {
         // Get params for this layer
         const layerDecl = layerService.getBuiltIn().find(l => l.id === layer);
         const params = layerDecl?.params ?? [];
+        layerParamsMap.set(layer, params);
 
-        // Aggregate cache/gpu state from all params of this layer
-        const cachedSet = new Set<string>();
-        const gpuSet = new Set<string>();
-
+        // Build per-param state maps
         for (const param of params) {
           const paramState = tsState.params.get(param);
           if (paramState) {
+            const cachedSet = new Set<string>();
             for (const ts of paramState.cache) {
               cachedSet.add(timestepService.toDate(ts).toISOString());
             }
+            cachedMap.set(param, cachedSet);
+
+            const gpuSet = new Set<string>();
             for (const ts of paramState.gpu) {
               gpuSet.add(timestepService.toDate(ts).toISOString());
             }
+            gpuMap.set(param, gpuSet);
+
+            // Active timesteps - query slot service with param name
+            const activeSet = new Set<string>();
+            for (const ts of slotService.getActiveTimesteps(param)) {
+              activeSet.add(timestepService.toDate(ts).toISOString());
+            }
+            activeMap.set(param, activeSet);
           }
         }
-
-        cachedMap.set(layer, cachedSet);
-        gpuMap.set(layer, gpuSet);
-
-        const activeSet = new Set<string>();
-        for (const ts of slotService.getActiveTimesteps(layer)) {
-          activeSet.add(timestepService.toDate(ts).toISOString());
-        }
-        activeMap.set(layer, activeSet);
       }
 
       // Filter to enabled layers
@@ -176,6 +178,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
           canvas,
           window,
           activeLayers,
+          layerParams: layerParamsMap,
           ecmwfSet,
           cachedMap,
           gpuMap,

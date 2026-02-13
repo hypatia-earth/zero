@@ -43,10 +43,11 @@ export interface TimebarRenderParams {
   canvas: HTMLCanvasElement;
   window: { start: Date; end: Date };
   activeLayers: TWeatherLayer[];
+  layerParams: Map<TWeatherLayer, string[]>;  // params per layer
   ecmwfSet: Set<string>;
-  cachedMap: Map<TWeatherLayer, Set<string>>;
-  gpuMap: Map<TWeatherLayer, Set<string>>;
-  activeMap: Map<TWeatherLayer, Set<string>>;
+  cachedMap: Map<string, Set<string>>;  // param → cached timesteps
+  gpuMap: Map<string, Set<string>>;     // param → gpu timesteps
+  activeMap: Map<string, Set<string>>;  // param → active timesteps
   wantedSet: Set<string>;
   nowTime: Date;
   viewTime: Date;
@@ -64,7 +65,7 @@ function formatDate(date: Date): string {
 
 export function renderTimebar(params: TimebarRenderParams): void {
   const {
-    canvas, window, activeLayers, ecmwfSet, cachedMap, gpuMap, activeMap,
+    canvas, window, activeLayers, layerParams, ecmwfSet, cachedMap, gpuMap, activeMap,
     wantedSet, nowTime, viewTime, cameraLat, cameraLon, sunEnabled, themeService
   } = params;
 
@@ -98,7 +99,7 @@ export function renderTimebar(params: TimebarRenderParams): void {
 
   // Draw ticks (disk area)
   drawTicks(ctx, {
-    diskTop, diskHeight: L.diskHeight, activeLayers, ecmwfSet, cachedMap, gpuMap, activeMap,
+    diskTop, diskHeight: L.diskHeight, activeLayers, layerParams, ecmwfSet, cachedMap, gpuMap, activeMap,
     getT, getX, cameraLat, cameraLon, sunEnabled, themeService
   });
 
@@ -123,10 +124,11 @@ interface TickParams {
   diskTop: number;
   diskHeight: number;
   activeLayers: TWeatherLayer[];
+  layerParams: Map<TWeatherLayer, string[]>;
   ecmwfSet: Set<string>;
-  cachedMap: Map<TWeatherLayer, Set<string>>;
-  gpuMap: Map<TWeatherLayer, Set<string>>;
-  activeMap: Map<TWeatherLayer, Set<string>>;
+  cachedMap: Map<string, Set<string>>;   // param → timesteps
+  gpuMap: Map<string, Set<string>>;      // param → timesteps
+  activeMap: Map<string, Set<string>>;   // param → timesteps
   getT: (ts: string) => number;
   getX: (t: number) => number;
   cameraLat: number;
@@ -135,21 +137,23 @@ interface TickParams {
   themeService: ThemeService;
 }
 
+const PARAM_GAP = 1;  // 1px gap between param sub-rows
+
 function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
   const {
-    diskTop, diskHeight: totalDiskHeight, activeLayers, ecmwfSet, cachedMap, gpuMap, activeMap,
+    diskTop, diskHeight: totalDiskHeight, activeLayers, layerParams, ecmwfSet, cachedMap, gpuMap, activeMap,
     getT, getX, cameraLat, cameraLon, sunEnabled, themeService
   } = params;
 
   const layerCount = activeLayers.length || 1;
   const layerHeight = totalDiskHeight / layerCount;
-  const baseTickHeight = layerHeight * TICK_HEIGHT_RATIO;
 
   const ecmwfColor = themeService.getColor('color-timebar-ecmwf').css;
   const activeColor = themeService.getColor('color-timebar-active').css;
 
   if (activeLayers.length === 0) {
     // No weather layers: show grey ECMWF ticks
+    const baseTickHeight = layerHeight * TICK_HEIGHT_RATIO;
     ecmwfSet.forEach(tsKey => {
       const t = getT(tsKey);
       const x = getX(t);
@@ -164,32 +168,43 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
       ctx.globalAlpha = 1.0;
     });
   } else {
-    // Weather layers active: show layer-colored ticks
-    activeLayers.forEach((layer, rowIndex) => {
-      const cached = cachedMap.get(layer)!;
-      const gpu = gpuMap.get(layer)!;
-      const active = activeMap.get(layer)!;
+    // Weather layers active: show layer-colored ticks with param sub-rows
+    activeLayers.forEach((layer, layerIndex) => {
+      const params = layerParams.get(layer) ?? [];
+      const paramCount = params.length || 1;
       const layerColor = themeService.getColor(`color-layer-${layer}`, 1.1, 1.2).css;
       const layerDimColor = themeService.getColor(`color-layer-${layer}`, 0.67, 0.67).css;
-      const rowTopY = diskTop + rowIndex * layerHeight;
+      const layerTopY = diskTop + layerIndex * layerHeight;
 
-      ecmwfSet.forEach(tsKey => {
-        const t = getT(tsKey);
-        const x = getX(t);
-        const tickH = baseTickHeight * diskHeight(t);
-        const topY = rowTopY + (layerHeight - tickH) / 2;
+      // Calculate sub-row height with gaps
+      const totalGaps = (paramCount - 1) * PARAM_GAP;
+      const paramHeight = (layerHeight - totalGaps) / paramCount;
+      const baseTickHeight = paramHeight * TICK_HEIGHT_RATIO;
 
-        let color = ecmwfColor;
-        if (cached.has(tsKey)) color = layerDimColor;
-        if (gpu.has(tsKey)) color = layerColor;
-        if (active.has(tsKey)) color = activeColor;
+      params.forEach((param, paramIndex) => {
+        const cached = cachedMap.get(param) ?? new Set();
+        const gpu = gpuMap.get(param) ?? new Set();
+        const active = activeMap.get(param) ?? new Set();
+        const paramTopY = layerTopY + paramIndex * (paramHeight + PARAM_GAP);
 
-        if (sunEnabled) {
-          ctx.globalAlpha = getSunBrightness(cameraLat, cameraLon, new Date(tsKey));
-        }
-        ctx.fillStyle = color;
-        ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickH);
-        ctx.globalAlpha = 1.0;
+        ecmwfSet.forEach(tsKey => {
+          const t = getT(tsKey);
+          const x = getX(t);
+          const tickH = baseTickHeight * diskHeight(t);
+          const topY = paramTopY + (paramHeight - tickH) / 2;
+
+          let color = ecmwfColor;
+          if (cached.has(tsKey)) color = layerDimColor;
+          if (gpu.has(tsKey)) color = layerColor;
+          if (active.has(tsKey)) color = activeColor;
+
+          if (sunEnabled) {
+            ctx.globalAlpha = getSunBrightness(cameraLat, cameraLon, new Date(tsKey));
+          }
+          ctx.fillStyle = color;
+          ctx.fillRect(x - TICK_WIDTH / 2, topY, TICK_WIDTH, tickH);
+          ctx.globalAlpha = 1.0;
+        });
       });
     });
   }
