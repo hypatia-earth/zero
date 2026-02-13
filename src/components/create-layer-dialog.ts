@@ -48,7 +48,7 @@ fn blend{BlendName}(color: vec4f, lat: f32, lon: f32) -> vec4f {
   if (opacity <= 0.0) { return color; }
 
   // Sample data at this location
-  let cell = tempLatLonToCell(lat, lon);
+  let cell = o1280LatLonToCell(lat, lon);
   let value = tempData0[cell];
 
   // Values outside data range → blue (for debugging)

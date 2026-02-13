@@ -10,6 +10,7 @@ import { getMainShaders, getPostShaders } from './shader-loader';
 
 // Import shader modules
 import commonCode from './shaders/common.wgsl?raw';
+import projectionO1280Code from './shaders/projection-o1280.wgsl?raw';
 import sunAtmoCode from '../layers/sun/atmo.wgsl?raw';
 import logoCode from './shaders/logo.wgsl?raw';
 import mainTemplateCode from './shaders/main-template.wgsl?raw';
@@ -73,6 +74,7 @@ export class ShaderComposer {
     // 1. Common utilities (ray-sphere intersection, constants)
     parts.push(sunAtmoCode);  // Atmosphere functions needed by other shaders
     parts.push(commonCode);
+    parts.push(projectionO1280Code);  // O1280 Gaussian grid projection
 
     // 2. Logo shader
     parts.push(logoCode);
