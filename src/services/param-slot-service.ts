@@ -32,6 +32,9 @@ export class ParamSlotService {
   /** Slots keyed by param name (e.g., 'temperature_2m'), not layer name */
   private paramSlots: Map<string, ParamSlots> = new Map();
 
+  /** Params in test mode - ignore real data from queue */
+  private testModeParams: Set<string> = new Set();
+
   private timeslotsPerLayer: number = 8;
   private disposeEffect: (() => void) | null = null;
   private initialized = false;
@@ -286,6 +289,12 @@ export class ParamSlotService {
       return false;
     }
 
+    // Skip real data when in test mode
+    if (this.testModeParams.has(param)) {
+      DEBUG && console.log(`[ParamSlot] ${P(param)} skip (test mode)`);
+      return false;
+    }
+
     // Skip if timestep no longer in wanted window
     if (!ps.wanted.value?.window.includes(timestep)) {
       ps.clearLoading(timestep);
@@ -485,6 +494,40 @@ export class ParamSlotService {
   /** Set Gaussian LUTs for synthetic data generation (TODO: implement) */
   setGaussianLats(_lats: Float32Array): void {
     // TODO: implement synthetic data support
+  }
+
+  /**
+   * Inject test data directly - bypasses queue/fetch.
+   * @param layer Layer name (e.g., 'pressure') - mapped to params via LayerService
+   * @param data Float32Array or array of Float32Arrays (for multi-param layers like wind)
+   */
+  injectTestData(layer: string, data: Float32Array | Float32Array[]): void {
+    const layerDecl = this.layerService.get(layer);
+    if (!layerDecl?.params?.length) {
+      console.warn(`[ParamSlot] injectTestData: no params for layer ${layer}`);
+      return;
+    }
+
+    const slabs = Array.isArray(data) ? data : [data];
+    const points = slabs[0]!.length;
+
+    // Upload each slab to corresponding param
+    for (let i = 0; i < layerDecl.params.length && i < slabs.length; i++) {
+      const param = layerDecl.params[i]!;
+      // Mark as test mode - ignore real data from queue
+      this.testModeParams.add(param);
+      this.auroraService.uploadData(param, 0, slabs[i]!);
+      const t = Date.now();
+      this.auroraService.activateSlots(param, 0, 0, t, t, points);
+    }
+  }
+
+  /** Exit test mode for a layer (re-enable real data) */
+  exitTestMode(layer: string): void {
+    const layerDecl = this.layerService.get(layer);
+    for (const param of layerDecl?.params ?? []) {
+      this.testModeParams.delete(param);
+    }
   }
 
   dispose(): void {
