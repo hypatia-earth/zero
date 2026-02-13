@@ -260,8 +260,8 @@ export class ParamSlotService {
     'humidity': ['relative_humidity_2m'],
   };
 
-  private paramToLayer(param: string): string | null {
-    return this.paramLayerMap[param] ?? null;
+  private paramToLayer(param: string): TWeatherLayer | null {
+    return (this.paramLayerMap[param] as TWeatherLayer) ?? null;
   }
 
   private layerToParams(layer: string): string[] {
