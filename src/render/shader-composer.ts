@@ -13,9 +13,9 @@ import commonCode from './shaders/common.wgsl?raw';
 import sunAtmoCode from '../layers/sun/atmo.wgsl?raw';
 import logoCode from './shaders/logo.wgsl?raw';
 import mainTemplateCode from './shaders/main-template.wgsl?raw';
-import sunPostCode from './shaders/sun-post.wgsl?raw';
-import sunCode from './shaders/sun.wgsl?raw';
-import sunBlendCode from './shaders/sun-blend.wgsl?raw';
+import sunPostCode from '../layers/sun/post.wgsl?raw';
+import sunCode from '../layers/sun/sun.wgsl?raw';
+import sunBlendCode from '../layers/sun/blend.wgsl?raw';
 
 export interface ComposedShaders {
   main: string;

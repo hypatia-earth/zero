@@ -6,17 +6,17 @@
  */
 
 import type { LayerService } from '../services/layer-service';
-import { shaderComposer } from './shader-composer';
+import { shaderComposer } from '../render/shader-composer';
 import { USE_DECLARATIVE_LAYERS } from '../config/feature-flags';
 
 // Import layer declarations from folders
-import { layer as earthLayer } from '../layers/earth';
-import { layer as sunLayer } from '../layers/sun';
-import { layer as gridLayer } from '../layers/grid';
-import { layer as tempLayer } from '../layers/temp';
-import { layer as rainLayer } from '../layers/rain';
-import { layer as pressureLayer } from '../layers/pressure';
-import { layer as windLayer } from '../layers/wind';
+import { layer as earthLayer } from './earth';
+import { layer as sunLayer } from './sun';
+import { layer as gridLayer } from './grid';
+import { layer as tempLayer } from './temp';
+import { layer as rainLayer } from './rain';
+import { layer as pressureLayer } from './pressure';
+import { layer as windLayer } from './wind';
 
 // Re-export for consumers
 export { earthLayer, sunLayer, gridLayer, tempLayer, rainLayer, pressureLayer, windLayer };

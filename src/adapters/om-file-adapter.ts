@@ -6,7 +6,7 @@
  */
 
 import { fetchSuffix, fetchRange, type CacheLayer } from '../utils/fetch';
-import { builtInLayers } from '../render/built-in-layers';
+import { builtInLayers } from '../layers';
 import type { TParam, TWeatherLayer } from '../config/types';
 
 // Build param -> layer lookup from built-in layer declarations

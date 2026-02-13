@@ -11,7 +11,7 @@
  *   );
  */
 
-import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders } from '../services/layer-service';
+import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders } from './layer-service';
 import type { TLayerCategory, SlabConfig } from '../config/types';
 
 export interface LayerFeature {

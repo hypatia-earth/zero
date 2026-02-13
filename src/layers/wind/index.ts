@@ -1,7 +1,7 @@
 export { WindLayer } from './wind-layer';
 export { createWindPalette } from './wind-palette';
 
-import { defineLayer, withUI, withParams, withSlabs, withOptions, withCompute, withRender, asBuiltIn } from '../../render/layer-builder';
+import { defineLayer, withUI, withParams, withSlabs, withOptions, withCompute, withRender, asBuiltIn } from '../../services/layer-builder';
 
 export const layer = defineLayer('wind',
   withUI('Wind', 'Wind', 'weather'),

@@ -7,9 +7,9 @@ import staticShaderCode from './shaders/zero-main.wgsl?raw';
 import staticPostprocessShaderCode from './shaders/zero-post.wgsl?raw';
 import type { ComposedShaders } from './shader-composer';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
-import { PressureLayer, type PressureResolution, type SmoothingAlgorithm } from './pressure-layer';
-import { WindLayer } from './wind-layer';
-import { GridAnimator, GRID_BUFFER_SIZE } from './grid-animator';
+import { PressureLayer, type PressureResolution, type SmoothingAlgorithm } from '../layers/pressure';
+import { WindLayer } from '../layers/wind';
+import { GridAnimator, GRID_BUFFER_SIZE } from '../layers/grid/grid-animator';
 import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 

@@ -22,7 +22,7 @@ import { PaletteService } from '../services/palette-service';
 import { KeyboardService } from '../services/keyboard-service';
 import { PerfService } from '../services/perf-service';
 import { LayerService } from '../services/layer-service';
-import { registerBuiltInLayers } from '../render/built-in-layers';
+import { registerBuiltInLayers } from '../layers';
 import { USE_PARAM_SLOTS } from '../config/feature-flags';
 
 export interface ServiceContainer {

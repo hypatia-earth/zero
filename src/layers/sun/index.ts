@@ -1,4 +1,4 @@
-import { defineLayer, withType, withUI, withOptions, withBlend, withPost, withRender, asBuiltIn } from '../../render/layer-builder';
+import { defineLayer, withType, withUI, withOptions, withBlend, withPost, withRender, asBuiltIn } from '../../services/layer-builder';
 
 export const layer = defineLayer('sun',
   withType('decoration'),

@@ -9,7 +9,7 @@
  * When enabled, renders a solid brown color on the globe surface.
  */
 
-import { defineLayer, withOptions, withSolidColor, withRender } from '../../render/layer-builder';
+import { defineLayer, withOptions, withSolidColor, withRender } from '../../services/layer-builder';
 
 export const jokerLayer = defineLayer('joker',
   withSolidColor(),

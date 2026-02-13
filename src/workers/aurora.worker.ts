@@ -12,14 +12,14 @@
 import type { CameraConfig } from '../render/camera';
 import type { TWeatherLayer, TWeatherTextureLayer, SlabConfig } from '../config/types';
 import { GlobeRenderer, type GlobeUniforms } from '../render/globe-renderer';
-import { generateIsobarLevels, type SmoothingAlgorithm } from '../render/pressure-layer';
+import { generateIsobarLevels, type SmoothingAlgorithm } from '../layers/pressure/pressure-layer';
 import { LayerStore } from '../services/layer-store';
 import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.schema';
 import { getSunDirection } from '../utils/sun-position';
 import { USE_DECLARATIVE_LAYERS } from '../config/feature-flags';
 import { shaderComposer } from '../render/shader-composer';
 import { LayerService } from '../services/layer-service';
-import { registerBuiltInLayers } from '../render/built-in-layers';
+import { registerBuiltInLayers } from '../layers';
 
 // ============================================================
 // Palette types for temp layer

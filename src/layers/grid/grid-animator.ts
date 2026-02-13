@@ -5,8 +5,8 @@
  * LoD level changes based on altitude with hysteresis.
  */
 
-import { defaultConfig } from '../config/defaults';
-import type { GridLodLevel } from '../config/types';
+import { defaultConfig } from '../../config/defaults';
+import type { GridLodLevel } from '../../config/types';
 
 const DEBUG = false;
 
