@@ -292,9 +292,6 @@ export interface ZeroConfig {
     defaultDistance: number;
   };
 
-  /** Layer definitions */
-  layers: LayerConfig[];
-
   /** Default active layers */
   defaultLayers: TLayer[];
 

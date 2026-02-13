@@ -1,8 +1,10 @@
-import { defineLayer, withType, withParams, withOptions, withBlend, withRender, asBuiltIn } from '../../render/layer-builder';
+import { defineLayer, withType, withUI, withParams, withSlabs, withOptions, withBlend, withRender, asBuiltIn } from '../../render/layer-builder';
 
 export const layer = defineLayer('rain',
   withType('texture'),
+  withUI('Precipitation', 'Rain', 'weather'),
   withParams(['precipitation']),
+  withSlabs([{ name: 'data', sizeMB: 26 }]),
   withOptions(['rain.enabled', 'rain.opacity']),
   withBlend('blendRain'),
   withRender({ pass: 'surface', order: 20 }),

@@ -46,32 +46,7 @@ export const defaultConfig: ZeroConfig = {
     defaultDistance: 3.2,
   },
 
-  // Layer UI config - params here are legacy, LayerService is authority
-  layers: [
-    { id: 'earth', label: 'Earth', buttonLabel: 'Earth', category: 'celestial' },
-    { id: 'sun', label: 'Sun', buttonLabel: 'Sun', category: 'celestial' },
-    { id: 'grid', label: 'Grid', buttonLabel: 'Grid', category: 'reference' },
-    {
-      id: 'temp', label: 'Temperature', buttonLabel: 'Temperature', category: 'weather',
-      params: ['temperature_2m'],
-      slabs: [{ name: 'data', sizeMB: 26 }],
-    },
-    {
-      id: 'rain', label: 'Precipitation', buttonLabel: 'Rain', category: 'weather',
-      params: ['precipitation'],
-      slabs: [{ name: 'data', sizeMB: 26 }],
-    },
-    {
-      id: 'wind', label: 'Wind', buttonLabel: 'Wind', category: 'weather',
-      params: ['wind_u_component_10m', 'wind_v_component_10m'],
-      slabs: [{ name: 'u', sizeMB: 26 }, { name: 'v', sizeMB: 26 }],
-    },
-    {
-      id: 'pressure', label: 'Pressure', buttonLabel: 'Pressure', category: 'weather',
-      params: ['pressure_msl'],
-      slabs: [{ name: 'raw', sizeMB: 26 }, { name: 'grid', sizeMB: 1 }],
-    },
-  ],
+  // Layer config now in src/layers/*/index.ts, read via LayerService
 
   defaultLayers: ['earth', 'sun', 'temp'],
   readyLayers: ['earth', 'sun', 'grid', 'temp', 'pressure', 'wind'],

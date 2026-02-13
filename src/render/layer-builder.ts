@@ -12,6 +12,7 @@
  */
 
 import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders } from '../services/layer-service';
+import type { TLayerCategory, SlabConfig } from '../config/types';
 
 export interface LayerFeature {
   apply(declaration: Partial<LayerDeclaration>): Partial<LayerDeclaration>;
@@ -44,9 +45,21 @@ export function withParams(params: string[]): LayerFeature {
   };
 }
 
+export function withSlabs(slabs: SlabConfig[]): LayerFeature {
+  return {
+    apply: (d) => ({ ...d, slabs }),
+  };
+}
+
 export function withOptions(paths: string[]): LayerFeature {
   return {
     apply: (d) => ({ ...d, options: paths }),
+  };
+}
+
+export function withUI(label: string, buttonLabel: string, category: TLayerCategory): LayerFeature {
+  return {
+    apply: (d) => ({ ...d, label, buttonLabel, category }),
   };
 }
 

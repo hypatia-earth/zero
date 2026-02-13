@@ -9,6 +9,7 @@
  */
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
+import type { TLayerCategory, SlabConfig } from '../config/types';
 
 export type LayerType = 'decoration' | 'texture' | 'geometry' | 'solid';
 export type ComputeTrigger = 'data-ready' | 'time-change';
@@ -24,7 +25,13 @@ export interface LayerShaders {
 export interface LayerDeclaration {
   id: string;
   type: LayerType;
+  // UI metadata
+  label?: string;              // Full name (e.g., "Temperature")
+  buttonLabel?: string;        // Short name for UI buttons (e.g., "Temp")
+  category?: TLayerCategory;   // celestial, weather, reference, custom
+  // Runtime config
   params?: string[];           // Data params to fetch (e.g., ['temperature_2m'])
+  slabs?: SlabConfig[];        // GPU buffer slabs (e.g., [{ name: 'data', sizeMB: 26 }])
   options?: string[];          // Option paths to watch (e.g., ['temp.enabled'])
   blendFn?: string;            // Fragment shader blend function name
   postFn?: string;             // Post-process function name

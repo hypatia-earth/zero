@@ -6,12 +6,12 @@
  */
 
 import { fetchSuffix, fetchRange, type CacheLayer } from '../utils/fetch';
-import { defaultConfig } from '../config/defaults';
+import { builtInLayers } from '../render/built-in-layers';
 import type { TParam, TWeatherLayer } from '../config/types';
 
-// Build param -> layer lookup from config
+// Build param -> layer lookup from built-in layer declarations
 const PARAM_TO_LAYER: Record<TParam, TWeatherLayer> = Object.fromEntries(
-  defaultConfig.layers.flatMap(layer =>
+  builtInLayers.flatMap(layer =>
     layer.params?.map(param => [param, layer.id]) ?? []
   )
 ) as Record<TParam, TWeatherLayer>;

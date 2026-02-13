@@ -3,15 +3,25 @@
  *
  * Loads runtime config from /config/zero.config.json in production,
  * falls back to compiled defaults in development.
+ *
+ * Layer UI config (label, buttonLabel, category) comes from LayerService.
+ * Extra layer config (slabs, etc.) still comes from defaults.ts.
  */
 
 import { defaultConfig, EARTH_RADIUS } from '../config/defaults';
-import type { ZeroConfig, TLayer, LayerConfig, AppConfig, DiscoveryConfig } from '../config/types';
+import type { ZeroConfig, TLayer, TParam, LayerConfig, AppConfig, DiscoveryConfig, TLayerCategory } from '../config/types';
 import { deepMerge } from '../utils/object';
+import type { LayerService } from './layer-service';
 
 export class ConfigService {
   private config: ZeroConfig = defaultConfig;
   private initialized = false;
+  private layerService: LayerService | null = null;
+
+  /** Set LayerService reference (called after both services created) */
+  setLayerService(layerService: LayerService): void {
+    this.layerService = layerService;
+  }
 
   /**
    * Initialize config by loading runtime overrides.
@@ -57,11 +67,21 @@ export class ConfigService {
   }
 
   getLayers(): LayerConfig[] {
-    return this.config.layers;
+    if (!this.layerService) {
+      throw new Error('ConfigService.getLayers() called before LayerService was set');
+    }
+    return this.layerService.getBuiltIn().map(decl => ({
+      id: decl.id as TLayer,
+      label: decl.label ?? decl.id,
+      buttonLabel: decl.buttonLabel ?? decl.id,
+      category: decl.category ?? 'custom' as TLayerCategory,
+      ...(decl.params && { params: decl.params as TParam[] }),
+      ...(decl.slabs && { slabs: decl.slabs }),
+    }));
   }
 
   getLayer(id: TLayer): LayerConfig | undefined {
-    return this.config.layers.find(l => l.id === id);
+    return this.getLayers().find(l => l.id === id);
   }
 
   getDefaultLayers(): TLayer[] {
@@ -82,7 +102,9 @@ export class ConfigService {
 
   /** Find which layer provides a given param (e.g., "temperature_2m" → "temp") */
   getLayerForParam(param: string): TLayer | undefined {
-    const layer = this.config.layers.find(l => l.params?.some(p => p === param));
-    return layer?.id as TLayer | undefined;
+    if (!this.layerService) return undefined;
+    const layers = this.layerService.getLayersForParam(param);
+    const builtIn = layers.find(l => l.isBuiltIn);
+    return builtIn?.id as TLayer | undefined;
   }
 }
