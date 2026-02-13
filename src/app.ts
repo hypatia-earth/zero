@@ -111,6 +111,7 @@ export const App: m.ClosureComponent = () => {
               timestepService: services.timestepService!,
               configService: services.configService!,
               themeService: services.themeService!,
+              layerService: services.layerService!,
             }),
           ]),
         ] : []),

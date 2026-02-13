@@ -305,12 +305,9 @@ export class ParamSlotService {
       return false;
     }
 
-    // Handle eviction - timestepService still tracks by layer for UI
+    // Handle eviction
     if (result.evicted) {
-      const layer = this.paramToLayer(param);
-      if (layer) {
-        this.timestepService.setGpuUnloaded(layer, result.evicted);
-      }
+      this.timestepService.setGpuUnloaded(param, result.evicted);
     }
 
     // Capture length BEFORE upload (buffer is transferred and detached)
@@ -322,12 +319,9 @@ export class ParamSlotService {
     // Mark loaded
     ps.markLoaded(timestep, result.slotIndex, dataLength);
 
-    // Update timestep service (still tracks by layer for timebar UI)
-    const layer = this.paramToLayer(param);
-    if (layer) {
-      this.timestepService.setGpuLoaded(layer, timestep);
-      this.timestepService.setCached(layer, timestep, data.byteLength);
-    }
+    // Update timestep service (param-centric)
+    this.timestepService.setGpuLoaded(param, timestep);
+    this.timestepService.setCached(param, timestep, data.byteLength);
 
     this.slotsVersion.value++;
     this.updateShaderIfReady(param, ps);
@@ -401,6 +395,7 @@ export class ParamSlotService {
 
       DEBUG && console.log(`[ParamSlot] ${P(param)} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
 
+      // Get layer name for QueueTask.param (legacy field)
       const layer = this.paramToLayer(param);
       if (!layer) continue;
 
@@ -408,9 +403,9 @@ export class ParamSlotService {
         ps.setLoading([ts]);
         allOrders.push({
           url: this.timestepService.url(ts),
-          param: layer,
+          param: layer,  // Legacy: QueueTask expects layer name
           timestep: ts,
-          sizeEstimate: this.timestepService.getSize(layer, ts),
+          sizeEstimate: this.timestepService.getSize(param, ts),  // Use param directly
           slabIndex: 0,
           omParam: param,
         });

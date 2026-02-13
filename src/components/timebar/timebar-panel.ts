@@ -17,6 +17,7 @@ import type { OptionsService } from '../../services/options-service';
 import type { ConfigService } from '../../services/config-service';
 import type { ThemeService } from '../../services/theme-service';
 import type { StateService } from '../../services/state-service';
+import type { LayerService } from '../../services/layer-service';
 import { diskUnwarp } from './timebar-math';
 import { renderTimebar, getTimebarHeight } from './timebar-renderer';
 
@@ -27,6 +28,7 @@ interface TimeBarPanelAttrs {
   timestepService: TimestepService;
   configService: ConfigService;
   themeService: ThemeService;
+  layerService: LayerService;
 }
 
 export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode) => {
@@ -54,7 +56,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     },
 
     view({ attrs }) {
-      const { optionsService, stateService, slotService, timestepService, configService, themeService } = attrs;
+      const { optionsService, stateService, slotService, timestepService, configService, themeService, layerService } = attrs;
 
       // Derive window
       const window = {
@@ -121,18 +123,27 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       const activeMap = new Map<TWeatherLayer, Set<string>>();
 
       for (const layer of readyWeatherLayers) {
-        const paramState = tsState.params.get(layer)!;
+        // Get params for this layer
+        const layerDecl = layerService.getBuiltIn().find(l => l.id === layer);
+        const params = layerDecl?.params ?? [];
 
+        // Aggregate cache/gpu state from all params of this layer
         const cachedSet = new Set<string>();
-        for (const ts of paramState.cache) {
-          cachedSet.add(timestepService.toDate(ts).toISOString());
-        }
-        cachedMap.set(layer, cachedSet);
-
         const gpuSet = new Set<string>();
-        for (const ts of paramState.gpu) {
-          gpuSet.add(timestepService.toDate(ts).toISOString());
+
+        for (const param of params) {
+          const paramState = tsState.params.get(param);
+          if (paramState) {
+            for (const ts of paramState.cache) {
+              cachedSet.add(timestepService.toDate(ts).toISOString());
+            }
+            for (const ts of paramState.gpu) {
+              gpuSet.add(timestepService.toDate(ts).toISOString());
+            }
+          }
         }
+
+        cachedMap.set(layer, cachedSet);
         gpuMap.set(layer, gpuSet);
 
         const activeSet = new Set<string>();

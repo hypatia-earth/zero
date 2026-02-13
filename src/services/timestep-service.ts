@@ -11,6 +11,7 @@
 import { signal } from '@preact/signals-core';
 import { isWeatherLayer, type TWeatherLayer, type TTimestep, type TModel, type Timestep, type QueueTask } from '../config/types';
 import type { ConfigService } from './config-service';
+import type { LayerService } from './layer-service';
 import { parseTimestep, formatTimestep } from '../utils/timestep';
 import { sendSWMessage } from '../utils/sw-message';
 import { countBeforeTimestep, clearBeforeTimestep } from './sw-registration';
@@ -37,7 +38,7 @@ export interface ParamState {
 /** TimestepService state exposed via signal */
 export interface TimestepState {
   ecmwf: Set<TTimestep>;
-  params: Map<TWeatherLayer, ParamState>;
+  params: Map<string, ParamState>;  // Keyed by param name (e.g., 'temperature_2m')
 }
 
 /** SW cache layer detail response */
@@ -50,7 +51,7 @@ interface LayerDetail {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 4-letter uppercase param code for logs */
-const P = (param: TWeatherLayer) => param.slice(0, 4).toUpperCase();
+const P = (param: string) => param.slice(0, 4).toUpperCase();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TimestepService
@@ -70,7 +71,10 @@ export class TimestepService {
     params: new Map(),  // Populated by explore()
   });
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private layerService: LayerService,
+  ) {
     const config = this.configService.getDiscovery();
     this.bucketRoot = config.root.replace(/\/data_spatial\/?$/, '');
     this.defaultModel = config.default;
@@ -108,17 +112,27 @@ export class TimestepService {
       ecmwf.add(ts.timestep);
     }
 
-    // Query SW cache for ready weather layers only
-    const params = new Map<TWeatherLayer, ParamState>();
+    // Query SW cache per layer, then create param entries
+    // SW cache is organized by layer (legacy), but we track by param
+    const params = new Map<string, ParamState>();
     const readyWeatherLayers = this.configService.getReadyLayers().filter(isWeatherLayer);
-    for (const param of readyWeatherLayers) {
-      await onProgress?.('cache', param);
-      const { cache, sizes } = await this.querySWCache(param);
-      params.set(param, { cache, gpu: new Set(), sizes });
+    for (const layer of readyWeatherLayers) {
+      await onProgress?.('cache', layer);
+      const { cache, sizes } = await this.querySWCache(layer);
+
+      // Get params for this layer and create entries for each
+      const layerDecl = this.layerService.getBuiltIn().find(l => l.id === layer);
+      const layerParams = layerDecl?.params ?? [layer];  // Fallback to layer name if no params
+
+      for (const param of layerParams) {
+        // All params of same layer share cache state (SW cache is per-layer)
+        params.set(param, { cache, gpu: new Set(), sizes });
+      }
+
       const avgMB = sizes.size > 0
         ? ([...sizes.values()].reduce((a, b) => a + b, 0) / sizes.size / 1024 / 1024).toFixed(1)
         : '0';
-      console.log(`[Timestep] ${P(param)}: ${sizes.size} cached, avg ${avgMB}MB`);
+      console.log(`[Timestep] ${P(layer)}: ${sizes.size} cached, avg ${avgMB}MB`);
     }
 
     this.state.value = { ecmwf, params };
@@ -385,7 +399,7 @@ export class TimestepService {
   // SW Cache Query
   // ─────────────────────────────────────────────────────────────────────────────
 
-  private async querySWCache(param: TWeatherLayer): Promise<{ cache: Set<TTimestep>; sizes: Map<TTimestep, number> }> {
+  private async querySWCache(param: string): Promise<{ cache: Set<TTimestep>; sizes: Map<TTimestep, number> }> {
     const cache = new Set<TTimestep>();
     const sizes = new Map<TTimestep, number>();
     const rangeCount = new Map<TTimestep, number>();
@@ -460,7 +474,7 @@ export class TimestepService {
   // GPU State Management
   // ─────────────────────────────────────────────────────────────────────────────
 
-  setGpuLoaded(param: TWeatherLayer, timestep: TTimestep): void {
+  setGpuLoaded(param: string, timestep: TTimestep): void {
     const current = this.state.value;
     const paramState = current.params.get(param);
     if (!paramState) return;
@@ -470,7 +484,7 @@ export class TimestepService {
   }
 
   /** Mark timestep as cached (called after successful fetch) */
-  setCached(param: TWeatherLayer, timestep: TTimestep, sizeBytes: number): void {
+  setCached(param: string, timestep: TTimestep, sizeBytes: number): void {
     const current = this.state.value;
     const paramState = current.params.get(param);
     if (!paramState) return;
@@ -483,7 +497,7 @@ export class TimestepService {
   }
 
   /** Refresh cache state for a param from SW */
-  async refreshCacheState(param: TWeatherLayer): Promise<void> {
+  async refreshCacheState(param: string): Promise<void> {
     const { cache, sizes } = await this.querySWCache(param);
 
     // Don't wipe cache state if SW query failed or returned empty
@@ -503,7 +517,7 @@ export class TimestepService {
     this.state.value = { ...current };
   }
 
-  setGpuUnloaded(param: TWeatherLayer, timestep: TTimestep): void {
+  setGpuUnloaded(param: string, timestep: TTimestep): void {
     const current = this.state.value;
     const paramState = current.params.get(param);
     if (!paramState) return;
@@ -513,7 +527,7 @@ export class TimestepService {
   }
 
   /** Clear all GPU state for a layer (used when shrinking slots) */
-  clearGpuState(param: TWeatherLayer): void {
+  clearGpuState(param: string): void {
     const current = this.state.value;
     const paramState = current.params.get(param);
     if (!paramState) return;
@@ -523,7 +537,7 @@ export class TimestepService {
   }
 
   /** Set GPU state for a layer (used after smart shrink) */
-  setGpuState(param: TWeatherLayer, timesteps: Set<TTimestep>): void {
+  setGpuState(param: string, timesteps: Set<TTimestep>): void {
     const current = this.state.value;
     const paramState = current.params.get(param);
     if (!paramState) return;
@@ -540,12 +554,12 @@ export class TimestepService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   /** Get known size for a timestep (NaN if unknown) */
-  getSize(param: TWeatherLayer, timestep: TTimestep): number {
+  getSize(param: string, timestep: TTimestep): number {
     return this.state.value.params.get(param)?.sizes.get(timestep) ?? NaN;
   }
 
   /** Set size for a timestep (learned from fetch) */
-  setSize(param: TWeatherLayer, timestep: TTimestep, bytes: number): void {
+  setSize(param: string, timestep: TTimestep, bytes: number): void {
     const paramState = this.state.value.params.get(param);
     if (!paramState) return;
     paramState.sizes.set(timestep, bytes);
