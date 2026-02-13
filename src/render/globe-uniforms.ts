@@ -83,6 +83,19 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['userLayerDataReady5', 'vec4u'], // 480: user layers 20-23
   ['userLayerDataReady6', 'vec4u'], // 496: user layers 24-27
   ['userLayerDataReady7', 'vec4u'], // 512: user layers 28-31
+
+  // Dynamic param state (16 params max) - for per-param interpolation
+  // paramLerp: 4 x vec4f = 64 bytes (lerp factors 0.0-1.0)
+  ['paramLerp0', 'vec4f'],   // 528: params 0-3
+  ['paramLerp1', 'vec4f'],   // 544: params 4-7
+  ['paramLerp2', 'vec4f'],   // 560: params 8-11
+  ['paramLerp3', 'vec4f'],   // 576: params 12-15
+
+  // paramReady: 4 x vec4u = 64 bytes (data ready flags)
+  ['paramReady0', 'vec4u'],  // 592: params 0-3
+  ['paramReady1', 'vec4u'],  // 608: params 4-7
+  ['paramReady2', 'vec4u'],  // 624: params 8-11
+  ['paramReady3', 'vec4u'],  // 640: params 12-15
 ]);
 
 // Strongly typed offsets - TypeScript knows all field names exist
@@ -145,6 +158,15 @@ export const U = GLOBE_UNIFORMS.offsets as {
   userLayerDataReady5: number;
   userLayerDataReady6: number;
   userLayerDataReady7: number;
+  // Dynamic param state (16 params max)
+  paramLerp0: number;
+  paramLerp1: number;
+  paramLerp2: number;
+  paramLerp3: number;
+  paramReady0: number;
+  paramReady1: number;
+  paramReady2: number;
+  paramReady3: number;
 };
 
 /** Get uniform buffer offset for user layer opacity by index (0-31) */
@@ -160,6 +182,22 @@ export function getUserLayerDataReadyOffset(index: number): number {
   const vecIndex = Math.floor(index / 4);
   const compIndex = index % 4;
   const baseOffset = U.userLayerDataReady0 + vecIndex * 16;
+  return baseOffset + compIndex * 4;
+}
+
+/** Get uniform buffer offset for param lerp by index (0-15) */
+export function getParamLerpOffset(index: number): number {
+  const vecIndex = Math.floor(index / 4);
+  const compIndex = index % 4;
+  const baseOffset = U.paramLerp0 + vecIndex * 16;
+  return baseOffset + compIndex * 4;
+}
+
+/** Get uniform buffer offset for param ready by index (0-15) */
+export function getParamReadyOffset(index: number): number {
+  const vecIndex = Math.floor(index / 4);
+  const compIndex = index % 4;
+  const baseOffset = U.paramReady0 + vecIndex * 16;
   return baseOffset + compIndex * 4;
 }
 

@@ -5,12 +5,12 @@
 import { Camera, type CameraConfig } from './camera';
 import staticShaderCode from './shaders/zero-main.wgsl?raw';
 import staticPostprocessShaderCode from './shaders/zero-post.wgsl?raw';
-import type { ComposedShaders } from './shader-composer';
+import { type ComposedShaders, activeParamBindings, type ParamBindingConfig } from './shader-composer';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 import { PressureLayer, type PressureResolution, type SmoothingAlgorithm } from '../layers/pressure';
 import { WindLayer } from '../layers/wind';
 import { GridAnimator, GRID_BUFFER_SIZE } from '../layers/grid/grid-animator';
-import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset } from './globe-uniforms';
+import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getParamLerpOffset, getParamReadyOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 
 // Re-export for consumers
@@ -97,6 +97,10 @@ export class GlobeRenderer {
   private pressureLayer!: PressureLayer;
   // Wind layer
   private windLayer!: WindLayer;
+  // Dynamic param buffers (keyed by param name)
+  private paramBuffers = new Map<string, { slot0: GPUBuffer; slot1: GPUBuffer }>();
+  // Current param binding config (set by recreatePipeline)
+  private currentParamBindings: ParamBindingConfig[] = [];
   // Grid animation
   private gridLinesBuffer!: GPUBuffer;
   private gridAnimator!: GridAnimator;
@@ -162,11 +166,16 @@ export class GlobeRenderer {
     if (hasFloat32Filterable) requiredFeatures.push('float32-filterable');
     if (hasTimestampQuery) requiredFeatures.push('timestamp-query');
 
+    // Request higher storage buffer limit for dynamic param bindings
+    const adapterStorageBuffersLimit = adapter.limits.maxStorageBuffersPerShaderStage;
+    const requiredStorageBuffers = Math.min(adapterStorageBuffersLimit, 32);  // 8 legacy + up to 24 dynamic params
+
     this.device = await adapter.requestDevice({
       requiredFeatures,
       requiredLimits: {
         maxStorageBufferBindingSize: Math.min(adapterStorageLimit, cap),
         maxBufferSize: Math.min(adapterBufferLimit, cap),
+        maxStorageBuffersPerShaderStage: requiredStorageBuffers,
       },
     });
 
@@ -497,7 +506,13 @@ export class GlobeRenderer {
       throw new Error(errorMsg);
     }
 
-    // Recreate main pipeline (same layout, new shader)
+    // Store current param bindings from ShaderComposer
+    this.currentParamBindings = [...activeParamBindings];
+
+    // Recreate bind group layout with dynamic param entries
+    this.bindGroupLayout = this.createDynamicBindGroupLayout();
+
+    // Recreate main pipeline with new layout
     this.pipeline = this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
       vertex: { module: shaderModule, entryPoint: 'vs_main' },
@@ -517,6 +532,9 @@ export class GlobeRenderer {
       fragment: { module: postProcessModule, entryPoint: 'fs_main', targets: [{ format: this.format }] },
       primitive: { topology: 'triangle-list' },
     });
+
+    // Recreate bind group with new layout
+    this.recreateBindGroup();
 
     console.log('[GlobeRenderer] Pipeline recreated');
   }
@@ -924,33 +942,44 @@ export class GlobeRenderer {
   /** Recreate main bind group (call after buffer/texture changes) */
   private recreateBindGroup(): void {
     const bindGroupLayout = this.pipeline.getBindGroupLayout(0);
-    this.bindGroup = this.device.createBindGroup({
-      layout: bindGroupLayout,
-      entries: [
-        { binding: 0, resource: { buffer: this.uniformBuffer } },
-        { binding: 1, resource: this.basemapTexture.createView({ dimension: 'cube' }) },
-        { binding: 2, resource: this.basemapSampler },
-        { binding: 3, resource: { buffer: this.gaussianLatsBuffer } },
-        { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
-        { binding: 5, resource: { buffer: this.tempData0Buffer } },
-        { binding: 6, resource: { buffer: this.tempData1Buffer } },
-        { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
-        { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
-        { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
-        { binding: 10, resource: this.atmosphereLUTs.sampler },
-        { binding: 11, resource: this.fontAtlasTexture.createView() },
-        { binding: 12, resource: this.fontAtlasSampler },
-        { binding: 13, resource: this.tempPaletteTexture.createView() },
-        { binding: 14, resource: this.tempPaletteSampler },
-        { binding: 15, resource: { buffer: this.cloudsDataBuffer } },
-        { binding: 16, resource: { buffer: this.humidityDataBuffer } },
-        { binding: 17, resource: { buffer: this.windDataBuffer } },
-        { binding: 18, resource: { buffer: this.rainDataBuffer } },
-        { binding: 19, resource: this.logoTexture.createView() },
-        { binding: 20, resource: this.logoSampler },
-        { binding: 21, resource: { buffer: this.gridLinesBuffer } },
-      ],
-    });
+    const entries: GPUBindGroupEntry[] = [
+      { binding: 0, resource: { buffer: this.uniformBuffer } },
+      { binding: 1, resource: this.basemapTexture.createView({ dimension: 'cube' }) },
+      { binding: 2, resource: this.basemapSampler },
+      { binding: 3, resource: { buffer: this.gaussianLatsBuffer } },
+      { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
+      { binding: 5, resource: { buffer: this.tempData0Buffer } },
+      { binding: 6, resource: { buffer: this.tempData1Buffer } },
+      { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
+      { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
+      { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
+      { binding: 10, resource: this.atmosphereLUTs.sampler },
+      { binding: 11, resource: this.fontAtlasTexture.createView() },
+      { binding: 12, resource: this.fontAtlasSampler },
+      { binding: 13, resource: this.tempPaletteTexture.createView() },
+      { binding: 14, resource: this.tempPaletteSampler },
+      { binding: 15, resource: { buffer: this.cloudsDataBuffer } },
+      { binding: 16, resource: { buffer: this.humidityDataBuffer } },
+      { binding: 17, resource: { buffer: this.windDataBuffer } },
+      { binding: 18, resource: { buffer: this.rainDataBuffer } },
+      { binding: 19, resource: this.logoTexture.createView() },
+      { binding: 20, resource: this.logoSampler },
+      { binding: 21, resource: { buffer: this.gridLinesBuffer } },
+    ];
+
+    // Add dynamic param buffer entries
+    for (const cfg of this.currentParamBindings) {
+      const buffers = this.paramBuffers.get(cfg.param);
+      // Use param buffers if available, otherwise use placeholder (tempData0)
+      const slot0 = buffers?.slot0 ?? this.tempData0Buffer;
+      const slot1 = buffers?.slot1 ?? this.tempData0Buffer;
+      entries.push(
+        { binding: cfg.bindingSlot0, resource: { buffer: slot0 } },
+        { binding: cfg.bindingSlot1, resource: { buffer: slot1 } }
+      );
+    }
+
+    this.bindGroup = this.device.createBindGroup({ layout: bindGroupLayout, entries });
   }
 
   /**
@@ -978,6 +1007,65 @@ export class GlobeRenderer {
    */
   setWindLayerBuffers(u0: GPUBuffer, v0: GPUBuffer, u1: GPUBuffer, v1: GPUBuffer): void {
     this.windLayer.setExternalBuffers(u0, v0, u1, v1, this.gaussianLatsBuffer, this.ringOffsetsBuffer);
+  }
+
+  /**
+   * Set dynamic param buffers for bind group creation
+   * Called when active slots change for a param
+   */
+  setParamBuffers(param: string, slot0: GPUBuffer, slot1: GPUBuffer): void {
+    this.paramBuffers.set(param, { slot0, slot1 });
+    this.recreateBindGroup();
+  }
+
+  /**
+   * Set param interpolation state (lerp factor and ready flag)
+   */
+  setParamState(paramIndex: number, lerp: number, ready: boolean): void {
+    const lerpOffset = getParamLerpOffset(paramIndex);
+    const readyOffset = getParamReadyOffset(paramIndex);
+    this.uniformView.setFloat32(lerpOffset, lerp, true);
+    this.uniformView.setUint32(readyOffset, ready ? 1 : 0, true);
+  }
+
+  /**
+   * Create bind group layout with dynamic param entries
+   */
+  private createDynamicBindGroupLayout(): GPUBindGroupLayout {
+    const entries: GPUBindGroupLayoutEntry[] = [
+      { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+      { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: 'cube' } },
+      { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+      { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
+      { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
+      { binding: 5, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // tempData0 (legacy)
+      { binding: 6, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // tempData1 (legacy)
+      { binding: 7, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // transmittance
+      { binding: 8, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } },  // scattering
+      { binding: 9, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // irradiance
+      { binding: 10, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+      { binding: 11, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // font atlas
+      { binding: 12, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+      { binding: 13, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // temp palette
+      { binding: 14, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+      { binding: 15, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // cloudsData (legacy)
+      { binding: 16, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // humidityData (legacy)
+      { binding: 17, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // windData (legacy)
+      { binding: 18, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // rainData (legacy)
+      { binding: 19, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // logo
+      { binding: 20, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+      { binding: 21, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },  // grid lines
+    ];
+
+    // Add dynamic param entries from activeParamBindings
+    for (const cfg of this.currentParamBindings) {
+      entries.push(
+        { binding: cfg.bindingSlot0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
+        { binding: cfg.bindingSlot1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }
+      );
+    }
+
+    return this.device.createBindGroupLayout({ entries });
   }
 
   /**

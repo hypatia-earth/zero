@@ -137,6 +137,15 @@ const slotStates = new Map<TWeatherLayer, SlotState>();
 // Param-keyed state (USE_PARAM_SLOTS=true)
 const paramSlotStates = new Map<string, SlotState>();
 
+// Dynamic param binding registry (built during init, matches ShaderComposer)
+interface ParamBinding {
+  index: number;          // 0, 1, 2, ...
+  bindingSlot0: number;   // 50, 52, 54, ...
+  bindingSlot1: number;   // 51, 53, 55, ...
+}
+const paramBindings = new Map<string, ParamBinding>();
+const PARAM_BINDING_START = 50;  // Must match shader-composer.ts
+
 // Param → Layer mapping (for renderer binding)
 const paramToLayerMap: Record<string, TWeatherLayer> = {
   'temperature_2m': 'temp',
@@ -456,6 +465,16 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
             dataReady: false,
           });
         }
+
+        // Build param binding registry (must match ShaderComposer order)
+        const sortedParams = [...config.paramConfigs.map(c => c.param)].sort();
+        sortedParams.forEach((param, idx) => {
+          paramBindings.set(param, {
+            index: idx,
+            bindingSlot0: PARAM_BINDING_START + idx * 2,
+            bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
+          });
+        });
       }
 
       // Legacy mode: create stores keyed by layer name
@@ -564,6 +583,16 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       renderer!.updateUniforms(uniforms);
       renderer!.setUserLayerOpacities(userLayerOpacities);
+
+      // Update dynamic param state (lerp and ready flags)
+      for (const [param, binding] of paramBindings) {
+        const state = paramSlotStates.get(param);
+        if (state) {
+          const lerp = state.dataReady ? computeLerp(state, time) : -1;
+          renderer!.setParamState(binding.index, lerp, state.dataReady);
+        }
+      }
+
       const passTimings = renderer!.render();  // Returns GPU timestamp query results
 
       // Compute memory stats from layer stores and param stores
@@ -654,6 +683,12 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         if (buffer0 && buffer1) {
           renderer!.setTextureLayerBuffers(layer as TWeatherTextureLayer, buffer0, buffer1);
           if (layerState) layerState.dataReady = true;
+
+          // Also bind to dynamic param system
+          const binding = paramBindings.get(param);
+          if (binding) {
+            renderer!.setParamBuffers(param, buffer0, buffer1);
+          }
         }
       } else if (layer === 'wind') {
         // Multi-param layer: check if ALL params are ready

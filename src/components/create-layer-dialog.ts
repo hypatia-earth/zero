@@ -23,16 +23,22 @@ interface CreateLayerDialogAttrs {
   dialogService: DialogService;
 }
 
-// Allowed params for user layers (current layers + albedo + cloud_cover)
+// Allowed params for user layers (subset with GPU buffer support)
 const ALLOWED_PARAMS: (keyof typeof PARAM_METADATA)[] = [
   'temperature_2m',
   'precipitation',
-  'pressure_msl',
   'cloud_cover',
-  'albedo',
+  // 'pressure_msl',  // TODO: needs contour rendering, not texture
+  // 'albedo',        // TODO: not loaded yet
 ];
 
 const DEFAULT_PARAM = 'temperature_2m' satisfies keyof typeof PARAM_METADATA;
+
+// Generate sampler function name from param (e.g., 'temperature_2m' -> 'sampleParam_temperature_2m')
+function getSamplerName(param: string): string {
+  const safeName = param.replace(/[^a-zA-Z0-9]/g, '_');
+  return `sampleParam_${safeName}`;
+}
 
 // Build DATA_PARAMS from metadata
 const DATA_PARAMS = ALLOWED_PARAMS.map(p => ({
@@ -41,15 +47,15 @@ const DATA_PARAMS = ALLOWED_PARAMS.map(p => ({
 }));
 
 // Template shader for new layers
-// Placeholders: {BlendName}, {userLayerIndex}, {paletteMin}, {paletteMax}
+// Placeholders: {BlendName}, {userLayerIndex}, {paletteMin}, {paletteMax}, {samplerFn}
 const SHADER_TEMPLATE = `// Custom blend function - red-green palette
 fn blend{BlendName}(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let opacity = getUserLayerOpacity({userLayerIndex}u);
   if (opacity <= 0.0) { return color; }
 
-  // Sample data at this location
+  // Sample data using dynamic param sampler (handles interpolation)
   let cell = o1280LatLonToCell(lat, lon);
-  let value = tempData0[cell];
+  let value = {samplerFn}(cell);
 
   // Values outside data range → blue (for debugging)
   let vMin = {paletteMin};
@@ -109,11 +115,13 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
   function updateShaderTemplate() {
     const blendName = capitalize(state.id || 'Custom');
     const [min, max] = state.paramMeta.range;
+    const samplerFn = getSamplerName(state.param);
     // Keep {userLayerIndex} placeholder - replaced when index is assigned
     state.shaderCode = SHADER_TEMPLATE
       .replace(/{BlendName}/g, blendName)
       .replace(/{paletteMin}/g, min.toFixed(1))
-      .replace(/{paletteMax}/g, max.toFixed(1));
+      .replace(/{paletteMax}/g, max.toFixed(1))
+      .replace(/{samplerFn}/g, samplerFn);
   }
 
   /** Replace index placeholder in shader code with actual index */
