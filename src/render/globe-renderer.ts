@@ -650,6 +650,7 @@ export class GlobeRenderer {
     view.setUint32(O.rainDataReady, uniforms.rainDataReady ? 1 : 0, true);
     view.setFloat32(O.tempLerp, uniforms.tempLerp, true);
 
+
     // Temp layer slots
     view.setUint32(O.tempLoadedPoints, uniforms.tempLoadedPoints, true);
     view.setUint32(O.tempSlot0, uniforms.tempSlot0, true);

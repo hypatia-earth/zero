@@ -20,7 +20,7 @@ import type { ConfigService } from './config-service';
 import type { LayerService } from './layer-service';
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
 
-const DEBUG = false;
+const DEBUG = true;
 
 /** Short timestep format for logs: "MM-DDTHH" */
 const fmt = (ts: TTimestep) => ts.slice(5, 13);
@@ -197,25 +197,23 @@ export class ParamSlotService {
 
   /**
    * Activate shader if required slots are loaded.
-   * Sends activateSlots to worker for the param.
+   * Sends activateSlots to worker with param name directly (param-centric API).
    */
   private activateIfReady(param: string, ps: ParamSlots, wanted: WantedState): void {
     const current = ps.getActiveTimesteps();
     const pcode = P(param);
 
-    // Map param to layer for aurora service (temp style for now)
-    const layer = this.paramToLayer(param);
-    if (!layer) return;
-
     if (wanted.mode === 'single') {
       const ts = wanted.priority[0]!;
       const slot = ps.getSlot(ts);
+      DEBUG && console.log(`[ParamSlot] ${pcode} activateIfReady: slot=${JSON.stringify(slot)}`);
       if (slot?.loaded) {
         if (current.length === 1 && current[0] === ts) return;
         ps.setActiveTimesteps([ts]);
 
         const t = this.timestepService.toDate(ts).getTime();
-        this.auroraService.activateSlots(layer, slot.slotIndex, slot.slotIndex, t, t, slot.loadedPoints);
+        // Param-centric API: send param name directly to worker
+        this.auroraService.activateSlots(param, slot.slotIndex, slot.slotIndex, t, t, slot.loadedPoints);
         DEBUG && console.log(`[ParamSlot] ${pcode} activated: ${fmt(ts)}`);
       } else {
         ps.setActiveTimesteps([]);
@@ -231,7 +229,8 @@ export class ParamSlotService {
 
         const t0 = this.timestepService.toDate(ts0).getTime();
         const t1 = this.timestepService.toDate(ts1).getTime();
-        this.auroraService.activateSlots(layer, slot0.slotIndex, slot1.slotIndex, t0, t1, Math.min(slot0.loadedPoints, slot1.loadedPoints));
+        // Param-centric API: send param name directly to worker
+        this.auroraService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, t0, t1, Math.min(slot0.loadedPoints, slot1.loadedPoints));
         DEBUG && console.log(`[ParamSlot] ${pcode} activated: ${fmt(ts0)} → ${fmt(ts1)}`);
       } else {
         ps.setActiveTimesteps([]);
@@ -309,19 +308,22 @@ export class ParamSlotService {
       return false;
     }
 
-    // Handle eviction
+    // Handle eviction - timestepService still tracks by layer for UI
     if (result.evicted) {
-      this.timestepService.setGpuUnloaded(this.paramToLayer(param) ?? param as TWeatherLayer, result.evicted);
+      const layer = this.paramToLayer(param);
+      if (layer) {
+        this.timestepService.setGpuUnloaded(layer, result.evicted);
+      }
     }
 
-    // Upload to worker
-    const layer = this.paramToLayer(param);
-    if (layer) {
-      this.auroraService.uploadData(layer, result.slotIndex, slabIndex, data);
-    }
+    // Upload to worker with param name directly (param-centric API)
+    this.auroraService.uploadData(param, result.slotIndex, data);
 
     // Mark loaded
     ps.markLoaded(timestep, result.slotIndex, data.length);
+
+    // Update timestep service (still tracks by layer for timebar UI)
+    const layer = this.paramToLayer(param);
     if (layer) {
       this.timestepService.setGpuLoaded(layer, timestep);
       this.timestepService.setCached(layer, timestep, data.byteLength);
@@ -435,8 +437,10 @@ export class ParamSlotService {
           );
 
           if (result) {
-            this.auroraService.uploadData(order.param, result.slotIndex, order.slabIndex, slice.data);
-            ps.markLoaded(order.timestep, result.slotIndex, slice.data.length);
+            // Capture length BEFORE upload (buffer is transferred and detached)
+            const dataLength = slice.data.length;
+            this.auroraService.uploadData(param, result.slotIndex, slice.data);
+            ps.markLoaded(order.timestep, result.slotIndex, dataLength);
           }
 
           orderIndex++;

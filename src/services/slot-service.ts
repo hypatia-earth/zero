@@ -241,7 +241,7 @@ export class SlotService {
 
         // Worker handles buffer rebinding on activateSlots
         const t = this.timestepService.toDate(ts).getTime();
-        this.auroraService.activateSlots(param, slot.slotIndex, slot.slotIndex, t, t, slot.loadedPoints);
+        this.auroraService.activateSlotsLegacy(param, slot.slotIndex, slot.slotIndex, t, t, slot.loadedPoints);
         DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(ts)}`);
       } else {
         ps.setActiveTimesteps([]);
@@ -262,7 +262,7 @@ export class SlotService {
         // Worker handles buffer rebinding on activateSlots
         const t0 = this.timestepService.toDate(ts0).getTime();
         const t1 = this.timestepService.toDate(ts1).getTime();
-        this.auroraService.activateSlots(param, slot0.slotIndex, slot1.slotIndex, t0, t1, Math.min(slot0.loadedPoints, slot1.loadedPoints));
+        this.auroraService.activateSlotsLegacy(param, slot0.slotIndex, slot1.slotIndex, t0, t1, Math.min(slot0.loadedPoints, slot1.loadedPoints));
         DEBUG && console.log(`[Slot] ${pcode} activated: ${fmt(ts0)} → ${fmt(ts1)}`);
       } else {
         ps.setActiveTimesteps([]);
@@ -273,7 +273,7 @@ export class SlotService {
   /** Deactivate layer by setting slots to 0 with 0 points */
   private deactivateLayer(param: TWeatherLayer): void {
     // Worker handles buffer rebinding on activateSlots
-    this.auroraService.activateSlots(param, 0, 0, 0, 0);
+    this.auroraService.activateSlotsLegacy(param, 0, 0, 0, 0);
   }
 
   /** Upload data to slot via worker message */
@@ -284,7 +284,7 @@ export class SlotService {
     }
 
     // Send data to worker (transfers ownership of buffer)
-    this.auroraService.uploadData(param, slotIndex, slabIndex, data);
+    this.auroraService.uploadDataLegacy(param, slotIndex, slabIndex, data);
   }
 
   /**
@@ -595,9 +595,9 @@ export class SlotService {
     this.testModeLayers.add(layer);
 
     for (let slabIndex = 0; slabIndex < slabs.length; slabIndex++) {
-      this.auroraService.uploadData(layer, 0, slabIndex, slabs[slabIndex]!);
+      this.auroraService.uploadDataLegacy(layer, 0, slabIndex, slabs[slabIndex]!);
     }
-    this.auroraService.activateSlots(layer, 0, 0, Date.now(), Date.now(), points);
+    this.auroraService.activateSlotsLegacy(layer, 0, 0, Date.now(), Date.now(), points);
   }
 
   /** Exit test mode for a layer (re-enable real data) */

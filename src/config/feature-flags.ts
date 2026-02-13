@@ -21,4 +21,4 @@ export const USE_DECLARATIVE_LAYERS = true;
  *
  * Migration path: test with flag true, then delete SlotService and rename.
  */
-export const USE_PARAM_SLOTS = false;
+export const USE_PARAM_SLOTS = true;

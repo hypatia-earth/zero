@@ -11,10 +11,12 @@ import type { AboutService } from '../../services/about-service';
 import type { OmService } from '../../services/om-service';
 import type { OptionsService } from '../../services/options-service';
 import type { ConfigService } from '../../services/config-service';
+import type { LayerService } from '../../services/layer-service';
 import type { ISlotService } from '../../services/queue-service';
 import type { Progress } from '../progress';
 import type { LoadedAssets } from './assets';
 import { isWeatherLayer } from '../../config/types';
+import { USE_PARAM_SLOTS } from '../../config/feature-flags';
 
 export async function runGpuInitPhase(
   canvas: HTMLCanvasElement,
@@ -24,6 +26,7 @@ export async function runGpuInitPhase(
   omService: OmService,
   optionsService: OptionsService,
   configService: ConfigService,
+  layerService: LayerService,
   slotService: ISlotService,
   assets: LoadedAssets,
   progress: Progress
@@ -42,7 +45,7 @@ export async function runGpuInitPhase(
   const windLineCount = optionsService.options.value.wind.seedCount;
   const readyLayers = configService.getReadyLayers().filter(isWeatherLayer);
 
-  // Build layer configs for worker LayerStore creation
+  // Build layer configs for worker LayerStore creation (legacy mode)
   const layerConfigs = readyLayers
     .map(id => {
       const layer = configService.getLayer(id);
@@ -51,6 +54,21 @@ export async function runGpuInitPhase(
     })
     .filter((cfg): cfg is NonNullable<typeof cfg> => cfg !== null);
 
+  // Build param configs for worker ParamStore creation (param-centric mode)
+  let paramConfigs: Array<{ param: string; sizeMB: number }> = [];
+  if (USE_PARAM_SLOTS) {
+    const paramSet = new Set<string>();
+    for (const layer of layerService.getBuiltIn()) {
+      if (layer.params) {
+        for (const param of layer.params) {
+          paramSet.add(param);
+        }
+      }
+    }
+    // Each param gets 26MB buffer (standard weather data size)
+    paramConfigs = [...paramSet].map(param => ({ param, sizeMB: 26 }));
+  }
+
   const config: AuroraConfig = {
     cameraConfig: configService.getCameraConfig(),
     timeslotsPerLayer,
@@ -58,6 +76,7 @@ export async function runGpuInitPhase(
     windLineCount,
     readyLayers,
     layerConfigs,
+    paramConfigs,
   };
 
   // Load palettes first (needed for worker assets)

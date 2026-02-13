@@ -119,6 +119,7 @@ async function runBootstrapInner(
     services.omService!,
     services.optionsService!,
     services.configService!,
+    services.layerService!,
     services.slotService,
     assets,
     progress

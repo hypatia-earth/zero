@@ -49,8 +49,12 @@ export interface AuroraService {
   start(): void;
   cleanup(): void;
   dispose(): void;
-  uploadData(layer: TWeatherLayer, slotIndex: number, slabIndex: number, data: Float32Array): void;
-  activateSlots(layer: TWeatherLayer, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
+  // Param-centric API (USE_PARAM_SLOTS=true)
+  uploadData(param: string, slotIndex: number, data: Float32Array): void;
+  activateSlots(param: string, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
+  // Legacy layer-based API (USE_PARAM_SLOTS=false) - DEPRECATED
+  uploadDataLegacy(layer: TWeatherLayer, slotIndex: number, slabIndex: number, data: Float32Array): void;
+  activateSlotsLegacy(layer: TWeatherLayer, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
@@ -249,15 +253,29 @@ export function createAuroraService(
       }
     },
 
-    uploadData(layer: TWeatherLayer, slotIndex: number, slabIndex: number, data: Float32Array): void {
-      send({ type: 'uploadData', layer, slotIndex, slabIndex, data }, [data.buffer]);
+    // Param-centric API (USE_PARAM_SLOTS=true)
+    uploadData(param: string, slotIndex: number, data: Float32Array): void {
+      send({ type: 'uploadData', param, slotIndex, data }, [data.buffer]);
     },
 
-    activateSlots(layer: TWeatherLayer, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void {
+    activateSlots(param: string, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void {
       if (loadedPoints !== undefined) {
-        send({ type: 'activateSlots', layer, slot0, slot1, t0, t1, loadedPoints });
+        send({ type: 'activateSlots', param, slot0, slot1, t0, t1, loadedPoints });
       } else {
-        send({ type: 'activateSlots', layer, slot0, slot1, t0, t1 });
+        send({ type: 'activateSlots', param, slot0, slot1, t0, t1 });
+      }
+    },
+
+    // Legacy layer-based API (USE_PARAM_SLOTS=false) - DEPRECATED
+    uploadDataLegacy(layer: TWeatherLayer, slotIndex: number, slabIndex: number, data: Float32Array): void {
+      send({ type: 'uploadDataLegacy', layer, slotIndex, slabIndex, data }, [data.buffer]);
+    },
+
+    activateSlotsLegacy(layer: TWeatherLayer, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void {
+      if (loadedPoints !== undefined) {
+        send({ type: 'activateSlotsLegacy', layer, slot0, slot1, t0, t1, loadedPoints });
+      } else {
+        send({ type: 'activateSlotsLegacy', layer, slot0, slot1, t0, t1 });
       }
     },
 

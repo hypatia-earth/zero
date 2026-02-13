@@ -66,8 +66,10 @@ export interface AuroraConfig {
   pressureResolution: 1 | 2;
   windLineCount: number;
   readyLayers: TWeatherLayer[];
-  /** Layer configs for LayerStore creation (only weather layers with slabs) */
+  /** Layer configs for LayerStore creation (only weather layers with slabs) - DEPRECATED */
   layerConfigs: Array<{ id: TWeatherLayer; slabs: SlabConfig[] }>;
+  /** Param configs for param-centric mode (USE_PARAM_SLOTS=true) */
+  paramConfigs?: Array<{ param: string; sizeMB: number }>;
 }
 
 // ============================================================
@@ -77,8 +79,12 @@ export interface AuroraConfig {
 export type AuroraRequest =
   | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; config: AuroraConfig; assets: AuroraAssets }
   | { type: 'options'; value: ZeroOptions }
-  | { type: 'uploadData'; layer: TWeatherLayer; slotIndex: number; slabIndex: number; data: Float32Array }
-  | { type: 'activateSlots'; layer: TWeatherLayer; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
+  // Param-centric API (USE_PARAM_SLOTS=true)
+  | { type: 'uploadData'; param: string; slotIndex: number; data: Float32Array }
+  | { type: 'activateSlots'; param: string; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
+  // Legacy layer-based API (USE_PARAM_SLOTS=false) - DEPRECATED
+  | { type: 'uploadDataLegacy'; layer: TWeatherLayer; slotIndex: number; slabIndex: number; data: Float32Array }
+  | { type: 'activateSlotsLegacy'; layer: TWeatherLayer; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
   | { type: 'render'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number }
   | { type: 'resize'; width: number; height: number }
   | { type: 'registerUserLayer'; layer: import('../services/layer-service').LayerDeclaration }
@@ -105,8 +111,11 @@ let currentOptions: ZeroOptions | null = null;
 // Layer registry (for declarative mode)
 let layerRegistry: LayerService | null = null;
 
-// Layer stores for GPU buffer management
+// Layer stores for GPU buffer management (legacy, USE_PARAM_SLOTS=false)
 const layerStores = new Map<TWeatherLayer, LayerStore>();
+
+// Param stores for GPU buffer management (param-centric, USE_PARAM_SLOTS=true)
+const paramStores = new Map<string, LayerStore>();
 
 // Palette data (received at init)
 let tempPalettes: Record<string, PaletteData> = {};
@@ -123,7 +132,35 @@ interface SlotState {
   loadedPoints: number;
   dataReady: boolean;
 }
+// Legacy layer-keyed state (USE_PARAM_SLOTS=false)
 const slotStates = new Map<TWeatherLayer, SlotState>();
+// Param-keyed state (USE_PARAM_SLOTS=true)
+const paramSlotStates = new Map<string, SlotState>();
+
+// Param → Layer mapping (for renderer binding)
+const paramToLayerMap: Record<string, TWeatherLayer> = {
+  'temperature_2m': 'temp',
+  'precipitation': 'rain',
+  'pressure_msl': 'pressure',
+  'wind_u_component_10m': 'wind',
+  'wind_v_component_10m': 'wind',
+  'cloud_cover': 'clouds',
+  'relative_humidity_2m': 'humidity',
+};
+
+// Layer → Params mapping (for multi-param layer binding)
+// Used by activateSlots to check if all params for a multi-param layer are ready
+function getLayerParams(layer: string): string[] {
+  const mapping: Record<string, string[]> = {
+    'temp': ['temperature_2m'],
+    'rain': ['precipitation'],
+    'pressure': ['pressure_msl'],
+    'wind': ['wind_u_component_10m', 'wind_v_component_10m'],
+    'clouds': ['cloud_cover'],
+    'humidity': ['relative_humidity_2m'],
+  };
+  return mapping[layer] ?? [];
+}
 
 // Pressure contour state
 let isobarLevels: number[] = generateIsobarLevels(4);  // Default 4 hPa spacing
@@ -402,6 +439,29 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       // Create LayerStore instances for each weather layer
       const device = renderer.getDevice();
+
+      // Param-centric mode: create stores keyed by param name
+      if (config.paramConfigs && config.paramConfigs.length > 0) {
+        for (const paramCfg of config.paramConfigs) {
+          const store = new LayerStore(device, {
+            layerId: paramCfg.param as TWeatherLayer,  // LayerStore uses layerId internally
+            slabs: [{ name: 'data', sizeMB: paramCfg.sizeMB }],
+            timeslots: config.timeslotsPerLayer,
+          });
+          store.initialize();
+          paramStores.set(paramCfg.param, store);
+          paramSlotStates.set(paramCfg.param, {
+            slot0: 0,
+            slot1: 0,
+            t0: 0,
+            t1: 0,
+            loadedPoints: 0,
+            dataReady: false,
+          });
+        }
+      }
+
+      // Legacy mode: create stores keyed by layer name
       for (const layerCfg of config.layerConfigs) {
         const store = new LayerStore(device, {
           layerId: layerCfg.id,
@@ -509,11 +569,15 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       renderer!.setUserLayerOpacities(userLayerOpacities);
       const passTimings = renderer!.render();  // Returns GPU timestamp query results
 
-      // Compute memory stats from layer stores
+      // Compute memory stats from layer stores and param stores
       // Allocated = actual buffers filled, Capacity = option × total slab sizes
       let allocatedMB = 0;
       let totalSlabSizeMB = 0;
       for (const store of layerStores.values()) {
+        allocatedMB += store.getAllocatedCount() * store.timeslotSizeMB;
+        totalSlabSizeMB += store.timeslotSizeMB;
+      }
+      for (const store of paramStores.values()) {
         allocatedMB += store.getAllocatedCount() * store.timeslotSizeMB;
         totalSlabSizeMB += store.timeslotSizeMB;
       }
@@ -534,14 +598,108 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       renderer!.resize(e.data.width, e.data.height);
     }
 
+    // ============================================================
+    // Param-centric API (USE_PARAM_SLOTS=true)
+    // ============================================================
+
     if (type === 'uploadData') {
+      const { param, slotIndex, data } = e.data;
+      const store = paramStores.get(param);
+      if (!store) {
+        console.warn(`[Aurora] uploadData: unknown param ${param}`);
+        return;
+      }
+      store.ensureSlotBuffers(slotIndex);
+      store.writeToSlab(0, slotIndex, data);  // Always slab 0 in param-centric mode
+    }
+
+    if (type === 'activateSlots') {
+      const { param, slot0, slot1, t0, t1, loadedPoints } = e.data;
+      const store = paramStores.get(param);
+      if (!store) {
+        console.warn(`[Aurora] activateSlots: unknown param ${param}`);
+        return;
+      }
+
+      // Update param slot state
+      const state = paramSlotStates.get(param);
+      if (state) {
+        state.slot0 = slot0;
+        state.slot1 = slot1;
+        state.t0 = t0;
+        state.t1 = t1;
+        if (loadedPoints !== undefined) state.loadedPoints = loadedPoints;
+        state.dataReady = true;
+      }
+
+      // Determine which renderer layer to bind
+      const layer = paramToLayerMap[param] as TWeatherLayer | undefined;
+      if (!layer) {
+        console.warn(`[Aurora] activateSlots: no layer mapping for param ${param}`);
+        return;
+      }
+
+      // Also update legacy slotStates for uniform building (renderer still uses layer keys)
+      const layerState = slotStates.get(layer);
+      if (layerState) {
+        layerState.slot0 = slot0;
+        layerState.slot1 = slot1;
+        layerState.t0 = t0;
+        layerState.t1 = t1;
+        if (loadedPoints !== undefined) layerState.loadedPoints = loadedPoints;
+      }
+
+      // Bind to renderer based on layer type
+      if (layer === 'temp' || layer === 'rain' || layer === 'clouds' || layer === 'humidity') {
+        // Single-param texture layers
+        const buffer0 = store.getSlotBuffer(slot0, 0);
+        const buffer1 = store.getSlotBuffer(slot1, 0);
+        if (buffer0 && buffer1) {
+          renderer!.setTextureLayerBuffers(layer as TWeatherTextureLayer, buffer0, buffer1);
+          if (layerState) layerState.dataReady = true;
+        }
+      } else if (layer === 'wind') {
+        // Multi-param layer: check if ALL params are ready
+        const windParams = getLayerParams('wind');
+        const allReady = windParams.every(p => paramSlotStates.get(p)?.dataReady);
+        if (allReady) {
+          const uStore = paramStores.get('wind_u_component_10m');
+          const vStore = paramStores.get('wind_v_component_10m');
+          const uState = paramSlotStates.get('wind_u_component_10m');
+          const vState = paramSlotStates.get('wind_v_component_10m');
+          if (uStore && vStore && uState && vState) {
+            const u0 = uStore.getSlotBuffer(uState.slot0, 0);
+            const v0 = vStore.getSlotBuffer(vState.slot0, 0);
+            const u1 = uStore.getSlotBuffer(uState.slot1, 0);
+            const v1 = vStore.getSlotBuffer(vState.slot1, 0);
+            if (u0 && v0 && u1 && v1) {
+              renderer!.setWindLayerBuffers(u0, v0, u1, v1);
+              if (layerState) layerState.dataReady = true;
+            }
+          }
+        }
+      } else if (layer === 'pressure') {
+        // Pressure: trigger regrid
+        const rawBuffer = store.getSlotBuffer(slot0, 0);
+        if (rawBuffer) {
+          renderer!.triggerPressureRegrid(slot0, rawBuffer);
+          if (layerState) layerState.dataReady = true;
+        }
+      }
+    }
+
+    // ============================================================
+    // Legacy layer-based API (USE_PARAM_SLOTS=false) - DEPRECATED
+    // ============================================================
+
+    if (type === 'uploadDataLegacy') {
       const { layer, slotIndex, slabIndex, data } = e.data;
       const store = layerStores.get(layer)!;
       store.ensureSlotBuffers(slotIndex);
       store.writeToSlab(slabIndex, slotIndex, data);
     }
 
-    if (type === 'activateSlots') {
+    if (type === 'activateSlotsLegacy') {
       const { layer, slot0, slot1, t0, t1, loadedPoints } = e.data;
       const store = layerStores.get(layer)!;
 
@@ -654,12 +812,19 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
     }
 
     if (type === 'cleanup') {
-      // Dispose layer stores
+      // Dispose layer stores (legacy)
       for (const store of layerStores.values()) {
         store.dispose();
       }
       layerStores.clear();
       slotStates.clear();
+
+      // Dispose param stores
+      for (const store of paramStores.values()) {
+        store.dispose();
+      }
+      paramStores.clear();
+      paramSlotStates.clear();
 
       // Get device before disposing renderer
       const device = renderer?.getDevice();
