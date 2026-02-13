@@ -647,8 +647,13 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         return;
       }
 
-      // Update param slot state
+      // Check if slots actually changed - skip rebind if identical
       const state = paramSlotStates.get(param);
+      if (state && state.slot0 === slot0 && state.slot1 === slot1 && state.t0 === t0 && state.t1 === t1) {
+        return; // Already active with same slots
+      }
+
+      // Update param slot state
       if (state) {
         state.slot0 = slot0;
         state.slot1 = slot1;
