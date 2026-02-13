@@ -7,7 +7,6 @@
 
 import type { LayerService } from '../services/layer-service';
 import { shaderComposer } from '../render/shader-composer';
-import { USE_DECLARATIVE_LAYERS } from '../config/feature-flags';
 
 // Import layer declarations from folders
 import { layer as earthLayer } from './earth';
@@ -39,8 +38,6 @@ export function registerBuiltInLayers(registry: LayerService): void {
   }
   console.log('[Layers] Registered:', registry.getAll().map(l => l.id).join(', '));
 
-  // When declarative mode is on, show what ShaderComposer would generate
-  if (USE_DECLARATIVE_LAYERS) {
-    shaderComposer.compose(registry.getAll());
-  }
+  // Compose shaders from registered layers
+  shaderComposer.compose(registry.getAll());
 }

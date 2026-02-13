@@ -16,7 +16,6 @@ import { generateIsobarLevels, type SmoothingAlgorithm } from '../layers/pressur
 import { LayerStore } from '../services/layer-store';
 import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.schema';
 import { getSunDirection } from '../utils/sun-position';
-import { USE_DECLARATIVE_LAYERS } from '../config/feature-flags';
 import { shaderComposer } from '../render/shader-composer';
 import { LayerService } from '../services/layer-service';
 import { registerBuiltInLayers } from '../layers';
@@ -411,15 +410,12 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       // Create and initialize renderer
       renderer = new GlobeRenderer(canvas, config.cameraConfig);
 
-      // Compose shaders dynamically when declarative layers enabled
-      let composedShaders;
-      if (USE_DECLARATIVE_LAYERS) {
-        layerRegistry = new LayerService();
-        registerBuiltInLayers(layerRegistry);
-        const layers = layerRegistry.getAll();
-        composedShaders = shaderComposer.compose(layers);
-        console.log('[Aurora] Using composed shaders for', layers.length, 'layers');
-      }
+      // Compose shaders dynamically from layer registry
+      layerRegistry = new LayerService();
+      registerBuiltInLayers(layerRegistry);
+      const layers = layerRegistry.getAll();
+      const composedShaders = shaderComposer.compose(layers);
+      console.log('[Aurora] Using composed shaders for', layers.length, 'layers');
 
       await renderer.initialize(
         config.timeslotsPerLayer,

@@ -14,7 +14,6 @@ import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
 import type { OptionsService } from './options-service';
 import type { PerfService } from './perf-service';
-import type { TWeatherLayer } from '../config/types';
 import { Camera } from '../render/camera';
 import { setupCameraControls } from './camera-controls';
 
@@ -49,13 +48,9 @@ export interface AuroraService {
   start(): void;
   cleanup(): void;
   dispose(): void;
-  // Param-centric API (USE_PARAM_SLOTS=true)
   uploadData(param: string, slotIndex: number, data: Float32Array): void;
   activateSlots(param: string, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
   deactivateSlots(param: string): void;
-  // Legacy layer-based API (USE_PARAM_SLOTS=false) - DEPRECATED
-  uploadDataLegacy(layer: TWeatherLayer, slotIndex: number, slabIndex: number, data: Float32Array): void;
-  activateSlotsLegacy(layer: TWeatherLayer, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
@@ -254,7 +249,6 @@ export function createAuroraService(
       }
     },
 
-    // Param-centric API (USE_PARAM_SLOTS=true)
     uploadData(param: string, slotIndex: number, data: Float32Array): void {
       send({ type: 'uploadData', param, slotIndex, data }, [data.buffer]);
     },
@@ -269,19 +263,6 @@ export function createAuroraService(
 
     deactivateSlots(param: string): void {
       send({ type: 'deactivateSlots', param });
-    },
-
-    // Legacy layer-based API (USE_PARAM_SLOTS=false) - DEPRECATED
-    uploadDataLegacy(layer: TWeatherLayer, slotIndex: number, slabIndex: number, data: Float32Array): void {
-      send({ type: 'uploadDataLegacy', layer, slotIndex, slabIndex, data }, [data.buffer]);
-    },
-
-    activateSlotsLegacy(layer: TWeatherLayer, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void {
-      if (loadedPoints !== undefined) {
-        send({ type: 'activateSlotsLegacy', layer, slot0, slot1, t0, t1, loadedPoints });
-      } else {
-        send({ type: 'activateSlotsLegacy', layer, slot0, slot1, t0, t1 });
-      }
     },
 
     start(): void {

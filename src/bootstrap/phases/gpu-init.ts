@@ -16,7 +16,6 @@ import type { ISlotService } from '../../services/queue-service';
 import type { Progress } from '../progress';
 import type { LoadedAssets } from './assets';
 import { isWeatherLayer } from '../../config/types';
-import { USE_PARAM_SLOTS } from '../../config/feature-flags';
 
 export async function runGpuInitPhase(
   canvas: HTMLCanvasElement,
@@ -54,20 +53,17 @@ export async function runGpuInitPhase(
     })
     .filter((cfg): cfg is NonNullable<typeof cfg> => cfg !== null);
 
-  // Build param configs for worker ParamStore creation (param-centric mode)
-  let paramConfigs: Array<{ param: string; sizeMB: number }> = [];
-  if (USE_PARAM_SLOTS) {
-    const paramSet = new Set<string>();
-    for (const layer of layerService.getBuiltIn()) {
-      if (layer.params) {
-        for (const param of layer.params) {
-          paramSet.add(param);
-        }
+  // Build param configs for worker ParamStore creation
+  const paramSet = new Set<string>();
+  for (const layer of layerService.getBuiltIn()) {
+    if (layer.params) {
+      for (const param of layer.params) {
+        paramSet.add(param);
       }
     }
-    // Each param gets 26MB buffer (standard weather data size)
-    paramConfigs = [...paramSet].map(param => ({ param, sizeMB: 26 }));
   }
+  // Each param gets 26MB buffer (standard weather data size)
+  const paramConfigs = [...paramSet].map(param => ({ param, sizeMB: 26 }));
 
   const config: AuroraConfig = {
     cameraConfig: configService.getCameraConfig(),
