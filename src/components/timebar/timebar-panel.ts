@@ -11,13 +11,13 @@
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
 import { isWeatherLayer, type TWeatherLayer } from '../../config/types';
-import type { ISlotService } from '../../services/queue';
-import type { TimestepService } from '../../services/timestep';
+import type { ISlotService } from '../../services/queue/queue-service';
+import type { TimestepService } from '../../services/timestep/timestep-service';
 import type { OptionsService } from '../../services/options-service';
 import type { ConfigService } from '../../services/config-service';
 import type { ThemeService } from '../../services/theme-service';
 import type { StateService } from '../../services/state-service';
-import type { LayerService } from '../../services/layer';
+import type { LayerService } from '../../services/layer/layer-service';
 import { diskUnwarp } from './timebar-math';
 import { renderTimebar, getTimebarHeight } from './timebar-renderer';
 

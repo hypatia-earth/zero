@@ -2,7 +2,7 @@
  * Discovery Phase - Register service worker and discover available timesteps
  */
 
-import type { TimestepService } from '../../services/timestep';
+import type { TimestepService } from '../../services/timestep/timestep-service';
 import type { StateService } from '../../services/state-service';
 import type { Progress } from '../progress';
 import { registerServiceWorker, getPrefetchHistory } from '../../services/sw-registration';

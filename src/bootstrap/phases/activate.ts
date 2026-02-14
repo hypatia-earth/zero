@@ -5,7 +5,7 @@
 import type { AuroraService } from '../../services/aurora-service';
 import type { StateService } from '../../services/state-service';
 import { KeyboardService } from '../../services/keyboard-service';
-import type { TimestepService } from '../../services/timestep';
+import type { TimestepService } from '../../services/timestep/timestep-service';
 import type { Progress } from '../progress';
 
 export interface ActivateResult {

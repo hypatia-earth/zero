@@ -10,7 +10,7 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import type { LayerService, LayerDeclaration } from '../services/layer';
+import type { LayerService, LayerDeclaration } from '../services/layer/layer-service';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
 import { defineLayer, withType, withParams, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';

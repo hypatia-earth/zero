@@ -7,7 +7,7 @@
 
 import type { Signal } from '@preact/signals-core';
 import type { TTimestep } from '../../config/types';
-import type { TimestepState } from './index';
+import type { TimestepState } from './timestep-service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State Updates

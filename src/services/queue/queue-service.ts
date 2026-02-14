@@ -16,8 +16,8 @@ import type { OmService } from './om-service';
 import type { OptionsService } from '../options-service';
 import type { ConfigService } from '../config-service';
 import type { StateService } from '../state-service';
-import type { TimestepService } from '../timestep';
-import type { LayerService } from '../layer';
+import type { TimestepService } from '../timestep/timestep-service';
+import type { LayerService } from '../layer/layer-service';
 
 /** Common interface for slot services (SlotService and ParamSlotService) */
 export interface ISlotReceiver {

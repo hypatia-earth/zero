@@ -13,14 +13,14 @@ import { DialogService } from '../services/dialog-service';
 import { AboutService } from '../services/about-service';
 import { ThemeService } from '../services/theme-service';
 import { CapabilitiesService } from '../services/capabilities-service';
-import { TimestepService } from '../services/timestep';
-import { QueueService, type ISlotService } from '../services/queue';
+import { TimestepService } from '../services/timestep/timestep-service';
+import { QueueService, type ISlotService } from '../services/queue/queue-service';
 import { createAuroraService, type AuroraService } from '../services/aurora-service';
 import { ParamSlotService } from '../services/param-slot-service';
 import { PaletteService } from '../services/palette-service';
 import { KeyboardService } from '../services/keyboard-service';
 import { PerfService } from '../services/perf-service';
-import { LayerService } from '../services/layer';
+import { LayerService } from '../services/layer/layer-service';
 
 export interface ServiceContainer {
   // Foundation (no service deps)

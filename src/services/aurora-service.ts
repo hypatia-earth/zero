@@ -16,7 +16,7 @@ import type { OptionsService } from './options-service';
 import type { PerfService } from './perf-service';
 import type { PaletteService } from './palette-service';
 import { Camera } from '../aurora/camera';
-import { setupViewport } from './viewport';
+import { setupViewport } from './viewport/viewport';
 
 // Re-export types for consumers
 export type { AuroraConfig, AuroraAssets } from '../aurora/worker';

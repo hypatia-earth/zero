@@ -8,7 +8,7 @@
  */
 
 import type { StateService } from './state-service';
-import type { TimestepService } from './timestep';
+import type { TimestepService } from './timestep/timestep-service';
 import { parseTimestep } from '../utils/timestep';
 import { toggleFullscreen } from '../components/fullscreen-panel';
 

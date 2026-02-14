@@ -17,7 +17,7 @@ import { LayerStore } from './layer-store';
 import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.schema';
 import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer } from './shader-composer';
-import { LayerService } from '../services/layer';
+import { LayerService } from '../services/layer/layer-service';
 
 // ============================================================
 // Asset types for worker transfer
@@ -50,7 +50,7 @@ export interface AuroraConfig {
   /** Param configs for buffer management (keyed by param name) */
   paramConfigs: Array<{ param: string; sizeMB: number }>;
   /** Built-in layer declarations (sent from main thread) */
-  layers: import('../services/layer').LayerDeclaration[];
+  layers: import('../services/layer/layer-service').LayerDeclaration[];
 }
 
 // ============================================================
@@ -66,7 +66,7 @@ export type AuroraRequest =
   | { type: 'deactivateSlots'; param: string }
   | { type: 'render'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number }
   | { type: 'resize'; width: number; height: number }
-  | { type: 'registerUserLayer'; layer: import('../services/layer').LayerDeclaration }
+  | { type: 'registerUserLayer'; layer: import('../services/layer/layer-service').LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'setUserLayerOpacity'; layerIndex: number; opacity: number }
   | { type: 'updatePalette'; layer: string; textureData: Uint8Array; range: [number, number] }
@@ -142,7 +142,7 @@ function getLayerSlotState(layerId: string): SlotState | undefined {
 }
 
 // Rebuild paramBindings after shader recomposition (indices may shift)
-function rebuildParamBindings(layers: import('../services/layer').LayerDeclaration[]): void {
+function rebuildParamBindings(layers: import('../services/layer/layer-service').LayerDeclaration[]): void {
   const allParams = new Set<string>();
   for (const layer of layers) {
     layer.params?.forEach(p => allParams.add(p));

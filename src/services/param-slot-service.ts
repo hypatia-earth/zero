@@ -11,13 +11,13 @@
 
 import { effect, signal } from '@preact/signals-core';
 import { type TWeatherLayer, type TTimestep, type TimestepOrder, type LayerState } from '../config/types';
-import type { TimestepService } from './timestep';
+import type { TimestepService } from './timestep/timestep-service';
 import type { AuroraService } from './aurora-service';
-import type { QueueService } from './queue';
+import type { QueueService } from './queue/queue-service';
 import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
-import type { LayerService } from './layer';
+import type { LayerService } from './layer/layer-service';
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
 
 const DEBUG = false;

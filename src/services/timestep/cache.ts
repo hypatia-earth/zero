@@ -8,7 +8,7 @@
 import type { Signal } from '@preact/signals-core';
 import type { TTimestep, Timestep } from '../../config/types';
 import { sendSWMessage } from '../../utils/sw-message';
-import type { TimestepState } from './index';
+import type { TimestepState } from './timestep-service';
 
 const DEBUG = false;
 

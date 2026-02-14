@@ -2,7 +2,7 @@
  * Data Phase - Load initial weather data for enabled layers
  */
 
-import type { QueueService, ISlotService } from '../../services/queue';
+import type { QueueService, ISlotService } from '../../services/queue/queue-service';
 import type { Progress } from '../progress';
 
 export async function runDataPhase(

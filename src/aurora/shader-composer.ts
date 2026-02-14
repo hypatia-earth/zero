@@ -5,7 +5,7 @@
  * Uses main-template.wgsl as base and injects layer blend calls.
  */
 
-import type { LayerDeclaration } from '../services/layer';
+import type { LayerDeclaration } from '../services/layer/layer-service';
 import { getMainShaders, getPostShaders } from './shader-loader';
 
 // Import shader modules
