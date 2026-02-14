@@ -21,23 +21,6 @@ import { LayerService } from '../services/layer-service';
 import { registerBuiltInLayers } from '../layers';
 
 // ============================================================
-// Palette types for temp layer
-// ============================================================
-
-interface PaletteStop {
-  value: number | null;
-  color: [number, number, number];
-  alpha?: number;
-}
-
-interface PaletteData {
-  name: string;
-  unit: string;
-  interpolate: boolean;
-  stops: PaletteStop[];
-}
-
-// ============================================================
 // Asset types for worker transfer
 // ============================================================
 
@@ -55,8 +38,9 @@ export interface AuroraAssets {
   basemapFaces: ImageBitmap[];
   fontAtlas: ImageBitmap;
   logo: ImageBitmap;
-  // Palette data for temp layer (loaded from JSON files)
-  tempPalettes: Record<string, PaletteData>;
+  // Initial palette texture (256x1 RGBA) and range for temp layer
+  tempPaletteTexture: Uint8Array;
+  tempPaletteRange: [number, number];  // [min, max] in Celsius
 }
 
 export interface AuroraConfig {
@@ -84,6 +68,7 @@ export type AuroraRequest =
   | { type: 'registerUserLayer'; layer: import('../services/layer-service').LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'setUserLayerOpacity'; layerIndex: number; opacity: number }
+  | { type: 'updatePalette'; layer: string; textureData: Uint8Array; range: [number, number] }
   | { type: 'cleanup' };
 
 export type AuroraResponse =
@@ -108,8 +93,6 @@ let layerRegistry: LayerService | null = null;
 // Param stores for GPU buffer management (keyed by param name)
 const paramStores = new Map<string, LayerStore>();
 
-// Palette data (received at init)
-let tempPalettes: Record<string, PaletteData> = {};
 
 // User layer state (opacity defaults to 1.0 when registered)
 const userLayerOpacities = new Map<number, number>();  // index -> opacity
@@ -313,112 +296,6 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
   };
 }
 
-// ============================================================
-// Palette computation helpers
-// ============================================================
-
-function updateTempPaletteFromOptions(paletteName: string): void {
-  const palette = tempPalettes[paletteName];
-  if (!palette) {
-    console.warn(`[Aurora] Unknown palette: ${paletteName}`);
-    return;
-  }
-
-  const textureData = generatePaletteTexture(palette);
-  const range = getPaletteRange(palette);
-
-  renderer!.updateTempPalette(textureData);
-  tempPaletteRange[0] = range.min;
-  tempPaletteRange[1] = range.max;
-}
-
-function generatePaletteTexture(palette: PaletteData): Uint8Array {
-  const stops = palette.stops.filter(s => s.value !== null);
-  const values = stops.map(s => s.value!);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-
-  const data = new Uint8Array(256 * 4);
-
-  for (let i = 0; i < 256; i++) {
-    const t = i / 255;
-    const value = min + t * (max - min);
-    const color = interpolatePaletteColor(palette, value, stops);
-
-    data[i * 4 + 0] = color[0];
-    data[i * 4 + 1] = color[1];
-    data[i * 4 + 2] = color[2];
-    data[i * 4 + 3] = color[3];
-  }
-
-  return data;
-}
-
-function interpolatePaletteColor(
-  palette: PaletteData,
-  value: number,
-  stops: PaletteStop[]
-): [number, number, number, number] {
-  if (stops.length === 0) return [0, 0, 0, 255];
-
-  let lowerStop = stops[0]!;
-  let upperStop = stops[stops.length - 1]!;
-
-  for (let i = 0; i < stops.length - 1; i++) {
-    const s1 = stops[i]!;
-    const s2 = stops[i + 1]!;
-    if (value >= s1.value! && value <= s2.value!) {
-      lowerStop = s1;
-      upperStop = s2;
-      break;
-    }
-  }
-
-  // Handle edge cases
-  if (value <= lowerStop.value!) {
-    return [...lowerStop.color, lowerStop.alpha ?? 255] as [number, number, number, number];
-  }
-  if (value >= upperStop.value!) {
-    return [...upperStop.color, upperStop.alpha ?? 255] as [number, number, number, number];
-  }
-
-  // Interpolate
-  const range = upperStop.value! - lowerStop.value!;
-  const t = range > 0 ? (value - lowerStop.value!) / range : 0;
-
-  if (!palette.interpolate) {
-    // Discrete palette - use lower stop color
-    return [...lowerStop.color, lowerStop.alpha ?? 255] as [number, number, number, number];
-  }
-
-  // Linear interpolation
-  const r = Math.round(lowerStop.color[0] + t * (upperStop.color[0] - lowerStop.color[0]));
-  const g = Math.round(lowerStop.color[1] + t * (upperStop.color[1] - lowerStop.color[1]));
-  const b = Math.round(lowerStop.color[2] + t * (upperStop.color[2] - lowerStop.color[2]));
-  const a = Math.round((lowerStop.alpha ?? 255) + t * ((upperStop.alpha ?? 255) - (lowerStop.alpha ?? 255)));
-
-  return [r, g, b, a];
-}
-
-function getPaletteRange(palette: PaletteData): { min: number; max: number } {
-  const values = palette.stops
-    .map(s => s.value)
-    .filter((v): v is number => v !== null);
-
-  if (values.length === 0) return { min: 0, max: 1 };
-
-  let min = Math.min(...values);
-  let max = Math.max(...values);
-
-  // Convert Fahrenheit to Celsius if needed
-  if (palette.unit === 'F') {
-    min = (min - 32) / 1.8;
-    max = (max - 32) / 1.8;
-  }
-
-  return { min, max };
-}
-
 self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
   const { type } = e.data;
 
@@ -492,8 +369,10 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         }
       });
 
-      // Store palette data for later use
-      tempPalettes = assets.tempPalettes;
+      // Apply initial palette texture and range
+      renderer.updateTempPalette(assets.tempPaletteTexture);
+      tempPaletteRange[0] = assets.tempPaletteRange[0];
+      tempPaletteRange[1] = assets.tempPaletteRange[1];
 
       // Recreate pipeline with composed shaders (includes dynamic param bindings)
       const initLayers = layerRegistry.getAll();
@@ -512,15 +391,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       if (prevOptions && currentOptions.wind.seedCount !== prevOptions.wind.seedCount) {
         renderer!.getWindLayer().setLineCount(currentOptions.wind.seedCount);
       }
-
-      // Check if temp palette changed
-      if (prevOptions && currentOptions.temp.palette !== prevOptions.temp.palette) {
-        updateTempPaletteFromOptions(currentOptions.temp.palette);
-      }
-      // Also handle initial palette on first options message
-      if (!prevOptions && currentOptions.temp.palette) {
-        updateTempPaletteFromOptions(currentOptions.temp.palette);
-      }
+      // Note: palette changes handled via 'updatePalette' message from main thread
     }
 
     if (type === 'render') {
@@ -786,6 +657,16 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
     if (type === 'setUserLayerOpacity') {
       const { layerIndex, opacity } = e.data;
       userLayerOpacities.set(layerIndex, opacity);
+    }
+
+    if (type === 'updatePalette') {
+      const { layer, textureData, range } = e.data;
+      if (layer === 'temp' && renderer) {
+        renderer.updateTempPalette(textureData);
+        tempPaletteRange[0] = range[0];
+        tempPaletteRange[1] = range[1];
+      }
+      // TODO: support other layers when they have palettes
     }
 
     if (type === 'cleanup') {

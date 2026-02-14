@@ -95,13 +95,14 @@ async function runBootstrapInner(
 
   // Phase 5: GPU Init (worker-based)
   progress.startStep('GPU_INIT');
+  services.paletteService = createPaletteService();
   services.auroraService = createAuroraService(
     services.stateService!,
     services.configService!,
     services.optionsService!,
-    services.perfService!
+    services.perfService!,
+    services.paletteService
   );
-  services.paletteService = createPaletteService();
   services.slotService = createSlotService(
     services.timestepService,
     services.auroraService,

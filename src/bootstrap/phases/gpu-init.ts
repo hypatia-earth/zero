@@ -84,10 +84,10 @@ export async function runGpuInitPhase(
       new Blob([assets.logoBuffer], { type: 'image/png' })
     );
 
-    // Convert palettes array to Record for worker
-    const tempPalettes = Object.fromEntries(
-      paletteService.getPalettes('temp').map(p => [p.name, p])
-    );
+    // Generate initial palette texture (256x1 RGBA) and range
+    const tempPalette = paletteService.getPalette('temp');
+    const tempPaletteTexture = paletteService.generateTextureData(tempPalette);
+    const tempRange = paletteService.getRange(tempPalette);
 
     const auroraAssets: AuroraAssets = {
       atmosphereLUTs: {
@@ -100,7 +100,8 @@ export async function runGpuInitPhase(
       basemapFaces,
       fontAtlas,
       logo,
-      tempPalettes,
+      tempPaletteTexture,
+      tempPaletteRange: [tempRange.min, tempRange.max],
     };
 
     // Initialize worker (transfers assets)
