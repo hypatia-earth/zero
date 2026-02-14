@@ -296,402 +296,401 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
   };
 }
 
-self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
-  const { type } = e.data;
+// ============================================================
+// Message Handlers
+// ============================================================
 
-  try {
-    if (type === 'init') {
-      const { config, assets } = e.data;
-      canvas = e.data.canvas;
-      canvas.width = e.data.width;
-      canvas.height = e.data.height;
+async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promise<void> {
+  const { config, assets } = data;
+  canvas = data.canvas;
+  canvas.width = data.width;
+  canvas.height = data.height;
 
-      // Create and initialize renderer
-      renderer = new GlobeRenderer(canvas, config.cameraConfig);
+  // Create and initialize renderer
+  renderer = new GlobeRenderer(canvas, config.cameraConfig);
 
-      // Compose shaders dynamically from layer registry
-      layerRegistry = new LayerService();
-      registerBuiltInLayers(layerRegistry);
-      const layers = layerRegistry.getAll();
-      const composedShaders = shaderComposer.compose(layers);
+  // Compose shaders dynamically from layer registry
+  layerRegistry = new LayerService();
+  registerBuiltInLayers(layerRegistry);
+  const layers = layerRegistry.getAll();
+  const composedShaders = shaderComposer.compose(layers);
 
-      await renderer.initialize(
-        config.timeslotsPerLayer,
-        config.windLineCount,
-        composedShaders
+  await renderer.initialize(
+    config.timeslotsPerLayer,
+    config.windLineCount,
+    composedShaders
+  );
+
+  // Upload assets
+  renderer.createAtmosphereTextures(assets.atmosphereLUTs);
+  await renderer.loadBasemap(assets.basemapFaces);
+  await renderer.loadFontAtlas(assets.fontAtlas);
+  await renderer.loadLogo(assets.logo);
+  renderer.uploadGaussianLUTs(assets.gaussianLats, assets.ringOffsets);
+
+  // Finalize renderer (creates bind groups)
+  renderer.finalize();
+
+  // Create LayerStore instances for each param
+  const device = renderer.getDevice();
+
+  for (const paramCfg of config.paramConfigs) {
+    const store = new LayerStore(device, {
+      layerId: paramCfg.param as TWeatherLayer,
+      slabs: [{ name: 'data', sizeMB: paramCfg.sizeMB }],
+      timeslots: config.timeslotsPerLayer,
+    });
+    store.initialize();
+    paramStores.set(paramCfg.param, store);
+    paramSlotStates.set(paramCfg.param, {
+      slot0: 0,
+      slot1: 0,
+      t0: 0,
+      t1: 0,
+      loadedPoints: 0,
+      dataReady: false,
+    });
+  }
+
+  // Build param binding registry (must match ShaderComposer order)
+  const sortedParams = [...config.paramConfigs.map(c => c.param)].sort();
+  sortedParams.forEach((param, idx) => {
+    paramBindings.set(param, {
+      index: idx,
+      bindingSlot0: PARAM_BINDING_START + idx * 2,
+      bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
+    });
+  });
+
+  // Log unexpected device loss (ignore intentional destroy on cleanup)
+  device.lost.then((info) => {
+    if (info.reason !== 'destroyed') {
+      console.error('[Aurora] GPU device lost:', info.reason, info.message);
+    }
+  });
+
+  // Apply initial palette texture and range
+  renderer.updateTempPalette(assets.tempPaletteTexture);
+  tempPaletteRange[0] = assets.tempPaletteRange[0];
+  tempPaletteRange[1] = assets.tempPaletteRange[1];
+
+  // Recreate pipeline with composed shaders (includes dynamic param bindings)
+  const initLayers = layerRegistry.getAll();
+  const initShaders = shaderComposer.compose(initLayers);
+  await renderer.recreatePipeline(initShaders);
+  console.log('[Aurora] Using composed shaders for', initLayers.length, 'layers');
+
+  self.postMessage({ type: 'ready' } satisfies AuroraResponse);
+}
+
+function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void {
+  const prevOptions = currentOptions;
+  currentOptions = data.value;
+
+  // React to options that require buffer recreation
+  if (prevOptions && currentOptions.wind.seedCount !== prevOptions.wind.seedCount) {
+    renderer!.getWindLayer().setLineCount(currentOptions.wind.seedCount);
+  }
+}
+
+function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): void {
+  const t0 = performance.now();
+  const { camera, time } = data;
+  const opts = currentOptions!;
+
+  // Compute delta time and update animated opacities
+  const dt = lastFrameTime > 0 ? (t0 - lastFrameTime) / 1000 : 0;
+  lastFrameTime = t0;
+  updateAnimatedOpacities(dt, time);
+
+  // Update isobar spacing if changed
+  const newSpacing = parseInt(opts.pressure.spacing, 10);
+  let needsContourRecompute = false;
+  if (newSpacing !== lastPressureSpacing) {
+    lastPressureSpacing = newSpacing;
+    isobarLevels = generateIsobarLevels(newSpacing);
+    renderer!.setPressureLevelCount(isobarLevels.length);
+    needsContourRecompute = true;
+  }
+
+  // Check if smoothing changed
+  const newSmoothing = opts.pressure.smoothing;
+  if (newSmoothing !== lastSmoothing) {
+    lastSmoothing = newSmoothing;
+    needsContourRecompute = true;
+  }
+
+  // Recompute pressure contours when time, spacing, or smoothing changes
+  const pressureState = getLayerSlotState('pressure');
+  if (opts.pressure.enabled && pressureState?.dataReady) {
+    const currentMinute = Math.floor(time / 60000);
+    if (currentMinute !== lastPressureMinute || needsContourRecompute) {
+      lastPressureMinute = currentMinute;
+      // Map smoothing option to Chaikin iterations: none=0, light=1
+      const smoothingMap = { none: 0, light: 1 } as const;
+      const smoothingIterations = smoothingMap[opts.pressure.smoothing] ?? 1;
+      const lerp = computeLerp(pressureState, time);
+      renderer!.runPressureContour(
+        pressureState.slot0,
+        pressureState.slot1,
+        lerp,
+        isobarLevels,
+        smoothingIterations
       );
-
-      // Upload assets
-      renderer.createAtmosphereTextures(assets.atmosphereLUTs);
-      await renderer.loadBasemap(assets.basemapFaces);
-      await renderer.loadFontAtlas(assets.fontAtlas);
-      await renderer.loadLogo(assets.logo);
-      renderer.uploadGaussianLUTs(assets.gaussianLats, assets.ringOffsets);
-
-      // Finalize renderer (creates bind groups)
-      renderer.finalize();
-
-      // Create LayerStore instances for each param
-      const device = renderer.getDevice();
-
-      for (const paramCfg of config.paramConfigs) {
-        const store = new LayerStore(device, {
-          layerId: paramCfg.param as TWeatherLayer,  // LayerStore uses layerId internally
-          slabs: [{ name: 'data', sizeMB: paramCfg.sizeMB }],
-          timeslots: config.timeslotsPerLayer,
-        });
-        store.initialize();
-        paramStores.set(paramCfg.param, store);
-        paramSlotStates.set(paramCfg.param, {
-          slot0: 0,
-          slot1: 0,
-          t0: 0,
-          t1: 0,
-          loadedPoints: 0,
-          dataReady: false,
-        });
-      }
-
-      // Build param binding registry (must match ShaderComposer order)
-      const sortedParams = [...config.paramConfigs.map(c => c.param)].sort();
-      sortedParams.forEach((param, idx) => {
-        paramBindings.set(param, {
-          index: idx,
-          bindingSlot0: PARAM_BINDING_START + idx * 2,
-          bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
-        });
-      });
-
-      // Log unexpected device loss (ignore intentional destroy on cleanup)
-      device.lost.then((info) => {
-        if (info.reason !== 'destroyed') {
-          console.error('[Aurora] GPU device lost:', info.reason, info.message);
-        }
-      });
-
-      // Apply initial palette texture and range
-      renderer.updateTempPalette(assets.tempPaletteTexture);
-      tempPaletteRange[0] = assets.tempPaletteRange[0];
-      tempPaletteRange[1] = assets.tempPaletteRange[1];
-
-      // Recreate pipeline with composed shaders (includes dynamic param bindings)
-      const initLayers = layerRegistry.getAll();
-      const initShaders = shaderComposer.compose(initLayers);
-      await renderer.recreatePipeline(initShaders);
-      console.log('[Aurora] Using composed shaders for', initLayers.length, 'layers');
-
-      self.postMessage({ type: 'ready' } satisfies AuroraResponse);
     }
+  }
 
-    if (type === 'options') {
-      const prevOptions = currentOptions;
-      currentOptions = e.data.value;
+  const uniforms = buildUniforms(camera, new Date(time));
 
-      // React to options that require buffer recreation
-      if (prevOptions && currentOptions.wind.seedCount !== prevOptions.wind.seedCount) {
-        renderer!.getWindLayer().setLineCount(currentOptions.wind.seedCount);
-      }
-      // Note: palette changes handled via 'updatePalette' message from main thread
+  renderer!.updateUniforms(uniforms);
+  renderer!.setUserLayerOpacities(userLayerOpacities);
+
+  // Update dynamic param state (lerp and ready flags)
+  for (const [param, binding] of paramBindings) {
+    const state = paramSlotStates.get(param);
+    if (state) {
+      const lerp = state.dataReady ? computeLerp(state, time) : -1;
+      renderer!.setParamState(binding.index, lerp, state.dataReady);
     }
+  }
 
-    if (type === 'render') {
-      const t0 = performance.now();
-      const { camera, time } = e.data;
-      const opts = currentOptions!;
+  const passTimings = renderer!.render();
 
-      // Compute delta time and update animated opacities
-      const dt = lastFrameTime > 0 ? (t0 - lastFrameTime) / 1000 : 0;
-      lastFrameTime = t0;
-      updateAnimatedOpacities(dt, time);
+  // Compute memory stats from param stores
+  let allocatedMB = 0;
+  let totalSlabSizeMB = 0;
+  for (const store of paramStores.values()) {
+    allocatedMB += store.getAllocatedCount() * store.timeslotSizeMB;
+    totalSlabSizeMB += store.timeslotSizeMB;
+  }
+  const timeslots = parseInt(currentOptions!.gpu.timeslotsPerLayer, 10);
+  const capacityMB = totalSlabSizeMB * timeslots;
 
-      // Update isobar spacing if changed
-      const newSpacing = parseInt(opts.pressure.spacing, 10);
-      let needsContourRecompute = false;
-      if (newSpacing !== lastPressureSpacing) {
-        lastPressureSpacing = newSpacing;
-        isobarLevels = generateIsobarLevels(newSpacing);
-        renderer!.setPressureLevelCount(isobarLevels.length);
-        needsContourRecompute = true;
+  const cpuTimeMs = performance.now() - t0;
+  self.postMessage({
+    type: 'frameComplete',
+    timing: { frame: cpuTimeMs, pass1: passTimings.pass1Ms, pass2: passTimings.pass2Ms, pass3: passTimings.pass3Ms },
+    memoryMB: { allocated: Math.round(allocatedMB), capacity: Math.round(capacityMB) },
+  } satisfies AuroraResponse);
+}
+
+function handleResize(data: Extract<AuroraRequest, { type: 'resize' }>): void {
+  canvas!.width = data.width;
+  canvas!.height = data.height;
+  renderer!.resize(data.width, data.height);
+}
+
+function handleUploadData(data: Extract<AuroraRequest, { type: 'uploadData' }>): void {
+  const { param, slotIndex, data: bufferData } = data;
+  const store = paramStores.get(param);
+  if (!store) {
+    console.warn(`[Aurora] uploadData: unknown param ${param}`);
+    return;
+  }
+  store.ensureSlotBuffers(slotIndex);
+  store.writeToSlab(0, slotIndex, bufferData);
+}
+
+function handleActivateSlots(data: Extract<AuroraRequest, { type: 'activateSlots' }>): void {
+  const { param, slot0, slot1, t0, t1, loadedPoints } = data;
+  const store = paramStores.get(param);
+  if (!store) {
+    console.warn(`[Aurora] activateSlots: unknown param ${param}`);
+    return;
+  }
+
+  // Check if slots actually changed - skip rebind if identical AND already bound
+  const state = paramSlotStates.get(param);
+  if (state && state.dataReady && state.slot0 === slot0 && state.slot1 === slot1 && state.t0 === t0 && state.t1 === t1) {
+    return;
+  }
+
+  // Update param slot state
+  if (state) {
+    state.slot0 = slot0;
+    state.slot1 = slot1;
+    state.t0 = t0;
+    state.t1 = t1;
+    if (loadedPoints !== undefined) state.loadedPoints = loadedPoints;
+    state.dataReady = true;
+  }
+
+  // Determine which renderer layer to bind
+  const layer = findLayerForParam(param) as TWeatherLayer | undefined;
+  if (!layer) {
+    console.warn(`[Aurora] activateSlots: no layer mapping for param ${param}`);
+    return;
+  }
+
+  // Bind to renderer based on layer type
+  if (layer === 'temp' || layer === 'rain' || layer === 'clouds' || layer === 'humidity') {
+    const buffer0 = store.getSlotBuffer(slot0, 0);
+    const buffer1 = store.getSlotBuffer(slot1, 0);
+    if (buffer0 && buffer1) {
+      renderer!.setTextureLayerBuffers(layer as TWeatherTextureLayer, buffer0, buffer1);
+      const binding = paramBindings.get(param);
+      if (binding) {
+        renderer!.setParamBuffers(param, buffer0, buffer1);
       }
-
-      // Check if smoothing changed
-      const newSmoothing = opts.pressure.smoothing;
-      if (newSmoothing !== lastSmoothing) {
-        lastSmoothing = newSmoothing;
-        needsContourRecompute = true;
-      }
-
-      // Recompute pressure contours when time, spacing, or smoothing changes
-      const pressureState = getLayerSlotState('pressure');
-      if (opts.pressure.enabled && pressureState?.dataReady) {
-        const currentMinute = Math.floor(time / 60000);
-        if (currentMinute !== lastPressureMinute || needsContourRecompute) {
-          lastPressureMinute = currentMinute;
-          // Map smoothing option to Chaikin iterations: none=0, light=1
-          const smoothingMap = { none: 0, light: 1 } as const;
-          const smoothingIterations = smoothingMap[opts.pressure.smoothing] ?? 1;
-          const lerp = computeLerp(pressureState, time);
-          renderer!.runPressureContour(
-            pressureState.slot0,
-            pressureState.slot1,
-            lerp,
-            isobarLevels,
-            smoothingIterations
-          );
-        }
-      }
-
-      const uniforms = buildUniforms(camera, new Date(time));
-
-      renderer!.updateUniforms(uniforms);
-      renderer!.setUserLayerOpacities(userLayerOpacities);
-
-      // Update dynamic param state (lerp and ready flags)
-      for (const [param, binding] of paramBindings) {
-        const state = paramSlotStates.get(param);
-        if (state) {
-          const lerp = state.dataReady ? computeLerp(state, time) : -1;
-          renderer!.setParamState(binding.index, lerp, state.dataReady);
-        }
-      }
-
-      const passTimings = renderer!.render();  // Returns GPU timestamp query results
-
-      // Compute memory stats from param stores
-      // Allocated = actual buffers filled, Capacity = option × total slab sizes
-      let allocatedMB = 0;
-      let totalSlabSizeMB = 0;
-      for (const store of paramStores.values()) {
-        allocatedMB += store.getAllocatedCount() * store.timeslotSizeMB;
-        totalSlabSizeMB += store.timeslotSizeMB;
-      }
-      const timeslots = parseInt(currentOptions!.gpu.timeslotsPerLayer, 10);
-      const capacityMB = totalSlabSizeMB * timeslots;
-
-      const cpuTimeMs = performance.now() - t0;
-      self.postMessage({
-        type: 'frameComplete',
-        timing: { frame: cpuTimeMs, pass1: passTimings.pass1Ms, pass2: passTimings.pass2Ms, pass3: passTimings.pass3Ms },
-        memoryMB: { allocated: Math.round(allocatedMB), capacity: Math.round(capacityMB) },
-      } satisfies AuroraResponse);
     }
-
-    if (type === 'resize') {
-      canvas!.width = e.data.width;
-      canvas!.height = e.data.height;
-      renderer!.resize(e.data.width, e.data.height);
-    }
-
-    // ============================================================
-    // Param-centric API (USE_PARAM_SLOTS=true)
-    // ============================================================
-
-    if (type === 'uploadData') {
-      const { param, slotIndex, data } = e.data;
-      const store = paramStores.get(param);
-      if (!store) {
-        console.warn(`[Aurora] uploadData: unknown param ${param}`);
-        return;
-      }
-      store.ensureSlotBuffers(slotIndex);
-      store.writeToSlab(0, slotIndex, data);  // Always slab 0 in param-centric mode
-    }
-
-    if (type === 'activateSlots') {
-      const { param, slot0, slot1, t0, t1, loadedPoints } = e.data;
-      const store = paramStores.get(param);
-      if (!store) {
-        console.warn(`[Aurora] activateSlots: unknown param ${param}`);
-        return;
-      }
-
-      // Check if slots actually changed - skip rebind if identical AND already bound
-      const state = paramSlotStates.get(param);
-      if (state && state.dataReady && state.slot0 === slot0 && state.slot1 === slot1 && state.t0 === t0 && state.t1 === t1) {
-        return; // Already active with same slots
-      }
-
-      // Update param slot state
-      if (state) {
-        state.slot0 = slot0;
-        state.slot1 = slot1;
-        state.t0 = t0;
-        state.t1 = t1;
-        if (loadedPoints !== undefined) state.loadedPoints = loadedPoints;
-        state.dataReady = true;
-      }
-
-      // Determine which renderer layer to bind
-      const layer = findLayerForParam(param) as TWeatherLayer | undefined;
-      if (!layer) {
-        console.warn(`[Aurora] activateSlots: no layer mapping for param ${param}`);
-        return;
-      }
-
-      // Bind to renderer based on layer type
-      if (layer === 'temp' || layer === 'rain' || layer === 'clouds' || layer === 'humidity') {
-        // Single-param texture layers
-        const buffer0 = store.getSlotBuffer(slot0, 0);
-        const buffer1 = store.getSlotBuffer(slot1, 0);
-        if (buffer0 && buffer1) {
-          renderer!.setTextureLayerBuffers(layer as TWeatherTextureLayer, buffer0, buffer1);
-
-          // Also bind to dynamic param system
-          const binding = paramBindings.get(param);
-          if (binding) {
-            renderer!.setParamBuffers(param, buffer0, buffer1);
-          }
-        }
-      } else if (layer === 'wind') {
-        // Multi-param layer: check if ALL params are ready
-        const windParams = getLayerParams('wind');
-        const allReady = windParams.every(p => paramSlotStates.get(p)?.dataReady);
-        if (allReady) {
-          const uStore = paramStores.get('wind_u_component_10m');
-          const vStore = paramStores.get('wind_v_component_10m');
-          const uState = paramSlotStates.get('wind_u_component_10m');
-          const vState = paramSlotStates.get('wind_v_component_10m');
-          if (uStore && vStore && uState && vState) {
-            const u0 = uStore.getSlotBuffer(uState.slot0, 0);
-            const v0 = vStore.getSlotBuffer(vState.slot0, 0);
-            const u1 = uStore.getSlotBuffer(uState.slot1, 0);
-            const v1 = vStore.getSlotBuffer(vState.slot1, 0);
-            if (u0 && v0 && u1 && v1) {
-              renderer!.setWindLayerBuffers(u0, v0, u1, v1);
-            }
-          }
-        }
-      } else if (layer === 'pressure') {
-        // Pressure: trigger regrid
-        const rawBuffer = store.getSlotBuffer(slot0, 0);
-        if (rawBuffer) {
-          renderer!.triggerPressureRegrid(slot0, rawBuffer);
+  } else if (layer === 'wind') {
+    // Multi-param layer: check if ALL params are ready
+    const windParams = getLayerParams('wind');
+    const allReady = windParams.every(p => paramSlotStates.get(p)?.dataReady);
+    if (allReady) {
+      const uStore = paramStores.get('wind_u_component_10m');
+      const vStore = paramStores.get('wind_v_component_10m');
+      const uState = paramSlotStates.get('wind_u_component_10m');
+      const vState = paramSlotStates.get('wind_v_component_10m');
+      if (uStore && vStore && uState && vState) {
+        const u0 = uStore.getSlotBuffer(uState.slot0, 0);
+        const v0 = vStore.getSlotBuffer(vState.slot0, 0);
+        const u1 = uStore.getSlotBuffer(uState.slot1, 0);
+        const v1 = vStore.getSlotBuffer(vState.slot1, 0);
+        if (u0 && v0 && u1 && v1) {
+          renderer!.setWindLayerBuffers(u0, v0, u1, v1);
         }
       }
     }
-
-    if (type === 'deactivateSlots') {
-      const { param } = e.data;
-
-      // Clear param slot state
-      const state = paramSlotStates.get(param);
-      if (state) {
-        state.dataReady = false;
-      }
+  } else if (layer === 'pressure') {
+    const rawBuffer = store.getSlotBuffer(slot0, 0);
+    if (rawBuffer) {
+      renderer!.triggerPressureRegrid(slot0, rawBuffer);
     }
+  }
+}
 
-    if (type === 'registerUserLayer') {
-      const { layer } = e.data;
-      if (!layerRegistry || !renderer) {
-        console.warn('[Aurora] Cannot register user layer: not initialized');
-        return;
-      }
+function handleDeactivateSlots(data: Extract<AuroraRequest, { type: 'deactivateSlots' }>): void {
+  const state = paramSlotStates.get(data.param);
+  if (state) {
+    state.dataReady = false;
+  }
+}
 
-      // Add to registry
-      layerRegistry.register(layer);
+function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerUserLayer' }>): void {
+  const { layer } = data;
+  if (!layerRegistry || !renderer) {
+    console.warn('[Aurora] Cannot register user layer: not initialized');
+    return;
+  }
 
-      // Set default opacity to 1.0
+  layerRegistry.register(layer);
+
+  if (layer.userLayerIndex !== undefined) {
+    userLayerOpacities.set(layer.userLayerIndex, 1.0);
+  }
+
+  console.log(`[Aurora] Registered user layer: ${layer.id} (index ${layer.userLayerIndex})`);
+
+  const layers = layerRegistry.getAll();
+  const composedShaders = shaderComposer.compose(layers);
+  renderer.recreatePipeline(composedShaders)
+    .then(() => {
+      rebuildParamBindings(layers);
+      rebindAllParamBuffers();
+      console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
+      self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: true });
+    })
+    .catch((err) => {
+      layerRegistry!.unregister(layer.id);
       if (layer.userLayerIndex !== undefined) {
-        userLayerOpacities.set(layer.userLayerIndex, 1.0);
+        userLayerOpacities.delete(layer.userLayerIndex);
       }
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[Aurora] Shader compilation failed:', message);
+      self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: false, error: message });
+    });
+}
 
-      console.log(`[Aurora] Registered user layer: ${layer.id} (index ${layer.userLayerIndex})`);
+function handleUnregisterUserLayer(data: Extract<AuroraRequest, { type: 'unregisterUserLayer' }>): void {
+  const { layerId } = data;
+  if (!layerRegistry || !renderer) {
+    console.warn('[Aurora] Cannot unregister user layer: not initialized');
+    return;
+  }
 
-      // Recompose shaders and recreate pipeline
-      const layers = layerRegistry.getAll();
-      const composedShaders = shaderComposer.compose(layers);
-      renderer.recreatePipeline(composedShaders)
-        .then(() => {
-          // Rebuild paramBindings to match new shader bindings
-          rebuildParamBindings(layers);
-          // Rebind all active param buffers
-          rebindAllParamBuffers();
-          console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
-          self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: true });
-        })
-        .catch((err) => {
-          // Rollback: remove the layer from registry
-          layerRegistry!.unregister(layer.id);
-          if (layer.userLayerIndex !== undefined) {
-            userLayerOpacities.delete(layer.userLayerIndex);
-          }
-          const message = err instanceof Error ? err.message : String(err);
-          console.error('[Aurora] Shader compilation failed:', message);
-          self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: false, error: message });
-        });
-    }
+  const layer = layerRegistry.get(layerId);
+  const index = layer?.userLayerIndex;
 
-    if (type === 'unregisterUserLayer') {
-      const { layerId } = e.data;
-      if (!layerRegistry || !renderer) {
-        console.warn('[Aurora] Cannot unregister user layer: not initialized');
-        return;
-      }
+  layerRegistry.unregister(layerId);
 
-      // Get index before removing
-      const layer = layerRegistry.get(layerId);
-      const index = layer?.userLayerIndex;
+  if (index !== undefined) {
+    userLayerOpacities.delete(index);
+  }
 
-      // Remove from registry
-      layerRegistry.unregister(layerId);
+  console.log(`[Aurora] Unregistered user layer: ${layerId}`);
 
-      // Remove opacity
-      if (index !== undefined) {
-        userLayerOpacities.delete(index);
-      }
+  const layers = layerRegistry.getAll();
+  const composedShaders = shaderComposer.compose(layers);
+  renderer.recreatePipeline(composedShaders)
+    .then(() => {
+      rebuildParamBindings(layers);
+      rebindAllParamBuffers();
+      console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
+    })
+    .catch((err) => console.error('[Aurora] Pipeline recreation failed:', err));
+}
 
-      console.log(`[Aurora] Unregistered user layer: ${layerId}`);
+function handleSetUserLayerOpacity(data: Extract<AuroraRequest, { type: 'setUserLayerOpacity' }>): void {
+  userLayerOpacities.set(data.layerIndex, data.opacity);
+}
 
-      // Recompose shaders and recreate pipeline
-      const layers = layerRegistry.getAll();
-      const composedShaders = shaderComposer.compose(layers);
-      renderer.recreatePipeline(composedShaders)
-        .then(() => {
-          rebuildParamBindings(layers);
-          rebindAllParamBuffers();
-          console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
-        })
-        .catch((err) => console.error('[Aurora] Pipeline recreation failed:', err));
-    }
+function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette' }>): void {
+  const { layer, textureData, range } = data;
+  if (layer === 'temp' && renderer) {
+    renderer.updateTempPalette(textureData);
+    tempPaletteRange[0] = range[0];
+    tempPaletteRange[1] = range[1];
+  }
+}
 
-    if (type === 'setUserLayerOpacity') {
-      const { layerIndex, opacity } = e.data;
-      userLayerOpacities.set(layerIndex, opacity);
-    }
+function handleCleanup(): void {
+  for (const store of paramStores.values()) {
+    store.dispose();
+  }
+  paramStores.clear();
+  paramSlotStates.clear();
 
-    if (type === 'updatePalette') {
-      const { layer, textureData, range } = e.data;
-      if (layer === 'temp' && renderer) {
-        renderer.updateTempPalette(textureData);
-        tempPaletteRange[0] = range[0];
-        tempPaletteRange[1] = range[1];
-      }
-      // TODO: support other layers when they have palettes
-    }
+  const device = renderer?.getDevice();
 
-    if (type === 'cleanup') {
-      // Dispose param stores
-      for (const store of paramStores.values()) {
-        store.dispose();
-      }
-      paramStores.clear();
-      paramSlotStates.clear();
+  renderer?.dispose();
+  renderer = null;
 
-      // Get device before disposing renderer
-      const device = renderer?.getDevice();
+  // Chrome 143+ WebGPU cleanup bug: must unconfigure context and destroy device
+  if (canvas) {
+    const ctx = canvas.getContext('webgpu');
+    ctx?.unconfigure();
+  }
+  device?.destroy();
+  canvas = null;
+}
 
-      renderer?.dispose();
-      renderer = null;
+// ============================================================
+// Message Dispatcher
+// ============================================================
 
-      // Chrome 143+ WebGPU cleanup bug: must unconfigure context and destroy device
-      if (canvas) {
-        const ctx = canvas.getContext('webgpu');
-        ctx?.unconfigure();
-      }
-      device?.destroy();
-      canvas = null;
-    }
+type MessageHandler<T extends AuroraRequest['type']> =
+  (data: Extract<AuroraRequest, { type: T }>) => void | Promise<void>;
 
+const handlers: { [K in AuroraRequest['type']]: MessageHandler<K> } = {
+  init: handleInit,
+  options: handleOptions,
+  render: handleRender,
+  resize: handleResize,
+  uploadData: handleUploadData,
+  activateSlots: handleActivateSlots,
+  deactivateSlots: handleDeactivateSlots,
+  registerUserLayer: handleRegisterUserLayer,
+  unregisterUserLayer: handleUnregisterUserLayer,
+  setUserLayerOpacity: handleSetUserLayerOpacity,
+  updatePalette: handleUpdatePalette,
+  cleanup: handleCleanup,
+};
+
+self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await handlers[e.data.type](e.data as any);
   } catch (err) {
     self.postMessage({
       type: 'error',

@@ -7,16 +7,17 @@
  */
 
 import { signal, computed, effect } from '@preact/signals-core';
-import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TWeatherLayer, TTimestep, QueueTask } from '../config/types';
-import { isWeatherLayer } from '../config/types';
-import { fetchStreaming } from '../utils/fetch';
-import { calcBandwidth, calcEta, pruneSamples, type Sample } from '../utils/bandwidth';
+import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TWeatherLayer, TTimestep, QueueTask } from '../../config/types';
+import { isWeatherLayer } from '../../config/types';
+import { fetchStreaming } from '../../utils/fetch';
+import { calcBandwidth, calcEta, pruneSamples, type Sample } from '../../utils/bandwidth';
+import { sortByTimestep } from './sorter';
 import type { OmService } from './om-service';
-import type { OptionsService } from './options-service';
-import type { ConfigService } from './config-service';
-import type { StateService } from './state-service';
-import type { TimestepService } from './timestep';
-import type { LayerService } from './layer-service';
+import type { OptionsService } from '../options-service';
+import type { ConfigService } from '../config-service';
+import type { StateService } from '../state-service';
+import type { TimestepService } from '../timestep';
+import type { LayerService } from '../layer-service';
 
 /** Common interface for slot services (SlotService and ParamSlotService) */
 export interface ISlotReceiver {
@@ -408,42 +409,12 @@ export class QueueService implements IQueueService {
     DEBUG && console.log('[Queue]', formatStats(this.queueStats.value));
   }
 
-  /**
-   * Sort queue by loading strategy.
-   * Priority: timesteps closest to current time come first (across all params).
-   * Then rest sorted by strategy (alternate: interleave future/past, future-first: all future then past).
-   */
+  /** Sort queue by loading strategy */
   private sortQueueByStrategy(): void {
-    if (!this.stateService || this.timestepQueue.length <= 1) return;
-
+    if (!this.stateService) return;
     const currentTime = this.stateService.viewState.value.time;
-    const strategy = this.optionsService.options.value.dataCache.cacheStrategy;
-
-    // Parse timestep to Date for comparison
-    const toDate = (ts: TTimestep): Date => {
-      // Format: "2025-12-19T0400" -> "2025-12-19T04:00:00Z"
-      const formatted = ts.slice(0, 11) + ts.slice(11, 13) + ':00:00Z';
-      return new Date(formatted);
-    };
-
-    // Sort by strategy
-    this.timestepQueue.sort((a, b) => {
-      const tsA = toDate(a.order.timestep);
-      const tsB = toDate(b.order.timestep);
-      const distA = Math.abs(tsA.getTime() - currentTime.getTime());
-      const distB = Math.abs(tsB.getTime() - currentTime.getTime());
-      const isFutureA = tsA.getTime() >= currentTime.getTime();
-      const isFutureB = tsB.getTime() >= currentTime.getTime();
-
-      if (strategy === 'future-first') {
-        // Primary: all future before all past
-        if (isFutureA !== isFutureB) return isFutureA ? -1 : 1;
-        // Secondary: closest first within each group
-        return distA - distB;
-      }
-      // 'alternate': closest to current time first
-      return distA - distB;
-    });
+    const strategy = this.optionsService.options.value.dataCache.cacheStrategy as 'alternate' | 'future-first';
+    sortByTimestep(this.timestepQueue, q => q.order.timestep, currentTime, strategy);
   }
 
   /** Handle parameter changes - reactive queue management */
@@ -506,31 +477,7 @@ export class QueueService implements IQueueService {
 
   /** Sort task queue by loading strategy */
   private sortTaskQueue(currentTime: Date, strategy: string): void {
-    if (this.taskQueue.length <= 1) return;
-
-    // Parse timestep to Date for comparison
-    const toDate = (ts: TTimestep): Date => {
-      const formatted = ts.slice(0, 11) + ts.slice(11, 13) + ':00:00Z';
-      return new Date(formatted);
-    };
-
-    this.taskQueue.sort((a, b) => {
-      const tsA = toDate(a.timestep);
-      const tsB = toDate(b.timestep);
-      const distA = Math.abs(tsA.getTime() - currentTime.getTime());
-      const distB = Math.abs(tsB.getTime() - currentTime.getTime());
-      const isFutureA = tsA.getTime() >= currentTime.getTime();
-      const isFutureB = tsB.getTime() >= currentTime.getTime();
-
-      if (strategy === 'future-first') {
-        // Primary: all future before all past
-        if (isFutureA !== isFutureB) return isFutureA ? -1 : 1;
-        // Secondary: closest first within each group
-        return distA - distB;
-      }
-      // 'alternate': closest to current time first
-      return distA - distB;
-    });
+    sortByTimestep(this.taskQueue, t => t.timestep, currentTime, strategy as 'alternate' | 'future-first');
   }
 
   /** Process task queue with fast/slow logic */

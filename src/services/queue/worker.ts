@@ -5,7 +5,7 @@
  * Each worker has its own WASM instance.
  */
 
-import { initOmWasm, streamOmVariable } from '../adapters/om-file-adapter';
+import { initOmWasm, streamOmVariable } from './om-adapter';
 
 let ready = false;
 const activeJobs = new Map<string, AbortController>();

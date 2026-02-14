@@ -13,7 +13,7 @@ import { effect, signal } from '@preact/signals-core';
 import { type TWeatherLayer, type TTimestep, type TimestepOrder, type LayerState } from '../config/types';
 import type { TimestepService } from './timestep';
 import type { AuroraService } from './aurora-service';
-import type { QueueService } from './queue-service';
+import type { QueueService } from './queue';
 import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';

@@ -5,8 +5,8 @@
  * Each worker has its own WASM instance for true parallelism.
  */
 
-import type { WorkerRequest, WorkerResponse } from '../workers/decompress.worker';
-import type { OmSlice, OmPreflight } from '../config/types';
+import type { WorkerRequest, WorkerResponse } from './worker';
+import type { OmSlice, OmPreflight } from '../../config/types';
 
 const DEBUG = false;
 
@@ -47,7 +47,7 @@ export class WorkerPool {
 
     for (let i = 0; i < this.poolSize; i++) {
       const worker = new Worker(
-        new URL('../workers/decompress.worker.ts', import.meta.url),
+        new URL('./worker.ts', import.meta.url),
         { type: 'module' }
       );
 
@@ -231,7 +231,7 @@ export class WorkerPool {
 
     // Spawn replacement
     const worker = new Worker(
-      new URL('../workers/decompress.worker.ts', import.meta.url),
+      new URL('./worker.ts', import.meta.url),
       { type: 'module' }
     );
 

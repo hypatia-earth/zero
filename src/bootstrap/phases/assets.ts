@@ -2,7 +2,7 @@
  * Assets Phase - Load static files (LUTs, basemap, WASM, fonts, logo)
  */
 
-import type { QueueService } from '../../services/queue-service';
+import type { QueueService } from '../../services/queue';
 import type { CapabilitiesService } from '../../services/capabilities-service';
 import type { Progress } from '../progress';
 

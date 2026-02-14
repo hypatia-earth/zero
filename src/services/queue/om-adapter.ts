@@ -5,7 +5,7 @@
  * Supports streaming: fetch slice → decode complete chunks → yield → repeat
  */
 
-import { fetchSuffix, fetchRange } from '../utils/fetch';
+import { fetchSuffix, fetchRange } from '../../utils/fetch';
 
 // WASM module type - functions have underscore prefix
 interface OmWasm {

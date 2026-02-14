@@ -8,11 +8,11 @@
 import type { AuroraService, AuroraConfig, AuroraAssets } from '../../services/aurora-service';
 import type { PaletteService } from '../../services/palette-service';
 import type { AboutService } from '../../services/about-service';
-import type { OmService } from '../../services/om-service';
+import type { OmService } from '../../services/queue/om-service';
 import type { OptionsService } from '../../services/options-service';
 import type { ConfigService } from '../../services/config-service';
 import type { LayerService } from '../../services/layer-service';
-import type { ISlotService } from '../../services/queue-service';
+import type { ISlotService } from '../../services/queue';
 import type { Progress } from '../progress';
 import type { LoadedAssets } from './assets';
 import { isWeatherLayer } from '../../config/types';

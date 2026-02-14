@@ -8,13 +8,13 @@
 import { ConfigService } from '../services/config-service';
 import { OptionsService } from '../services/options-service';
 import { StateService } from '../services/state-service';
-import { OmService } from '../services/om-service';
+import { OmService } from '../services/queue/om-service';
 import { DialogService } from '../services/dialog-service';
 import { AboutService } from '../services/about-service';
 import { ThemeService } from '../services/theme-service';
 import { CapabilitiesService } from '../services/capabilities-service';
 import { TimestepService } from '../services/timestep';
-import { QueueService, type ISlotService } from '../services/queue-service';
+import { QueueService, type ISlotService } from '../services/queue';
 import { createAuroraService, type AuroraService } from '../services/aurora-service';
 import { ParamSlotService } from '../services/param-slot-service';
 import { PaletteService } from '../services/palette-service';

@@ -6,10 +6,10 @@
  * Uses worker pool for parallel decompression (minimum 1 worker).
  */
 
-import type { IOmService, OmPreflight, OmSlice } from '../config/types';
-import { preflightOmVariable } from '../adapters/om-file-adapter';
+import type { IOmService, OmPreflight, OmSlice } from '../../config/types';
+import { preflightOmVariable } from './om-adapter';
 import { WorkerPool } from './worker-pool';
-import type { OptionsService } from './options-service';
+import type { OptionsService } from '../options-service';
 
 export class OmService implements IOmService {
   private workerPool: WorkerPool | null = null;
