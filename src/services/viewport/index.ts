@@ -5,7 +5,7 @@
  * and updates the Camera accordingly.
  */
 
-import type { Camera } from '../../render/camera';
+import type { Camera } from '../aurora-service';
 import type { StateService } from '../state-service';
 import type { ConfigService } from '../config-service';
 import type { OptionsService } from '../options-service';

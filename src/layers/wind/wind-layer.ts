@@ -10,7 +10,7 @@
 import windRenderCode from './render.wgsl?raw';
 import windComputeCode from './compute.wgsl?raw';
 import { generateFibonacciSphere } from '../../utils/fibonacci-sphere';
-import { generateGaussianLUTs } from '../../render/gaussian-grid';
+import { generateGaussianLUTs } from '../../utils/gaussian-grid';
 import { defaultConfig } from '../../config/defaults';
 import type { LayerState } from '../../config/types';
 
