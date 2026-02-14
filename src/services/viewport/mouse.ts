@@ -4,7 +4,7 @@
  * Handles mouse events: drag, wheel zoom/time, double-click
  */
 
-import type { GestureDirection } from './gesture-detector';
+import type { GestureDirection } from './gestures';
 
 export interface MouseDragConfig {
   sensitivity: number;

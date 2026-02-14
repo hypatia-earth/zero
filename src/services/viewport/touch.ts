@@ -4,7 +4,7 @@
  * Handles touch events: single finger drag, two finger pinch/pan, tap to zoom
  */
 
-import type { TwoFingerGestureMode } from './gesture-detector';
+import type { TwoFingerGestureMode } from './gestures';
 
 export interface TouchDragConfig {
   sensitivity: number;

@@ -16,7 +16,7 @@ import type { OptionsService } from './options-service';
 import type { PerfService } from './perf-service';
 import type { PaletteService } from './palette-service';
 import { Camera } from '../render/camera';
-import { setupCameraControls } from './camera-controls';
+import { setupViewport } from './viewport';
 
 // Re-export types for consumers
 export type { AuroraConfig, AuroraAssets } from '../workers/aurora.worker';
@@ -115,7 +115,7 @@ export function createAuroraService(
 
   // Camera (created in init)
   let camera: Camera | null = null;
-  let cameraControls: { tick: () => void; setPosition: (lat: number, lon: number, distance: number) => void } | null = null;
+  let viewport: { tick: () => void; setPosition: (lat: number, lon: number, distance: number) => void } | null = null;
   let canvas: HTMLCanvasElement | null = null;
 
   // Reusable buffers for render message (avoid GC pressure)
@@ -199,7 +199,7 @@ export function createAuroraService(
       camera.setAspect(canvas.clientWidth, canvas.clientHeight);
 
       // Set up camera controls
-      cameraControls = setupCameraControls(canvas, camera, stateService, configService, optionsService);
+      viewport = setupViewport(canvas, camera, stateService, configService, optionsService);
 
       // Send initial options
       send({ type: 'options', value: optionsService.options.value });
@@ -284,7 +284,7 @@ export function createAuroraService(
 
     start(): void {
       const cam = camera!;
-      const controls = cameraControls!;
+      const controls = viewport!;
 
       onFrameComplete = (timing, memory) => {
         renderInFlight = false;
@@ -338,8 +338,8 @@ export function createAuroraService(
     },
 
     setCameraPosition(lat: number, lon: number, distance: number): void {
-      if (!cameraControls) throw new Error('AuroraService.setCameraPosition() called before init()');
-      cameraControls.setPosition(lat, lon, distance);
+      if (!viewport) throw new Error('AuroraService.setCameraPosition() called before init()');
+      viewport.setPosition(lat, lon, distance);
     },
 
     memoryStats,
