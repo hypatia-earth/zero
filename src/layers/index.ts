@@ -2,11 +2,8 @@
  * Built-in Layer Declarations
  *
  * Imports layer declarations from layer folders.
- * These are registered in LayerService at bootstrap.
+ * Registered in LayerService.registerBuiltInLayers() at bootstrap.
  */
-
-import type { LayerService } from '../services/layer';
-import { shaderComposer } from '../render/shader-composer';
 
 // Import layer declarations from folders
 import { layer as earthLayer } from './earth';
@@ -30,14 +27,3 @@ export const builtInLayers = [
   pressureLayer,
   windLayer,
 ];
-
-/** Register all built-in layers in the registry */
-export function registerBuiltInLayers(registry: LayerService): void {
-  for (const layer of builtInLayers) {
-    registry.registerBuiltIn(layer);
-  }
-  console.log('[Layers] Registered:', registry.getAll().map(l => `${l.id}:${l.index}`).join(', '));
-
-  // Compose shaders from registered layers
-  shaderComposer.compose(registry.getAll());
-}

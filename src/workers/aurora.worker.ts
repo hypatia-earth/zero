@@ -18,7 +18,6 @@ import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.sch
 import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer } from '../render/shader-composer';
 import { LayerService } from '../services/layer';
-import { registerBuiltInLayers } from '../layers';
 
 // ============================================================
 // Asset types for worker transfer
@@ -324,7 +323,7 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 
   // Compose shaders dynamically from layer registry
   layerRegistry = new LayerService();
-  registerBuiltInLayers(layerRegistry);
+  layerRegistry.registerBuiltInLayers();
   initAnimatedOpacity();  // Initialize opacity map for all layers
   const layers = layerRegistry.getAll();
   const composedShaders = shaderComposer.compose(layers);

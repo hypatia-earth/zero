@@ -10,6 +10,7 @@
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import type { TLayerCategory, SlabConfig } from '../../config/types';
+import { builtInLayers } from '../../layers';
 
 export type LayerType = 'decoration' | 'texture' | 'geometry' | 'solid';
 export type ComputeTrigger = 'data-ready' | 'time-change';
@@ -218,6 +219,14 @@ export class LayerService {
   registerBuiltIn(declaration: LayerDeclaration): void {
     declaration.isBuiltIn = true;
     this.register(declaration);
+  }
+
+  /** Register all built-in layers from the layers module */
+  registerBuiltInLayers(): void {
+    for (const layer of builtInLayers) {
+      this.registerBuiltIn(layer);
+    }
+    console.log('[Layers] Registered:', this.getAll().map(l => `${l.id}:${l.index}`).join(', '));
   }
 
   unregister(id: string): void {

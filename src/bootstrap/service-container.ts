@@ -21,7 +21,6 @@ import { PaletteService } from '../services/palette-service';
 import { KeyboardService } from '../services/keyboard-service';
 import { PerfService } from '../services/perf-service';
 import { LayerService } from '../services/layer';
-import { registerBuiltInLayers } from '../layers';
 
 export interface ServiceContainer {
   // Foundation (no service deps)
@@ -73,7 +72,7 @@ export function createFoundationServices(): Pick<
   const perfService = new PerfService();
 
   // Register built-in layers
-  registerBuiltInLayers(layerService);
+  layerService.registerBuiltInLayers();
 
   return {
     layerService,
