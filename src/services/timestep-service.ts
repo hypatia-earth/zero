@@ -42,8 +42,8 @@ export interface TimestepState {
   params: Map<string, ParamState>;  // Keyed by param name (e.g., 'temperature_2m')
 }
 
-/** SW cache layer detail response */
-interface LayerDetail {
+/** SW cache param detail response */
+interface ParamDetail {
   items: Array<{ url: string; sizeMB: string }>;
 }
 
@@ -113,27 +113,29 @@ export class TimestepService {
       ecmwf.add(ts.timestep);
     }
 
-    // Query SW cache per layer, then create param entries
-    // SW cache is organized by layer (legacy), but we track by param
+    // Query SW cache per param (SW cache is now param-centric)
     const params = new Map<string, ParamState>();
     const readyWeatherLayers = this.configService.getReadyLayers().filter(isWeatherLayer);
+
+    // Collect all params from ready weather layers
+    const allParams = new Set<string>();
     for (const layer of readyWeatherLayers) {
-      await onProgress?.('cache', layer);
-      const { cache, sizes } = await this.querySWCache(layer);
-
-      // Get params for this layer and create entries for each
       const layerDecl = this.layerService.getBuiltIn().find(l => l.id === layer);
-      const layerParams = layerDecl?.params ?? [layer];  // Fallback to layer name if no params
-
-      for (const param of layerParams) {
-        // All params of same layer share cache state (SW cache is per-layer)
-        params.set(param, { cache, gpu: new Set(), sizes });
+      for (const param of layerDecl?.params ?? []) {
+        allParams.add(param);
       }
+    }
+
+    // Query cache for each param
+    for (const param of allParams) {
+      await onProgress?.('cache', param);
+      const { cache, sizes } = await this.querySWCache(param);
+      params.set(param, { cache, gpu: new Set(), sizes });
 
       const avgMB = sizes.size > 0
         ? ([...sizes.values()].reduce((a, b) => a + b, 0) / sizes.size / 1024 / 1024).toFixed(1)
         : '0';
-      console.log(`[Timestep] ${P(layer)}: ${sizes.size} cached, avg ${avgMB}MB`);
+      console.log(`[Timestep] ${P(param)}: ${sizes.size} cached, avg ${avgMB}MB`);
     }
 
     this.state.value = { ecmwf, params };
@@ -406,9 +408,9 @@ export class TimestepService {
     const rangeCount = new Map<TTimestep, number>();
 
     try {
-      const detail = await sendSWMessage<LayerDetail>({
-        type: 'GET_LAYER_STATS',
-        layer: param,
+      const detail = await sendSWMessage<ParamDetail>({
+        type: 'GET_PARAM_STATS',
+        param,
       });
 
       const now = Date.now();

@@ -5,16 +5,7 @@
  * Supports streaming: fetch slice → decode complete chunks → yield → repeat
  */
 
-import { fetchSuffix, fetchRange, type CacheLayer } from '../utils/fetch';
-import { builtInLayers } from '../layers';
-import type { TParam, TWeatherLayer } from '../config/types';
-
-// Build param -> layer lookup from built-in layer declarations
-const PARAM_TO_LAYER: Record<TParam, TWeatherLayer> = Object.fromEntries(
-  builtInLayers.flatMap(layer =>
-    layer.params?.map(param => [param, layer.id]) ?? []
-  )
-) as Record<TParam, TWeatherLayer>;
+import { fetchSuffix, fetchRange } from '../utils/fetch';
 
 // WASM module type - functions have underscore prefix
 interface OmWasm {
@@ -106,11 +97,6 @@ interface ChunkInfo {
   indexCount: number;
 }
 
-/** Map param name to cache layer */
-function paramToLayer(param: string): CacheLayer {
-  return PARAM_TO_LAYER[param as TParam] ?? 'meta';
-}
-
 export interface OmPreflightResult {
   totalBytes: number;
   chunks: number;
@@ -149,7 +135,6 @@ export async function streamOmVariable(
   onBytes?: OmBytesCallback,
   signal?: AbortSignal
 ): Promise<OmReadResult> {
-  const cacheLayer = paramToLayer(param);
   if (!wasmInstance) {
     throw new Error('WASM not initialized. Call initOmWasm first.');
   }
@@ -306,7 +291,7 @@ export async function streamOmVariable(
     const indexOffset = Number(wasm.getValue(indexReadPtr, 'i64'));
     const indexCount = Number(wasm.getValue(indexReadPtr + 8, 'i64'));
 
-    const indexData = await fetchRange(url, indexOffset, indexCount, cacheLayer);
+    const indexData = await fetchRange(url, indexOffset, indexCount, param);
     const blockIdx = indexBlocks.length;
     indexBlocks.push({ offset: indexOffset, count: indexCount, data: indexData });
 
@@ -401,7 +386,7 @@ export async function streamOmVariable(
     }
 
     // Fetch this slice (use layer for caching)
-    const sliceData = await fetchRange(url, firstChunk.dataOffset, sliceSize, cacheLayer);
+    const sliceData = await fetchRange(url, firstChunk.dataOffset, sliceSize, param);
     allDataBuffer.set(sliceData, sliceByteStart);
     onBytes?.(sliceData.length);
 

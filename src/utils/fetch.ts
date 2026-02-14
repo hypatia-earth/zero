@@ -3,13 +3,11 @@
  *
  * All network requests go through these functions to enable:
  * - Consistent error handling
- * - Layer-based SW caching via X-Layer header
+ * - Param-based SW caching via X-Param header
  */
 
-import type { TWeatherLayer } from '../config/types';
-
-/** Layer identifier for SW caching */
-export type CacheLayer = TWeatherLayer | 'meta';
+/** Param identifier for SW caching (any param name or 'meta') */
+export type CacheParam = string;
 
 /**
  * Simple GET fetch, returns ArrayBuffer
@@ -61,19 +59,19 @@ export async function fetchStreaming(
 /**
  * Range GET fetch, returns Uint8Array
  * Used for: .om file partial reads
- * @param layer - Layer identifier for SW cache segregation
+ * @param param - Param identifier for SW cache segregation
  * @param signal - Optional AbortSignal for cancellation
  */
 export async function fetchRange(
   url: string,
   offset: number,
   size: number,
-  layer: CacheLayer = 'meta',
+  param: CacheParam = 'meta',
   signal?: AbortSignal
 ): Promise<Uint8Array> {
   const headers: HeadersInit = {
     Range: `bytes=${offset}-${offset + size - 1}`,
-    'X-Layer': layer,
+    'X-Param': param,
   };
   const response = await fetch(url, { headers, signal: signal ?? null });
   if (!response.ok && response.status !== 206) {
@@ -103,17 +101,18 @@ export async function fetchHead(url: string): Promise<number> {
  * Suffix range GET fetch, returns last N bytes
  * Uses HTTP suffix range (bytes=-N) to get last N bytes without knowing file size
  * Used for: .om trailer fetch (saves HEAD roundtrip)
+ * @param param - Param identifier for SW cache segregation
  * @param signal - Optional AbortSignal for cancellation
  */
 export async function fetchSuffix(
   url: string,
   suffixBytes: number,
-  layer: CacheLayer = 'meta',
+  param: CacheParam = 'meta',
   signal?: AbortSignal
 ): Promise<Uint8Array> {
   const headers: HeadersInit = {
     Range: `bytes=-${suffixBytes}`,
-    'X-Layer': layer,
+    'X-Param': param,
   };
   const response = await fetch(url, { headers, signal: signal ?? null });
   if (!response.ok && response.status !== 206) {

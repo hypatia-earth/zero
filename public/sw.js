@@ -4,13 +4,13 @@
  * Cache strategy:
  * - Past data (validTime < now): cache 30 days (immutable reanalysis)
  * - Future data (forecasts): cache 1 hour (updated with new model runs)
- * - Separate cache per layer (temp, wind, rain, pressure, meta)
+ * - Separate cache per param (temperature_2m, wind_u_component_10m, etc.)
  * - Cache key: path + range bytes
  */
 
 const DEBUG = false;
 const CACHE_PREFIX = 'om-';
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';  // Bumped for param-based caching
 const S3_HOST = 'openmeteo.s3.amazonaws.com';
 
 // Log to main thread via BroadcastChannel
@@ -22,15 +22,23 @@ function swLog(...args) {
 const PAST_MAX_AGE = 30 * 24 * 3600 * 1000; // 30 days in ms
 const FUTURE_MAX_AGE = 7 * 24 * 3600 * 1000; // 7 days in ms (data immutable per model run)
 
-// Valid layer names (must match TWeatherLayer + 'meta')
-const VALID_LAYERS = ['temp', 'rain', 'clouds', 'humidity', 'wind', 'pressure', 'meta'];
+// Valid param names for caching
+const VALID_PARAMS = [
+  'temperature_2m',
+  'precipitation_type',
+  'cloud_cover',
+  'wind_u_component_10m',
+  'wind_v_component_10m',
+  'pressure_msl',
+  'meta',
+];
 
 /**
- * Get cache name for a layer
+ * Get cache name for a param
  */
-function getCacheName(layer) {
-  const validLayer = VALID_LAYERS.includes(layer) ? layer : 'meta';
-  return `${CACHE_PREFIX}${validLayer}-${CACHE_VERSION}`;
+function getCacheName(param) {
+  const validParam = VALID_PARAMS.includes(param) ? param : 'meta';
+  return `${CACHE_PREFIX}${validParam}-${CACHE_VERSION}`;
 }
 
 // Legacy cache name to clean up
@@ -111,14 +119,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Get layer from custom header
-  const layer = event.request.headers.get('X-Layer') || 'meta';
+  // Get param from custom header
+  const param = event.request.headers.get('X-Param') || 'meta';
 
-  event.respondWith(handleRangeRequest(event.request, url, rangeHeader, layer));
+  event.respondWith(handleRangeRequest(event.request, url, rangeHeader, param));
 });
 
-async function handleRangeRequest(request, url, rangeHeader, layer) {
-  const cacheName = getCacheName(layer);
+async function handleRangeRequest(request, url, rangeHeader, param) {
+  const cacheName = getCacheName(param);
   const cache = await caches.open(cacheName);
   const cacheKey = buildCacheKey(url, rangeHeader);
   const validTime = parseValidTime(url);
@@ -127,17 +135,17 @@ async function handleRangeRequest(request, url, rangeHeader, layer) {
   const cachedResponse = await cache.match(cacheKey);
   if (cachedResponse) {
     if (isEntryValid(cachedResponse, validTime)) {
-      DEBUG && swLog(`[SW] HIT (${layer}):`, cacheKey.slice(-50));
+      DEBUG && swLog(`[SW] HIT (${param}):`, cacheKey.slice(-50));
       return cachedResponse;
     } else {
       const cachedAt = cachedResponse.headers.get('x-cached-at');
       const age = cachedAt ? Math.round((Date.now() - parseInt(cachedAt)) / 60000) : '?';
-      DEBUG && swLog(`[SW] EXPIRED (${layer}): age=${age}min`, cacheKey.slice(-50));
+      DEBUG && swLog(`[SW] EXPIRED (${param}): age=${age}min`, cacheKey.slice(-50));
     }
   }
 
   // Fetch from network
-  DEBUG && swLog(`[SW] MISS (${layer}):`, cacheKey.slice(-50));
+  DEBUG && swLog(`[SW] MISS (${param}):`, cacheKey.slice(-50));
   const networkResponse = await fetch(request);
 
   if (networkResponse.ok || networkResponse.status === 206) {
@@ -145,7 +153,7 @@ async function handleRangeRequest(request, url, rangeHeader, layer) {
     const headers = new Headers(networkResponse.headers);
     headers.set('x-cached-at', Date.now().toString());
     headers.set('x-original-status', networkResponse.status.toString());
-    headers.set('x-layer', layer);
+    headers.set('x-param', param);
 
     const responseToCache = new Response(await networkResponse.clone().arrayBuffer(), {
       status: 200,
@@ -177,7 +185,7 @@ self.addEventListener('message', async (event) => {
   }
 
   if (type === 'CLEAR_CACHE') {
-    // Clear all layer caches
+    // Clear all param caches
     const keys = await caches.keys();
     const deleted = await Promise.all(
       keys.filter(k => k.startsWith(CACHE_PREFIX)).map(k => caches.delete(k))
@@ -185,25 +193,25 @@ self.addEventListener('message', async (event) => {
     event.ports[0].postMessage({ success: deleted.some(d => d) });
   }
 
-  if (type === 'CLEAR_LAYER_CACHE') {
-    const { layer } = event.data;
-    const cacheName = getCacheName(layer);
+  if (type === 'CLEAR_PARAM_CACHE') {
+    const { param } = event.data;
+    const cacheName = getCacheName(param);
     const deleted = await caches.delete(cacheName);
-    event.ports[0].postMessage({ success: deleted, layer });
+    event.ports[0].postMessage({ success: deleted, param });
   }
 
   if (type === 'GET_CACHE_STATS') {
     const keys = await caches.keys();
-    const layerCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
-    const stats = { layers: {}, totalEntries: 0, totalSizeMB: '0' };
+    const paramCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
+    const stats = { params: {}, totalEntries: 0, totalSizeMB: '0' };
 
-    for (const cacheName of layerCaches) {
+    for (const cacheName of paramCaches) {
       const cache = await caches.open(cacheName);
       const requests = await cache.keys();
 
-      // Extract layer name from cache name: om-temp-v2 → temp
-      const layerName = cacheName.replace(CACHE_PREFIX, '').replace(`-${CACHE_VERSION}`, '');
-      stats.layers[layerName] = {
+      // Extract param name from cache name: om-temperature_2m-v3 → temperature_2m
+      const paramName = cacheName.replace(CACHE_PREFIX, '').replace(`-${CACHE_VERSION}`, '');
+      stats.params[paramName] = {
         entries: requests.length,
         sizeMB: '0'  // Skip slow blob size calc for quick stats
       };
@@ -213,9 +221,9 @@ self.addEventListener('message', async (event) => {
     event.ports[0].postMessage(stats);
   }
 
-  if (type === 'GET_LAYER_STATS') {
-    const { layer } = event.data;
-    const cacheName = getCacheName(layer);
+  if (type === 'GET_PARAM_STATS') {
+    const { param } = event.data;
+    const cacheName = getCacheName(param);
     const cache = await caches.open(cacheName);
     const requests = await cache.keys();
     let totalSize = 0;
@@ -236,7 +244,7 @@ self.addEventListener('message', async (event) => {
     }
 
     event.ports[0].postMessage({
-      layer,
+      param,
       entries: entries.length,
       totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2),
       items: entries
@@ -247,10 +255,10 @@ self.addEventListener('message', async (event) => {
     const { days } = event.data;
     const cutoff = Date.now() - (days * 24 * 3600 * 1000);
     const keys = await caches.keys();
-    const layerCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
+    const paramCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
     let deleted = 0;
 
-    for (const cacheName of layerCaches) {
+    for (const cacheName of paramCaches) {
       const cache = await caches.open(cacheName);
       const requests = await cache.keys();
 
@@ -273,10 +281,10 @@ self.addEventListener('message', async (event) => {
     const { cutoffIso } = event.data;
     const cutoff = new Date(cutoffIso);
     const keys = await caches.keys();
-    const layerCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
+    const paramCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
     let deleted = 0;
 
-    for (const cacheName of layerCaches) {
+    for (const cacheName of paramCaches) {
       const cache = await caches.open(cacheName);
       const requests = await cache.keys();
 
@@ -297,10 +305,10 @@ self.addEventListener('message', async (event) => {
     const { cutoffIso } = event.data;
     const cutoff = new Date(cutoffIso);
     const keys = await caches.keys();
-    const layerCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
+    const paramCaches = keys.filter(k => k.startsWith(CACHE_PREFIX));
     let count = 0;
 
-    for (const cacheName of layerCaches) {
+    for (const cacheName of paramCaches) {
       const cache = await caches.open(cacheName);
       const requests = await cache.keys();
 

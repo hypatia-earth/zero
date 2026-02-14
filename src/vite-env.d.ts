@@ -8,11 +8,14 @@ interface Window {
   __hypatia?: Record<string, unknown>;
   __omCache?: {
     clearCache: () => Promise<boolean>;
-    clearLayerCache: (layer: string) => Promise<boolean>;
+    clearParamCache: (param: string) => Promise<boolean>;
     getCacheStats: () => Promise<unknown>;
-    getLayerStats: (layer: string) => Promise<unknown>;
+    getParamStats: (param: string) => Promise<unknown>;
     clearOlderThan: (days: number) => Promise<number>;
     unregister: () => Promise<void>;
+    prefetch: () => Promise<void>;
+    prefetchHistory: () => Promise<unknown[]>;
+    clearPrefetchHistory: () => Promise<boolean>;
     help: () => void;
   };
 }

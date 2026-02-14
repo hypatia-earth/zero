@@ -5,14 +5,13 @@
  * Optionally registers Periodic Background Sync for prefetching.
  */
 
-import { SW_CACHED_WEATHER_LAYERS } from '../config/types';
 import { sendSWMessage } from '../utils/sw-message';
 
 /** Prefetch configuration passed to SW */
 export interface PrefetchConfig {
   enabled: boolean;
   forecastDays: string;
-  layers: string[];  // ['temp', 'pressure', 'wind']
+  layers: string[];  // ['temp', 'pressure', 'wind'] - user-facing layer names
 }
 
 // Extend ServiceWorkerRegistration for Periodic Sync (not in all TS libs)
@@ -26,22 +25,22 @@ interface ServiceWorkerRegistrationWithPeriodicSync extends ServiceWorkerRegistr
   periodicSync?: PeriodicSyncManager;
 }
 
-/** Layer stats from SW */
-interface LayerStats {
+/** Param stats from SW */
+interface ParamStats {
   entries: number;
   sizeMB: string;
 }
 
 /** Cache stats from SW */
 interface CacheStats {
-  layers: Record<string, LayerStats>;
+  params: Record<string, ParamStats>;
   totalEntries: number;
   totalSizeMB: string;
 }
 
-/** Detailed layer stats from SW */
-interface LayerDetail {
-  layer: string;
+/** Detailed param stats from SW */
+export interface ParamDetail {
+  param: string;
   entries: number;
   totalSizeMB: string;
   items: Array<{
@@ -104,18 +103,14 @@ export async function registerServiceWorker(): Promise<void> {
 }
 
 /**
- * Log cached timesteps per weather layer
+ * Log cached timesteps per param
  */
 async function logCachedTimesteps(): Promise<void> {
   try {
     const stats = await sendSWMessage<CacheStats>({ type: 'GET_CACHE_STATS' });
-    const codes: Record<string, string> = { temp: 'T', rain: 'R', clouds: 'C', humidity: 'H', pressure: 'P', wind: 'W' };
-    const parts = SW_CACHED_WEATHER_LAYERS
-      .map(layer => {
-        const n = stats.layers[layer]?.entries ?? 0;
-        return n > 0 ? `${codes[layer]}:${n}` : null;
-      })
-      .filter(Boolean);
+    const parts = Object.entries(stats.params)
+      .filter(([, s]) => s.entries > 0)
+      .map(([param, s]) => `${param.slice(0, 4)}:${s.entries}`);
     const cacheInfo = parts.length > 0 ? ` cache: ${parts.join(' ')}` : '';
     console.log(`[SW] Ready${cacheInfo}`);
   } catch {
@@ -133,30 +128,30 @@ export async function clearCache(): Promise<boolean> {
 }
 
 /**
- * Clear cache for a specific layer
+ * Clear cache for a specific param
  */
-async function clearLayerCache(layer: string): Promise<boolean> {
-  const result = await sendSWMessage<{ success: boolean; layer: string }>({ type: 'CLEAR_LAYER_CACHE', layer });
-  console.log(result.success ? `[SW] Cache cleared for layer: ${layer}` : `[SW] No cache found for layer: ${layer}`);
+async function clearParamCache(param: string): Promise<boolean> {
+  const result = await sendSWMessage<{ success: boolean; param: string }>({ type: 'CLEAR_PARAM_CACHE', param });
+  console.log(result.success ? `[SW] Cache cleared for param: ${param}` : `[SW] No cache found for param: ${param}`);
   return result.success;
 }
 
 /**
- * Get cache statistics (per layer and total)
+ * Get cache statistics (per param and total)
  */
 async function getCacheStats(): Promise<CacheStats> {
   const result = await sendSWMessage<CacheStats>({ type: 'GET_CACHE_STATS' });
   console.log(`[SW] Cache total: ${result.totalEntries} entries, ${result.totalSizeMB} MB`);
-  console.table(result.layers);
+  console.table(result.params);
   return result;
 }
 
 /**
- * Get detailed stats for a specific layer
+ * Get detailed stats for a specific param
  */
-async function getLayerStats(layer: string): Promise<LayerDetail> {
-  const result = await sendSWMessage<LayerDetail>({ type: 'GET_LAYER_STATS', layer });
-  console.log(`[SW] Layer '${layer}': ${result.entries} entries, ${result.totalSizeMB} MB`);
+async function getParamStats(param: string): Promise<ParamDetail> {
+  const result = await sendSWMessage<ParamDetail>({ type: 'GET_PARAM_STATS', param });
+  console.log(`[SW] Param '${param}': ${result.entries} entries, ${result.totalSizeMB} MB`);
   if (result.items.length > 0) {
     console.table(result.items.slice(0, 20)); // Show first 20
     if (result.items.length > 20) {
@@ -164,6 +159,11 @@ async function getLayerStats(layer: string): Promise<LayerDetail> {
     }
   }
   return result;
+}
+
+/** Export for timestep-service */
+export async function querySWCacheForParam(param: string): Promise<ParamDetail> {
+  return sendSWMessage<ParamDetail>({ type: 'GET_PARAM_STATS', param });
 }
 
 /**
@@ -245,9 +245,9 @@ export async function triggerPrefetch(): Promise<void> {
 export function setupCacheUtils(): void {
   const utils = {
     clearCache,
-    clearLayerCache,
+    clearParamCache,
     getCacheStats,
-    getLayerStats,
+    getParamStats,
     clearOlderThan,
     unregister,
     prefetch: triggerPrefetch,
@@ -256,15 +256,15 @@ export function setupCacheUtils(): void {
     help: () => {
       console.log(`
 __omCache utilities:
-  getCacheStats()         - Show all layer caches with entry count and size
-  getLayerStats('temp')   - Show detailed entries for a layer (temp, wind, rain, pressure, meta)
-  clearCache()            - Clear all layer caches
-  clearLayerCache('temp') - Clear a specific layer cache
-  clearOlderThan(7)       - Clear entries older than N days
-  unregister()            - Unregister SW and clear caches
-  prefetch()              - Trigger manual prefetch (test)
-  prefetchHistory()       - Show prefetch history
-  clearPrefetchHistory()  - Clear prefetch history
+  getCacheStats()                    - Show all param caches with entry count and size
+  getParamStats('temperature_2m')    - Show detailed entries for a param
+  clearCache()                       - Clear all param caches
+  clearParamCache('temperature_2m')  - Clear a specific param cache
+  clearOlderThan(7)                  - Clear entries older than N days
+  unregister()                       - Unregister SW and clear caches
+  prefetch()                         - Trigger manual prefetch (test)
+  prefetchHistory()                  - Show prefetch history
+  clearPrefetchHistory()             - Clear prefetch history
       `);
     }
   };
