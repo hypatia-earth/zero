@@ -75,9 +75,7 @@ export class GlobeRenderer {
   private basemapSampler!: GPUSampler;
   private gaussianLatsBuffer!: GPUBuffer;
   private ringOffsetsBuffer!: GPUBuffer;
-  private tempData0Buffer!: GPUBuffer;  // Slot 0 buffer (rebound on slot change)
-  private tempData1Buffer!: GPUBuffer;  // Slot 1 buffer (rebound on slot change)
-  private rainDataBuffer!: GPUBuffer;
+  // tempData0/1 and rainData removed - now using dynamic param bindings
   private cloudsDataBuffer!: GPUBuffer;
   private humidityDataBuffer!: GPUBuffer;
   private windDataBuffer!: GPUBuffer;
@@ -233,24 +231,9 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // 4-byte placeholders: WebGPU bind groups require buffers at creation time.
-    // finalize() creates bind groups before SlotService/LayerStore exist.
-    // LayerStore replaces these via setTempSlotBuffers() → recreateBindGroup().
-    this.tempData0Buffer = this.device.createBuffer({
-      size: 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    this.tempData1Buffer = this.device.createBuffer({
-      size: 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-
     // 4-byte placeholder buffers for unimplemented texture layers
     // Real buffers come from LayerStore when slot-based loading is implemented
-    this.rainDataBuffer = this.device.createBuffer({
-      size: 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
+    // Note: tempData0/1 and rainData removed - now using dynamic param bindings
     this.cloudsDataBuffer = this.device.createBuffer({
       size: 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
@@ -341,38 +324,11 @@ export class GlobeRenderer {
     const shaderModule = this.device.createShaderModule({ code: shaderCode });
     const postProcessModule = this.device.createShaderModule({ code: postprocessShaderCode });
 
-    this.bindGroupLayout = this.device.createBindGroupLayout({
-      entries: [
-        { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: 'cube' } },
-        { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-        { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-        { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-        { binding: 5, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // tempData0 (slot 0)
-        { binding: 6, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // tempData1 (slot 1)
-        // Atmosphere LUTs
-        { binding: 7, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // transmittance (2D)
-        { binding: 8, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } },  // scattering (3D)
-        { binding: 9, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // irradiance (2D)
-        { binding: 10, visibility: GPUShaderStage.FRAGMENT, sampler: {} },  // atmosphere sampler
-        // Font atlas for grid labels
-        { binding: 11, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
-        { binding: 12, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-        // Temperature palette
-        { binding: 13, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
-        { binding: 14, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-        // Additional weather layers
-        { binding: 15, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // cloudsData
-        { binding: 16, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // humidityData
-        { binding: 17, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // windData
-        { binding: 18, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // rainData
-        // Logo texture for idle globe
-        { binding: 19, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
-        { binding: 20, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-        // Grid lines for animated LoD
-        { binding: 21, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-      ],
-    });
+    // Store current param bindings for dynamic layout (set by ShaderComposer.compose())
+    this.currentParamBindings = [...activeParamBindings];
+
+    // Create bind group layout with dynamic param entries
+    this.bindGroupLayout = this.createDynamicBindGroupLayout();
 
     this.pipeline = this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
@@ -430,38 +386,8 @@ export class GlobeRenderer {
    * Must be called after createAtmosphereTextures() and loadBasemap()
    */
   finalize(): void {
-    // Globe pass bind group
-    this.bindGroup = this.device.createBindGroup({
-      layout: this.bindGroupLayout,
-      entries: [
-        { binding: 0, resource: { buffer: this.uniformBuffer } },
-        { binding: 1, resource: this.basemapTexture.createView({ dimension: 'cube' }) },
-        { binding: 2, resource: this.basemapSampler },
-        { binding: 3, resource: { buffer: this.gaussianLatsBuffer } },
-        { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
-        { binding: 5, resource: { buffer: this.tempData0Buffer } },
-        { binding: 6, resource: { buffer: this.tempData1Buffer } },
-        // Atmosphere LUTs
-        { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
-        { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
-        { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
-        { binding: 10, resource: this.atmosphereLUTs.sampler },
-        // Font atlas
-        { binding: 11, resource: this.fontAtlasTexture.createView() },
-        { binding: 12, resource: this.fontAtlasSampler },
-        // Temperature palette
-        { binding: 13, resource: this.tempPaletteTexture.createView() },
-        { binding: 14, resource: this.tempPaletteSampler },
-        // Additional weather layers
-        { binding: 15, resource: { buffer: this.cloudsDataBuffer } },
-        { binding: 16, resource: { buffer: this.humidityDataBuffer } },
-        { binding: 17, resource: { buffer: this.windDataBuffer } },
-        { binding: 18, resource: { buffer: this.rainDataBuffer } },
-        { binding: 19, resource: this.logoTexture.createView() },
-        { binding: 20, resource: this.logoSampler },
-        { binding: 21, resource: { buffer: this.gridLinesBuffer } },
-      ],
-    });
+    // Globe pass bind group (includes dynamic param entries)
+    this.recreateBindGroup();
 
     // Post-process bind group for atmosphere pass
     this.createPostProcessBindGroup();
@@ -948,8 +874,7 @@ export class GlobeRenderer {
       { binding: 2, resource: this.basemapSampler },
       { binding: 3, resource: { buffer: this.gaussianLatsBuffer } },
       { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
-      { binding: 5, resource: { buffer: this.tempData0Buffer } },
-      { binding: 6, resource: { buffer: this.tempData1Buffer } },
+      // Bindings 5-6 removed (legacy tempData0/1)
       { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
       { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
       { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
@@ -961,7 +886,7 @@ export class GlobeRenderer {
       { binding: 15, resource: { buffer: this.cloudsDataBuffer } },
       { binding: 16, resource: { buffer: this.humidityDataBuffer } },
       { binding: 17, resource: { buffer: this.windDataBuffer } },
-      { binding: 18, resource: { buffer: this.rainDataBuffer } },
+      // Binding 18 removed (legacy rainData)
       { binding: 19, resource: this.logoTexture.createView() },
       { binding: 20, resource: this.logoSampler },
       { binding: 21, resource: { buffer: this.gridLinesBuffer } },
@@ -970,9 +895,9 @@ export class GlobeRenderer {
     // Add dynamic param buffer entries
     for (const cfg of this.currentParamBindings) {
       const buffers = this.paramBuffers.get(cfg.param);
-      // Use param buffers if available, otherwise use placeholder (tempData0)
-      const slot0 = buffers?.slot0 ?? this.tempData0Buffer;
-      const slot1 = buffers?.slot1 ?? this.tempData0Buffer;
+      // Use param buffers if available, otherwise use placeholder (cloudsData)
+      const slot0 = buffers?.slot0 ?? this.cloudsDataBuffer;
+      const slot1 = buffers?.slot1 ?? this.cloudsDataBuffer;
       entries.push(
         { binding: cfg.bindingSlot0, resource: { buffer: slot0 } },
         { binding: cfg.bindingSlot1, resource: { buffer: slot1 } }
@@ -984,19 +909,12 @@ export class GlobeRenderer {
 
   /**
    * Set texture layer slot buffers (owned by LayerStore)
-   * Replaces internal placeholders and recreates bind groups
-   * Called when active slots change for texture-sampled layers (rebind)
+   * @deprecated Use setParamBuffers() with dynamic param bindings instead
    */
-  setTextureLayerBuffers(param: TWeatherTextureLayer, buffer0: GPUBuffer, buffer1: GPUBuffer): void {
-    switch (param) {
-      case 'temp':
-        this.tempData0Buffer = buffer0;
-        this.tempData1Buffer = buffer1;
-        break;
-      // TODO: Add rain/clouds/humidity when per-slot + interpolation is implemented
-      default:
-        console.warn(`[Globe] setTextureLayerBuffers not implemented for ${param}`);
-        return;
+  setTextureLayerBuffers(param: TWeatherTextureLayer, _buffer0: GPUBuffer, _buffer1: GPUBuffer): void {
+    // temp and rain now use dynamic param bindings - ignore legacy calls
+    if (param === 'temp' || param === 'rain') {
+      return;
     }
     this.recreateBindGroup();
   }
@@ -1038,8 +956,7 @@ export class GlobeRenderer {
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
       { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-      { binding: 5, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // tempData0 (legacy)
-      { binding: 6, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // tempData1 (legacy)
+      // Bindings 5-6 removed (legacy tempData0/1)
       { binding: 7, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // transmittance
       { binding: 8, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } },  // scattering
       { binding: 9, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // irradiance
@@ -1051,7 +968,7 @@ export class GlobeRenderer {
       { binding: 15, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // cloudsData (legacy)
       { binding: 16, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // humidityData (legacy)
       { binding: 17, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // windData (legacy)
-      { binding: 18, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // rainData (legacy)
+      // Binding 18 removed (legacy rainData)
       { binding: 19, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // logo
       { binding: 20, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       { binding: 21, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },  // grid lines
@@ -1143,9 +1060,7 @@ export class GlobeRenderer {
     this.device.queue.writeBuffer(buffer, byteOffset, data.buffer, data.byteOffset, data.byteLength);
   }
 
-  uploadRainData(data: Float32Array, offset: number = 0): void {
-    this.device.queue.writeBuffer(this.rainDataBuffer, offset, data.buffer, data.byteOffset, data.byteLength);
-  }
+  // uploadRainData removed - now using dynamic param bindings
 
   uploadCloudsData(data: Float32Array, offset: number = 0): void {
     this.device.queue.writeBuffer(this.cloudsDataBuffer, offset, data.buffer, data.byteOffset, data.byteLength);
@@ -1260,9 +1175,7 @@ export class GlobeRenderer {
     this.basemapTexture?.destroy();
     this.gaussianLatsBuffer?.destroy();
     this.ringOffsetsBuffer?.destroy();
-    this.tempData0Buffer?.destroy();
-    this.tempData1Buffer?.destroy();
-    this.rainDataBuffer?.destroy();
+    // tempData0/1 and rainData removed - using dynamic param bindings
     this.cloudsDataBuffer?.destroy();
     this.humidityDataBuffer?.destroy();
     this.windDataBuffer?.destroy();

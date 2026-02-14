@@ -109,8 +109,7 @@ fn isParamReady(index: u32) -> bool {
 @group(0) @binding(2) var basemapSampler: sampler;
 @group(0) @binding(3) var<storage, read> gaussianLats: array<f32>;
 @group(0) @binding(4) var<storage, read> ringOffsets: array<u32>;
-@group(0) @binding(5) var<storage, read> tempData0: array<f32>;  // Slot 0 for interpolation
-@group(0) @binding(6) var<storage, read> tempData1: array<f32>;  // Slot 1 for interpolation
+// Bindings 5-6 removed (legacy tempData0/1 - now using dynamic param bindings)
 // Atmosphere LUTs (Bruneton precomputed scattering)
 @group(0) @binding(7) var atm_transmittance: texture_2d<f32>;
 @group(0) @binding(8) var atm_scattering: texture_3d<f32>;
@@ -122,11 +121,11 @@ fn isParamReady(index: u32) -> bool {
 // Temperature palette (1D texture for color mapping)
 @group(0) @binding(13) var tempPalette: texture_2d<f32>;
 @group(0) @binding(14) var tempPaletteSampler: sampler;
-// Additional weather layer data
+// Additional weather layer data (legacy - will migrate to dynamic)
 @group(0) @binding(15) var<storage, read> cloudsData: array<f32>;
 @group(0) @binding(16) var<storage, read> humidityData: array<f32>;
 @group(0) @binding(17) var<storage, read> windData: array<f32>;
-@group(0) @binding(18) var<storage, read> rainData: array<f32>;
+// Binding 18 removed (legacy rainData - now using dynamic param bindings)
 // Logo texture for idle globe display
 @group(0) @binding(19) var logoTexture: texture_2d<f32>;
 @group(0) @binding(20) var logoSampler: sampler;

@@ -1,5 +1,5 @@
 // Rain/precipitation layer
-// Uses shared O1280 projection from projection-o1280.wgsl
+// Uses dynamic param bindings via sampleParam_precipitation()
 
 fn colormapRain(mm: f32) -> vec4f {
   if (mm < 0.1) { return vec4f(0.0); }
@@ -9,9 +9,9 @@ fn colormapRain(mm: f32) -> vec4f {
 }
 
 fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
-  if (u.rainDataReady == 0u || u.rainOpacity <= 0.0) { return color; }
+  if (u.rainOpacity <= 0.0) { return color; }
   let cell = o1280LatLonToCell(lat, lon);
-  let mm = rainData[cell];
+  let mm = sampleParam_precipitation(cell);
   let rainColor = colormapRain(mm);
   if (rainColor.a <= 0.0) { return color; }
   return vec4f(mix(color.rgb, rainColor.rgb, rainColor.a), color.a);

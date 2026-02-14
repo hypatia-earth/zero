@@ -424,7 +424,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       registerBuiltInLayers(layerRegistry);
       const layers = layerRegistry.getAll();
       const composedShaders = shaderComposer.compose(layers);
-      console.log('[Aurora] Using composed shaders for', layers.length, 'layers');
 
       await renderer.initialize(
         config.timeslotsPerLayer,
@@ -506,6 +505,12 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       // Store palette data for later use
       tempPalettes = assets.tempPalettes;
+
+      // Recreate pipeline with composed shaders (includes dynamic param bindings)
+      const initLayers = layerRegistry.getAll();
+      const initShaders = shaderComposer.compose(initLayers);
+      await renderer.recreatePipeline(initShaders);
+      console.log('[Aurora] Using composed shaders for', initLayers.length, 'layers');
 
       self.postMessage({ type: 'ready' } satisfies AuroraResponse);
     }
