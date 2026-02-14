@@ -42,16 +42,7 @@ export async function runGpuInitPhase(
   const windLineCount = optionsService.options.value.wind.seedCount;
   const readyLayers = configService.getReadyLayers().filter(isWeatherLayer);
 
-  // Build layer configs for worker LayerStore creation (legacy mode)
-  const layerConfigs = readyLayers
-    .map(id => {
-      const layer = configService.getLayer(id);
-      if (!layer?.slabs || layer.slabs.length === 0) return null;
-      return { id, slabs: layer.slabs };
-    })
-    .filter((cfg): cfg is NonNullable<typeof cfg> => cfg !== null);
-
-  // Build param configs for worker ParamStore creation
+  // Build param configs for worker buffer creation
   const paramSet = new Set<string>();
   for (const layer of layerService.getBuiltIn()) {
     if (layer.params) {
@@ -68,7 +59,6 @@ export async function runGpuInitPhase(
     timeslotsPerLayer,
     windLineCount,
     readyLayers,
-    layerConfigs,
     paramConfigs,
   };
 

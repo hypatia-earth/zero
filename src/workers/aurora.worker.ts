@@ -10,7 +10,7 @@
  */
 
 import type { CameraConfig } from '../render/camera';
-import type { TWeatherLayer, TWeatherTextureLayer, SlabConfig } from '../config/types';
+import type { TWeatherLayer, TWeatherTextureLayer } from '../config/types';
 import { GlobeRenderer, type GlobeUniforms } from '../render/globe-renderer';
 import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
 import { LayerStore } from '../services/layer-store';
@@ -64,10 +64,8 @@ export interface AuroraConfig {
   timeslotsPerLayer: number;
   windLineCount: number;
   readyLayers: TWeatherLayer[];
-  /** Layer configs for LayerStore creation (only weather layers with slabs) - DEPRECATED */
-  layerConfigs: Array<{ id: TWeatherLayer; slabs: SlabConfig[] }>;
-  /** Param configs for param-centric mode (USE_PARAM_SLOTS=true) */
-  paramConfigs?: Array<{ param: string; sizeMB: number }>;
+  /** Param configs for buffer management (keyed by param name) */
+  paramConfigs: Array<{ param: string; sizeMB: number }>;
 }
 
 // ============================================================
@@ -107,10 +105,7 @@ let currentOptions: ZeroOptions | null = null;
 // Layer registry (for declarative mode)
 let layerRegistry: LayerService | null = null;
 
-// Layer stores for GPU buffer management (legacy, USE_PARAM_SLOTS=false)
-const layerStores = new Map<TWeatherLayer, LayerStore>();
-
-// Param stores for GPU buffer management (param-centric, USE_PARAM_SLOTS=true)
+// Param stores for GPU buffer management (keyed by param name)
 const paramStores = new Map<string, LayerStore>();
 
 // Palette data (received at init)
@@ -119,7 +114,7 @@ let tempPalettes: Record<string, PaletteData> = {};
 // User layer state (opacity defaults to 1.0 when registered)
 const userLayerOpacities = new Map<number, number>();  // index -> opacity
 
-// Slot activation state per layer (for uniform building)
+// Slot activation state per param (for uniform building)
 interface SlotState {
   slot0: number;
   slot1: number;
@@ -128,9 +123,6 @@ interface SlotState {
   loadedPoints: number;
   dataReady: boolean;
 }
-// Legacy layer-keyed state (USE_PARAM_SLOTS=false)
-const slotStates = new Map<TWeatherLayer, SlotState>();
-// Param-keyed state (USE_PARAM_SLOTS=true)
 const paramSlotStates = new Map<string, SlotState>();
 
 // Dynamic param binding registry (built during init, matches ShaderComposer)
@@ -156,6 +148,13 @@ function findLayerForParam(param: string): string | undefined {
 // Get params for a layer (from layerRegistry)
 function getLayerParams(layerId: string): string[] {
   return layerRegistry?.get(layerId)?.params ?? [];
+}
+
+// Get slot state for a layer (looks up first param's state)
+function getLayerSlotState(layerId: string): SlotState | undefined {
+  const params = getLayerParams(layerId);
+  if (params.length === 0) return undefined;
+  return paramSlotStates.get(params[0]!);
 }
 
 // Rebuild paramBindings after shader recomposition (indices may shift)
@@ -222,7 +221,7 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
 
   // Check if data is ready AND current time is within data window
   const isReady = (layer: TWeatherLayer): boolean => {
-    const state = slotStates.get(layer);
+    const state = getLayerSlotState(layer);
     if (!state?.dataReady) return false;
     // Check if current time is within slot time range (with some margin)
     // t0 and t1 are timestamps, allow some extrapolation margin (30 min)
@@ -292,23 +291,23 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     tempOpacity: animatedOpacity.temp,
     rainOpacity: animatedOpacity.rain,
     windOpacity: animatedOpacity.wind,
-    windDataReady: slotStates.get('wind')?.dataReady ?? false,
-    windLerp: slotStates.get('wind') ? computeLerp(slotStates.get('wind')!, time.getTime()) : 0,
+    windDataReady: getLayerSlotState('wind')?.dataReady ?? false,
+    windLerp: getLayerSlotState('wind') ? computeLerp(getLayerSlotState('wind')!, time.getTime()) : 0,
     windAnimSpeed: opts?.wind.speed ?? 1,
     windState: {
-      mode: slotStates.get('wind')?.dataReady ? 'pair' : 'loading',
-      lerp: slotStates.get('wind') ? computeLerp(slotStates.get('wind')!, time.getTime()) : 0,
+      mode: getLayerSlotState('wind')?.dataReady ? 'pair' : 'loading',
+      lerp: getLayerSlotState('wind') ? computeLerp(getLayerSlotState('wind')!, time.getTime()) : 0,
       time,
     },
     pressureOpacity: animatedOpacity.pressure,
     pressureColors: opts?.pressure.colors ?? PRESSURE_COLOR_DEFAULT,
     // Data state (from slot activation messages)
-    tempDataReady: slotStates.get('temp')?.dataReady ?? false,
-    rainDataReady: slotStates.get('rain')?.dataReady ?? false,
-    tempLerp: slotStates.get('temp') ? computeLerp(slotStates.get('temp')!, time.getTime()) : 0,
-    tempLoadedPoints: slotStates.get('temp')?.loadedPoints ?? 0,
-    tempSlot0: slotStates.get('temp')?.slot0 ?? 0,
-    tempSlot1: slotStates.get('temp')?.slot1 ?? 0,
+    tempDataReady: getLayerSlotState('temp')?.dataReady ?? false,
+    rainDataReady: getLayerSlotState('rain')?.dataReady ?? false,
+    tempLerp: getLayerSlotState('temp') ? computeLerp(getLayerSlotState('temp')!, time.getTime()) : 0,
+    tempLoadedPoints: getLayerSlotState('temp')?.loadedPoints ?? 0,
+    tempSlot0: getLayerSlotState('temp')?.slot0 ?? 0,
+    tempSlot1: getLayerSlotState('temp')?.slot1 ?? 0,
     tempPaletteRange,
     logoOpacity: 0,
   };
@@ -455,51 +454,18 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       // Finalize renderer (creates bind groups)
       renderer.finalize();
 
-      // Create LayerStore instances for each weather layer
+      // Create LayerStore instances for each param
       const device = renderer.getDevice();
 
-      // Param-centric mode: create stores keyed by param name
-      if (config.paramConfigs && config.paramConfigs.length > 0) {
-        for (const paramCfg of config.paramConfigs) {
-          const store = new LayerStore(device, {
-            layerId: paramCfg.param as TWeatherLayer,  // LayerStore uses layerId internally
-            slabs: [{ name: 'data', sizeMB: paramCfg.sizeMB }],
-            timeslots: config.timeslotsPerLayer,
-          });
-          store.initialize();
-          paramStores.set(paramCfg.param, store);
-          paramSlotStates.set(paramCfg.param, {
-            slot0: 0,
-            slot1: 0,
-            t0: 0,
-            t1: 0,
-            loadedPoints: 0,
-            dataReady: false,
-          });
-        }
-
-        // Build param binding registry (must match ShaderComposer order)
-        const sortedParams = [...config.paramConfigs.map(c => c.param)].sort();
-        sortedParams.forEach((param, idx) => {
-          paramBindings.set(param, {
-            index: idx,
-            bindingSlot0: PARAM_BINDING_START + idx * 2,
-            bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
-          });
-        });
-      }
-
-      // Legacy mode: create stores keyed by layer name
-      for (const layerCfg of config.layerConfigs) {
+      for (const paramCfg of config.paramConfigs) {
         const store = new LayerStore(device, {
-          layerId: layerCfg.id,
-          slabs: layerCfg.slabs,
+          layerId: paramCfg.param as TWeatherLayer,  // LayerStore uses layerId internally
+          slabs: [{ name: 'data', sizeMB: paramCfg.sizeMB }],
           timeslots: config.timeslotsPerLayer,
         });
         store.initialize();
-        layerStores.set(layerCfg.id, store);
-        // Initialize slot state
-        slotStates.set(layerCfg.id, {
+        paramStores.set(paramCfg.param, store);
+        paramSlotStates.set(paramCfg.param, {
           slot0: 0,
           slot1: 0,
           t0: 0,
@@ -508,6 +474,16 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
           dataReady: false,
         });
       }
+
+      // Build param binding registry (must match ShaderComposer order)
+      const sortedParams = [...config.paramConfigs.map(c => c.param)].sort();
+      sortedParams.forEach((param, idx) => {
+        paramBindings.set(param, {
+          index: idx,
+          bindingSlot0: PARAM_BINDING_START + idx * 2,
+          bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
+        });
+      });
 
       // Log unexpected device loss (ignore intentional destroy on cleanup)
       device.lost.then((info) => {
@@ -575,7 +551,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       }
 
       // Recompute pressure contours when time, spacing, or smoothing changes
-      const pressureState = slotStates.get('pressure');
+      const pressureState = getLayerSlotState('pressure');
       if (opts.pressure.enabled && pressureState?.dataReady) {
         const currentMinute = Math.floor(time / 60000);
         if (currentMinute !== lastPressureMinute || needsContourRecompute) {
@@ -610,14 +586,10 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       const passTimings = renderer!.render();  // Returns GPU timestamp query results
 
-      // Compute memory stats from layer stores and param stores
+      // Compute memory stats from param stores
       // Allocated = actual buffers filled, Capacity = option × total slab sizes
       let allocatedMB = 0;
       let totalSlabSizeMB = 0;
-      for (const store of layerStores.values()) {
-        allocatedMB += store.getAllocatedCount() * store.timeslotSizeMB;
-        totalSlabSizeMB += store.timeslotSizeMB;
-      }
       for (const store of paramStores.values()) {
         allocatedMB += store.getAllocatedCount() * store.timeslotSizeMB;
         totalSlabSizeMB += store.timeslotSizeMB;
@@ -685,16 +657,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         return;
       }
 
-      // Also update legacy slotStates for uniform building (renderer still uses layer keys)
-      const layerState = slotStates.get(layer);
-      if (layerState) {
-        layerState.slot0 = slot0;
-        layerState.slot1 = slot1;
-        layerState.t0 = t0;
-        layerState.t1 = t1;
-        if (loadedPoints !== undefined) layerState.loadedPoints = loadedPoints;
-      }
-
       // Bind to renderer based on layer type
       if (layer === 'temp' || layer === 'rain' || layer === 'clouds' || layer === 'humidity') {
         // Single-param texture layers
@@ -702,7 +664,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         const buffer1 = store.getSlotBuffer(slot1, 0);
         if (buffer0 && buffer1) {
           renderer!.setTextureLayerBuffers(layer as TWeatherTextureLayer, buffer0, buffer1);
-          if (layerState) layerState.dataReady = true;
 
           // Also bind to dynamic param system
           const binding = paramBindings.get(param);
@@ -726,7 +687,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
             const v1 = vStore.getSlotBuffer(vState.slot1, 0);
             if (u0 && v0 && u1 && v1) {
               renderer!.setWindLayerBuffers(u0, v0, u1, v1);
-              if (layerState) layerState.dataReady = true;
             }
           }
         }
@@ -735,7 +695,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         const rawBuffer = store.getSlotBuffer(slot0, 0);
         if (rawBuffer) {
           renderer!.triggerPressureRegrid(slot0, rawBuffer);
-          if (layerState) layerState.dataReady = true;
         }
       }
     }
@@ -747,15 +706,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       const state = paramSlotStates.get(param);
       if (state) {
         state.dataReady = false;
-      }
-
-      // Also clear legacy slotStates for uniform building
-      const layer = findLayerForParam(param) as TWeatherLayer | undefined;
-      if (layer) {
-        const layerState = slotStates.get(layer);
-        if (layerState) {
-          layerState.dataReady = false;
-        }
       }
     }
 
@@ -839,13 +789,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
     }
 
     if (type === 'cleanup') {
-      // Dispose layer stores (legacy)
-      for (const store of layerStores.values()) {
-        store.dispose();
-      }
-      layerStores.clear();
-      slotStates.clear();
-
       // Dispose param stores
       for (const store of paramStores.values()) {
         store.dispose();
