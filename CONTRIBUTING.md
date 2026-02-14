@@ -54,11 +54,8 @@ This runs TypeScript type checking and linting.
 
 ### Shader Development
 
-WGSL shaders are in `src/render/shaders/`. Edit source files, not generated ones:
-- Edit: `*.wgsl` (source files)
-- Don't edit: `zero-main.wgsl`, `zero-post.wgsl` (auto-generated)
-
-Shaders rebuild automatically in dev mode.
+WGSL shaders are composed at runtime by `ShaderComposer` from layer declarations.
+Layer shaders live in `src/layers/<layer>/` directories.
 
 ## Pull Requests
 

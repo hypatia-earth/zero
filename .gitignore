@@ -9,10 +9,6 @@ dist/
 /test/
 DEBUG.md
 
-# Generated shaders (built by wgsl-plus from master-*.wgsl)
-src/render/shaders/zero-main.wgsl
-src/render/shaders/zero-post.wgsl
-
 # External large dependencies (lazy-loaded)
 extern/
 

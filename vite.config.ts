@@ -1,7 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import fs from 'fs';
 import { execSync } from 'child_process';
-import path from 'path';
 
 // Get version and git hash for build
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
@@ -24,64 +23,9 @@ function cacheHeaders(): Plugin {
   };
 }
 
-/**
- * Vite plugin to process WGSL shaders with wgsl-plus
- * - Watches all *.wgsl files in shaders folder
- * - Runs wgsl-plus master-main.wgsl -o zero-main.wgsl on changes
- * - Dev: link only, Prod: link + obfuscate
- */
-function wgslProcess(): Plugin {
-  const shadersDir = path.resolve(__dirname, 'src/render/shaders');
-
-  // Shader builds: { master: output }
-  const shaderBuilds = {
-    'master-main.wgsl': 'zero-main.wgsl',
-    'master-post.wgsl': 'zero-post.wgsl',
-  };
-
-  function buildShaders(isProd: boolean) {
-    const obfuscateFlag = isProd ? ' --obfuscate' : '';
-    for (const [master, output] of Object.entries(shaderBuilds)) {
-      const masterPath = path.join(shadersDir, master);
-      const outputPath = path.join(shadersDir, output);
-      try {
-        execSync(`npx wgsl-plus "${masterPath}" -o "${outputPath}"${obfuscateFlag}`, {
-          stdio: 'pipe',
-          cwd: shadersDir,
-        });
-        console.log(`[wgsl] Built ${output} (${isProd ? 'obfuscated' : 'linked'})`);
-      } catch (e) {
-        console.error(`[wgsl] Build failed for ${output}:`, e);
-      }
-    }
-  }
-
-  return {
-    name: 'wgsl-process',
-    buildStart() {
-      const isProd = process.env.NODE_ENV === 'production';
-      buildShaders(isProd);
-    },
-    configureServer(server) {
-      // Watch all .wgsl files except generated outputs
-      const generatedFiles = Object.values(shaderBuilds);
-      server.watcher.add(path.join(shadersDir, '*.wgsl'));
-      server.watcher.on('change', (file) => {
-        const basename = path.basename(file);
-        if (file.endsWith('.wgsl') && !generatedFiles.includes(basename)) {
-          console.log(`[wgsl] ${basename} changed, rebuilding...`);
-          buildShaders(false);
-          // Trigger HMR
-          server.ws.send({ type: 'full-reload' });
-        }
-      });
-    },
-  };
-}
-
 export default defineConfig({
   base: process.env.BASE_URL || '/',
-  plugins: [cacheHeaders(), wgslProcess()],
+  plugins: [cacheHeaders()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __APP_HASH__: JSON.stringify(gitHash),

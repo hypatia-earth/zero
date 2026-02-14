@@ -3,8 +3,6 @@
  */
 
 import { Camera, type CameraConfig } from './camera';
-import staticShaderCode from './shaders/zero-main.wgsl?raw';
-import staticPostprocessShaderCode from './shaders/zero-post.wgsl?raw';
 import { type ComposedShaders, activeParamBindings, type ParamBindingConfig } from './shader-composer';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 import { PressureLayer, type PressureResolution, type SmoothingAlgorithm } from '../layers/pressure';
@@ -138,13 +136,12 @@ export class GlobeRenderer {
 
   async initialize(
     requestedSlots: number,
-    pressureResolution: PressureResolution = 2,
-    windLineCount = 8192,
-    composedShaders?: ComposedShaders
+    pressureResolution: PressureResolution,
+    windLineCount: number,
+    composedShaders: ComposedShaders
   ): Promise<void> {
-    // Use composed shaders if provided, otherwise use static wgsl-plus output
-    const shaderCode = composedShaders?.main || staticShaderCode;
-    const postprocessShaderCode = composedShaders?.post || staticPostprocessShaderCode;
+    const shaderCode = composedShaders.main;
+    const postprocessShaderCode = composedShaders.post;
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) throw new Error('No WebGPU adapter found');
 
