@@ -8,7 +8,7 @@ import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } fro
 import { PressureLayer } from '../layers/pressure';
 import { WindLayer } from '../layers/wind';
 import { GridAnimator, GRID_BUFFER_SIZE } from '../layers/grid/grid-animator';
-import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getParamLerpOffset, getParamReadyOffset } from './globe-uniforms';
+import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getParamLerpOffset, getParamReadyOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 
 // Re-export for consumers
@@ -16,6 +16,15 @@ export type { PassTimings } from './gpu-timestamp';
 import type { TWeatherTextureLayer, LayerState } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import type { PressureColorOption } from '../schemas/options.schema';
+
+// Layer indices for uniform array access (must match registration order)
+const LAYER_EARTH = 0;
+const LAYER_SUN = 1;
+const LAYER_GRID = 2;
+const LAYER_TEMP = 3;
+const LAYER_RAIN = 4;
+const LAYER_PRESSURE = 5;
+const LAYER_WIND = 6;
 
 export interface GlobeUniforms {
   viewProj: Float32Array;
@@ -562,16 +571,26 @@ export class GlobeRenderer {
     // Layer controls
     view.setUint32(O.gridEnabled, uniforms.gridEnabled ? 1 : 0, true);
     view.setFloat32(O.gridOpacity, uniforms.gridOpacity, true);
-    view.setFloat32(O.earthOpacity, uniforms.earthOpacity, true);
-    view.setFloat32(O.tempOpacity, uniforms.tempOpacity, true);
+
+    // Built-in layer opacities (indexed array)
+    view.setFloat32(getLayerOpacityOffset(LAYER_EARTH), uniforms.earthOpacity, true);
+    view.setFloat32(getLayerOpacityOffset(LAYER_SUN), uniforms.sunOpacity, true);
+    view.setFloat32(getLayerOpacityOffset(LAYER_GRID), uniforms.gridOpacity, true);
+    view.setFloat32(getLayerOpacityOffset(LAYER_TEMP), uniforms.tempOpacity, true);
+    view.setFloat32(getLayerOpacityOffset(LAYER_RAIN), uniforms.rainOpacity, true);
+    view.setFloat32(getLayerOpacityOffset(LAYER_PRESSURE), uniforms.pressureOpacity, true);
+    view.setFloat32(getLayerOpacityOffset(LAYER_WIND), uniforms.windOpacity, true);
+
+    // Built-in layer data ready flags (indexed array)
+    view.setUint32(getLayerDataReadyOffset(LAYER_TEMP), uniforms.tempDataReady ? 1 : 0, true);
+    view.setUint32(getLayerDataReadyOffset(LAYER_RAIN), uniforms.rainDataReady ? 1 : 0, true);
+    view.setUint32(getLayerDataReadyOffset(LAYER_WIND), uniforms.windDataReady ? 1 : 0, true);
 
     // Track for depth test decision in render()
     this.currentEarthOpacity = uniforms.earthOpacity;
     this.currentTempOpacity = uniforms.tempOpacity;
 
-    view.setFloat32(O.rainOpacity, uniforms.rainOpacity, true);
-    view.setUint32(O.tempDataReady, uniforms.tempDataReady ? 1 : 0, true);
-    view.setUint32(O.rainDataReady, uniforms.rainDataReady ? 1 : 0, true);
+    // Legacy temp-specific uniforms
     view.setFloat32(O.tempLerp, uniforms.tempLerp, true);
 
 

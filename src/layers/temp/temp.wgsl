@@ -11,7 +11,8 @@ fn colormapTemp(tempC: f32) -> vec3f {
 }
 
 fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
-  if (u.tempOpacity <= 0.0) { return color; }
+  let opacity = getLayerOpacity(LAYER_TEMP);
+  if (opacity <= 0.0) { return color; }
 
   let cell = o1280LatLonToCell(lat, lon);
   let tempC = sampleParam_temperature_2m(cell);
@@ -20,5 +21,5 @@ fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
   if (tempC == 0.0 || tempC < -100.0 || tempC > 100.0) { return color; }
 
   let tempColor = colormapTemp(tempC);
-  return vec4f(mix(color.rgb, tempColor, u.tempOpacity), color.a);
+  return vec4f(mix(color.rgb, tempColor, opacity), color.a);
 }

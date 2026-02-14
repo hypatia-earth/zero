@@ -34,9 +34,10 @@ export const builtInLayers = [
 /** Register all built-in layers in the registry */
 export function registerBuiltInLayers(registry: LayerService): void {
   for (const layer of builtInLayers) {
+    layer.isBuiltIn = true;  // Mark as built-in (assigns index in register())
     registry.register(layer);
   }
-  console.log('[Layers] Registered:', registry.getAll().map(l => l.id).join(', '));
+  console.log('[Layers] Registered:', registry.getAll().map(l => `${l.id}:${l.index}`).join(', '));
 
   // Compose shaders from registered layers
   shaderComposer.compose(registry.getAll());

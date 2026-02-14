@@ -180,51 +180,64 @@ let lastPressureSpacing = 4;
 let lastSmoothing = 'light';
 
 // Animated opacity state (smooth transitions ~100ms)
-const animatedOpacity = {
-  earth: 0,
-  sun: 0,
-  grid: 0,
-  temp: 0,
-  rain: 0,
-  clouds: 0,
-  humidity: 0,
-  wind: 0,
-  pressure: 0,
-};
+// Keyed by layer id, initialized from layer registry
+const animatedOpacity = new Map<string, number>();
 let lastFrameTime = 0;
+
+/** Initialize animated opacity for all registered layers */
+function initAnimatedOpacity(): void {
+  if (!layerRegistry) return;
+  for (const layer of layerRegistry.getAll()) {
+    if (!animatedOpacity.has(layer.id)) {
+      animatedOpacity.set(layer.id, 0);
+    }
+  }
+}
+
+/** Get animated opacity for a layer (defaults to 0) */
+function getAnimatedOpacity(layerId: string): number {
+  return animatedOpacity.get(layerId) ?? 0;
+}
 
 /** Update animated opacities toward targets (exponential decay) */
 function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
   const opts = currentOptions;
-  if (!opts) return;
+  if (!opts || !layerRegistry) return;
 
   const animMs = 100;  // ~100ms transitions
   const rate = 1000 / animMs;
   const factor = Math.min(1, dt * rate);
 
   // Check if data is ready AND current time is within data window
-  const isReady = (layer: TWeatherLayer): boolean => {
-    const state = getLayerSlotState(layer);
+  const isDataReady = (layerId: string): boolean => {
+    const state = getLayerSlotState(layerId);
     if (!state?.dataReady) return false;
     // Check if current time is within slot time range (with some margin)
-    // t0 and t1 are timestamps, allow some extrapolation margin (30 min)
     const margin = 30 * 60 * 1000;  // 30 minutes
-    if (state.t0 === 0 && state.t1 === 0) return false;  // No timestamps set
+    if (state.t0 === 0 && state.t1 === 0) return false;
     return currentTimeMs >= state.t0 - margin && currentTimeMs <= state.t1 + margin;
   };
 
-  // Decoration layers: just enabled check
-  animatedOpacity.earth += ((opts.earth.enabled ? opts.earth.opacity : 0) - animatedOpacity.earth) * factor;
-  animatedOpacity.sun += ((opts.sun.enabled ? opts.sun.opacity : 0) - animatedOpacity.sun) * factor;
-  animatedOpacity.grid += ((opts.grid.enabled ? opts.grid.opacity : 0) - animatedOpacity.grid) * factor;
+  // Iterate all registered layers
+  for (const layer of layerRegistry.getAll()) {
+    const layerOpts = (opts as Record<string, { enabled?: boolean; opacity?: number }>)[layer.id];
+    if (!layerOpts) continue;
 
-  // Weather layers: enabled AND dataReady
-  animatedOpacity.temp += (((opts.temp.enabled && isReady('temp')) ? opts.temp.opacity : 0) - animatedOpacity.temp) * factor;
-  animatedOpacity.rain += (((opts.rain.enabled && isReady('rain')) ? opts.rain.opacity : 0) - animatedOpacity.rain) * factor;
-  animatedOpacity.clouds += (((opts.clouds.enabled && isReady('clouds')) ? opts.clouds.opacity : 0) - animatedOpacity.clouds) * factor;
-  animatedOpacity.humidity += (((opts.humidity.enabled && isReady('humidity')) ? opts.humidity.opacity : 0) - animatedOpacity.humidity) * factor;
-  animatedOpacity.wind += (((opts.wind.enabled && isReady('wind')) ? opts.wind.opacity : 0) - animatedOpacity.wind) * factor;
-  animatedOpacity.pressure += (((opts.pressure.enabled && isReady('pressure')) ? opts.pressure.opacity : 0) - animatedOpacity.pressure) * factor;
+    // Calculate target opacity
+    let target = 0;
+    if (layerOpts.enabled) {
+      // Data layers (texture/geometry) require data ready check
+      const needsData = layer.type === 'texture' || layer.type === 'geometry';
+      if (!needsData || isDataReady(layer.id)) {
+        target = layerOpts.opacity ?? 1.0;
+      }
+    }
+
+    // Animate toward target
+    const current = animatedOpacity.get(layer.id) ?? 0;
+    const newValue = current + (target - current) * factor;
+    animatedOpacity.set(layer.id, newValue);
+  }
 }
 
 /** Compute lerp for a layer based on time and slot times */
@@ -257,23 +270,23 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     time: performance.now() / 1000,
     tanFov: camera.tanFov,
     // Sun (animated opacity)
-    sunOpacity: animatedOpacity.sun,
+    sunOpacity: getAnimatedOpacity('sun'),
     sunDirection: getSunDirection(time),
     sunCoreRadius: 0.005,
     sunGlowRadius: 0.02,
     sunCoreColor: new Float32Array([1, 1, 0.9]),
     sunGlowColor: new Float32Array([1, 0.8, 0.4]),
     // Grid (animated opacity)
-    gridEnabled: animatedOpacity.grid > 0.01,
-    gridOpacity: animatedOpacity.grid,
+    gridEnabled: getAnimatedOpacity('grid') > 0.01,
+    gridOpacity: getAnimatedOpacity('grid'),
     gridFontSize: opts?.grid.fontSize ?? 12,
     gridLabelMaxRadius: 280,
     gridLineWidth: opts?.grid.lineWidth ?? 1,
     // Layers (animated opacities)
-    earthOpacity: animatedOpacity.earth,
-    tempOpacity: animatedOpacity.temp,
-    rainOpacity: animatedOpacity.rain,
-    windOpacity: animatedOpacity.wind,
+    earthOpacity: getAnimatedOpacity('earth'),
+    tempOpacity: getAnimatedOpacity('temp'),
+    rainOpacity: getAnimatedOpacity('rain'),
+    windOpacity: getAnimatedOpacity('wind'),
     windDataReady: getLayerSlotState('wind')?.dataReady ?? false,
     windLerp: getLayerSlotState('wind') ? computeLerp(getLayerSlotState('wind')!, time.getTime()) : 0,
     windAnimSpeed: opts?.wind.speed ?? 1,
@@ -282,7 +295,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
       lerp: getLayerSlotState('wind') ? computeLerp(getLayerSlotState('wind')!, time.getTime()) : 0,
       time,
     },
-    pressureOpacity: animatedOpacity.pressure,
+    pressureOpacity: getAnimatedOpacity('pressure'),
     pressureColors: opts?.pressure.colors ?? PRESSURE_COLOR_DEFAULT,
     // Data state (from slot activation messages)
     tempDataReady: getLayerSlotState('temp')?.dataReady ?? false,
@@ -312,6 +325,7 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   // Compose shaders dynamically from layer registry
   layerRegistry = new LayerService();
   registerBuiltInLayers(layerRegistry);
+  initAnimatedOpacity();  // Initialize opacity map for all layers
   const layers = layerRegistry.getAll();
   const composedShaders = shaderComposer.compose(layers);
 
@@ -575,6 +589,7 @@ function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerU
   }
 
   layerRegistry.register(layer);
+  animatedOpacity.set(layer.id, 0);  // Initialize opacity for animation
 
   if (layer.userLayerIndex !== undefined) {
     userLayerOpacities.set(layer.userLayerIndex, 1.0);

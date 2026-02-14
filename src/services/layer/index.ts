@@ -40,6 +40,7 @@ export interface LayerDeclaration {
   topology?: 'triangle-list' | 'line-list';
   pass?: RenderPass;
   order?: number;              // Render order within pass
+  index?: number;              // Uniform array index (0-15 for built-in, assigned at registration)
   isBuiltIn?: boolean;         // true for core layers, false for user layers
   userLayerIndex?: number;     // 0-31 for user layers (uniform slot index)
 }
@@ -60,12 +61,15 @@ const DB_NAME = 'hypatia-zero';
 const DB_VERSION = 4;  // Bump from 3 to add user-layers store
 const USER_LAYERS_STORE = 'user-layers';
 
+const MAX_BUILT_IN_LAYERS = 16;  // Indices 0-15 for built-in layers
+
 export class LayerService {
   private layers: Map<string, LayerDeclaration> = new Map();
   private changeSignal: Signal<number> = signal(0);
   private usedUserIndices: Set<number> = new Set();
   private userLayerEnabled: Map<string, boolean> = new Map();
   private userLayerOpacity: Map<string, number> = new Map();
+  private nextBuiltInIndex = 0;  // Auto-increment for built-in layer indices
 
   /** Signal that increments when registry changes */
   get changed(): ReadonlySignal<number> {
@@ -199,6 +203,13 @@ export class LayerService {
   // ============================================================
 
   register(declaration: LayerDeclaration): void {
+    // Assign index to built-in layers (user layers use userLayerIndex instead)
+    if (declaration.isBuiltIn && declaration.index === undefined) {
+      if (this.nextBuiltInIndex >= MAX_BUILT_IN_LAYERS) {
+        console.warn(`[LayerService] Max built-in layers (${MAX_BUILT_IN_LAYERS}) reached`);
+      }
+      declaration.index = this.nextBuiltInIndex++;
+    }
     this.layers.set(declaration.id, declaration);
     this.changeSignal.value++;
   }
@@ -211,6 +222,11 @@ export class LayerService {
 
   get(id: string): LayerDeclaration | undefined {
     return this.layers.get(id);
+  }
+
+  /** Get layer index for uniform array access (-1 if not found) */
+  getLayerIndex(id: string): number {
+    return this.layers.get(id)?.index ?? -1;
   }
 
   getAll(): LayerDeclaration[] {

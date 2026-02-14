@@ -39,22 +39,32 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   // Layer controls (tightly packed f32/u32)
   ['gridEnabled', 'u32'],          // 176
   ['gridOpacity', 'f32'],          // 180
-  ['earthOpacity', 'f32'],         // 184
-  ['tempOpacity', 'f32'],          // 188
-  ['rainOpacity', 'f32'],          // 192
-  ['tempDataReady', 'u32'],        // 196
-  ['rainDataReady', 'u32'],        // 200
-  ['tempLerp', 'f32'],             // 204
-  ['tempLoadedPoints', 'u32'],     // 208
-  ['tempSlot0', 'u32'],            // 212
-  ['tempSlot1', 'u32'],            // 216
-  ['gridFontSize', 'f32'],         // 220
-  ['gridLabelMaxRadius', 'f32'],   // 224
-  ['gridLineWidth', 'f32'],        // 228: line width in screen pixels
-  ['tempPaletteRange', 'vec2f'],   // 232
 
-  ['logoOpacity', 'f32'],          // 240: computed from all layer opacities
-  ['logoPad', 'f32'],              // 244: padding for alignment
+  // Built-in layer opacity array (16 slots = 4 x vec4f)
+  // Indices: earth=0, sun=1, grid=2, temp=3, rain=4, pressure=5, wind=6
+  ['layerOpacity0', 'vec4f'],      // 192: layers 0-3 (earth, sun, grid, temp)
+  ['layerOpacity1', 'vec4f'],      // 208: layers 4-7 (rain, pressure, wind, -)
+  ['layerOpacity2', 'vec4f'],      // 224: layers 8-11 (reserved)
+  ['layerOpacity3', 'vec4f'],      // 240: layers 12-15 (reserved)
+
+  // Built-in layer data ready flags (16 slots = 4 x vec4u)
+  ['layerDataReady0', 'vec4u'],    // 256: layers 0-3
+  ['layerDataReady1', 'vec4u'],    // 272: layers 4-7
+  ['layerDataReady2', 'vec4u'],    // 288: layers 8-11
+  ['layerDataReady3', 'vec4u'],    // 304: layers 12-15
+
+  // Temp layer specific (legacy - to be replaced by param system)
+  ['tempLerp', 'f32'],             // 320
+  ['tempLoadedPoints', 'u32'],     // 324
+  ['tempSlot0', 'u32'],            // 328
+  ['tempSlot1', 'u32'],            // 332
+  ['gridFontSize', 'f32'],         // 336
+  ['gridLabelMaxRadius', 'f32'],   // 340
+  ['gridLineWidth', 'f32'],        // 344
+  ['tempPaletteRange', 'vec2f'],   // 352 (vec2f needs 8-byte align)
+
+  ['logoOpacity', 'f32'],          // 360
+  ['logoPad', 'f32'],              // 364
 
   // User layer slots (32 max) - packed as vec4s for alignment
   // userLayerOpacity: 8 x vec4f = 128 bytes (indices 0-31)
@@ -113,11 +123,16 @@ export const U = GLOBE_UNIFORMS.offsets as {
   sunGlowColorPad: number;
   gridEnabled: number;
   gridOpacity: number;
-  earthOpacity: number;
-  tempOpacity: number;
-  rainOpacity: number;
-  tempDataReady: number;
-  rainDataReady: number;
+  // Built-in layer arrays (4 vec4s each = 16 slots)
+  layerOpacity0: number;
+  layerOpacity1: number;
+  layerOpacity2: number;
+  layerOpacity3: number;
+  layerDataReady0: number;
+  layerDataReady1: number;
+  layerDataReady2: number;
+  layerDataReady3: number;
+  // Legacy temp-specific
   tempLerp: number;
   tempLoadedPoints: number;
   tempSlot0: number;
@@ -172,6 +187,22 @@ export function getUserLayerDataReadyOffset(index: number): number {
   return baseOffset + compIndex * 4;
 }
 
+/** Get uniform buffer offset for built-in layer opacity by index (0-15) */
+export function getLayerOpacityOffset(index: number): number {
+  const vecIndex = Math.floor(index / 4);
+  const compIndex = index % 4;
+  const baseOffset = U.layerOpacity0 + vecIndex * 16;
+  return baseOffset + compIndex * 4;
+}
+
+/** Get uniform buffer offset for built-in layer dataReady by index (0-15) */
+export function getLayerDataReadyOffset(index: number): number {
+  const vecIndex = Math.floor(index / 4);
+  const compIndex = index % 4;
+  const baseOffset = U.layerDataReady0 + vecIndex * 16;
+  return baseOffset + compIndex * 4;
+}
+
 /** Get uniform buffer offset for param lerp by index (0-15) */
 export function getParamLerpOffset(index: number): number {
   const vecIndex = Math.floor(index / 4);
@@ -202,8 +233,8 @@ export function validateGlobeUniforms(): void {
     sunCoreColor: 144,
     sunGlowColor: 160,
     gridEnabled: 176,
-    tempPaletteRange: 232,
-    logoOpacity: 240,
+    layerOpacity0: 192,
+    layerDataReady0: 256,
   };
 
   const errors: string[] = [];
