@@ -6,7 +6,7 @@
  * Single source of truth for all pending downloads.
  */
 
-import { signal, computed, effect } from '@preact/signals-core';
+import { signal, computed, effect, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TWeatherLayer, TTimestep, QueueTask } from '../../config/types';
 import { isWeatherLayer } from '../../config/types';
 import { fetchStreaming } from '../../utils/fetch';
@@ -29,8 +29,8 @@ export interface ISlotService extends ISlotReceiver {
   setGaussianLats(lats: Float32Array): void;
   initialize(onProgress?: (param: TWeatherLayer | string, index: number, total: number) => Promise<void>): Promise<void>;
   getActiveTimesteps(param: TWeatherLayer | string): TTimestep[];
-  readonly slotsVersion: import('@preact/signals-core').Signal<number>;
-  readonly memoryStats: import('@preact/signals-core').ReadonlySignal<{ allocatedMB: number; capacityMB: number }>;
+  readonly slotsVersion: Signal<number>;
+  readonly memoryStats: ReadonlySignal<{ allocatedMB: number; capacityMB: number }>;
 }
 
 const DEBUG = false;
