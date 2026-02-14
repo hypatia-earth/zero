@@ -2,7 +2,7 @@
  * Discovery Phase - Register service worker and discover available timesteps
  */
 
-import type { TimestepService } from '../../services/timestep-service';
+import type { TimestepService } from '../../services/timestep';
 import type { StateService } from '../../services/state-service';
 import type { Progress } from '../progress';
 import { registerServiceWorker, getPrefetchHistory } from '../../services/sw-registration';
@@ -28,7 +28,7 @@ export async function runDiscoveryPhase(
   });
 
   // Discover available timesteps
-  await timestepService.initialize(async (step, detail) => {
+  await timestepService.initialize(async (step: string, detail?: string) => {
     const messages: Record<string, string> = {
       manifest: 'Fetching data manifest...',
       runs: 'Discovering model runs...',

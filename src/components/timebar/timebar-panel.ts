@@ -12,7 +12,7 @@ import m from 'mithril';
 import { effect } from '@preact/signals-core';
 import { isWeatherLayer, type TWeatherLayer } from '../../config/types';
 import type { ISlotService } from '../../services/queue-service';
-import type { TimestepService } from '../../services/timestep-service';
+import type { TimestepService } from '../../services/timestep';
 import type { OptionsService } from '../../services/options-service';
 import type { ConfigService } from '../../services/config-service';
 import type { ThemeService } from '../../services/theme-service';

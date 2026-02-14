@@ -13,7 +13,7 @@ import { DialogService } from '../services/dialog-service';
 import { AboutService } from '../services/about-service';
 import { ThemeService } from '../services/theme-service';
 import { CapabilitiesService } from '../services/capabilities-service';
-import { TimestepService } from '../services/timestep-service';
+import { TimestepService } from '../services/timestep';
 import { QueueService, type ISlotService } from '../services/queue-service';
 import { createAuroraService, type AuroraService } from '../services/aurora-service';
 import { ParamSlotService } from '../services/param-slot-service';
