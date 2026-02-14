@@ -214,6 +214,12 @@ export class LayerService {
     this.changeSignal.value++;
   }
 
+  /** Register a built-in layer (sets isBuiltIn flag and assigns index) */
+  registerBuiltIn(declaration: LayerDeclaration): void {
+    declaration.isBuiltIn = true;
+    this.register(declaration);
+  }
+
   unregister(id: string): void {
     if (this.layers.delete(id)) {
       this.changeSignal.value++;

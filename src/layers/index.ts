@@ -34,7 +34,7 @@ export const builtInLayers = [
 /** Register all built-in layers in the registry */
 export function registerBuiltInLayers(registry: LayerService): void {
   for (const layer of builtInLayers) {
-    registry.register(layer);
+    registry.registerBuiltIn(layer);
   }
   console.log('[Layers] Registered:', registry.getAll().map(l => `${l.id}:${l.index}`).join(', '));
 
