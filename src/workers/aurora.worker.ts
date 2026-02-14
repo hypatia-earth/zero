@@ -49,6 +49,8 @@ export interface AuroraConfig {
   readyLayers: TWeatherLayer[];
   /** Param configs for buffer management (keyed by param name) */
   paramConfigs: Array<{ param: string; sizeMB: number }>;
+  /** Built-in layer declarations (sent from main thread) */
+  layers: import('../services/layer').LayerDeclaration[];
 }
 
 // ============================================================
@@ -321,9 +323,11 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   // Create and initialize renderer
   renderer = new GlobeRenderer(canvas, config.cameraConfig);
 
-  // Compose shaders dynamically from layer registry
+  // Register layers from main thread config
   layerRegistry = new LayerService();
-  layerRegistry.registerBuiltInLayers();
+  for (const layer of config.layers) {
+    layerRegistry.registerBuiltIn(layer);
+  }
   initAnimatedOpacity();  // Initialize opacity map for all layers
   const layers = layerRegistry.getAll();
   const composedShaders = shaderComposer.compose(layers);

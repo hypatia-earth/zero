@@ -60,6 +60,7 @@ export async function runGpuInitPhase(
     windLineCount,
     readyLayers,
     paramConfigs,
+    layers: layerService.getBuiltIn(),
   };
 
   // Load palettes first (needed for worker assets)
