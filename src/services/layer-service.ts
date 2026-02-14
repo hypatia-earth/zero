@@ -217,6 +217,15 @@ export class LayerService {
     return Array.from(this.layers.values());
   }
 
+  /** Get all params used by registered layers */
+  getActiveParams(): string[] {
+    const params = new Set<string>();
+    for (const layer of this.layers.values()) {
+      layer.params?.forEach(p => params.add(p));
+    }
+    return [...params];
+  }
+
   getBuiltIn(): LayerDeclaration[] {
     return this.getAll().filter(l => l.isBuiltIn);
   }

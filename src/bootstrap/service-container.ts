@@ -91,7 +91,7 @@ export function createFoundationServices(): Pick<
 }
 
 /**
- * Create TimestepService (needs config and layer service initialized)
+ * Create TimestepService (needs config and layer services)
  */
 export function createTimestepService(configService: ConfigService, layerService: LayerService): TimestepService {
   return new TimestepService(configService, layerService);

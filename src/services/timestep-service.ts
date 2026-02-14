@@ -9,13 +9,13 @@
  */
 
 import { signal } from '@preact/signals-core';
-import { isWeatherLayer, type TWeatherLayer, type TTimestep, type TModel, type Timestep, type QueueTask } from '../config/types';
+import { type TWeatherLayer, type TTimestep, type TModel, type Timestep, type QueueTask } from '../config/types';
 import type { ConfigService } from './config-service';
-import type { LayerService } from './layer-service';
 import { parseTimestep, formatTimestep } from '../utils/timestep';
 import { sendSWMessage } from '../utils/sw-message';
 import { countBeforeTimestep, clearBeforeTimestep } from './sw-registration';
 import { PARAM_METADATA } from '../config/param-metadata';
+import type { LayerService } from './layer-service';
 
 const DEBUG = false;
 
@@ -113,21 +113,10 @@ export class TimestepService {
       ecmwf.add(ts.timestep);
     }
 
-    // Query SW cache per param (SW cache is now param-centric)
+    // Query SW cache per param (all params from registered layers)
     const params = new Map<string, ParamState>();
-    const readyWeatherLayers = this.configService.getReadyLayers().filter(isWeatherLayer);
 
-    // Collect all params from ready weather layers
-    const allParams = new Set<string>();
-    for (const layer of readyWeatherLayers) {
-      const layerDecl = this.layerService.getBuiltIn().find(l => l.id === layer);
-      for (const param of layerDecl?.params ?? []) {
-        allParams.add(param);
-      }
-    }
-
-    // Query cache for each param
-    for (const param of allParams) {
+    for (const param of this.layerService.getActiveParams()) {
       await onProgress?.('cache', param);
       const { cache, sizes } = await this.querySWCache(param);
       params.set(param, { cache, gpu: new Set(), sizes });

@@ -411,7 +411,7 @@ function renderGroup(
             ] : null
           ]) : null,
           ...opts.map(opt => renderOption(opt, options, optionsService, paletteService, capabilitiesService))
-        ]);
+        ].filter(Boolean));
       })
     ].filter(Boolean));
   }
