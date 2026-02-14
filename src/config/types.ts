@@ -100,7 +100,7 @@ export interface LayerState {
 /** Task for QueueService to execute */
 export interface QueueTask {
   url: string;
-  param: TWeatherLayer;
+  param: string;  // layer ID (built-in or custom)
   timestep: TTimestep;
   sizeEstimate: number;
   omParam: string;
@@ -136,7 +136,7 @@ export interface IQueueService {
 /** Timestep download order for QueueService */
 export interface TimestepOrder {
   url: string;
-  param: TWeatherLayer;
+  param: string;  // layer ID (built-in or custom)
   timestep: TTimestep;
   sizeEstimate: number;  // Estimated bytes (NaN = use default)
   slabIndex: number;     // Which slab to upload to (0 for single-slab layers)

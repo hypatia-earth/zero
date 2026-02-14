@@ -42,9 +42,9 @@ export async function runGpuInitPhase(
   const windLineCount = optionsService.options.value.wind.seedCount;
   const readyLayers = configService.getReadyLayers().filter(isWeatherLayer);
 
-  // Build param configs for worker buffer creation
+  // Build param configs for worker buffer creation (all registered layers)
   const paramSet = new Set<string>();
-  for (const layer of layerService.getBuiltIn()) {
+  for (const layer of layerService.getAll()) {
     if (layer.params) {
       for (const param of layer.params) {
         paramSet.add(param);

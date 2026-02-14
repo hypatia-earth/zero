@@ -550,6 +550,13 @@ function handleActivateSlots(data: Extract<AuroraRequest, { type: 'activateSlots
         renderer!.setParamBuffers(param, buffer0, buffer1);
       }
     }
+  } else if (paramBindings.has(param)) {
+    // Custom layer or other param-based layer - bind via param bindings
+    const buffer0 = store.getSlotBuffer(slot0, 0);
+    const buffer1 = store.getSlotBuffer(slot1, 0);
+    if (buffer0 && buffer1) {
+      renderer!.setParamBuffers(param, buffer0, buffer1);
+    }
   } else if (layer === 'wind') {
     // Multi-param layer: check if ALL params are ready
     const windParams = getLayerParams('wind');

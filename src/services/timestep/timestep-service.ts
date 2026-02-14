@@ -9,7 +9,7 @@
  */
 
 import { signal } from '@preact/signals-core';
-import { type TWeatherLayer, type TTimestep, type TModel, type Timestep, type QueueTask } from '../../config/types';
+import { type TTimestep, type TModel, type Timestep, type QueueTask } from '../../config/types';
 import type { ConfigService } from '../config-service';
 import type { LayerService } from '../layer/layer-service';
 import { parseTimestep, formatTimestep } from '../../utils/timestep';
@@ -138,10 +138,34 @@ export class TimestepService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
+  // Dynamic Param Registration
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /** Ensure param exists in state (for custom layers added after init) */
+  ensureParam(param: string): void {
+    if (this.state.value.params.has(param)) return;
+
+    // Create new ParamState
+    const paramState: ParamState = {
+      cache: new Set(),
+      gpu: new Set(),
+      sizes: new Map(),
+    };
+
+    // Update state immutably
+    const newParams = new Map(this.state.value.params);
+    newParams.set(param, paramState);
+    this.state.value = { ...this.state.value, params: newParams };
+
+    console.log(`[Timestep] Added param: ${P(param)}`);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
   // Cache State (delegates to cache.ts)
   // ─────────────────────────────────────────────────────────────────────────────
 
   setCached(param: string, timestep: TTimestep, sizeBytes: number): void {
+    this.ensureParam(param);  // Auto-create if needed
     setCachedFn(this.state, param, timestep, sizeBytes);
   }
 
@@ -154,6 +178,7 @@ export class TimestepService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   setGpuLoaded(param: string, timestep: TTimestep): void {
+    this.ensureParam(param);  // Auto-create if needed
     setGpuLoadedFn(this.state, param, timestep);
   }
 
@@ -305,7 +330,7 @@ export class TimestepService {
     return window;
   }
 
-  getWindowTasks(time: Date, numSlots: number, activeLayers: TWeatherLayer[]): {
+  getWindowTasks(time: Date, numSlots: number, activeLayers: string[]): {
     window: TTimestep[];
     tasks: QueueTask[];
   } {

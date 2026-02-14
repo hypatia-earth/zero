@@ -39,7 +39,7 @@ const DEBUG = false;
 const fmt = (ts: string) => ts.slice(5, 13);
 
 /** 4-letter uppercase param code for logs */
-const P = (param: TWeatherLayer) => param.slice(0, 4).toUpperCase();
+const P = (param: string) => param.slice(0, 4).toUpperCase();
 
 /** Queued order with callback */
 interface QueuedTimestepOrder {
@@ -103,17 +103,12 @@ export class QueueService implements IQueueService {
     const builtInLayers = this.layerService.getBuiltIn()
       .filter(l => l.params && l.params.length > 0)
       .map(l => l.id as TWeatherLayer);
-    const activeLayers = new Set(builtInLayers.filter(p => opts[p]?.enabled));
+    const activeLayers = new Set<string>(builtInLayers.filter(p => opts[p]?.enabled));
 
-    // Add layers required by enabled user layers
+    // Add enabled user layers directly (they fetch their own params)
     for (const userLayer of this.layerService.getUserLayers()) {
-      if (!this.layerService.isUserLayerEnabled(userLayer.id)) continue;
-      for (const param of userLayer.params ?? []) {
-        const layers = this.layerService.getLayersForParam(param);
-        const builtIn = layers.find(l => l.isBuiltIn);
-        if (builtIn && isWeatherLayer(builtIn.id)) {
-          activeLayers.add(builtIn.id as TWeatherLayer);
-        }
+      if (this.layerService.isUserLayerEnabled(userLayer.id) && userLayer.params?.length) {
+        activeLayers.add(userLayer.id);
       }
     }
 
@@ -121,7 +116,7 @@ export class QueueService implements IQueueService {
       time: this.stateService.viewState.value.time,
       poolSize: parseInt(opts.gpu.workerPoolSize, 10),
       numSlots: parseInt(opts.gpu.timeslotsPerLayer, 10),
-      activeLayers: Array.from(activeLayers),
+      activeLayers: [...activeLayers],
       strategy: opts.dataCache.cacheStrategy,
     };
   });
@@ -255,7 +250,7 @@ export class QueueService implements IQueueService {
     this.updateStats();
 
     // Log one line per param (grouped, in order of first appearance)
-    const byParam = new Map<TWeatherLayer, TimestepOrder[]>();
+    const byParam = new Map<string, TimestepOrder[]>();
     for (const order of orders) {
       const list = byParam.get(order.param) || [];
       list.push(order);
@@ -422,7 +417,7 @@ export class QueueService implements IQueueService {
     time: Date;
     poolSize: number;
     numSlots: number;
-    activeLayers: TWeatherLayer[];
+    activeLayers: string[];  // layer IDs (built-in + custom)
     strategy: string;
   }): void {
     // 1. Get window and tasks from TimestepService

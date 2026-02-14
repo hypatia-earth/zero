@@ -10,7 +10,7 @@
  */
 
 import { effect, signal } from '@preact/signals-core';
-import { type TWeatherLayer, type TTimestep, type TimestepOrder, type LayerState } from '../config/types';
+import { type TTimestep, type TimestepOrder, type LayerState } from '../config/types';
 import type { TimestepService } from './timestep/timestep-service';
 import type { AuroraService } from './aurora-service';
 import type { QueueService } from './queue/queue-service';
@@ -254,13 +254,6 @@ export class ParamSlotService {
     this.auroraService.deactivateSlots(param);
   }
 
-  /** Get first built-in layer that uses this param (for TimestepService updates) */
-  private paramToLayer(param: string): TWeatherLayer | null {
-    const layers = this.layerService.getLayersForParam(param);
-    const builtIn = layers.find(l => l.isBuiltIn);
-    return (builtIn?.id as TWeatherLayer) ?? null;
-  }
-
   /** Get params for a layer (for legacy layer→param conversion) */
   private layerToParams(layer: string): string[] {
     const decl = this.layerService.getBuiltIn().find(l => l.id === layer);
@@ -404,8 +397,9 @@ export class ParamSlotService {
 
       DEBUG && console.log(`[ParamSlot] ${P(param)} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
 
-      // Get layer name for QueueTask.param (legacy field)
-      const layer = this.paramToLayer(param);
+      // Get layer ID for QueueTask.param (built-in or first user layer using this param)
+      const layers = this.layerService.getLayersForParam(param);
+      const layer = layers[0]?.id;
       if (!layer) continue;
 
       for (const ts of wanted.priority) {
