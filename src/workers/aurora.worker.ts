@@ -162,6 +162,38 @@ function getLayerParams(layerId: string): string[] {
   return layerRegistry?.get(layerId)?.params ?? [];
 }
 
+// Rebuild paramBindings after shader recomposition (indices may shift)
+function rebuildParamBindings(layers: import('../services/layer-service').LayerDeclaration[]): void {
+  const allParams = new Set<string>();
+  for (const layer of layers) {
+    layer.params?.forEach(p => allParams.add(p));
+  }
+  const sortedParams = [...allParams].sort();
+  paramBindings.clear();
+  sortedParams.forEach((param, idx) => {
+    paramBindings.set(param, {
+      index: idx,
+      bindingSlot0: PARAM_BINDING_START + idx * 2,
+      bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
+    });
+  });
+}
+
+// Rebind all active param buffers to renderer
+function rebindAllParamBuffers(): void {
+  if (!renderer) return;
+  for (const [param, state] of paramSlotStates) {
+    if (!state.dataReady) continue;
+    const store = paramStores.get(param);
+    if (!store) continue;
+    const buffer0 = store.getSlotBuffer(state.slot0, 0);
+    const buffer1 = store.getSlotBuffer(state.slot1, 0);
+    if (buffer0 && buffer1) {
+      renderer.setParamBuffers(param, buffer0, buffer1);
+    }
+  }
+}
+
 // Pressure contour state
 let isobarLevels: number[] = generateIsobarLevels(4);  // Default 4 hPa spacing
 const tempPaletteRange = new Float32Array([-40, 50]);  // Updated by updatePalette message
@@ -643,9 +675,9 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         return;
       }
 
-      // Check if slots actually changed - skip rebind if identical
+      // Check if slots actually changed - skip rebind if identical AND already bound
       const state = paramSlotStates.get(param);
-      if (state && state.slot0 === slot0 && state.slot1 === slot1 && state.t0 === t0 && state.t1 === t1) {
+      if (state && state.dataReady && state.slot0 === slot0 && state.slot1 === slot1 && state.t0 === t0 && state.t1 === t1) {
         return; // Already active with same slots
       }
 
@@ -814,6 +846,10 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       const composedShaders = shaderComposer.compose(layers);
       renderer.recreatePipeline(composedShaders)
         .then(() => {
+          // Rebuild paramBindings to match new shader bindings
+          rebuildParamBindings(layers);
+          // Rebind all active param buffers
+          rebindAllParamBuffers();
           console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
           self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: true });
         })
@@ -854,7 +890,11 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       const layers = layerRegistry.getAll();
       const composedShaders = shaderComposer.compose(layers);
       renderer.recreatePipeline(composedShaders)
-        .then(() => console.log('[Aurora] Pipeline recreated with', layers.length, 'layers'))
+        .then(() => {
+          rebuildParamBindings(layers);
+          rebindAllParamBuffers();
+          console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
+        })
         .catch((err) => console.error('[Aurora] Pipeline recreation failed:', err));
     }
 
