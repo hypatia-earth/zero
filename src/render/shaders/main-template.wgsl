@@ -36,13 +36,6 @@ struct Uniforms {
   gridLabelMaxRadius: f32, // max globe radius (px) before labels shrink
   gridLineWidth: f32, // line width in screen pixels
   tempPaletteRange: vec2f, // min/max temperature values for palette mapping (Celsius)
-  // Additional weather layer opacities
-  cloudsOpacity: f32,
-  humidityOpacity: f32,
-  windOpacity: f32,
-  cloudsDataReady: u32,
-  humidityDataReady: u32,
-  windDataReady: u32,
   logoOpacity: f32,       // computed from all layer opacities
   logoPad: f32,           // padding for alignment
   // User layer slots (32 max) - packed as vec4s for alignment
@@ -121,11 +114,7 @@ fn isParamReady(index: u32) -> bool {
 // Temperature palette (1D texture for color mapping)
 @group(0) @binding(13) var tempPalette: texture_2d<f32>;
 @group(0) @binding(14) var tempPaletteSampler: sampler;
-// Additional weather layer data (legacy - will migrate to dynamic)
-@group(0) @binding(15) var<storage, read> cloudsData: array<f32>;
-@group(0) @binding(16) var<storage, read> humidityData: array<f32>;
-@group(0) @binding(17) var<storage, read> windData: array<f32>;
-// Binding 18 removed (legacy rainData - now using dynamic param bindings)
+// Bindings 15-18 removed (legacy weather data - now using dynamic param bindings)
 // Logo texture for idle globe display
 @group(0) @binding(19) var logoTexture: texture_2d<f32>;
 @group(0) @binding(20) var logoSampler: sampler;

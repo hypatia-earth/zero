@@ -2,13 +2,13 @@
  * Globe Uniform Buffer Layout
  *
  * Single source of truth for uniform struct layout.
- * Must match the WGSL struct in main.wgsl exactly.
+ * Must match the WGSL struct in main-template.wgsl exactly.
  */
 
 import { layoutStruct, type StructLayout } from './uniform-struct';
 
 /**
- * Globe uniform struct layout - matches main.wgsl Uniforms struct
+ * Globe uniform struct layout - matches main-template.wgsl Uniforms struct
  *
  * Note: Fields are in WGSL declaration order. The layoutStruct function
  * calculates correct offsets including alignment padding.
@@ -53,15 +53,8 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['gridLineWidth', 'f32'],        // 228: line width in screen pixels
   ['tempPaletteRange', 'vec2f'],   // 232
 
-  // Additional weather layers
-  ['cloudsOpacity', 'f32'],        // 240
-  ['humidityOpacity', 'f32'],      // 244
-  ['windOpacity', 'f32'],          // 248
-  ['cloudsDataReady', 'u32'],      // 252
-  ['humidityDataReady', 'u32'],    // 256
-  ['windDataReady', 'u32'],        // 260
-  ['logoOpacity', 'f32'],          // 264: computed from all layer opacities
-  ['logoPad', 'f32'],              // 268: padding for alignment
+  ['logoOpacity', 'f32'],          // 240: computed from all layer opacities
+  ['logoPad', 'f32'],              // 244: padding for alignment
 
   // User layer slots (32 max) - packed as vec4s for alignment
   // userLayerOpacity: 8 x vec4f = 128 bytes (indices 0-31)
@@ -133,12 +126,6 @@ export const U = GLOBE_UNIFORMS.offsets as {
   gridLabelMaxRadius: number;
   gridLineWidth: number;
   tempPaletteRange: number;
-  cloudsOpacity: number;
-  humidityOpacity: number;
-  windOpacity: number;
-  cloudsDataReady: number;
-  humidityDataReady: number;
-  windDataReady: number;
   logoOpacity: number;
   logoPad: number;
   // User layer arrays (8 vec4s each = 32 slots)
@@ -216,8 +203,7 @@ export function validateGlobeUniforms(): void {
     sunGlowColor: 160,
     gridEnabled: 176,
     tempPaletteRange: 232,
-    cloudsOpacity: 240,
-    logoOpacity: 264,
+    logoOpacity: 240,
   };
 
   const errors: string[] = [];

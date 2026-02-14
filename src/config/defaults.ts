@@ -1,8 +1,8 @@
 /**
  * Default configuration for Hypatia Zero
  *
- * NOTE: Layer params are duplicated here and in layer declarations (src/layers/*).
- * LayerService is the authority. These will be removed when ParamSlotService is enabled.
+ * Layer declarations live in src/layers/{layer}/index.ts.
+ * LayerService is the authority for layer config.
  */
 
 import { ALL_LAYERS, type ZeroConfig, type TLayer } from './types';

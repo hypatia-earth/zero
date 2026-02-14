@@ -78,13 +78,10 @@ export interface AuroraConfig {
 export type AuroraRequest =
   | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; config: AuroraConfig; assets: AuroraAssets }
   | { type: 'options'; value: ZeroOptions }
-  // Param-centric API (USE_PARAM_SLOTS=true)
+  // Param-centric API
   | { type: 'uploadData'; param: string; slotIndex: number; data: Float32Array }
   | { type: 'activateSlots'; param: string; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
   | { type: 'deactivateSlots'; param: string }
-  // Legacy layer-based API (USE_PARAM_SLOTS=false) - DEPRECATED
-  | { type: 'uploadDataLegacy'; layer: TWeatherLayer; slotIndex: number; slabIndex: number; data: Float32Array }
-  | { type: 'activateSlotsLegacy'; layer: TWeatherLayer; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
   | { type: 'render'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number }
   | { type: 'resize'; width: number; height: number }
   | { type: 'registerUserLayer'; layer: import('../services/layer-service').LayerDeclaration }
@@ -296,9 +293,8 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     earthOpacity: animatedOpacity.earth,
     tempOpacity: animatedOpacity.temp,
     rainOpacity: animatedOpacity.rain,
-    cloudsOpacity: animatedOpacity.clouds,
-    humidityOpacity: animatedOpacity.humidity,
     windOpacity: animatedOpacity.wind,
+    windDataReady: slotStates.get('wind')?.dataReady ?? false,
     windLerp: slotStates.get('wind') ? computeLerp(slotStates.get('wind')!, time.getTime()) : 0,
     windAnimSpeed: opts?.wind.speed ?? 1,
     windState: {
@@ -311,9 +307,6 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     // Data state (from slot activation messages)
     tempDataReady: slotStates.get('temp')?.dataReady ?? false,
     rainDataReady: slotStates.get('rain')?.dataReady ?? false,
-    cloudsDataReady: slotStates.get('clouds')?.dataReady ?? false,
-    humidityDataReady: slotStates.get('humidity')?.dataReady ?? false,
-    windDataReady: slotStates.get('wind')?.dataReady ?? false,
     tempLerp: slotStates.get('temp') ? computeLerp(slotStates.get('temp')!, time.getTime()) : 0,
     tempLoadedPoints: slotStates.get('temp')?.loadedPoints ?? 0,
     tempSlot0: slotStates.get('temp')?.slot0 ?? 0,
@@ -768,58 +761,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         const layerState = slotStates.get(layer);
         if (layerState) {
           layerState.dataReady = false;
-        }
-      }
-    }
-
-    // ============================================================
-    // Legacy layer-based API (USE_PARAM_SLOTS=false) - DEPRECATED
-    // ============================================================
-
-    if (type === 'uploadDataLegacy') {
-      const { layer, slotIndex, slabIndex, data } = e.data;
-      const store = layerStores.get(layer)!;
-      store.ensureSlotBuffers(slotIndex);
-      store.writeToSlab(slabIndex, slotIndex, data);
-    }
-
-    if (type === 'activateSlotsLegacy') {
-      const { layer, slot0, slot1, t0, t1, loadedPoints } = e.data;
-      const store = layerStores.get(layer)!;
-
-      // Update slot state for uniform building
-      const state = slotStates.get(layer);
-      if (state) {
-        state.slot0 = slot0;
-        state.slot1 = slot1;
-        state.t0 = t0;
-        state.t1 = t1;
-        if (loadedPoints !== undefined) state.loadedPoints = loadedPoints;
-        state.dataReady = true;
-      }
-
-      // Rebind GPU buffers based on layer type
-      if (layer === 'temp' || layer === 'rain' || layer === 'clouds' || layer === 'humidity') {
-        // Texture layers: single slab (index 0)
-        const buffer0 = store.getSlotBuffer(slot0, 0);
-        const buffer1 = store.getSlotBuffer(slot1, 0);
-        if (buffer0 && buffer1) {
-          renderer!.setTextureLayerBuffers(layer as TWeatherTextureLayer, buffer0, buffer1);
-        }
-      } else if (layer === 'wind') {
-        // Wind: 2 slabs (u=0, v=1)
-        const u0 = store.getSlotBuffer(slot0, 0);
-        const v0 = store.getSlotBuffer(slot0, 1);
-        const u1 = store.getSlotBuffer(slot1, 0);
-        const v1 = store.getSlotBuffer(slot1, 1);
-        if (u0 && v0 && u1 && v1) {
-          renderer!.setWindLayerBuffers(u0, v0, u1, v1);
-        }
-      } else if (layer === 'pressure') {
-        // Pressure: trigger regrid (raw=0, grid=1)
-        const rawBuffer = store.getSlotBuffer(slot0, 0);
-        if (rawBuffer) {
-          renderer!.triggerPressureRegrid(slot0, rawBuffer);
         }
       }
     }
