@@ -70,7 +70,7 @@ export function createAuroraService(
 ): AuroraService {
   // Worker
   const worker = new Worker(
-    new URL('../workers/aurora.worker.ts', import.meta.url),
+    new URL('../aurora/worker.ts', import.meta.url),
     { type: 'module', name: 'aurora' }
   );
 
