@@ -75,6 +75,7 @@ export function createFoundationServices(): Pick<
   layerService.registerBuiltInLayers();
   layerService.setOptionsService(optionsService);
   optionsService.setLayerService(layerService);
+  stateService.setLayerService(layerService);
 
   return {
     layerService,

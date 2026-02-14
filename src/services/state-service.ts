@@ -10,6 +10,7 @@ import { signal, effect } from '@preact/signals-core';
 import { debounceFlush } from '../utils/debounce-flush';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
+import type { LayerService } from './layer/layer-service';
 
 const DEBUG = false;
 
@@ -39,6 +40,15 @@ export class StateService {
   private debouncedUrlSync = debounceFlush(() => this.syncToUrl(), 300);
 
   private optionsService: OptionsService;
+
+  /** Post-construction wiring for LayerService (needed for URL sync on custom layer toggle) */
+  setLayerService(layerService: LayerService): void {
+    // Watch layer registry changes (custom layer enable/disable)
+    effect(() => {
+      layerService.changed.value;
+      this.scheduleUrlSync();
+    });
+  }
 
   constructor(
     private configService: ConfigService,

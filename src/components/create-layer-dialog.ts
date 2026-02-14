@@ -51,15 +51,10 @@ fn blend{BlendName}(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let cell = o1280LatLonToCell(lat, lon);
   let value = {samplerFn}(cell);
 
-  // Values outside data range → blue (for debugging)
+  // Normalize to 0-1 and apply red-green palette
   let vMin = {paletteMin};
   let vMax = {paletteMax};
-  if (value < vMin || value > vMax) {
-    return vec4f(mix(color.rgb, vec3f(0.2, 0.3, 0.8), opacity), color.a);
-  }
-
-  // Normalize to 0-1 and apply red-green palette
-  let t = (value - vMin) / (vMax - vMin);
+  let t = clamp((value - vMin) / (vMax - vMin), 0.0, 1.0);
   let layerColor = vec3f(1.0 - t, t, 0.0);  // red → green
 
   return vec4f(mix(color.rgb, layerColor, opacity), color.a);

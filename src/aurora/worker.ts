@@ -472,7 +472,15 @@ function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): void {
   const uniforms = buildUniforms(camera, new Date(time));
 
   renderer!.updateUniforms(uniforms);
-  renderer!.setUserLayerOpacities(userLayerOpacities);
+
+  // Build animated user layer opacities (indexed by userLayerIndex)
+  const animatedUserOpacities = new Map<number, number>();
+  for (const layer of layerRegistry!.getAll()) {
+    if (!layer.isBuiltIn && layer.userLayerIndex !== undefined) {
+      animatedUserOpacities.set(layer.userLayerIndex, animatedOpacity.get(layer.id) ?? 0);
+    }
+  }
+  renderer!.setUserLayerOpacities(animatedUserOpacities);
 
   // Update dynamic param state (lerp and ready flags)
   for (const [param, binding] of paramBindings) {

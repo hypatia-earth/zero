@@ -189,6 +189,11 @@
   }
 }
 
+/* Dev mode: always show Add Layer button (localhost testing) */
+body.dev .panel.layers .add-layer {
+  display: block;
+}
+
 .panel.layers .add-layer:hover {
   background: var(--color-primary-bg-hover);
 }
