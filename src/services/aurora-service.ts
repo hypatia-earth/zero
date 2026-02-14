@@ -9,7 +9,7 @@
  */
 
 import { effect, signal, type Signal } from '@preact/signals-core';
-import type { AuroraRequest, AuroraResponse, AuroraConfig, AuroraAssets } from '../workers/aurora.worker';
+import type { AuroraRequest, AuroraResponse, AuroraConfig, AuroraAssets } from '../aurora/worker';
 import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
 import type { OptionsService } from './options-service';
@@ -19,7 +19,7 @@ import { Camera } from '../aurora/camera';
 import { setupViewport } from './viewport';
 
 // Re-export types for consumers
-export type { AuroraConfig, AuroraAssets } from '../workers/aurora.worker';
+export type { AuroraConfig, AuroraAssets } from '../aurora/worker';
 export type { Camera } from '../aurora/camera';
 
 /** Performance statistics emitted each frame */

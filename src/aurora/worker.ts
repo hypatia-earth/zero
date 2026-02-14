@@ -9,14 +9,14 @@
  * Main thread sends camera/options/time updates, worker builds uniforms and renders.
  */
 
-import type { CameraConfig } from '../aurora/camera';
+import type { CameraConfig } from './camera';
 import type { TWeatherLayer, TWeatherTextureLayer } from '../config/types';
-import { GlobeRenderer, type GlobeUniforms } from '../aurora/globe-renderer';
+import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
-import { LayerStore } from '../aurora/layer-store';
+import { LayerStore } from './layer-store';
 import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.schema';
 import { getSunDirection } from '../utils/sun-position';
-import { shaderComposer } from '../aurora/shader-composer';
+import { shaderComposer } from './shader-composer';
 import { LayerService } from '../services/layer';
 
 // ============================================================
