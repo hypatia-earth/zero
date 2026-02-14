@@ -146,29 +146,20 @@ interface ParamBinding {
 const paramBindings = new Map<string, ParamBinding>();
 const PARAM_BINDING_START = 50;  // Must match shader-composer.ts
 
-// Param → Layer mapping (for renderer binding)
-const paramToLayerMap: Record<string, TWeatherLayer> = {
-  'temperature_2m': 'temp',
-  'precipitation_type': 'rain',
-  'pressure_msl': 'pressure',
-  'wind_u_component_10m': 'wind',
-  'wind_v_component_10m': 'wind',
-  'cloud_cover': 'clouds',
-  'relative_humidity_2m': 'humidity',
-};
+// Find which layer uses a given param (from layerRegistry)
+function findLayerForParam(param: string): string | undefined {
+  if (!layerRegistry) return undefined;
+  for (const layer of layerRegistry.getAll()) {
+    if (layer.params?.includes(param)) {
+      return layer.id;
+    }
+  }
+  return undefined;
+}
 
-// Layer → Params mapping (for multi-param layer binding)
-// Used by activateSlots to check if all params for a multi-param layer are ready
-function getLayerParams(layer: string): string[] {
-  const mapping: Record<string, string[]> = {
-    'temp': ['temperature_2m'],
-    'rain': ['precipitation_type'],
-    'pressure': ['pressure_msl'],
-    'wind': ['wind_u_component_10m', 'wind_v_component_10m'],
-    'clouds': ['cloud_cover'],
-    'humidity': ['relative_humidity_2m'],
-  };
-  return mapping[layer] ?? [];
+// Get params for a layer (from layerRegistry)
+function getLayerParams(layerId: string): string[] {
+  return layerRegistry?.get(layerId)?.params ?? [];
 }
 
 // Pressure contour state
@@ -669,7 +660,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       }
 
       // Determine which renderer layer to bind
-      const layer = paramToLayerMap[param] as TWeatherLayer | undefined;
+      const layer = findLayerForParam(param) as TWeatherLayer | undefined;
       if (!layer) {
         console.warn(`[Aurora] activateSlots: no layer mapping for param ${param}`);
         return;
@@ -740,7 +731,7 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
       }
 
       // Also clear legacy slotStates for uniform building
-      const layer = paramToLayerMap[param] as TWeatherLayer | undefined;
+      const layer = findLayerForParam(param) as TWeatherLayer | undefined;
       if (layer) {
         const layerState = slotStates.get(layer);
         if (layerState) {
