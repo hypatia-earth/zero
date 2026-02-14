@@ -109,9 +109,10 @@ export class QueueService implements IQueueService {
     for (const userLayer of this.layerService.getUserLayers()) {
       if (!this.layerService.isUserLayerEnabled(userLayer.id)) continue;
       for (const param of userLayer.params ?? []) {
-        const builtInLayer = this.configService.getLayerForParam(param);
-        if (builtInLayer && isWeatherLayer(builtInLayer)) {
-          activeLayers.add(builtInLayer);
+        const layers = this.layerService.getLayersForParam(param);
+        const builtIn = layers.find(l => l.isBuiltIn);
+        if (builtIn && isWeatherLayer(builtIn.id)) {
+          activeLayers.add(builtIn.id as TWeatherLayer);
         }
       }
     }
@@ -229,8 +230,7 @@ export class QueueService implements IQueueService {
     this.timestepQueue = [
       ...keepFromExisting,
       ...newOrders.map(order => {
-      const defaultSize = this.configService.getLayer(order.param)?.defaultSizeEstimate ?? 0;
-      const estimatedBytes = isNaN(order.sizeEstimate) ? defaultSize : order.sizeEstimate;
+      const estimatedBytes = isNaN(order.sizeEstimate) ? 0 : order.sizeEstimate;
       return {
         order,
         estimatedBytes,

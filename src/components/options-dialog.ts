@@ -22,7 +22,6 @@ import type { OptionsService } from '../services/options-service';
 import type { PaletteService } from '../services/palette-service';
 import { getByPath } from '../utils/object';
 import type { ConfigService } from '../services/config-service';
-import type { TLayer } from '../config/types';
 import type { DialogService } from '../services/dialog-service';
 import type { CapabilitiesService } from '../services/capabilities-service';
 import { clearCache, nuke } from '../services/sw-registration';
@@ -360,7 +359,6 @@ function renderGroup(
   options: ZeroOptions,
   optionsService: OptionsService,
   paletteService: PaletteService,
-  configService: ConfigService,
   showAdvancedOptions: boolean,
   capabilitiesService: CapabilitiesService,
   skipGroupHeader: boolean = false
@@ -395,21 +393,8 @@ function renderGroup(
       m('h3.title', { key: '_title' }, group.label),
       group.description ? m('p.description', { key: '_desc' }, group.description) : null,
       ...Array.from(byLayer.entries()).map(([layerId, opts]) => {
-        const layerConfig = configService.getLayer(layerId as TLayer);
         return m('div.subsection', { key: layerId }, [
           m('h4.title', { key: `${layerId}_title` }, layerLabels[layerId] || layerId),
-          layerConfig?.description ? m('p.layer-description', { key: `${layerId}_desc` }, [
-            layerConfig.description,
-            layerConfig.links?.length ? [
-              ' ECMWF parameter',
-              layerConfig.links.length > 1 ? 's' : '',
-              ': ',
-              ...layerConfig.links.flatMap((link, i) => [
-                i > 0 ? ', ' : '',
-                m('a.param-link', { href: link.url, target: '_blank', rel: 'noopener' }, link.param)
-              ])
-            ] : null
-          ]) : null,
           ...opts.map(opt => renderOption(opt, options, optionsService, paletteService, capabilitiesService))
         ].filter(Boolean));
       })
@@ -462,27 +447,9 @@ function renderGroup(
     ].filter(Boolean));
   }
 
-  // For filtered layer view, show layer description at top
-  const filteredLayerId = skipGroupHeader && groupId === 'layers' && visibleOptions.length > 0
-    ? visibleOptions[0]!.path.split('.')[0]
-    : null;
-  const filteredLayerConfig = filteredLayerId ? configService.getLayer(filteredLayerId as TLayer) : null;
-
   return m('div.section', { key: groupId }, [
     !skipGroupHeader ? m('h3.title', { key: '_title' }, group.label) : null,
     !skipGroupHeader && group.description ? m('p.description', { key: '_desc' }, group.description) : null,
-    filteredLayerConfig?.description ? m('p.layer-description', { key: '_layer_desc' }, [
-      filteredLayerConfig.description,
-      filteredLayerConfig.links?.length ? [
-        ' ECMWF parameter',
-        filteredLayerConfig.links.length > 1 ? 's' : '',
-        ': ',
-        ...filteredLayerConfig.links.flatMap((link, i) => [
-          i > 0 ? ', ' : '',
-          m('a.param-link', { href: link.url, target: '_blank', rel: 'noopener' }, link.param)
-        ])
-      ] : null
-    ]) : null,
     ...visibleOptions.map(opt => renderOption(opt, options, optionsService, paletteService, capabilitiesService))
   ].filter(Boolean));
 }
@@ -611,7 +578,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
           ...sortedGroupIds.map(groupId => {
             const groupOpts = filteredGroups[groupId];
             if (!groupOpts) return null;
-            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, configService, showAdvanced, capabilitiesService, !!filter && filter !== 'global');
+            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, showAdvanced, capabilitiesService, !!filter && filter !== 'global');
           }).filter(Boolean),
 
           // Danger zone (only in global view)
@@ -655,7 +622,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
 
           // Advanced group (only in global view)
           (!filter || filter === 'global') && showAdvanced && advancedGroup
-            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, configService, true, capabilitiesService)
+            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, true, capabilitiesService)
             : null
         ].filter(Boolean)),
         m('div.footer', [

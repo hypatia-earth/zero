@@ -9,19 +9,12 @@
  */
 
 import { defaultConfig, EARTH_RADIUS } from '../config/defaults';
-import type { ZeroConfig, TLayer, TParam, LayerConfig, AppConfig, DiscoveryConfig, TLayerCategory } from '../config/types';
+import type { ZeroConfig, TLayer, AppConfig, DiscoveryConfig } from '../config/types';
 import { deepMerge } from '../utils/object';
-import type { LayerService } from './layer';
 
 export class ConfigService {
   private config: ZeroConfig = defaultConfig;
   private initialized = false;
-  private layerService: LayerService | null = null;
-
-  /** Set LayerService reference (called after both services created) */
-  setLayerService(layerService: LayerService): void {
-    this.layerService = layerService;
-  }
 
   /**
    * Initialize config by loading runtime overrides.
@@ -66,24 +59,6 @@ export class ConfigService {
     return this.config.camera;
   }
 
-  getLayers(): LayerConfig[] {
-    if (!this.layerService) {
-      throw new Error('ConfigService.getLayers() called before LayerService was set');
-    }
-    return this.layerService.getBuiltIn().map(decl => ({
-      id: decl.id as TLayer,
-      label: decl.label ?? decl.id,
-      buttonLabel: decl.buttonLabel ?? decl.id,
-      category: decl.category ?? 'custom' as TLayerCategory,
-      ...(decl.params && { params: decl.params as TParam[] }),
-      ...(decl.slabs && { slabs: decl.slabs }),
-    }));
-  }
-
-  getLayer(id: TLayer): LayerConfig | undefined {
-    return this.getLayers().find(l => l.id === id);
-  }
-
   getDefaultLayers(): TLayer[] {
     return this.config.defaultLayers;
   }
@@ -98,13 +73,5 @@ export class ConfigService {
 
   getEarthRadius(): number {
     return EARTH_RADIUS;
-  }
-
-  /** Find which layer provides a given param (e.g., "temperature_2m" → "temp") */
-  getLayerForParam(param: string): TLayer | undefined {
-    if (!this.layerService) return undefined;
-    const layers = this.layerService.getLayersForParam(param);
-    const builtIn = layers.find(l => l.isBuiltIn);
-    return builtIn?.id as TLayer | undefined;
   }
 }

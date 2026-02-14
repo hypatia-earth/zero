@@ -23,8 +23,8 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
   return {
     view({ attrs }) {
       const { configService, optionsService, layerRegistry, auroraService, dialogService } = attrs;
-      const readyLayerIds = new Set(configService.getReadyLayers());
-      const layers = configService.getLayers().filter(l => readyLayerIds.has(l.id));
+      const readyLayerIds = new Set<string>(configService.getReadyLayers());
+      const layers = layerRegistry.getBuiltIn().filter(l => readyLayerIds.has(l.id));
       const opts = optionsService.options.value;
 
       // Get user layers from registry (exclude preview)
@@ -41,14 +41,16 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
 
         groups.push(m('.group', { key: category }, [
           m('h4', LAYER_CATEGORY_LABELS[category]),
-          categoryLayers.map(layer =>
-            m(LayerWidget, {
-              key: layer.id,
+          categoryLayers.map(layer => {
+            const id = layer.id as TLayer;
+            return m(LayerWidget, {
+              key: id,
               layer,
-              active: opts[layer.id].enabled,
-              onToggle: () => optionsService.update(draft => { draft[layer.id].enabled = !draft[layer.id].enabled; }),
-              onOptions: () => dialogService.open('options', { filter: layer.id }),
-            })
+              active: opts[id].enabled,
+              onToggle: () => optionsService.update(draft => { draft[id].enabled = !draft[id].enabled; }),
+              onOptions: () => dialogService.open('options', { filter: id }),
+            });
+          }
           ),
         ]));
       }
@@ -90,7 +92,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
 };
 
 interface LayerWidgetAttrs {
-  layer: { id: TLayer; label: string; buttonLabel: string };
+  layer: { id: string; label?: string; buttonLabel?: string };
   active: boolean;
   onToggle: () => void;
   onOptions: () => void;

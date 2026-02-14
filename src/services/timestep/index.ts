@@ -313,8 +313,8 @@ export class TimestepService {
     const tasks: QueueTask[] = [];
 
     for (const layer of activeLayers) {
-      const layerConfig = this.configService.getLayer(layer);
-      const omParams = layerConfig?.params ?? [layer];
+      const layerDecl = this.layerService.get(layer);
+      const omParams = layerDecl?.params ?? [layer];
 
       for (const timestep of window) {
         for (let slabIndex = 0; slabIndex < omParams.length; slabIndex++) {
