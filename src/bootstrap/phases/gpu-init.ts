@@ -11,7 +11,7 @@ import type { AboutService } from '../../services/about-service';
 import type { OmService } from '../../services/queue/om-service';
 import type { OptionsService } from '../../services/options-service';
 import type { ConfigService } from '../../services/config-service';
-import type { LayerService } from '../../services/layer-service';
+import type { LayerService } from '../../services/layer';
 import type { ISlotService } from '../../services/queue';
 import type { Progress } from '../progress';
 import type { LoadedAssets } from './assets';

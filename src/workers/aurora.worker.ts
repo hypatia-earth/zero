@@ -13,11 +13,11 @@ import type { CameraConfig } from '../render/camera';
 import type { TWeatherLayer, TWeatherTextureLayer } from '../config/types';
 import { GlobeRenderer, type GlobeUniforms } from '../render/globe-renderer';
 import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
-import { LayerStore } from '../services/layer-store';
+import { LayerStore } from '../render/layer-store';
 import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.schema';
 import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer } from '../render/shader-composer';
-import { LayerService } from '../services/layer-service';
+import { LayerService } from '../services/layer';
 import { registerBuiltInLayers } from '../layers';
 
 // ============================================================
@@ -65,7 +65,7 @@ export type AuroraRequest =
   | { type: 'deactivateSlots'; param: string }
   | { type: 'render'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number }
   | { type: 'resize'; width: number; height: number }
-  | { type: 'registerUserLayer'; layer: import('../services/layer-service').LayerDeclaration }
+  | { type: 'registerUserLayer'; layer: import('../services/layer').LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'setUserLayerOpacity'; layerIndex: number; opacity: number }
   | { type: 'updatePalette'; layer: string; textureData: Uint8Array; range: [number, number] }
@@ -141,7 +141,7 @@ function getLayerSlotState(layerId: string): SlotState | undefined {
 }
 
 // Rebuild paramBindings after shader recomposition (indices may shift)
-function rebuildParamBindings(layers: import('../services/layer-service').LayerDeclaration[]): void {
+function rebuildParamBindings(layers: import('../services/layer').LayerDeclaration[]): void {
   const allParams = new Set<string>();
   for (const layer of layers) {
     layer.params?.forEach(p => allParams.add(p));

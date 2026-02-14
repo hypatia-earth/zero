@@ -10,10 +10,10 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import type { LayerService, LayerDeclaration } from '../services/layer-service';
+import type { LayerService, LayerDeclaration } from '../services/layer';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
-import { defineLayer, withType, withParams, withOptions, withBlend, withShader, withRender } from '../services/layer-builder';
+import { defineLayer, withType, withParams, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
 import { DialogHeader } from './dialog-header';
 import { PARAM_METADATA, getParamMeta, getCustomLayerParams, type ParamMeta } from '../config/param-metadata';
 

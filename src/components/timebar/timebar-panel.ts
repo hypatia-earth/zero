@@ -17,7 +17,7 @@ import type { OptionsService } from '../../services/options-service';
 import type { ConfigService } from '../../services/config-service';
 import type { ThemeService } from '../../services/theme-service';
 import type { StateService } from '../../services/state-service';
-import type { LayerService } from '../../services/layer-service';
+import type { LayerService } from '../../services/layer';
 import { diskUnwarp } from './timebar-math';
 import { renderTimebar, getTimebarHeight } from './timebar-renderer';
 

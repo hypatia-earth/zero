@@ -1,4 +1,4 @@
-import { defineLayer, withType, withUI, withParams, withSlabs, withOptions, withBlend, withRender, withShader, asBuiltIn } from '../../services/layer-builder';
+import { defineLayer, withType, withUI, withParams, withSlabs, withOptions, withBlend, withRender, withShader, asBuiltIn } from '../../services/layer/builder';
 import shaderCode from './temp.wgsl?raw';
 
 export const layer = defineLayer('temp',

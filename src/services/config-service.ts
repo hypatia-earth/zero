@@ -11,7 +11,7 @@
 import { defaultConfig, EARTH_RADIUS } from '../config/defaults';
 import type { ZeroConfig, TLayer, TParam, LayerConfig, AppConfig, DiscoveryConfig, TLayerCategory } from '../config/types';
 import { deepMerge } from '../utils/object';
-import type { LayerService } from './layer-service';
+import type { LayerService } from './layer';
 
 export class ConfigService {
   private config: ZeroConfig = defaultConfig;

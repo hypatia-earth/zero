@@ -17,7 +17,7 @@ import type { QueueService } from './queue';
 import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
-import type { LayerService } from './layer-service';
+import type { LayerService } from './layer';
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
 
 const DEBUG = false;

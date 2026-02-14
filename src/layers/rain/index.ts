@@ -1,4 +1,4 @@
-import { defineLayer, withType, withUI, withParams, withSlabs, withOptions, withBlend, withRender, asBuiltIn } from '../../services/layer-builder';
+import { defineLayer, withType, withUI, withParams, withSlabs, withOptions, withBlend, withRender, asBuiltIn } from '../../services/layer/builder';
 
 export const layer = defineLayer('rain',
   withType('texture'),

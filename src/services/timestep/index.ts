@@ -11,7 +11,7 @@
 import { signal } from '@preact/signals-core';
 import { type TWeatherLayer, type TTimestep, type TModel, type Timestep, type QueueTask } from '../../config/types';
 import type { ConfigService } from '../config-service';
-import type { LayerService } from '../layer-service';
+import type { LayerService } from '../layer';
 import { parseTimestep, formatTimestep } from '../../utils/timestep';
 import { countBeforeTimestep, clearBeforeTimestep } from '../sw-registration';
 import { PARAM_METADATA } from '../../config/param-metadata';

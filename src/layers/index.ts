@@ -5,7 +5,7 @@
  * These are registered in LayerService at bootstrap.
  */
 
-import type { LayerService } from '../services/layer-service';
+import type { LayerService } from '../services/layer';
 import { shaderComposer } from '../render/shader-composer';
 
 // Import layer declarations from folders

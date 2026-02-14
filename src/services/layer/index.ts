@@ -9,7 +9,7 @@
  */
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
-import type { TLayerCategory, SlabConfig } from '../config/types';
+import type { TLayerCategory, SlabConfig } from '../../config/types';
 
 export type LayerType = 'decoration' | 'texture' | 'geometry' | 'solid';
 export type ComputeTrigger = 'data-ready' | 'time-change';

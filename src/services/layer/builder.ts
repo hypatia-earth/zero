@@ -11,8 +11,8 @@
  *   );
  */
 
-import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders } from './layer-service';
-import type { TLayerCategory, SlabConfig } from '../config/types';
+import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders } from './index';
+import type { TLayerCategory, SlabConfig } from '../../config/types';
 
 export interface LayerFeature {
   apply(declaration: Partial<LayerDeclaration>): Partial<LayerDeclaration>;
