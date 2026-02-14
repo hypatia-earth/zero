@@ -92,9 +92,10 @@ export function createParamSlots(param: string, timeslots: number, slabsCount?: 
         return { slotIndex: freeIndices.pop()!, evicted: null, evictedSlotIndex: null };
       }
 
-      // Need to evict - find furthest from reference time
+      // Need to evict - find furthest from reference time, but protect slots in wanted window
+      const wantedWindow = new Set(wanted.value?.window ?? []);
       const candidates = [...slots.entries()]
-        .filter(([, slot]) => slot.loaded)
+        .filter(([ts, slot]) => slot.loaded && !wantedWindow.has(ts))  // Don't evict slots in window
         .sort((a, b) => {
           const distA = Math.abs(toDate(a[0]).getTime() - referenceTime.getTime());
           const distB = Math.abs(toDate(b[0]).getTime() - referenceTime.getTime());

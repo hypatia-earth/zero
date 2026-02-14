@@ -109,7 +109,6 @@ export const App: m.ClosureComponent = () => {
               stateService: services.stateService!,
               slotService: services.slotService!,
               timestepService: services.timestepService!,
-              configService: services.configService!,
               themeService: services.themeService!,
               layerService: services.layerService!,
             }),

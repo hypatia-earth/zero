@@ -110,6 +110,7 @@
   --color-layer-graticule: #ffffff;
   --color-layer-text: #ffffff;
   --color-layer-debug: #ffffff;
+  --color-layer-custom: oklch(50% 0 0);        /* 50% grey - all custom layers */
 
   /* Timebar UI colors */
   --color-timebar-ecmwf: oklch(30% 0.00 0);     /* grey: available */

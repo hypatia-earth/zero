@@ -10,6 +10,7 @@
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import type { TLayerCategory, SlabConfig } from '../../config/types';
+import type { OptionsService } from '../options-service';
 import { builtInLayers } from '../../layers';
 
 export type LayerType = 'decoration' | 'texture' | 'geometry' | 'solid';
@@ -71,6 +72,12 @@ export class LayerService {
   private userLayerEnabled: Map<string, boolean> = new Map();
   private userLayerOpacity: Map<string, number> = new Map();
   private nextBuiltInIndex = 0;  // Auto-increment for built-in layer indices
+  private optionsService: OptionsService | null = null;
+
+  /** Post-construction wiring for OptionsService */
+  setOptionsService(optionsService: OptionsService): void {
+    this.optionsService = optionsService;
+  }
 
   /** Signal that increments when registry changes */
   get changed(): ReadonlySignal<number> {
@@ -273,6 +280,30 @@ export class LayerService {
   /** Get layers watching a specific options path */
   getLayersWatching(optionPath: string): LayerDeclaration[] {
     return this.getAll().filter(l => l.options?.includes(optionPath));
+  }
+
+  /** Check if a layer is enabled (works for both built-in and user layers) */
+  isLayerEnabled(id: string): boolean {
+    const layer = this.layers.get(id);
+    if (!layer) return false;
+
+    if (layer.isBuiltIn) {
+      // Built-in: check OptionsService
+      const opts = this.optionsService?.options.value;
+      const layerOpts = opts?.[id as keyof typeof opts] as { enabled?: boolean } | undefined;
+      return layerOpts?.enabled ?? false;
+    } else {
+      // User layer: check internal map
+      return this.userLayerEnabled.get(id) ?? true;
+    }
+  }
+
+  /** Get all enabled layers that have params (for TimeBar) */
+  getEnabledLayers(): LayerDeclaration[] {
+    return this.getAll().filter(layer => {
+      if (!layer.params?.length) return false;  // No params = not a data layer
+      return this.isLayerEnabled(layer.id);
+    });
   }
 
   /** Get all unique params needed by registered layers */

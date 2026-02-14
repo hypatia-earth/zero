@@ -188,6 +188,10 @@ export class ThemeService {
     console.log('[Theme] Loaded colors:', this.colors.size, 'sizes:', this.sizes.size);
   }
 
+  hasColor(name: string): boolean {
+    return this.colors.has(name);
+  }
+
   getColor(name: string, lightness = 1.0, chroma = 1.0): Color {
     const color = this.colors.get(name);
     if (!color) throw new Error(`[Theme] Unknown color: ${name}`);

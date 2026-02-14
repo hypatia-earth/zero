@@ -3,24 +3,30 @@
  * Draws ticks, labels, now marker, and knob
  */
 
-import type { TWeatherLayer } from '../../config/types';
 import type { ThemeService } from '../../services/theme-service';
 import { diskWarp, diskHeight, getSunBrightness } from './timebar-math';
 
+/** Minimum pixels per layer row */
+const MIN_LAYER_HEIGHT = 12;
+
 /** Get layout from ThemeService */
-function getLayout(themeService: ThemeService) {
+function getLayout(themeService: ThemeService, layerCount: number) {
+  const baseDiskHeight = themeService.getSize('size-timebar-disk-height');
+  // For >3 layers, grow to give each layer at least MIN_LAYER_HEIGHT
+  const diskHeight = Math.max(baseDiskHeight, layerCount * MIN_LAYER_HEIGHT);
+
   return {
     topPadding: themeService.getSize('size-timebar-top-padding'),
-    diskHeight: themeService.getSize('size-timebar-disk-height'),
+    diskHeight,
     diskLabelGap: themeService.getSize('size-timebar-disk-label-gap'),
     labelHeight: themeService.getSize('size-timebar-label-height'),
     bottomPadding: themeService.getSize('size-timebar-bottom-padding'),
   };
 }
 
-/** Total timebar height in pixels */
-export function getTimebarHeight(themeService: ThemeService): number {
-  const L = getLayout(themeService);
+/** Total timebar height in pixels (dynamic based on layer count) */
+export function getTimebarHeight(themeService: ThemeService, layerCount: number): number {
+  const L = getLayout(themeService, layerCount);
   return L.topPadding + L.diskHeight + L.diskLabelGap + L.labelHeight + L.bottomPadding;
 }
 
@@ -42,8 +48,8 @@ const LABEL_MIN_GAP = 40;
 export interface TimebarRenderParams {
   canvas: HTMLCanvasElement;
   window: { start: Date; end: Date };
-  activeLayers: TWeatherLayer[];
-  layerParams: Map<TWeatherLayer, string[]>;  // params per layer
+  activeLayers: string[];           // layer IDs (built-in + custom)
+  layerParams: Map<string, string[]>;  // params per layer
   ecmwfSet: Set<string>;
   cachedMap: Map<string, Set<string>>;  // param → cached timesteps
   gpuMap: Map<string, Set<string>>;     // param → gpu timesteps
@@ -82,8 +88,8 @@ export function renderTimebar(params: TimebarRenderParams): void {
 
   const width = rect.width;
 
-  // Get layout from CSS vars via themeService
-  const L = getLayout(themeService);
+  // Get layout from CSS vars via themeService (dynamic based on layer count)
+  const L = getLayout(themeService, activeLayers.length);
   const diskTop = L.topPadding;
   const labelTop = diskTop + L.diskHeight + L.diskLabelGap;
   const windowMs = window.end.getTime() - window.start.getTime();
@@ -123,8 +129,8 @@ export function renderTimebar(params: TimebarRenderParams): void {
 interface TickParams {
   diskTop: number;
   diskHeight: number;
-  activeLayers: TWeatherLayer[];
-  layerParams: Map<TWeatherLayer, string[]>;
+  activeLayers: string[];
+  layerParams: Map<string, string[]>;
   ecmwfSet: Set<string>;
   cachedMap: Map<string, Set<string>>;   // param → timesteps
   gpuMap: Map<string, Set<string>>;      // param → timesteps
@@ -172,8 +178,14 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
     activeLayers.forEach((layer, layerIndex) => {
       const params = layerParams.get(layer) ?? [];
       const paramCount = params.length || 1;
-      const layerColor = themeService.getColor(`color-layer-${layer}`, 1.1, 1.2).css;
-      const layerDimColor = themeService.getColor(`color-layer-${layer}`, 0.67, 0.67).css;
+      // Custom layers may not have color defined - use fallback
+      const hasColor = themeService.hasColor(`color-layer-${layer}`);
+      const layerColor = hasColor
+        ? themeService.getColor(`color-layer-${layer}`, 1.1, 1.2).css
+        : themeService.getColor('color-layer-custom', 1.1, 1.2).css;
+      const layerDimColor = hasColor
+        ? themeService.getColor(`color-layer-${layer}`, 0.67, 0.67).css
+        : themeService.getColor('color-layer-custom', 0.67, 0.67).css;
       const layerTopY = diskTop + layerIndex * layerHeight;
 
       // Calculate sub-row height with gaps

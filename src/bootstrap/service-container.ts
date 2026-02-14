@@ -71,8 +71,9 @@ export function createFoundationServices(): Pick<
   const capabilitiesService = new CapabilitiesService();
   const perfService = new PerfService();
 
-  // Register built-in layers
+  // Register built-in layers and wire dependencies
   layerService.registerBuiltInLayers();
+  layerService.setOptionsService(optionsService);
 
   return {
     layerService,

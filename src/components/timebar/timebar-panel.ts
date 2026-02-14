@@ -10,11 +10,9 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import { isWeatherLayer, type TWeatherLayer } from '../../config/types';
 import type { ISlotService } from '../../services/queue/queue-service';
 import type { TimestepService } from '../../services/timestep/timestep-service';
 import type { OptionsService } from '../../services/options-service';
-import type { ConfigService } from '../../services/config-service';
 import type { ThemeService } from '../../services/theme-service';
 import type { StateService } from '../../services/state-service';
 import type { LayerService } from '../../services/layer/layer-service';
@@ -26,7 +24,6 @@ interface TimeBarPanelAttrs {
   stateService: StateService;
   slotService: ISlotService;
   timestepService: TimestepService;
-  configService: ConfigService;
   themeService: ThemeService;
   layerService: LayerService;
 }
@@ -56,7 +53,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     },
 
     view({ attrs }) {
-      const { optionsService, stateService, slotService, timestepService, configService, themeService, layerService } = attrs;
+      const { optionsService, stateService, slotService, timestepService, themeService, layerService } = attrs;
 
       // Derive window
       const window = {
@@ -117,17 +114,17 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
         ecmwfSet.add(timestepService.toDate(ts).toISOString());
       }
 
-      const readyWeatherLayers = configService.getReadyLayers().filter(isWeatherLayer);
-      const layerParamsMap = new Map<TWeatherLayer, string[]>();
+      // Get enabled layers (built-in + custom) that have params
+      const enabledLayers = layerService.getEnabledLayers();
+      const activeLayers = enabledLayers.map(l => l.id);
+      const layerParamsMap = new Map<string, string[]>();
       const cachedMap = new Map<string, Set<string>>();  // param → timesteps
       const gpuMap = new Map<string, Set<string>>();     // param → timesteps
       const activeMap = new Map<string, Set<string>>();  // param → timesteps
 
-      for (const layer of readyWeatherLayers) {
-        // Get params for this layer
-        const layerDecl = layerService.getBuiltIn().find(l => l.id === layer);
-        const params = layerDecl?.params ?? [];
-        layerParamsMap.set(layer, params);
+      for (const layer of enabledLayers) {
+        const params = layer.params ?? [];
+        layerParamsMap.set(layer.id, params);
 
         // Build per-param state maps
         for (const param of params) {
@@ -155,9 +152,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
         }
       }
 
-      // Filter to enabled layers
       const opts = optionsService.options.value;
-      const activeLayers = readyWeatherLayers.filter(layer => opts[layer].enabled);
 
       // Camera and sun state
       const viewState = stateService.viewState.value;
@@ -193,8 +188,8 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
         });
       };
 
-      // Canvas height from CSS vars
-      const canvasHeight = getTimebarHeight(themeService);
+      // Canvas height - dynamic based on active layer count
+      const canvasHeight = getTimebarHeight(themeService, activeLayers.length);
 
       return m('.panel.timebar', [
         m('.control.timeslider', { style: { height: `${canvasHeight}px` } }, [
