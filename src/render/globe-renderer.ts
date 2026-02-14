@@ -5,7 +5,7 @@
 import { Camera, type CameraConfig } from './camera';
 import { type ComposedShaders, activeParamBindings, type ParamBindingConfig } from './shader-composer';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
-import { PressureLayer, type PressureResolution, type SmoothingAlgorithm } from '../layers/pressure';
+import { PressureLayer } from '../layers/pressure';
 import { WindLayer } from '../layers/wind';
 import { GridAnimator, GRID_BUFFER_SIZE } from '../layers/grid/grid-animator';
 import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getParamLerpOffset, getParamReadyOffset } from './globe-uniforms';
@@ -130,7 +130,6 @@ export class GlobeRenderer {
 
   async initialize(
     requestedSlots: number,
-    pressureResolution: PressureResolution,
     windLineCount: number,
     composedShaders: ComposedShaders
   ): Promise<void> {
@@ -346,7 +345,7 @@ export class GlobeRenderer {
     });
 
     // Initialize pressure layer with configured resolution
-    this.pressureLayer = new PressureLayer(this.device, this.format, pressureResolution);
+    this.pressureLayer = new PressureLayer(this.device, this.format);
 
     // Initialize wind layer (2K lines for debugging)
     this.windLayer = new WindLayer(this.device, this.format, windLineCount);
@@ -1041,11 +1040,6 @@ export class GlobeRenderer {
     return this.device;
   }
 
-  /** Change pressure resolution live, returns slots needing regrid */
-  setPressureResolution(resolution: PressureResolution): number[] {
-    return this.pressureLayer.setResolution(resolution);
-  }
-
   /** Update level count (may resize vertex buffer) */
   setPressureLevelCount(levelCount: number): void {
     this.pressureLayer.setLevelCount(levelCount);
@@ -1066,8 +1060,7 @@ export class GlobeRenderer {
     slot1: number,
     lerp: number,
     levels: number[],
-    smoothingIterations = 0,
-    smoothingAlgo: SmoothingAlgorithm = 'laplacian'
+    smoothingIterations = 0
   ): void {
     if (!this.pressureLayer.isComputeReady()) {
       console.warn('[Globe] Pressure layer not ready');
@@ -1082,8 +1075,8 @@ export class GlobeRenderer {
 
     // Base vertex count per level from marching squares
     const baseVerticesPerLevel = this.pressureLayer.getBaseVerticesPerLevel();
-    // Chaikin 2× per pass (4 output vertices per 2 input), so max expansion is 4× for 2 passes
-    const expansionFactor = smoothingAlgo === 'chaikin' ? Math.pow(2, smoothingIterations) : 1;
+    // Chaikin 2× per pass, so max expansion is 2^iterations
+    const expansionFactor = Math.pow(2, smoothingIterations);
     const maxVerticesPerLevel = baseVerticesPerLevel * expansionFactor;
 
     // Prepare batch: write all uniforms, clear buffers, cache bind group
@@ -1100,12 +1093,11 @@ export class GlobeRenderer {
       // Run contour with dynamic uniform offset
       this.pressureLayer.runContourLevel(commandEncoder, i);
 
-      // Run smoothing passes if requested
+      // Run Chaikin smoothing passes if requested
       const vertexOffset = i * maxVerticesPerLevel;
       if (smoothingIterations > 0) {
         const newCount = this.pressureLayer.runSmoothing(
           commandEncoder,
-          smoothingAlgo,
           smoothingIterations,
           vertexOffset,
           baseVerticesPerLevel,

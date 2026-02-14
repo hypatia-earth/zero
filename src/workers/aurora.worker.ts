@@ -12,7 +12,7 @@
 import type { CameraConfig } from '../render/camera';
 import type { TWeatherLayer, TWeatherTextureLayer, SlabConfig } from '../config/types';
 import { GlobeRenderer, type GlobeUniforms } from '../render/globe-renderer';
-import { generateIsobarLevels, type SmoothingAlgorithm } from '../layers/pressure/pressure-layer';
+import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
 import { LayerStore } from '../services/layer-store';
 import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.schema';
 import { getSunDirection } from '../utils/sun-position';
@@ -62,7 +62,6 @@ export interface AuroraAssets {
 export interface AuroraConfig {
   cameraConfig: CameraConfig;
   timeslotsPerLayer: number;
-  pressureResolution: 1 | 2;
   windLineCount: number;
   readyLayers: TWeatherLayer[];
   /** Layer configs for LayerStore creation (only weather layers with slabs) - DEPRECATED */
@@ -196,8 +195,7 @@ let isobarLevels: number[] = generateIsobarLevels(4);  // Default 4 hPa spacing
 const tempPaletteRange = new Float32Array([-40, 50]);  // Updated by updatePalette message
 let lastPressureMinute = -1;
 let lastPressureSpacing = 4;
-let lastSmoothing = 'laplacian';
-let lastSmoothingPasses = '1';
+let lastSmoothing = 'light';
 
 // Animated opacity state (smooth transitions ~100ms)
 const animatedOpacity = {
@@ -443,7 +441,6 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
 
       await renderer.initialize(
         config.timeslotsPerLayer,
-        config.pressureResolution,
         config.windLineCount,
         composedShaders
       );
@@ -570,12 +567,10 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         needsContourRecompute = true;
       }
 
-      // Check if smoothing settings changed
+      // Check if smoothing changed
       const newSmoothing = opts.pressure.smoothing;
-      const newSmoothingPasses = opts.pressure.smoothingPasses;
-      if (newSmoothing !== lastSmoothing || newSmoothingPasses !== lastSmoothingPasses) {
+      if (newSmoothing !== lastSmoothing) {
         lastSmoothing = newSmoothing;
-        lastSmoothingPasses = newSmoothingPasses;
         needsContourRecompute = true;
       }
 
@@ -585,17 +580,16 @@ self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
         const currentMinute = Math.floor(time / 60000);
         if (currentMinute !== lastPressureMinute || needsContourRecompute) {
           lastPressureMinute = currentMinute;
-          const smoothing = opts.pressure.smoothing;
-          const smoothingIterations = smoothing === 'none' ? 0 : parseInt(opts.pressure.smoothingPasses, 10);
-          const smoothingAlgo: SmoothingAlgorithm = smoothing === 'none' ? 'laplacian' : smoothing;
+          // Map smoothing option to Chaikin iterations: none=0, light=1
+          const smoothingMap = { none: 0, light: 1 } as const;
+          const smoothingIterations = smoothingMap[opts.pressure.smoothing] ?? 1;
           const lerp = computeLerp(pressureState, time);
           renderer!.runPressureContour(
             pressureState.slot0,
             pressureState.slot1,
             lerp,
             isobarLevels,
-            smoothingIterations,
-            smoothingAlgo
+            smoothingIterations
           );
         }
       }

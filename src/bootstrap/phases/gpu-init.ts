@@ -39,8 +39,6 @@ export async function runGpuInitPhase(
 
   // Prepare config for worker
   const timeslotsPerLayer = parseInt(optionsService.options.value.gpu.timeslotsPerLayer, 10);
-  const resolutionMap = { '1': 1, '2': 2 } as const;
-  const pressureResolution = resolutionMap[optionsService.options.value.pressure.resolution];
   const windLineCount = optionsService.options.value.wind.seedCount;
   const readyLayers = configService.getReadyLayers().filter(isWeatherLayer);
 
@@ -68,7 +66,6 @@ export async function runGpuInitPhase(
   const config: AuroraConfig = {
     cameraConfig: configService.getCameraConfig(),
     timeslotsPerLayer,
-    pressureResolution,
     windLineCount,
     readyLayers,
     layerConfigs,

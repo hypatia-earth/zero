@@ -849,51 +849,19 @@ export const optionsSchema = z.object({
         step: 0.05,
       }
     ),
-    resolution: opt(
-      z.enum(['1', '2']).default('2'),
-      {
-        label: 'Grid resolution',
-        description: 'Contour grid resolution (1° = finer, 2° = faster)',
-        group: 'layers',
-        filter: ['global', 'pressure'],
-        order: 17.5,
-        disabled: true,  // 1° grid needs ~350MB buffers, requires device limit changes
-        control: 'radio',
-        options: [
-          { value: '2', label: '2° (fast)' },
-          { value: '1', label: '1° (detailed)' },
-        ],
-      }
-    ),
     smoothing: opt(
-      z.enum(['none', 'laplacian', 'chaikin']).default('laplacian'),
+      z.enum(['none', 'light']).default('light'),
       {
         label: 'Smoothing',
-        description: 'Laplacian averages neighbors, Chaikin subdivides corners',
-        group: 'layers',
-        filter: ['global', 'pressure'],
-        order: 17.8,
-        control: 'radio',
-        options: [
-          { value: 'none', label: 'None' },
-          { value: 'laplacian', label: 'Laplacian' },
-          { value: 'chaikin', label: 'Chaikin' },
-        ],
-      }
-    ),
-    smoothingPasses: opt(
-      z.enum(['1', '2']).default('1'),
-      {
-        label: 'Smoothing passes',
-        description: 'Number of iterations (ignored when smoothing is None)',
+        description: 'Smooth isobar contour lines',
         group: 'layers',
         filter: ['global', 'pressure'],
         order: 18,
         control: 'radio',
-        hidden: true,  // Pass 2 doesn't add visible smoothing, disabled for now
         options: [
-          { value: '1', label: '1 pass' },
-          { value: '2', label: '2 passes' },
+          { value: 'none', label: 'None' },
+          { value: 'light', label: 'Light' },
+          // 'strong' (2 Chaikin passes) disabled - drops every other line
         ],
       }
     ),
@@ -1088,7 +1056,7 @@ export const defaultOptions: ZeroOptions = {
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },
   wind: { enabled: false, seedCount: defaultConfig.wind.seedCount, opacity: defaultConfig.wind.opacity, speed: 30 },
-  pressure: { enabled: false, opacity: 0.85, resolution: '2', smoothing: 'laplacian', smoothingPasses: '1', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
+  pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
   debug: { showPerfPanel: false, fpsLimit: 'off' },

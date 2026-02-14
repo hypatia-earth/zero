@@ -1,5 +1,4 @@
 export { PressureLayer } from './pressure-layer';
-export type { PressureResolution, SmoothingAlgorithm } from './pressure-layer';
 
 import { defineLayer, withUI, withParams, withSlabs, withOptions, withCompute, withRender, asBuiltIn } from '../../services/layer-builder';
 

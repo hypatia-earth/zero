@@ -41,7 +41,6 @@ import windRenderShader from '../layers/wind/render.wgsl?raw';
 // Pressure layer (compute pipeline + render)
 import pressureContourShader from '../layers/pressure/contour.wgsl?raw';
 import pressureRegridShader from '../layers/pressure/regrid.wgsl?raw';
-import pressureSmoothShader from '../layers/pressure/smooth.wgsl?raw';
 import pressureChaikinShader from '../layers/pressure/chaikin.wgsl?raw';
 import pressureRenderShader from '../layers/pressure/render.wgsl?raw';
 import pressurePrefixSumShader from '../layers/pressure/prefix-sum.wgsl?raw';
@@ -103,7 +102,6 @@ export function getLayerShaders(): Map<string, LayerShaders> {
     ['pressure', {
       compute: [
         pressureRegridShader,
-        pressureSmoothShader,
         pressureContourShader,
         pressureChaikinShader,
         pressurePrefixSumShader,
