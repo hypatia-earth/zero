@@ -137,10 +137,14 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       return;
     }
 
-    // Check for duplicate with built-in
+    // Check for duplicate layer ID (built-in or user)
     const existing = registry.get(state.id);
-    if (existing?.isBuiltIn) {
-      state.error = `Cannot override built-in layer "${state.id}"`;
+    if (existing) {
+      if (existing.isBuiltIn) {
+        state.error = `Cannot use built-in layer ID "${state.id}"`;
+      } else {
+        state.error = `Layer "${state.id}" already exists`;
+      }
       m.redraw();
       return;
     }

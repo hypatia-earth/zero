@@ -221,16 +221,28 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
 
   // Iterate all registered layers
   for (const layer of layerRegistry.getAll()) {
-    const layerOpts = (opts as Record<string, { enabled?: boolean; opacity?: number }>)[layer.id];
-    if (!layerOpts) continue;
+    let enabled: boolean;
+    let opacity: number;
+
+    if (layer.isBuiltIn) {
+      // Built-in layers: get from options
+      const layerOpts = (opts as Record<string, { enabled?: boolean; opacity?: number }>)[layer.id];
+      if (!layerOpts) continue;
+      enabled = layerOpts.enabled ?? false;
+      opacity = layerOpts.opacity ?? 1.0;
+    } else {
+      // User layers: always enabled, opacity from userLayerOpacities
+      enabled = true;
+      opacity = userLayerOpacities.get(layer.userLayerIndex ?? -1) ?? 1.0;
+    }
 
     // Calculate target opacity
     let target = 0;
-    if (layerOpts.enabled) {
+    if (enabled) {
       // Data layers (texture/geometry) require data ready check
       const needsData = layer.type === 'texture' || layer.type === 'geometry';
       if (!needsData || isDataReady(layer.id)) {
-        target = layerOpts.opacity ?? 1.0;
+        target = opacity;
       }
     }
 

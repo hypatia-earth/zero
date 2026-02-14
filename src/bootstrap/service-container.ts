@@ -74,6 +74,7 @@ export function createFoundationServices(): Pick<
   // Register built-in layers and wire dependencies
   layerService.registerBuiltInLayers();
   layerService.setOptionsService(optionsService);
+  optionsService.setLayerService(layerService);
 
   return {
     layerService,

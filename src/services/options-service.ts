@@ -22,6 +22,7 @@ import { debounceFlush } from '../utils/debounce-flush';
 import { layerIds } from '../config/defaults';
 import type { TLayer } from '../config/types';
 import type { ConfigService } from './config-service';
+import type { LayerService } from './layer/layer-service';
 import { updatePrefetchConfig } from './sw-registration';
 
 const DEBUG = false;
@@ -195,6 +196,12 @@ export class OptionsService {
 
   private debouncedSave = debounceFlush(() => this.save(), 500);
   private initialized = false;
+  private layerService: LayerService | null = null;
+
+  /** Post-construction wiring for LayerService */
+  setLayerService(layerService: LayerService): void {
+    this.layerService = layerService;
+  }
 
   constructor(private configService: ConfigService) {
     // Auto-merge when userOverrides change
@@ -339,6 +346,7 @@ export class OptionsService {
    * Set enabled layers from StateService (URL delegation)
    */
   setEnabledLayers(enabledSet: Set<string>): void {
+    // Built-in layers: update options
     for (const layerId of layerIds) {
       const shouldEnable = enabledSet.has(layerId);
       const current = this.options.value[layerId as keyof ZeroOptions] as { enabled: boolean };
@@ -348,16 +356,38 @@ export class OptionsService {
         });
       }
     }
+
+    // Custom layers: update LayerService
+    if (this.layerService) {
+      for (const userLayer of this.layerService.getUserLayers()) {
+        const shouldEnable = enabledSet.has(userLayer.id);
+        if (this.layerService.isUserLayerEnabled(userLayer.id) !== shouldEnable) {
+          this.layerService.setUserLayerEnabled(userLayer.id, shouldEnable);
+        }
+      }
+    }
   }
 
   /**
-   * Get list of enabled layer IDs for URL sync
+   * Get list of enabled layer IDs for URL sync (built-in + custom)
    */
   getEnabledLayers(): string[] {
-    return layerIds.filter(id => {
+    // Built-in layers from options
+    const enabled: string[] = layerIds.filter(id => {
       const layer = this.options.value[id as keyof ZeroOptions] as { enabled?: boolean };
       return layer?.enabled === true;
     });
+
+    // Custom layers from LayerService
+    if (this.layerService) {
+      for (const userLayer of this.layerService.getUserLayers()) {
+        if (this.layerService.isUserLayerEnabled(userLayer.id)) {
+          enabled.push(userLayer.id);
+        }
+      }
+    }
+
+    return enabled;
   }
 
   private logChange(oldOverrides: Partial<ZeroOptions>, newOverrides: Partial<ZeroOptions>): void {
