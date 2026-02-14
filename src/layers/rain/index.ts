@@ -3,7 +3,7 @@ import { defineLayer, withType, withUI, withParams, withSlabs, withOptions, with
 export const layer = defineLayer('rain',
   withType('texture'),
   withUI('Precipitation', 'Rain', 'weather'),
-  withParams(['precipitation']),
+  withParams(['precipitation_type']),
   withSlabs([{ name: 'data', sizeMB: 26 }]),
   withOptions(['rain.enabled', 'rain.opacity']),
   withBlend('blendRain'),

@@ -12,6 +12,8 @@ export interface ParamMeta {
   palette: string;          // suggested palette name
   description?: string;
   sizeEstimate?: number;    // compressed bytes per timestep (for queue ETA)
+  customLayer?: boolean;    // available for user-created custom layers
+  layers?: string[];        // built-in layers using this param (e.g., ['temp'], ['wind'])
 }
 
 export const PARAM_METADATA: Record<string, ParamMeta> = {
@@ -24,6 +26,8 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     range: [-40, 50],  // Data stored in Celsius
     palette: 'thermal',
     sizeEstimate: 8_000_000,
+    customLayer: true,
+    layers: ['temp'],
   },
   'temperature_2m_max': {
     label: 'Max Temperature (2m)',
@@ -162,6 +166,8 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     range: [0, 100],
     palette: 'clouds',
     sizeEstimate: 8_000_000,
+    customLayer: true,
+    layers: ['clouds'],
   },
   'cloud_cover_low': {
     label: 'Low Clouds',
@@ -197,6 +203,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     range: [-50, 50],
     palette: 'diverging',
     sizeEstimate: 4_100_000,  // ~half of 8.2MB combined
+    layers: ['wind'],
   },
   'wind_v_component_10m': {
     label: 'Wind V (10m)',
@@ -204,6 +211,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     range: [-50, 50],
     palette: 'diverging',
     sizeEstimate: 4_100_000,
+    layers: ['wind'],
   },
   'wind_u_component_100m': {
     label: 'Wind U (100m)',
@@ -245,6 +253,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     range: [97000, 105000],  // 970-1050 hPa
     palette: 'pressure',
     sizeEstimate: 2_000_000,
+    layers: ['pressure'],
   },
 
   // ============================================================
@@ -357,6 +366,8 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     unit: 'code',
     range: [0, 3],  // categorical: none, rain, snow, mix
     palette: 'categorical',
+    customLayer: true,
+    layers: ['rain'],
   },
 };
 
@@ -377,4 +388,13 @@ export function getParamMeta(param: string): ParamMeta {
  */
 export function getKnownParams(): string[] {
   return Object.keys(PARAM_METADATA);
+}
+
+/**
+ * Get params available for custom layers
+ */
+export function getCustomLayerParams(): string[] {
+  return Object.entries(PARAM_METADATA)
+    .filter(([, meta]) => meta.customLayer)
+    .map(([param]) => param);
 }

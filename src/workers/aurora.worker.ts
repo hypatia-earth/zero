@@ -149,7 +149,7 @@ const PARAM_BINDING_START = 50;  // Must match shader-composer.ts
 // Param → Layer mapping (for renderer binding)
 const paramToLayerMap: Record<string, TWeatherLayer> = {
   'temperature_2m': 'temp',
-  'precipitation': 'rain',
+  'precipitation_type': 'rain',
   'pressure_msl': 'pressure',
   'wind_u_component_10m': 'wind',
   'wind_v_component_10m': 'wind',
@@ -162,7 +162,7 @@ const paramToLayerMap: Record<string, TWeatherLayer> = {
 function getLayerParams(layer: string): string[] {
   const mapping: Record<string, string[]> = {
     'temp': ['temperature_2m'],
-    'rain': ['precipitation'],
+    'rain': ['precipitation_type'],
     'pressure': ['pressure_msl'],
     'wind': ['wind_u_component_10m', 'wind_v_component_10m'],
     'clouds': ['cloud_cover'],

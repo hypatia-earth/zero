@@ -15,7 +15,7 @@ import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
 import { defineLayer, withType, withParams, withOptions, withBlend, withShader, withRender } from '../services/layer-builder';
 import { DialogHeader } from './dialog-header';
-import { PARAM_METADATA, getParamMeta, type ParamMeta } from '../config/param-metadata';
+import { PARAM_METADATA, getParamMeta, getCustomLayerParams, type ParamMeta } from '../config/param-metadata';
 
 interface CreateLayerDialogAttrs {
   layerRegistry: LayerService;
@@ -23,14 +23,8 @@ interface CreateLayerDialogAttrs {
   dialogService: DialogService;
 }
 
-// Allowed params for user layers (subset with GPU buffer support)
-const ALLOWED_PARAMS: (keyof typeof PARAM_METADATA)[] = [
-  'temperature_2m',
-  'precipitation',
-  'cloud_cover',
-  // 'pressure_msl',  // TODO: needs contour rendering, not texture
-  // 'albedo',        // TODO: not loaded yet
-];
+// Params available for custom layers (from metadata)
+const ALLOWED_PARAMS = getCustomLayerParams();
 
 const DEFAULT_PARAM = 'temperature_2m' satisfies keyof typeof PARAM_METADATA;
 
