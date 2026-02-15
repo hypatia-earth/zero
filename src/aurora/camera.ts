@@ -2,6 +2,8 @@
  * Camera - Orbital camera for globe view
  */
 
+import { CAMERA_DEFAULTS } from './defaults';
+
 export interface CameraState {
   lat: number;
   lon: number;
@@ -32,11 +34,10 @@ export class Camera {
   private far: number;
   private dirty = true;
 
-  constructor(state?: CameraState, config?: CameraConfig) {
-    // Apply config (defaults if not provided)
-    this.fov = (config?.fov ?? 75) * Math.PI / 180;
-    this.near = config?.near ?? 0.1;
-    this.far = config?.far ?? 100;
+  constructor(state?: CameraState, config: CameraConfig = CAMERA_DEFAULTS) {
+    this.fov = config.fov * Math.PI / 180;
+    this.near = config.near;
+    this.far = config.far;
 
     if (state) {
       this.lat = state.lat;

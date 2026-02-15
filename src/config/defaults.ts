@@ -6,6 +6,7 @@
  */
 
 import { ALL_LAYERS, type ZeroConfig, type TLayer } from './types';
+import { CAMERA_DEFAULTS } from '../aurora/defaults';
 
 export const EARTH_RADIUS = 6371000; // meters
 
@@ -38,9 +39,7 @@ export const defaultConfig: ZeroConfig = {
   },
 
   camera: {
-    fov: 75,
-    near: 0.1,
-    far: 100,
+    ...CAMERA_DEFAULTS,
     minDistance: 1.047,
     maxDistance: 6.65,
     defaultDistance: 3.2,
