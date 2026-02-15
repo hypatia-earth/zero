@@ -137,8 +137,8 @@ export class StateService {
       this.viewState.value = { ...this.viewState.value, time: newTime };
     }
 
-    // Schedule URL sync (will only run after enableUrlSync is called)
-    this.scheduleUrlSync();
+    // Write sanitized state to URL
+    this.syncToUrl();
   }
 
   /** Enable URL sync after bootstrap complete */
