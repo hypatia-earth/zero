@@ -13,7 +13,7 @@ import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 
 // Re-export for consumers
 export type { PassTimings } from './gpu-timestamp';
-import type { TWeatherTextureLayer, LayerState } from '../config/types';
+import type { LayerState } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import type { PressureColorOption } from '../schemas/options.schema';
 
@@ -892,18 +892,6 @@ export class GlobeRenderer {
     }
 
     this.bindGroup = this.device.createBindGroup({ layout: bindGroupLayout, entries });
-  }
-
-  /**
-   * Set texture layer slot buffers (owned by LayerStore)
-   * @deprecated Use setParamBuffers() with dynamic param bindings instead
-   */
-  setTextureLayerBuffers(param: TWeatherTextureLayer, _buffer0: GPUBuffer, _buffer1: GPUBuffer): void {
-    // temp and rain now use dynamic param bindings - ignore legacy calls
-    if (param === 'temp' || param === 'rain') {
-      return;
-    }
-    this.recreateBindGroup();
   }
 
   /**

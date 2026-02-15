@@ -10,7 +10,6 @@
  */
 
 import type { CameraConfig } from './camera';
-import type { TWeatherLayer, TWeatherTextureLayer } from '../config/types';
 import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
 import { LayerStore } from './layer-store';
@@ -46,7 +45,7 @@ export interface AuroraConfig {
   cameraConfig: CameraConfig;
   timeslotsPerLayer: number;
   windLineCount: number;
-  readyLayers: TWeatherLayer[];
+  readyLayers: string[];
   /** Param configs for buffer management (keyed by param name) */
   paramConfigs: Array<{ param: string; sizeMB: number }>;
   /** Built-in layer declarations (sent from main thread) */
@@ -368,7 +367,7 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 
   for (const paramCfg of config.paramConfigs) {
     const store = new LayerStore(device, {
-      layerId: paramCfg.param as TWeatherLayer,
+      layerId: paramCfg.param,
       slabs: [{ name: 'data', sizeMB: paramCfg.sizeMB }],
       timeslots: config.timeslotsPerLayer,
     });
@@ -555,25 +554,16 @@ function handleActivateSlots(data: Extract<AuroraRequest, { type: 'activateSlots
     state.dataReady = true;
   }
 
-  // Determine which renderer layer to bind
-  const layer = findLayerForParam(param) as TWeatherLayer | undefined;
-  if (!layer) {
+  // Determine which layer uses this param (built-in or custom)
+  const layerId = findLayerForParam(param);
+  if (!layerId) {
     console.warn(`[Aurora] activateSlots: no layer mapping for param ${param}`);
     return;
   }
 
   // Bind to renderer based on layer type
-  if (layer === 'temp' || layer === 'rain' || layer === 'clouds' || layer === 'humidity') {
-    const buffer0 = store.getSlotBuffer(slot0, 0);
-    const buffer1 = store.getSlotBuffer(slot1, 0);
-    if (buffer0 && buffer1) {
-      renderer!.setTextureLayerBuffers(layer as TWeatherTextureLayer, buffer0, buffer1);
-      const binding = paramBindings.get(param);
-      if (binding) {
-        renderer!.setParamBuffers(param, buffer0, buffer1);
-      }
-    }
-  } else if (layer === 'wind') {
+  // Wind and pressure have special handling, all others use generic param bindings
+  if (layerId === 'wind') {
     // Multi-param layer: check if ALL params are ready
     const windParams = getLayerParams('wind');
     const allReady = windParams.every(p => paramSlotStates.get(p)?.dataReady);
@@ -592,7 +582,7 @@ function handleActivateSlots(data: Extract<AuroraRequest, { type: 'activateSlots
         }
       }
     }
-  } else if (layer === 'pressure') {
+  } else if (layerId === 'pressure') {
     const rawBuffer = store.getSlotBuffer(slot0, 0);
     if (rawBuffer) {
       renderer!.triggerPressureRegrid(slot0, rawBuffer);
