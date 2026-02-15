@@ -13,7 +13,7 @@ import type { CameraConfig } from './camera';
 import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
 import { LayerStore } from './layer-store';
-import { PRESSURE_COLOR_DEFAULT, type ZeroOptions } from '../schemas/options.schema';
+import type { ZeroOptions } from '../schemas/options.schema';
 import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer } from './shader-composer';
 import { LayerService, type LayerDeclaration } from '../services/layer/layer-service';
@@ -274,7 +274,7 @@ interface CameraState {
  * Build uniforms from render message state
  */
 function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
-  const opts = currentOptions;
+  const opts = currentOptions!;
 
   return {
     // Camera (from render message)
@@ -293,9 +293,9 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     sunGlowColor: new Float32Array([1, 0.8, 0.4]),
     // Graticule (animated opacity)
     graticuleOpacity: getAnimatedOpacity('graticule'),
-    graticuleFontSize: opts?.graticule.fontSize ?? 12,
+    graticuleFontSize: opts.graticule.fontSize,
     graticuleLabelMaxRadius: 280,
-    graticuleLineWidth: opts?.graticule.lineWidth ?? 1,
+    graticuleLineWidth: opts.graticule.lineWidth,
     // Layers (animated opacities)
     earthOpacity: getAnimatedOpacity('earth'),
     tempOpacity: getAnimatedOpacity('temp'),
@@ -303,14 +303,14 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     windOpacity: getAnimatedOpacity('wind'),
     windDataReady: getLayerSlotState('wind')?.dataReady ?? false,
     windLerp: getLayerSlotState('wind') ? computeLerp(getLayerSlotState('wind')!, time.getTime()) : 0,
-    windAnimSpeed: opts?.wind.speed ?? 1,
+    windAnimSpeed: opts.wind.speed,
     windState: {
       mode: getLayerSlotState('wind')?.dataReady ? 'pair' : 'loading',
       lerp: getLayerSlotState('wind') ? computeLerp(getLayerSlotState('wind')!, time.getTime()) : 0,
       time,
     },
     pressureOpacity: getAnimatedOpacity('pressure'),
-    pressureColors: opts?.pressure.colors ?? PRESSURE_COLOR_DEFAULT,
+    pressureColors: opts.pressure.colors,
     // Data state (from slot activation messages)
     tempDataReady: getLayerSlotState('temp')?.dataReady ?? false,
     rainDataReady: getLayerSlotState('rain')?.dataReady ?? false,
