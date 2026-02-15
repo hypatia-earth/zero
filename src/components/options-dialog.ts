@@ -536,7 +536,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
       queue: 'Download',
     };
     const dialogTitle = filter && filter !== 'global'
-      ? `${filterTitles[filter] ?? layerLabels[filter]!} Options`
+      ? `${filterTitles[filter] ?? layerLabels[filter]!} Options` // QC-OK: try service title, then layer label
       : 'Options';
 
     const windowStyle: Record<string, string> = {};

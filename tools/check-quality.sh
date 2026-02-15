@@ -62,9 +62,14 @@ else
 fi
 
 # Check for nullish coalescing (potential defensive programming)
-NULLISH_COUNT=$(grep -r ' ?? ' src --include="*.ts" --include="*.tsx" --exclude-dir=__tests__ --exclude="*.test.ts" --exclude="*.spec.ts" 2>/dev/null | wc -l || echo 0)
+# Lines with QC-OK or SAFE comments are exempted
+NULLISH_COUNT=$(grep -r ' ?? ' src --include="*.ts" --include="*.tsx" --exclude-dir=__tests__ --exclude="*.test.ts" --exclude="*.spec.ts" 2>/dev/null | grep -v "QC-OK\|SAFE\|// ??" | wc -l || echo 0)
 if [ "$NULLISH_COUNT" -gt 0 ]; then
-    echo -e "${YELLOW}ℹ Found $NULLISH_COUNT nullish coalescing (??) - review for defensive programming${NC}"
+    echo -e "${RED}✗ Found $NULLISH_COUNT undocumented nullish coalescing (??)${NC}"
+    grep -r ' ?? ' src --include="*.ts" --include="*.tsx" --exclude-dir=__tests__ | grep -v "QC-OK\|SAFE\|// ??" | head -5 || true
+    ((ERROR_COUNT+=$NULLISH_COUNT))
+else
+    echo -e "${GREEN}✓ All nullish coalescing documented${NC}"
 fi
 
 echo ""

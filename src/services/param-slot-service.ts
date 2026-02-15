@@ -237,31 +237,16 @@ export class ParamSlotService {
     this.auroraService.deactivateSlots(param);
   }
 
-  /** Get params for a layer (for legacy layer→param conversion) */
-  private layerToParams(layer: string): string[] {
-    const decl = this.layerService.get(layer);
-    return decl?.params ?? [];
-  }
-
   /**
    * Receive and process downloaded data for a param/timestep.
    * Called by QueueService when data download completes.
-   * Note: QueueService sends layer name (temp), we need to map to param (temperature_2m)
    */
-  receiveData(layerOrParam: string, timestep: TTimestep, slabIndex: number, data: Float32Array): boolean {
-    DEBUG && console.log(`[ParamSlot] receiveData: ${layerOrParam} ${timestep} slab=${slabIndex}`);
+  receiveData(param: string, timestep: TTimestep, slabIndex: number, data: Float32Array): boolean {
+    DEBUG && console.log(`[ParamSlot] receiveData: ${param} ${timestep} slab=${slabIndex}`);
 
-    // Try as param first, then map from layer
-    let param = layerOrParam;
-    let ps = this.paramSlots.get(param);
+    const ps = this.paramSlots.get(param);
     if (!ps) {
-      // Map layer name to params and use slabIndex to pick the right one
-      const params = this.layerToParams(layerOrParam);
-      param = params[slabIndex] ?? params[0] ?? layerOrParam;
-      ps = this.paramSlots.get(param);
-    }
-    if (!ps) {
-      DEBUG && console.log(`[ParamSlot] No slots for param: ${param} (from ${layerOrParam})`);
+      DEBUG && console.log(`[ParamSlot] No slots for param: ${param}`);
       return false;
     }
 
@@ -451,15 +436,7 @@ export class ParamSlotService {
 
   /** Get active timesteps for a param */
   getActiveTimesteps(param: string): TTimestep[] {
-    return this.paramSlots.get(param)?.getActiveTimesteps() ?? [];
-  }
-
-  /** Get wanted window (first active param's window, or empty) */
-  getWantedWindow(): TTimestep[] {
-    for (const [, ps] of this.paramSlots) {
-      return ps.wanted.value?.window ?? [];
-    }
-    return [];
+    return this.paramSlots.get(param)!.getActiveTimesteps();
   }
 
   /** GPU memory stats signal from worker */
@@ -496,14 +473,6 @@ export class ParamSlotService {
       this.auroraService.uploadData(param, 0, slabs[i]!);
       const t = Date.now();
       this.auroraService.activateSlots(param, 0, 0, t, t, points);
-    }
-  }
-
-  /** Exit test mode for a layer (re-enable real data) */
-  exitTestMode(layer: string): void {
-    const layerDecl = this.layerService.get(layer);
-    for (const param of layerDecl?.params ?? []) {
-      this.testModeParams.delete(param);
     }
   }
 

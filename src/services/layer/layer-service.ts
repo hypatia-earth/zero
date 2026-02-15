@@ -123,7 +123,7 @@ export class LayerService {
         const store = tx.objectStore(USER_LAYERS_STORE);
         const request = store.getAll();
         request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result ?? []);
+        request.onsuccess = () => resolve(request.result ?? []); // QC-OK: IndexedDB API
         tx.oncomplete = () => db.close();
       });
 
@@ -250,7 +250,7 @@ export class LayerService {
 
   /** Get layer index for uniform array access (NaN if not found) */
   getLayerIndex(id: string): number {
-    return this.layers.get(id)?.index ?? NaN;
+    return this.layers.get(id)?.index ?? NaN; // QC-OK: NaN for unknown layer
   }
 
   getAll(): LayerDeclaration[] {
@@ -276,10 +276,10 @@ export class LayerService {
       // Built-in: check OptionsService
       const opts = this.optionsService?.options.value;
       const layerOpts = opts?.[id as keyof typeof opts] as { enabled?: boolean } | undefined;
-      return layerOpts?.enabled ?? false;
+      return layerOpts?.enabled ?? false; // QC-OK: dynamic options lookup
     } else {
       // User layer: check internal map
-      return this.userLayerEnabled.get(id) ?? true;
+      return this.userLayerEnabled.get(id) ?? true; // QC-OK: new layers default enabled
     }
   }
 

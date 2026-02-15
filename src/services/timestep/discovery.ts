@@ -50,9 +50,13 @@ export async function discoverModel(
     throw new Error(`[Discovery] Failed to fetch latest.json for ${model}`);
   }
   const data = await response.json();
+  if (!data.variables || !data.reference_time || !Array.isArray(data.valid_times)) {
+    console.error(`[Discovery] Invalid latest.json for ${model}:`, data);
+    throw new Error('Weather data server returned invalid response');
+  }
   const variables: string[] = data.variables;
   const completedRunTime = new Date(data.reference_time);
-  const completedValidTimes: string[] = data.valid_times ?? [];
+  const completedValidTimes: string[] = data.valid_times;
 
   // 2. Find first and newest runs via S3
   await onProgress?.('runs', model);
@@ -79,6 +83,7 @@ export async function discoverModel(
   }
 
   // 4. Generate runs from first to completed (or newest if no incomplete)
+  // QC-OK: newestRun null means no runs found, fallback to completed
   const lastCompleteRun = incompleteRunTimesteps ? completedRunTime : (newestRun ?? completedRunTime);
   const runs = generateRuns(basePrefix, firstRun, lastCompleteRun);
 
@@ -126,11 +131,17 @@ async function discoverRunBounds(basePrefix: string, bucketRoot: string): Promis
 
   // List oldest day runs
   const oldestDayRuns = await listS3Prefixes(dayPrefixes[0]!, bucketRoot);
-  const firstRunMatch = /\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{4}Z)\/$/.exec(oldestDayRuns[0] ?? '');
+  if (oldestDayRuns.length === 0) {
+    return { firstRun: null, newestRun: null, newestRunPrefix: null };
+  }
+  const firstRunMatch = /\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{4}Z)\/$/.exec(oldestDayRuns[0]!);
 
   // List newest day runs
   const newestDayRuns = await listS3Prefixes(dayPrefixes[dayPrefixes.length - 1]!, bucketRoot);
-  const newestRunMatch = /\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{4}Z)\/$/.exec(newestDayRuns[newestDayRuns.length - 1] ?? '');
+  if (newestDayRuns.length === 0) {
+    return { firstRun: null, newestRun: null, newestRunPrefix: null };
+  }
+  const newestRunMatch = /\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{4}Z)\/$/.exec(newestDayRuns[newestDayRuns.length - 1]!);
 
   const parseRun = (match: RegExpExecArray | null) =>
     match ? new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]!.slice(0, 2)}:00:00Z`) : null;
@@ -221,7 +232,11 @@ function generateTimesteps(
   // 1. Add incomplete run timesteps first (highest priority)
   if (incompleteRunPrefix && incompleteRunTimesteps) {
     const runMatch = /\/(\d{4}Z)\/$/.exec(incompleteRunPrefix);
-    const runTime = runMatch?.[1] ?? 'unknown';
+    if (!runMatch) {
+      console.error(`[Discovery] Invalid run prefix format: ${incompleteRunPrefix}`);
+      throw new Error('Weather data server returned unexpected format');
+    }
+    const runTime = runMatch[1]!;
 
     for (const tsStr of incompleteRunTimesteps) {
       const ts = tsStr as TTimestep;

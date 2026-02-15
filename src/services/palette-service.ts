@@ -78,7 +78,7 @@ export class PaletteService {
     // Store loaded palettes
     const current = this.layerPalettes.value;
     const existing = current.get(layer);
-    const activeName = existing?.activeName ?? this.getDefaultPaletteName(layer);
+    const activeName = existing?.activeName ?? this.getDefaultPaletteName(layer); // QC-OK: first-time load
 
     current.set(layer, {
       available: palettes,
@@ -114,7 +114,7 @@ export class PaletteService {
    */
   getPalettes(layer: string): PaletteData[] {
     const entry = this.layerPalettes.value.get(layer);
-    return entry?.available ?? [];
+    return entry?.available ?? []; // QC-OK: may be called before load
   }
 
   /**
@@ -123,8 +123,7 @@ export class PaletteService {
   getPalette(layer: string): PaletteData {
     const entry = this.layerPalettes.value.get(layer);
     if (!entry) {
-      // Return default fallback
-      return DEFAULT_PALETTES[layer] ?? {
+      return DEFAULT_PALETTES[layer] ?? { // QC-OK: fallback for unknown layer
         name: 'Default',
         unit: '',
         interpolate: true,
@@ -280,10 +279,10 @@ export class PaletteService {
 
     // Handle out-of-range values
     if (value <= lowerStop.value!) {
-      return [...lowerStop.color, lowerStop.alpha ?? 255];
+      return [...lowerStop.color, lowerStop.alpha ?? 255]; // QC-OK: alpha optional
     }
     if (value >= upperStop.value!) {
-      return [...upperStop.color, upperStop.alpha ?? 255];
+      return [...upperStop.color, upperStop.alpha ?? 255]; // QC-OK: alpha optional
     }
 
     // Interpolate between stops
@@ -295,14 +294,13 @@ export class PaletteService {
       const r = Math.round(lowerStop.color[0] + t * (upperStop.color[0] - lowerStop.color[0]));
       const g = Math.round(lowerStop.color[1] + t * (upperStop.color[1] - lowerStop.color[1]));
       const b = Math.round(lowerStop.color[2] + t * (upperStop.color[2] - lowerStop.color[2]));
-      const a = Math.round(
-        (lowerStop.alpha ?? 255) + t * ((upperStop.alpha ?? 255) - (lowerStop.alpha ?? 255))
-      );
+      // QC-OK: alpha optional, defaults to opaque
+      const a = Math.round((lowerStop.alpha ?? 255) + t * ((upperStop.alpha ?? 255) - (lowerStop.alpha ?? 255)));
       return [r, g, b, a];
     }
 
-    // Default: nearest neighbor (no interpolation) - use lower stop color
-    return [...lowerStop.color, lowerStop.alpha ?? 255];
+    // Default: nearest neighbor
+    return [...lowerStop.color, lowerStop.alpha ?? 255]; // QC-OK: alpha optional
   }
 
   /**
@@ -312,6 +310,6 @@ export class PaletteService {
     const defaults: Record<string, string> = {
       temp: 'Classic Temperature',
     };
-    return defaults[layer] ?? '';
+    return defaults[layer] ?? ''; // QC-OK: no default for this layer
   }
 }

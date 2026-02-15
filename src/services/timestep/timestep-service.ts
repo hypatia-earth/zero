@@ -200,7 +200,7 @@ export class TimestepService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   getSize(param: string, timestep: TTimestep): number {
-    return this.state.value.params.get(param)?.sizes.get(timestep) ?? NaN;
+    return this.state.value.params.get(param)?.sizes.get(timestep) ?? NaN; // QC-OK: NaN = unknown size
   }
 
   setSize(param: string, timestep: TTimestep, bytes: number): void {
@@ -341,7 +341,7 @@ export class TimestepService {
           if (paramState.gpu.has(timestep)) continue;
 
           const isFast = paramState.cache.has(timestep);
-          const sizeEstimate = paramState.sizes.get(timestep) ?? PARAM_METADATA[omParam]!.sizeEstimate;
+          const sizeEstimate = paramState.sizes.get(timestep) ?? PARAM_METADATA[omParam]!.sizeEstimate; // QC-OK: size learned at download
           const url = this.url(timestep);
 
           tasks.push({
