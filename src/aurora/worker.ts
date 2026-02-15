@@ -293,9 +293,9 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     sunGlowColor: new Float32Array([1, 0.8, 0.4]),
     // Graticule (animated opacity)
     graticuleOpacity: getAnimatedOpacity('graticule'),
-    graticuleFontSize: opts?.grid.fontSize ?? 12,
+    graticuleFontSize: opts?.graticule.fontSize ?? 12,
     graticuleLabelMaxRadius: 280,
-    graticuleLineWidth: opts?.grid.lineWidth ?? 1,
+    graticuleLineWidth: opts?.graticule.lineWidth ?? 1,
     // Layers (animated opacities)
     earthOpacity: getAnimatedOpacity('earth'),
     tempOpacity: getAnimatedOpacity('temp'),

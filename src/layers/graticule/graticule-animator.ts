@@ -6,7 +6,7 @@
  */
 
 import { defaultConfig } from '../../config/defaults';
-import type { GridLodLevel } from '../../config/types';
+import type { GraticuleLodLevel } from '../../config/types';
 
 const DEBUG = false;
 
@@ -26,7 +26,7 @@ const ANIMATION_DURATION = 1000;  // ms per birth/death cycle
 export const GRATICULE_BUFFER_SIZE = 1328;  // bytes for GPU buffer (aligned to 16)
 
 // LoD levels from config (includes spacing and pixel thresholds)
-const LOD_LEVELS: GridLodLevel[] = defaultConfig.grid.lodLevels;
+const LOD_LEVELS: GraticuleLodLevel[] = defaultConfig.graticule.lodLevels;
 
 // Generate line positions for a given spacing
 function generateLonLines(spacing: number): number[] {

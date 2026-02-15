@@ -554,16 +554,16 @@ export const optionsSchema = z.object({
   }),
 
   // ----------------------------------------------------------
-  // Layer: Grid (Graticule)
+  // Layer: Graticule (lat/lon grid overlay)
   // ----------------------------------------------------------
-  grid: z.object({
+  graticule: z.object({
     enabled: opt(
       z.boolean().default(true),
       {
         label: 'Show grid',
         description: 'Display latitude/longitude lines',
         group: 'layers',
-        filter: ['global', 'grid'],
+        filter: ['global', 'graticule'],
         order: 3,
         control: 'toggle',
       }
@@ -574,7 +574,7 @@ export const optionsSchema = z.object({
         label: 'Grid opacity',
         description: 'Transparency of grid lines',
         group: 'layers',
-        filter: ['global', 'grid'],
+        filter: ['global', 'graticule'],
         order: 4,
         control: 'slider',
         min: 0.05,
@@ -586,9 +586,9 @@ export const optionsSchema = z.object({
       z.number().min(2).max(16).default(12),
       {
         label: 'Label size',
-        description: 'Font size for grid coordinate labels',
+        description: 'Font size for graticule coordinate labels',
         group: 'layers',
-        filter: ['global', 'grid'],
+        filter: ['global', 'graticule'],
         order: 5,
         control: 'slider',
         min: 2,
@@ -600,9 +600,9 @@ export const optionsSchema = z.object({
       z.number().min(1).max(5).default(1),
       {
         label: 'Line width',
-        description: 'Width of grid lines in pixels',
+        description: 'Width of graticule lines in pixels',
         group: 'layers',
-        filter: ['global', 'grid'],
+        filter: ['global', 'graticule'],
         order: 6,
         control: 'slider',
         min: 1,
@@ -1050,7 +1050,7 @@ export const defaultOptions: ZeroOptions = {
   },
   earth: { enabled: true, opacity: 1 },
   sun: { enabled: true, opacity: 1 },
-  grid: { enabled: true, opacity: defaultConfig.grid.opacity, fontSize: 12, lineWidth: 2 },
+  graticule: { enabled: true, opacity: defaultConfig.graticule.opacity, fontSize: 12, lineWidth: 2 },
   temp: { enabled: true, opacity: 0.6, palette: 'Classic Temperature' },
   rain: { enabled: false, opacity: 1.0 },
   clouds: { enabled: false, opacity: 0.5 },

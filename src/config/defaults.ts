@@ -49,7 +49,7 @@ export const defaultConfig: ZeroConfig = {
   // Layer config now in src/layers/*/index.ts, read via LayerService
 
   defaultLayers: ['earth', 'sun', 'temp'],
-  readyLayers: ['earth', 'sun', 'grid', 'temp', 'pressure', 'wind'],
+  readyLayers: ['earth', 'sun', 'graticule', 'temp', 'pressure', 'wind'],
 
   sun: {
     coreRadius: 0.015,
@@ -58,7 +58,7 @@ export const defaultConfig: ZeroConfig = {
     glowColor: [1.0, 0.6, 0.2],
   },
 
-  grid: {
+  graticule: {
     opacity: 0.8,
     labelMaxRadiusPx: 500,
     lodLevels: [

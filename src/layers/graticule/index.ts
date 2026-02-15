@@ -3,7 +3,7 @@ import { defineLayer, withType, withUI, withOptions, withBlend, withRender, asBu
 export const layer = defineLayer('graticule',
   withType('decoration'),
   withUI('Grid', 'Grid', 'reference'),
-  withOptions(['grid.enabled', 'grid.opacity']),
+  withOptions(['graticule.enabled', 'graticule.opacity']),
   withBlend('blendGraticule'),
   withRender({ pass: 'surface', order: 90 }),
   asBuiltIn(),

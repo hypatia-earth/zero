@@ -3,7 +3,7 @@
  *
  * Layer hierarchy:
  *   TLayer (all layers, have button in Layer panel)
- *   ├── TDecorationLayer (earth, sun, grid)
+ *   ├── TDecorationLayer (earth, sun, graticule)
  *   └── TWeatherLayer (need store, request data from ECMWF)
  *       ├── TWeatherTextureLayer (simple: temp, rain, clouds, humidity)
  *       └── TWeatherGeometryLayer (complex: pressure, wind)
@@ -16,7 +16,7 @@ import type { Signal } from '@preact/signals-core';
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Decoration layers (no weather data) */
-export const DECORATION_LAYERS = ['earth', 'sun', 'grid'] as const;
+export const DECORATION_LAYERS = ['earth', 'sun', 'graticule'] as const;
 export type TDecorationLayer = typeof DECORATION_LAYERS[number];
 
 /** Weather texture layers (buffer rebind + interpolation) */
@@ -212,19 +212,19 @@ export interface SunConfig {
   glowColor: [number, number, number];
 }
 
-export interface GridLodLevel {
-  spacing: number;     // degrees between grid lines (same for lon/lat)
+export interface GraticuleLodLevel {
+  spacing: number;     // degrees between graticule lines (same for lon/lat)
   zoomInPx: number;    // enter this LoD when globeRadiusPx >= this
   zoomOutPx: number;   // leave this LoD when globeRadiusPx <= this
 }
 
-export interface GridConfig {
+export interface GraticuleConfig {
   /** Default opacity 0-1 */
   opacity: number;
   /** Max globe radius in CSS pixels before label font starts shrinking */
   labelMaxRadiusPx: number;
   /** LoD levels indexed by level number */
-  lodLevels: GridLodLevel[];
+  lodLevels: GraticuleLodLevel[];
 }
 
 export interface WindConfig {
@@ -301,8 +301,8 @@ export interface ZeroConfig {
   /** Sun rendering settings */
   sun: SunConfig;
 
-  /** Grid layer settings */
-  grid: GridConfig;
+  /** Graticule layer settings */
+  graticule: GraticuleConfig;
 
   /** Wind layer settings */
   wind: WindConfig;
