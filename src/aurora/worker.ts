@@ -14,6 +14,7 @@ import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
 import { LayerStore } from './layer-store';
 import type { ZeroOptions } from '../schemas/options.schema';
+import type { TLayer } from '../config/types';
 import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer } from './shader-composer';
 import { LayerService, type LayerDeclaration } from '../services/layer/layer-service';
@@ -216,16 +217,16 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
     let opacity: number;
 
     if (layer.isBuiltIn) {
-      // Built-in layers: get from options
-      const layerOpts = (opts as Record<string, { enabled?: boolean; opacity?: number }>)[layer.id];
-      if (!layerOpts) continue;
-      enabled = layerOpts.enabled ?? false;
-      opacity = layerOpts.opacity ?? 1.0;
+      // Built-in layers: get from Zod-validated options
+      const layerOpts = opts[layer.id as TLayer];
+      if (!layerOpts || !('enabled' in layerOpts)) continue;
+      enabled = layerOpts.enabled;
+      opacity = layerOpts.opacity;
     } else {
-      // User layers: enabled and opacity from state maps
-      const idx = layer.userLayerIndex ?? -1;
-      enabled = userLayerEnabled.get(idx) ?? false;
-      opacity = userLayerOpacities.get(idx) ?? 1.0;
+      // User layers: enabled and opacity from state maps (set on registration)
+      const idx = layer.userLayerIndex!;
+      enabled = userLayerEnabled.get(idx)!;
+      opacity = userLayerOpacities.get(idx)!;
     }
 
     // Calculate target opacity
@@ -239,7 +240,7 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
     }
 
     // Animate toward target
-    const current = animatedOpacity.get(layer.id) ?? 0;
+    const current = animatedOpacity.get(layer.id)!;
     const newValue = current + (target - current) * factor;
     animatedOpacity.set(layer.id, newValue);
   }
@@ -469,7 +470,7 @@ function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): void {
   const animatedUserOpacities = new Map<number, number>();
   for (const layer of layerRegistry!.getAll()) {
     if (!layer.isBuiltIn && layer.userLayerIndex !== undefined) {
-      animatedUserOpacities.set(layer.userLayerIndex, animatedOpacity.get(layer.id) ?? 0);
+      animatedUserOpacities.set(layer.userLayerIndex, animatedOpacity.get(layer.id)!);
     }
   }
   renderer!.setUserLayerOpacities(animatedUserOpacities);
