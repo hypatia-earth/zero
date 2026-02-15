@@ -776,7 +776,7 @@ export class GlobeRenderer {
       this.gpuTimestamp.startReadback();
     }
 
-    return this.gpuTimestamp?.getLastTimings() ?? { pass1Ms: NaN, pass2Ms: NaN, pass3Ms: NaN };
+    return this.gpuTimestamp?.getLastTimings() ?? { pass1Ms: NaN, pass2Ms: NaN, pass3Ms: NaN };  // QC-OK: timing optional
   }
 
   async loadBasemap(faces: ImageBitmap[]): Promise<void> {
@@ -861,11 +861,11 @@ export class GlobeRenderer {
       { binding: 21, resource: { buffer: this.graticuleLinesBuffer } },
     ];
 
-    // Add dynamic param buffer entries
+    // Add dynamic param buffer entries (placeholder until data loads)
     for (const cfg of this.currentParamBindings) {
       const buffers = this.paramBuffers.get(cfg.param);
-      const slot0 = buffers?.slot0 ?? this.placeholderBuffer;
-      const slot1 = buffers?.slot1 ?? this.placeholderBuffer;
+      const slot0 = buffers?.slot0 ?? this.placeholderBuffer;  // QC-OK: GPU needs valid buffer
+      const slot1 = buffers?.slot1 ?? this.placeholderBuffer;  // QC-OK: GPU needs valid buffer
       entries.push(
         { binding: cfg.bindingSlot0, resource: { buffer: slot0 } },
         { binding: cfg.bindingSlot1, resource: { buffer: slot1 } }
