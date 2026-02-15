@@ -190,10 +190,6 @@ function initAnimatedOpacity(): void {
   }
 }
 
-/** Get animated opacity for a layer */
-function getAnimatedOpacity(layerId: string): number {
-  return animatedOpacity.get(layerId)!;
-}
 
 /** Update animated opacities toward targets (exponential decay) */
 function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
@@ -279,22 +275,22 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     time: performance.now() / 1000,
     tanFov: camera.tanFov,
     // Sun (animated opacity)
-    sunOpacity: getAnimatedOpacity('sun'),
+    sunOpacity: animatedOpacity.get('sun')!,
     sunDirection: getSunDirection(time),
     sunCoreRadius: 0.005,
     sunGlowRadius: 0.02,
     sunCoreColor: new Float32Array([1, 1, 0.9]),
     sunGlowColor: new Float32Array([1, 0.8, 0.4]),
     // Graticule (animated opacity)
-    graticuleOpacity: getAnimatedOpacity('graticule'),
+    graticuleOpacity: animatedOpacity.get('graticule')!,
     graticuleFontSize: opts.graticule.fontSize,
     graticuleLabelMaxRadius: 280,
     graticuleLineWidth: opts.graticule.lineWidth,
     // Layers (animated opacities)
-    earthOpacity: getAnimatedOpacity('earth'),
-    tempOpacity: getAnimatedOpacity('temp'),
-    rainOpacity: getAnimatedOpacity('rain'),
-    windOpacity: getAnimatedOpacity('wind'),
+    earthOpacity: animatedOpacity.get('earth')!,
+    tempOpacity: animatedOpacity.get('temp')!,
+    rainOpacity: animatedOpacity.get('rain')!,
+    windOpacity: animatedOpacity.get('wind')!,
     windDataReady: getLayerSlotState('wind')!.dataReady,
     windLerp: computeLerp(getLayerSlotState('wind')!, time.getTime()),
     windAnimSpeed: opts.wind.speed,
@@ -303,7 +299,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
       lerp: computeLerp(getLayerSlotState('wind')!, time.getTime()),
       time,
     },
-    pressureOpacity: getAnimatedOpacity('pressure'),
+    pressureOpacity: animatedOpacity.get('pressure')!,
     pressureColors: opts.pressure.colors,
     // Data state (from slot activation messages)
     tempDataReady: getLayerSlotState('temp')!.dataReady,
