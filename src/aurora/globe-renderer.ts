@@ -39,8 +39,7 @@ export interface GlobeUniforms {
   sunGlowRadius: number;
   sunCoreColor: Float32Array;
   sunGlowColor: Float32Array;
-  gridEnabled: boolean;
-  gridOpacity: number;
+  gridOpacity: number;      // written to layer array, not direct uniform
   gridFontSize: number;
   gridLabelMaxRadius: number;
   gridLineWidth: number;
@@ -541,9 +540,8 @@ export class GlobeRenderer {
     view.setFloat32(O.resolution + 4, uniforms.resolution[1]!, true);
     view.setFloat32(O.tanFov, uniforms.tanFov, true);
 
-    // time, sunOpacity
+    // time
     view.setFloat32(O.time, uniforms.time, true);
-    view.setFloat32(O.sunOpacity, uniforms.sunOpacity, true);
 
     // vec3 sunDirection
     view.setFloat32(O.sunDirection, uniforms.sunDirection[0]!, true);
@@ -563,10 +561,6 @@ export class GlobeRenderer {
     view.setFloat32(O.sunGlowColor, uniforms.sunGlowColor[0]!, true);
     view.setFloat32(O.sunGlowColor + 4, uniforms.sunGlowColor[1]!, true);
     view.setFloat32(O.sunGlowColor + 8, uniforms.sunGlowColor[2]!, true);
-
-    // Layer controls
-    view.setUint32(O.gridEnabled, uniforms.gridEnabled ? 1 : 0, true);
-    view.setFloat32(O.gridOpacity, uniforms.gridOpacity, true);
 
     // Built-in layer opacities (indexed array)
     view.setFloat32(getLayerOpacityOffset(LAYER_EARTH), uniforms.earthOpacity, true);

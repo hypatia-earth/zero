@@ -11,6 +11,7 @@ import { getMainShaders, getPostShaders } from './shader-loader';
 // Import shader modules
 import commonCode from './shaders/common.wgsl?raw';
 import projectionO1280Code from './shaders/projection-o1280.wgsl?raw';
+import layerHelpersCode from './shaders/layer-helpers.wgsl?raw';
 import sunAtmoCode from '../layers/sun/atmo.wgsl?raw';
 import logoCode from './shaders/logo.wgsl?raw';
 import mainTemplateCode from './shaders/main-template.wgsl?raw';
@@ -83,19 +84,22 @@ export class ShaderComposer {
       surfaceLayers.map(l => `${l.id}(order:${l.order})`).join(', '));
 
     const main = this.composeMain(surfaceLayers, layers);
-    const post = this.composePost(postLayers);
+    const post = this.composePost(postLayers, layers);
 
     return { main, post };
   }
 
-  private composeMain(surfaceLayers: LayerDeclaration[], _allLayers: LayerDeclaration[]): string {
+  private composeMain(surfaceLayers: LayerDeclaration[], allLayers: LayerDeclaration[]): string {
     const parts: string[] = [];
 
     // 1. Layer index constants (must come before layer shaders that use them)
-    const layerConstants = this.generateLayerConstants(_allLayers);
+    const layerConstants = this.generateLayerConstants(allLayers);
     parts.push(layerConstants);
 
-    // 2. Common utilities (ray-sphere intersection, constants)
+    // 2. Uniforms struct and helper functions (must come before layer shaders)
+    parts.push(layerHelpersCode);
+
+    // 3. Common utilities (ray-sphere intersection, constants)
     parts.push(sunAtmoCode);  // Atmosphere functions needed by other shaders
     parts.push(commonCode);
     parts.push(projectionO1280Code);  // O1280 Gaussian grid projection
@@ -115,7 +119,7 @@ export class ShaderComposer {
     }
 
     // 4. Grid shader (special - always included for back-side grid logic)
-    const gridLayer = _allLayers.find(l => l.id === 'grid');
+    const gridLayer = allLayers.find(l => l.id === 'grid');
     const gridShader = gridLayer?.shaders?.main ?? this.mainShaders.get('grid');
     if (gridShader) {
       parts.push('// --- Layer: grid ---');
@@ -123,7 +127,7 @@ export class ShaderComposer {
     }
 
     // 5. Generate dynamic param bindings
-    const paramShader = this.generateParamBindings(_allLayers);
+    const paramShader = this.generateParamBindings(allLayers);
 
     // 6. Main template with blend calls and param bindings injected
     // Note: Layer constants are injected at the beginning of the shader (step 1)
@@ -138,15 +142,15 @@ export class ShaderComposer {
     return parts.join('\n\n');
   }
 
-  private composePost(_postLayers: LayerDeclaration[]): string {
+  private composePost(_postLayers: LayerDeclaration[], allLayers: LayerDeclaration[]): string {
     const parts: string[] = [];
 
-    // Post shader needs Uniforms struct first (same as main shader)
-    // We'll extract it from mainTemplateCode
-    const uniformsMatch = mainTemplateCode.match(/struct Uniforms \{[\s\S]*?\}/);
-    if (uniformsMatch) {
-      parts.push(uniformsMatch[0]);
-    }
+    // 1. Layer index constants (LAYER_SUN needed for atmosphere blend)
+    const layerConstants = this.generateLayerConstants(allLayers);
+    parts.push(layerConstants);
+
+    // 2. Uniforms struct and helpers (from layer-helpers.wgsl)
+    parts.push(layerHelpersCode);
 
     // Atmosphere functions
     parts.push(sunAtmoCode);

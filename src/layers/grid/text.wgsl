@@ -170,7 +170,8 @@ fn findNearestLat(latDeg: f32) -> vec2<f32> {
 
 // Blend grid text labels onto surface
 fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
-  if (u.gridOpacity < 0.01) { return color; }
+  let gridOpacity = getLayerOpacity(LAYER_GRID);
+  if (gridOpacity < 0.01) { return color; }
 
   let latDeg = degrees(lat);
   var lonDeg = degrees(lon);
@@ -248,5 +249,5 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
     return color;
   }
 
-  return vec4f(mix(color.rgb, vec3f(1.0), opacity * TEXT_OPACITY * u.gridOpacity * labelOpacity), color.a);
+  return vec4f(mix(color.rgb, vec3f(1.0), opacity * TEXT_OPACITY * gridOpacity * labelOpacity), color.a);
 }

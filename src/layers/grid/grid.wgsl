@@ -72,7 +72,7 @@ fn getGridLatOpacity(i: u32) -> f32 {
 }
 
 // Fast O(1) grid when not animating - uses modulo math
-fn blendGridFast(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
+fn blendGridFast(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f, gridOpacity: f32) -> vec4f {
   let latDeg = degrees(lat);
   var lonDeg = degrees(lon);
   if (lonDeg < 0.0) { lonDeg += 360.0; }
@@ -101,13 +101,13 @@ fn blendGridFast(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
 
   if (gridFactor > 0.001) {
     let gridColor = vec3f(1.0, 1.0, 1.0);
-    return vec4f(mix(color.rgb, gridColor, gridFactor * u.gridOpacity * 0.5), color.a);
+    return vec4f(mix(color.rgb, gridColor, gridFactor * gridOpacity * 0.5), color.a);
   }
   return color;
 }
 
 // Animated grid with line loops (only used during LoD transitions)
-fn blendGridAnimated(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
+fn blendGridAnimated(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f, gridOpacity: f32) -> vec4f {
   let latDeg = degrees(lat);
   var lonDeg = degrees(lon);
   if (lonDeg < 0.0) { lonDeg += 360.0; }
@@ -155,18 +155,19 @@ fn blendGridAnimated(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f
 
   if (gridFactor > 0.001) {
     let gridColor = vec3f(1.0, 1.0, 1.0);
-    return vec4f(mix(color.rgb, gridColor, gridFactor * u.gridOpacity * 0.5), color.a);
+    return vec4f(mix(color.rgb, gridColor, gridFactor * gridOpacity * 0.5), color.a);
   }
   return color;
 }
 
 // Main entry: dispatch to fast or animated path
 fn blendGrid(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
-  if (u.gridOpacity < 0.01) { return color; }
+  let gridOpacity = getLayerOpacity(LAYER_GRID);
+  if (gridOpacity < 0.01) { return color; }
 
   if (gridLines.isAnimating == 0u) {
-    return blendGridFast(color, lat, lon, hitPoint);
+    return blendGridFast(color, lat, lon, hitPoint, gridOpacity);
   } else {
-    return blendGridAnimated(color, lat, lon, hitPoint);
+    return blendGridAnimated(color, lat, lon, hitPoint, gridOpacity);
   }
 }

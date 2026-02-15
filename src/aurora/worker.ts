@@ -292,7 +292,6 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     sunCoreColor: new Float32Array([1, 1, 0.9]),
     sunGlowColor: new Float32Array([1, 0.8, 0.4]),
     // Grid (animated opacity)
-    gridEnabled: getAnimatedOpacity('grid') > 0.01,
     gridOpacity: getAnimatedOpacity('grid'),
     gridFontSize: opts?.grid.fontSize ?? 12,
     gridLabelMaxRadius: 280,

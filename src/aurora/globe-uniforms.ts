@@ -24,8 +24,7 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
 
   // Time & Sun (16 + 16 + 16 + 16 + 16 = 80 bytes)
   ['time', 'f32'],                 // 96
-  ['sunOpacity', 'f32'],           // 100
-  ['sunPad', 'vec2f'],             // 104: pad for vec3f alignment
+  ['sunPad', 'vec3f'],             // 100: pad for vec3f alignment
   ['sunDirection', 'vec3f'],       // 112
   ['sunDirPad', 'f32'],            // 124
   ['sunCoreRadius', 'f32'],        // 128
@@ -35,10 +34,6 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['sunCoreColorPad', 'f32'],      // 156
   ['sunGlowColor', 'vec3f'],       // 160
   ['sunGlowColorPad', 'f32'],      // 172
-
-  // Layer controls (tightly packed f32/u32)
-  ['gridEnabled', 'u32'],          // 176
-  ['gridOpacity', 'f32'],          // 180
 
   // Built-in layer opacity array (16 slots = 4 x vec4f)
   // Indices: earth=0, sun=1, grid=2, temp=3, rain=4, pressure=5, wind=6
@@ -105,7 +100,6 @@ export const U = GLOBE_UNIFORMS.offsets as {
   tanFov: number;
   resPad: number;
   time: number;
-  sunOpacity: number;
   sunPad: number;
   sunDirection: number;
   sunDirPad: number;
@@ -116,8 +110,6 @@ export const U = GLOBE_UNIFORMS.offsets as {
   sunCoreColorPad: number;
   sunGlowColor: number;
   sunGlowColorPad: number;
-  gridEnabled: number;
-  gridOpacity: number;
   // Built-in layer arrays (4 vec4s each = 16 slots)
   layerOpacity0: number;
   layerOpacity1: number;
@@ -222,9 +214,8 @@ export function validateGlobeUniforms(): void {
     sunDirection: 112,
     sunCoreColor: 144,
     sunGlowColor: 160,
-    gridEnabled: 176,
-    layerOpacity0: 192,
-    layerDataReady0: 256,
+    layerOpacity0: 176,  // After sunGlowColorPad (172 + 4 = 176)
+    layerDataReady0: 240, // After layerOpacity3 (176 + 64 = 240)
   };
 
   const errors: string[] = [];

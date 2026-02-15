@@ -12,7 +12,8 @@ fn toneMap(radiance: vec3f, exposure: f32) -> vec3f {
 }
 
 fn blendAtmosphereSpace(color: vec4f, rayDir: vec3f, camera_km: vec3f, exposure: f32, fragPos: vec4f) -> vec4f {
-  if (u.sunOpacity < 0.01) { return color; }
+  let sunOpacity = getLayerOpacity(LAYER_SUN);
+  if (sunOpacity < 0.01) { return color; }
 
   // Compute atmospheric scattering for sky/space (uses Bruneton LUT)
   let sky = GetSkyRadiance(
@@ -21,7 +22,7 @@ fn blendAtmosphereSpace(color: vec4f, rayDir: vec3f, camera_km: vec3f, exposure:
   );
 
   // Blend atmosphere over background color (not pure black space)
-  let atm_color = toneMap(sky.radiance, exposure) * u.sunOpacity;
+  let atm_color = toneMap(sky.radiance, exposure) * sunOpacity;
   var sky_color = vec4f(color.rgb + atm_color, 1.0);
 
   // Add sun disc/glow
@@ -31,7 +32,8 @@ fn blendAtmosphereSpace(color: vec4f, rayDir: vec3f, camera_km: vec3f, exposure:
 }
 
 fn blendAtmosphereGlobe(color: vec4f, hitPoint: vec3f, camera_km: vec3f, exposure: f32) -> vec4f {
-  if (u.sunOpacity < 0.01) { return color; }
+  let sunOpacity = getLayerOpacity(LAYER_SUN);
+  if (sunOpacity < 0.01) { return color; }
 
   // View angle: edgeFactor = 0 at center, 1 at limb
   let viewDir = normalize(u.eyePosition - hitPoint);
@@ -50,15 +52,15 @@ fn blendAtmosphereGlobe(color: vec4f, hitPoint: vec3f, camera_km: vec3f, exposur
   let terminatorBand = terminatorFactor;
 
   // Simple approach: darken surface for day/night (blend with sunOpacity)
-  let dayNightBlend = mix(1.0, dayNight, u.sunOpacity);
+  let dayNightBlend = mix(1.0, dayNight, sunOpacity);
   let dimmedSurface = color.rgb * dayNightBlend;
 
   // Blue limb glow - only at edges, stronger on day side
-  let blueGlow = vec3f(0.4, 0.6, 1.0) * pow(edgeFactor, 2.0) * dayFactor * 0.5 * u.sunOpacity;
+  let blueGlow = vec3f(0.4, 0.6, 1.0) * pow(edgeFactor, 2.0) * dayFactor * 0.5 * sunOpacity;
 
   // Warm terminator glow - orange/gold near sunrise/sunset
   let warmColor = vec3f(1.0, 0.6, 0.3);  // sunset orange
-  let warmGlow = warmColor * terminatorBand * 0.15 * u.sunOpacity;
+  let warmGlow = warmColor * terminatorBand * 0.15 * sunOpacity;
 
   let final_color = dimmedSurface + blueGlow + warmGlow;
 

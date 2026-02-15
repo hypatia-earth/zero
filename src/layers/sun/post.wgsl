@@ -4,9 +4,8 @@
 // Reads: color texture (scene without atmosphere), depth texture
 // Outputs: final color with atmosphere applied to all geometry
 
-// Uniforms struct 'u' is declared in master-postprocess.wgsl before includes
-// Bindings for post-process pass
-@group(0) @binding(0) var<uniform> u: Uniforms;
+// Uniforms struct 'u' is declared in layer-helpers.wgsl before includes
+// Bindings for post-process pass (binding(0) is in layer-helpers.wgsl)
 @group(0) @binding(1) var sceneColor: texture_2d<f32>;
 @group(0) @binding(2) var sceneDepth: texture_depth_2d;
 @group(0) @binding(3) var sceneSampler: sampler;
