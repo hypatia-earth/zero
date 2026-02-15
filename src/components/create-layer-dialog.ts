@@ -90,15 +90,29 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
   function initFromLayer(registry: LayerService, layerId: string) {
     const layer = registry.get(layerId);
-    if (!layer) return;
+    if (!layer || layer.isBuiltIn) {
+      console.warn(`[CreateLayer] Layer ${layerId} not found or built-in`);
+      return;
+    }
+
+    // Extract required fields - user layers must have all of these
+    const param = layer.params?.[0];
+    const shaderCode = layer.shaders?.main;
+    const order = layer.order;
+    const userLayerIndex = layer.userLayerIndex;
+
+    if (!param || !shaderCode || order === undefined || userLayerIndex === undefined) {
+      console.warn(`[CreateLayer] Layer ${layerId} missing required fields, using template`);
+      return;
+    }
 
     state.id = layer.id;
-    state.param = layer.params?.[0] ?? DEFAULT_PARAM;
-    state.paramMeta = getParamMeta(state.param);
-    state.shaderCode = layer.shaders?.main ?? SHADER_TEMPLATE;
-    state.order = layer.order ?? 50;
+    state.param = param;
+    state.paramMeta = getParamMeta(param);
+    state.shaderCode = shaderCode;
+    state.order = order;
     state.opacity = registry.getUserLayerOpacity(layerId);
-    state.userLayerIndex = layer.userLayerIndex ?? null;
+    state.userLayerIndex = userLayerIndex;
   }
 
   function updateShaderTemplate() {
