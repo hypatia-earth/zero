@@ -315,10 +315,6 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     // Data state (from slot activation messages)
     tempDataReady: getLayerSlotState('temp')?.dataReady ?? false,
     rainDataReady: getLayerSlotState('rain')?.dataReady ?? false,
-    tempLerp: getLayerSlotState('temp') ? computeLerp(getLayerSlotState('temp')!, time.getTime()) : 0,
-    tempLoadedPoints: getLayerSlotState('temp')?.loadedPoints ?? 0,
-    tempSlot0: getLayerSlotState('temp')?.slot0 ?? 0,
-    tempSlot1: getLayerSlotState('temp')?.slot1 ?? 0,
     tempPaletteRange,
     logoOpacity: 0,
   };

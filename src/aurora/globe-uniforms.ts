@@ -53,12 +53,7 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['layerDataReady2', 'vec4u'],    // 288: layers 8-11
   ['layerDataReady3', 'vec4u'],    // 304: layers 12-15
 
-  // Temp layer specific (legacy - to be replaced by param system)
-  ['tempLerp', 'f32'],             // 320
-  ['tempLoadedPoints', 'u32'],     // 324
-  ['tempSlot0', 'u32'],            // 328
-  ['tempSlot1', 'u32'],            // 332
-  ['gridFontSize', 'f32'],         // 336
+  ['gridFontSize', 'f32'],         // 320
   ['gridLabelMaxRadius', 'f32'],   // 340
   ['gridLineWidth', 'f32'],        // 344
   ['tempPaletteRange', 'vec2f'],   // 352 (vec2f needs 8-byte align)
@@ -132,11 +127,6 @@ export const U = GLOBE_UNIFORMS.offsets as {
   layerDataReady1: number;
   layerDataReady2: number;
   layerDataReady3: number;
-  // Legacy temp-specific
-  tempLerp: number;
-  tempLoadedPoints: number;
-  tempSlot0: number;
-  tempSlot1: number;
   gridFontSize: number;
   gridLabelMaxRadius: number;
   gridLineWidth: number;

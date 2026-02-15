@@ -56,10 +56,6 @@ export interface GlobeUniforms {
   pressureColors: PressureColorOption;
   tempDataReady: boolean;
   rainDataReady: boolean;
-  tempLerp: number;
-  tempLoadedPoints: number;  // progressive loading: cells 0..N valid
-  tempSlot0: number;         // slot index for time0 in large buffer
-  tempSlot1: number;         // slot index for time1 in large buffer
   tempPaletteRange: Float32Array; // min/max temperature values for palette mapping
   logoOpacity: number;       // computed from all layer opacities
 }
@@ -589,15 +585,6 @@ export class GlobeRenderer {
     // Track for depth test decision in render()
     this.currentEarthOpacity = uniforms.earthOpacity;
     this.currentTempOpacity = uniforms.tempOpacity;
-
-    // Legacy temp-specific uniforms
-    view.setFloat32(O.tempLerp, uniforms.tempLerp, true);
-
-
-    // Temp layer slots
-    view.setUint32(O.tempLoadedPoints, uniforms.tempLoadedPoints, true);
-    view.setUint32(O.tempSlot0, uniforms.tempSlot0, true);
-    view.setUint32(O.tempSlot1, uniforms.tempSlot1, true);
 
     // Grid settings
     view.setFloat32(O.gridFontSize, uniforms.gridFontSize, true);

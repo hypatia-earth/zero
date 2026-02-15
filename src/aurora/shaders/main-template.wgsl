@@ -27,11 +27,6 @@ struct Uniforms {
   // Indices: earth=0, sun=1, grid=2, temp=3, rain=4, pressure=5, wind=6
   layerOpacity: array<vec4<f32>, 4>,     // 16 opacity values (4 vec4s)
   layerDataReady: array<vec4<u32>, 4>,   // 16 data ready flags (4 vec4s)
-  // Legacy temp-specific (to be replaced by param system)
-  tempLerp: f32,          // interpolation factor 0-1 between slot0 and slot1
-  tempLoadedPoints: u32,  // progressive loading: cells 0..N are valid
-  tempSlot0: u32,         // slot index for time0 in tempData buffer
-  tempSlot1: u32,         // slot index for time1 in tempData buffer
   gridFontSize: f32,      // font size in screen pixels for grid labels
   gridLabelMaxRadius: f32, // max globe radius (px) before labels shrink
   gridLineWidth: f32,     // line width in screen pixels
