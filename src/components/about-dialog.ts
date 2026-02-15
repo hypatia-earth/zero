@@ -33,7 +33,7 @@ export const AboutDialog: m.ClosureComponent<AboutDialogAttrs> = () => {
       if (!wasOpen) {
         wasOpen = true;
         const payload = dialogService.getPayload('about');
-        aboutService.loadPage(payload?.page ?? 'about');
+        aboutService.loadPage(payload?.page ?? 'about');  // QC-OK: default page
       }
 
       const isFloating = dialogService.isFloating('about');

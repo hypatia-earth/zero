@@ -81,7 +81,7 @@ export class DialogService {
   }
 
   open<K extends DialogId>(id: K, payload?: DialogPayloads[K]): void {
-    this.openDialogs.set(id, payload ?? {});
+    this.openDialogs.set(id, payload ?? {});  // QC-OK: dialogs can have no payload
     this.bringToFront(id);
     m.redraw();
   }

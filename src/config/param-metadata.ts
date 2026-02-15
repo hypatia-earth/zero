@@ -414,16 +414,14 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
 };
 
 /**
- * Get metadata for a parameter, with fallback for unknown params
+ * Get metadata for a parameter
  */
 export function getParamMeta(param: string): ParamMeta {
-  return PARAM_METADATA[param] ?? {
-    label: param,
-    unit: '?',
-    range: [0, 1],
-    palette: 'grayscale',
-    sizeEstimate: 0,
-  };
+  const meta = PARAM_METADATA[param];
+  if (!meta) {
+    throw new Error(`Unknown param: ${param}`);
+  }
+  return meta;
 }
 
 /**

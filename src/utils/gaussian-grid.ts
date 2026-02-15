@@ -69,5 +69,5 @@ export function latLonToCell(lat: number, lon: number, luts: GaussianLUTs): numb
   if (lonNorm < 0) lonNorm += 2 * Math.PI;
   const lonIdx = Math.floor(lonNorm / (2 * Math.PI) * nPoints) % nPoints;
 
-  return (luts.offsets[ring] ?? 0) + lonIdx;
+  return luts.offsets[ring]! + lonIdx;
 }

@@ -295,7 +295,7 @@ export class PaletteService {
       const g = Math.round(lowerStop.color[1] + t * (upperStop.color[1] - lowerStop.color[1]));
       const b = Math.round(lowerStop.color[2] + t * (upperStop.color[2] - lowerStop.color[2]));
       // QC-OK: alpha optional, defaults to opaque
-      const a = Math.round((lowerStop.alpha ?? 255) + t * ((upperStop.alpha ?? 255) - (lowerStop.alpha ?? 255)));
+      const a = Math.round((lowerStop.alpha ?? 255) + t * ((upperStop.alpha ?? 255) - (lowerStop.alpha ?? 255)));  // QC-OK: alpha optional
       return [r, g, b, a];
     }
 

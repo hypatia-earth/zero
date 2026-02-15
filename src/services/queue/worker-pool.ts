@@ -187,7 +187,7 @@ export class WorkerPool {
 
       case 'error':
         this.active.delete(id!);
-        job.reject(new Error(msg.error ?? 'Unknown error'));
+        job.reject(new Error(msg.error ?? 'Unknown error'));  // QC-OK: error message fallback
         this.processQueue(worker);
         break;
 

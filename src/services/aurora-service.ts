@@ -166,7 +166,7 @@ export function createAuroraService(
   }
 
   function send(msg: AuroraRequest, transfer?: Transferable[]): void {
-    worker.postMessage(msg, transfer ?? []);
+    worker.postMessage(msg, transfer ?? []);  // QC-OK: postMessage API
   }
 
   return {

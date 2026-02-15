@@ -93,7 +93,7 @@ export function createParamSlots(param: string, timeslots: number, slabsCount?: 
       }
 
       // Need to evict - find furthest from reference time, but protect slots in wanted window
-      const wantedWindow = new Set(wanted.value?.window ?? []);
+      const wantedWindow = new Set(wanted.value?.window ?? []);  // QC-OK: empty if no wanted state
       const candidates = [...slots.entries()]
         .filter(([ts, slot]) => slot.loaded && !wantedWindow.has(ts))  // Don't evict slots in window
         .sort((a, b) => {

@@ -449,8 +449,8 @@ function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): void {
     if (currentMinute !== lastPressureMinute || needsContourRecompute) {
       lastPressureMinute = currentMinute;
       // Map smoothing option to Chaikin iterations: none=0, light=1
-      const smoothingMap = { none: 0, light: 1 } as const;
-      const smoothingIterations = smoothingMap[opts.pressure.smoothing] ?? 1;
+      const smoothingMap: Record<string, number> = { none: 0, light: 1 };
+      const smoothingIterations = smoothingMap[opts.pressure.smoothing]!;
       const lerp = computeLerp(pressureState, time);
       renderer!.runPressureContour(
         pressureState.slot0,

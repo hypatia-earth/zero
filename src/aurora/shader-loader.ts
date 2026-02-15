@@ -144,7 +144,7 @@ export function getPostShaders(): Map<string, string> {
  */
 export function getComputeShaders(layerId: string): string[] {
   const shaders = getLayerShaders().get(layerId);
-  return shaders?.compute ?? [];
+  return shaders?.compute ?? [];  // QC-OK: no compute shaders for layer
 }
 
 /**

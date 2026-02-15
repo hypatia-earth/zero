@@ -51,7 +51,7 @@ function getSelectedPresetIndex(option: PressureColorOption): number {
 }
 
 function buildOption(mode: ColorMode, presetIndex: number): PressureColorOption {
-  const preset = colorPresets[presetIndex] ?? colorPresets[0]!;
+  const preset = colorPresets[presetIndex]!;
   const color = [...preset.color] as [number, number, number, number];
 
   switch (mode) {

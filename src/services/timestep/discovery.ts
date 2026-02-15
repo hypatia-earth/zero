@@ -83,8 +83,7 @@ export async function discoverModel(
   }
 
   // 4. Generate runs from first to completed (or newest if no incomplete)
-  // QC-OK: newestRun null means no runs found, fallback to completed
-  const lastCompleteRun = incompleteRunTimesteps ? completedRunTime : (newestRun ?? completedRunTime);
+  const lastCompleteRun = incompleteRunTimesteps ? completedRunTime : (newestRun ?? completedRunTime);  // QC-OK: fallback if no runs
   const runs = generateRuns(basePrefix, firstRun, lastCompleteRun);
 
   // 5. Generate timesteps

@@ -111,7 +111,7 @@ export async function preflightOmVariable(
   param: string
 ): Promise<OmPreflightResult> {
   const result = await streamOmVariable(url, param, 1, () => {}, undefined, true);
-  return { totalBytes: result.totalBytes ?? 0, chunks: 0, dims: result.dims };
+  return { totalBytes: result.totalBytes!, chunks: 0, dims: result.dims };  // preflight always sets totalBytes
 }
 
 /** Byte progress callback - called after each slice fetch */

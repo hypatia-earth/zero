@@ -56,7 +56,7 @@ export interface ParamDetail {
  */
 export async function registerServiceWorker(): Promise<void> {
   // Skip SW registration if debug=nosw is in URL (for e2e testing)
-  const debugFlags = new URLSearchParams(location.search).get('debug')?.split(',') ?? [];
+  const debugFlags = new URLSearchParams(location.search).get('debug')?.split(',') ?? [];  // QC-OK: no debug param
   if (debugFlags.includes('nosw')) {
     console.log('[SW] Skipped (debug=nosw)');
     return;

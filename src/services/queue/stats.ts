@@ -15,7 +15,7 @@ const DEBUG = false;
 const formatStats = (s: QueueStats) =>
   `${(s.bytesQueued / 1024 / 1024).toFixed(1)}MB queued, ` +
   `${s.bytesPerSec ? (s.bytesPerSec / 1024 / 1024).toFixed(1) : '?'}MB/s, ` +
-  `ETA ${s.etaSeconds?.toFixed(0) ?? '?'}s`;
+  `ETA ${s.etaSeconds?.toFixed(0) ?? '?'}s`;  // QC-OK: ETA unknown
 
 export class QueueStatsTracker {
   readonly stats = signal<QueueStats>({
