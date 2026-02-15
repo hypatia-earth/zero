@@ -76,10 +76,13 @@ export async function querySWCache(
       }
 
       if (ts) {
-        rangeCount.set(ts, (rangeCount.get(ts) ?? 0) + 1);
+        if (!rangeCount.has(ts)) rangeCount.set(ts, 0);
+        rangeCount.set(ts, rangeCount.get(ts)! + 1);
+
         const sizeBytes = parseFloat(item.sizeMB) * 1024 * 1024;
         if (!isNaN(sizeBytes)) {
-          sizes.set(ts, (sizes.get(ts) ?? 0) + sizeBytes);
+          if (!sizes.has(ts)) sizes.set(ts, 0);
+          sizes.set(ts, sizes.get(ts)! + sizeBytes);
         }
       }
     }
@@ -115,8 +118,8 @@ export function setCached(
 
   paramState.cache.add(timestep);
   // Accumulate size (multi-slab layers like wind have U+V)
-  const existing = paramState.sizes.get(timestep) ?? 0;
-  paramState.sizes.set(timestep, existing + sizeBytes);
+  if (!paramState.sizes.has(timestep)) paramState.sizes.set(timestep, 0);
+  paramState.sizes.set(timestep, paramState.sizes.get(timestep)! + sizeBytes);
   state.value = { ...current };
 }
 
