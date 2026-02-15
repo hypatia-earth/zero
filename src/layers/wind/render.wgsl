@@ -124,26 +124,72 @@ fn vertexMain(
   return out;
 }
 
-// Speed-to-color mapping based on Beaufort scale hazard thresholds
-// White (0-17 m/s) → gradient to red (17-26 m/s) → full red (26+ m/s)
-// Alpha ramps from 0% at 0 m/s to 100% at 17 m/s
+// Wind speed palette - matches wind-speed in palettes.ts
+// Normalized t = speed / 50.0 (max 50 m/s)
+// Colors: calm white → light blue → cyan → red gradient
 fn speedToColor(speed: f32) -> vec4<f32> {
-  let safeThreshold = 17.0;   // Beaufort 8: gale, walking difficult
-  let dangerThreshold = 26.0; // Beaufort 10: storm, trees uprooted
+  let maxSpeed = 50.0;
+  let t = clamp(speed / maxSpeed, 0.0, 1.0);
 
-  // Alpha: 60% at 0 m/s → 100% at 17 m/s
-  let alpha = 0.6 + 0.4 * clamp(speed / safeThreshold, 0.0, 1.0);
+  // Palette stops (from palettes.ts wind-speed)
+  // 0.00: [245,245,245] alpha=0
+  // 0.12: [200,230,255] alpha=89
+  // 0.22: [100,220,255] alpha=166
+  // 0.34: [255,180,180] alpha=255
+  // 0.40: [255,100,100] alpha=255
+  // 0.48: [230,50,50] alpha=255
+  // 0.60: [200,30,30] alpha=255
+  // 0.80: [170,0,20] alpha=255
+  // 1.00: [140,0,30] alpha=255
 
-  if (speed < safeThreshold) {
-    // Safe: white with speed-based alpha
-    return vec4<f32>(1.0, 1.0, 1.0, alpha);
-  } else if (speed < dangerThreshold) {
-    // Hazardous: white → red gradient
-    let t = (speed - safeThreshold) / (dangerThreshold - safeThreshold);
-    return vec4<f32>(1.0, 1.0 - t * 0.8, 1.0 - t * 0.9, 1.0);
+  if (t < 0.12) {
+    let f = t / 0.12;
+    return vec4<f32>(
+      mix(0.96, 0.78, f),
+      mix(0.96, 0.90, f),
+      mix(0.96, 1.0, f),
+      mix(0.0, 0.35, f)
+    );
+  } else if (t < 0.22) {
+    let f = (t - 0.12) / 0.10;
+    return vec4<f32>(
+      mix(0.78, 0.39, f),
+      mix(0.90, 0.86, f),
+      mix(1.0, 1.0, f),
+      mix(0.35, 0.65, f)
+    );
+  } else if (t < 0.34) {
+    let f = (t - 0.22) / 0.12;
+    return vec4<f32>(
+      mix(0.39, 1.0, f),
+      mix(0.86, 0.71, f),
+      mix(1.0, 0.71, f),
+      mix(0.65, 1.0, f)
+    );
+  } else if (t < 0.48) {
+    let f = (t - 0.34) / 0.14;
+    return vec4<f32>(
+      mix(1.0, 0.90, f),
+      mix(0.71, 0.20, f),
+      mix(0.71, 0.20, f),
+      1.0
+    );
+  } else if (t < 0.80) {
+    let f = (t - 0.48) / 0.32;
+    return vec4<f32>(
+      mix(0.90, 0.67, f),
+      mix(0.20, 0.0, f),
+      mix(0.20, 0.08, f),
+      1.0
+    );
   } else {
-    // Dangerous: full red
-    return vec4<f32>(1.0, 0.2, 0.1, 1.0);
+    let f = (t - 0.80) / 0.20;
+    return vec4<f32>(
+      mix(0.67, 0.55, f),
+      0.0,
+      mix(0.08, 0.12, f),
+      1.0
+    );
   }
 }
 
