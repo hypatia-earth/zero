@@ -873,8 +873,8 @@ export class PressureLayer {
     if (colorOption.mode !== 'debug') {
       const colors = colorOption.colors;
       floatView.set(colors[0], 28);                           // color0
-      floatView.set(colors[1] ?? [1, 1, 1, 1], 32);           // color1
-      floatView.set(colors[2] ?? [1, 1, 1, 1], 36);           // color2
+      floatView.set(colors[1] ?? [1, 1, 1, 1], 32);           // color1  QC-OK: optional
+      floatView.set(colors[2] ?? [1, 1, 1, 1], 36);           // color2  QC-OK: optional
     } else {
       // Debug mode: colors not used, but set defaults
       floatView.set([1, 1, 1, 1], 28);

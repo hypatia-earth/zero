@@ -177,10 +177,10 @@ function drawPalette(
 
   const labelHeight = height / 2;
 
-  // Get value range for position mapping (QC-OK: palette format allows nulls)
+  // Get value range for position mapping
   const values = stops.map(s => s.value).filter((v): v is number => v !== null);
-  const minVal = values[0] ?? 0;
-  const maxVal = values[values.length - 1] ?? 1;
+  const minVal = values[0] ?? 0;  // QC-OK: fallback if all nulls
+  const maxVal = values[values.length - 1] ?? 1;  // QC-OK: fallback if all nulls
   const range = maxVal - minVal;
 
   // Draw color bar (full width) - map pixel position to value

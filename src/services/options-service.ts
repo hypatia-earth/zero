@@ -76,7 +76,7 @@ async function loadFromDB(): Promise<{ options: Partial<ZeroOptions> | null; isN
       const request = store.get(OPTIONS_KEY);
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve({
-        options: request.result?.options ?? null,
+        options: request.result?.options ?? null,  // QC-OK: IDB result may be empty
         isNewDB
       });
       tx.oncomplete = () => db.close();
@@ -119,7 +119,7 @@ async function loadUsageStats(): Promise<UsageStats | null> {
       const store = tx.objectStore(USAGE_STORE);
       const request = store.get(USAGE_KEY);
       request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result ?? null);
+      request.onsuccess = () => resolve(request.result ?? null);  // QC-OK: IDB may return undefined
       tx.oncomplete = () => db.close();
     });
   } catch (err) {

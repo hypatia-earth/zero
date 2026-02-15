@@ -73,7 +73,7 @@ export async function fetchRange(
     Range: `bytes=${offset}-${offset + size - 1}`,
     'X-Param': param,
   };
-  const response = await fetch(url, { headers, signal: signal ?? null });
+  const response = await fetch(url, { headers, signal: signal ?? null });  // QC-OK: fetch accepts null
   if (!response.ok && response.status !== 206) {
     throw new Error(`HTTP ${response.status} fetching range ${url}`);
   }
@@ -114,7 +114,7 @@ export async function fetchSuffix(
     Range: `bytes=-${suffixBytes}`,
     'X-Param': param,
   };
-  const response = await fetch(url, { headers, signal: signal ?? null });
+  const response = await fetch(url, { headers, signal: signal ?? null });  // QC-OK: fetch accepts null
   if (!response.ok && response.status !== 206) {
     throw new Error(`HTTP ${response.status} fetching suffix ${url}`);
   }

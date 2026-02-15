@@ -33,7 +33,7 @@ export async function runDiscoveryPhase(
       manifest: 'Fetching data manifest...',
       runs: 'Discovering model runs...',
       cache: `Checking cache: ${detail}...`,
-      cleanup: detail ?? 'Cleaning cache...',
+      cleanup: detail ?? 'Cleaning cache...',  // QC-OK: detail optional
     };
     const fractions: Record<string, number> = {
       manifest: 0.2,
@@ -41,7 +41,7 @@ export async function runDiscoveryPhase(
       cache: 0.7,
       cleanup: 0.85,
     };
-    await progress.sub(messages[step] ?? `Discovery: ${step}...`, fractions[step] ?? 0.5);
+    await progress.sub(messages[step] ?? `Discovery: ${step}...`, fractions[step] ?? 0.5);  // QC-OK: future steps
   });
 
   // Snap time to closest available timestep and sanitize layers
