@@ -190,9 +190,9 @@ function initAnimatedOpacity(): void {
   }
 }
 
-/** Get animated opacity for a layer (defaults to 0) */
+/** Get animated opacity for a layer */
 function getAnimatedOpacity(layerId: string): number {
-  return animatedOpacity.get(layerId) ?? 0;
+  return animatedOpacity.get(layerId)!;
 }
 
 /** Update animated opacities toward targets (exponential decay) */
