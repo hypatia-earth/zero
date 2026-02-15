@@ -116,41 +116,50 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
 
       // Get enabled layers (built-in + custom) that have params
       const enabledLayers = layerService.getEnabledLayers();
-      const activeLayers = enabledLayers.map(l => l.id);
       const layerParamsMap = new Map<string, string[]>();
       const cachedMap = new Map<string, Set<string>>();  // param → timesteps
       const gpuMap = new Map<string, Set<string>>();     // param → timesteps
       const activeMap = new Map<string, Set<string>>();  // param → timesteps
 
       for (const layer of enabledLayers) {
-        const params = layer.params ?? [];
-        layerParamsMap.set(layer.id, params);
+        const params = layer.params!;  // getEnabledLayers filters by params
+        const readyParams: string[] = [];
 
-        // Build per-param state maps
+        // Build per-param state maps (only for params with state)
         for (const param of params) {
           const paramState = tsState.params.get(param);
-          if (paramState) {
-            const cachedSet = new Set<string>();
-            for (const ts of paramState.cache) {
-              cachedSet.add(timestepService.toDate(ts).toISOString());
-            }
-            cachedMap.set(param, cachedSet);
+          if (!paramState) continue;  // no state = nothing to render
 
-            const gpuSet = new Set<string>();
-            for (const ts of paramState.gpu) {
-              gpuSet.add(timestepService.toDate(ts).toISOString());
-            }
-            gpuMap.set(param, gpuSet);
+          readyParams.push(param);
 
-            // Active timesteps - query slot service with param name
-            const activeSet = new Set<string>();
-            for (const ts of slotService.getActiveTimesteps(param)) {
-              activeSet.add(timestepService.toDate(ts).toISOString());
-            }
-            activeMap.set(param, activeSet);
+          const cachedSet = new Set<string>();
+          for (const ts of paramState.cache) {
+            cachedSet.add(timestepService.toDate(ts).toISOString());
           }
+          cachedMap.set(param, cachedSet);
+
+          const gpuSet = new Set<string>();
+          for (const ts of paramState.gpu) {
+            gpuSet.add(timestepService.toDate(ts).toISOString());
+          }
+          gpuMap.set(param, gpuSet);
+
+          // Active timesteps - query slot service with param name
+          const activeSet = new Set<string>();
+          for (const ts of slotService.getActiveTimesteps(param)) {
+            activeSet.add(timestepService.toDate(ts).toISOString());
+          }
+          activeMap.set(param, activeSet);
+        }
+
+        // Only include layer if it has ready params
+        if (readyParams.length > 0) {
+          layerParamsMap.set(layer.id, readyParams);
         }
       }
+
+      // Only layers with ready params
+      const activeLayers = [...layerParamsMap.keys()];
 
       const opts = optionsService.options.value;
 

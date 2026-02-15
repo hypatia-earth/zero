@@ -376,25 +376,25 @@ export class GraticuleAnimator {
 
     // Longitude degrees (80 floats = 320 bytes)
     for (let i = 0; i < MAX_LINES; i++) {
-      view.setFloat32(offset, this.lonLines[i]?.currentDeg ?? 0, true);
+      view.setFloat32(offset, this.lonLines[i]?.currentDeg ?? 0, true); // QC-OK: pad unused
       offset += 4;
     }
 
     // Longitude opacities (80 floats = 320 bytes)
     for (let i = 0; i < MAX_LINES; i++) {
-      view.setFloat32(offset, this.lonLines[i]?.opacity ?? 0, true);
+      view.setFloat32(offset, this.lonLines[i]?.opacity ?? 0, true); // QC-OK: pad unused
       offset += 4;
     }
 
     // Latitude degrees (80 floats = 320 bytes)
     for (let i = 0; i < MAX_LINES; i++) {
-      view.setFloat32(offset, this.latLines[i]?.currentDeg ?? 0, true);
+      view.setFloat32(offset, this.latLines[i]?.currentDeg ?? 0, true); // QC-OK: pad unused
       offset += 4;
     }
 
     // Latitude opacities (80 floats = 320 bytes)
     for (let i = 0; i < MAX_LINES; i++) {
-      view.setFloat32(offset, this.latLines[i]?.opacity ?? 0, true);
+      view.setFloat32(offset, this.latLines[i]?.opacity ?? 0, true); // QC-OK: pad unused
       offset += 4;
     }
 

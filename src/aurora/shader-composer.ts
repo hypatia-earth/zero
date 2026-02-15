@@ -270,10 +270,6 @@ fn sampleParam_${safeName}(cell: u32) -> f32 {
   hasPostShader(layerId: string): boolean {
     return this.postShaders.has(layerId);
   }
-
-  private capitalize(s: string): string {
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  }
 }
 
 /** Singleton instance */

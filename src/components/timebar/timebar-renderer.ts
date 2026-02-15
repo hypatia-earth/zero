@@ -176,8 +176,8 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
   } else {
     // Weather layers active: show layer-colored ticks with param sub-rows
     activeLayers.forEach((layer, layerIndex) => {
-      const params = layerParams.get(layer) ?? [];
-      const paramCount = params.length || 1;
+      const params = layerParams.get(layer)!;  // panel builds this for every enabled layer
+      const paramCount = params.length;
       // Custom layers may not have color defined - use fallback
       const hasColor = themeService.hasColor(`color-layer-${layer}`);
       const layerColor = hasColor
@@ -194,9 +194,9 @@ function drawTicks(ctx: CanvasRenderingContext2D, params: TickParams): void {
       const baseTickHeight = paramHeight * TICK_HEIGHT_RATIO;
 
       params.forEach((param, paramIndex) => {
-        const cached = cachedMap.get(param) ?? new Set();
-        const gpu = gpuMap.get(param) ?? new Set();
-        const active = activeMap.get(param) ?? new Set();
+        const cached = cachedMap.get(param)!;  // panel only passes params with state
+        const gpu = gpuMap.get(param)!;
+        const active = activeMap.get(param)!
         const paramTopY = layerTopY + paramIndex * (paramHeight + PARAM_GAP);
 
         ecmwfSet.forEach(tsKey => {
