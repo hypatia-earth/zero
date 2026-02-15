@@ -998,27 +998,6 @@ export class GlobeRenderer {
     );
   }
 
-  /**
-   * Upload temperature data directly to a buffer
-   * In new architecture, each timeslot has its own buffer (no offset needed)
-   * @param data Float32Array of temperature values (6.6M points)
-   * @param buffer Target GPUBuffer to write to
-   */
-  uploadTempDataToBuffer(data: Float32Array, buffer: GPUBuffer): void {
-    this.device.queue.writeBuffer(buffer, 0, data.buffer, data.byteOffset, data.byteLength);
-  }
-
-  /**
-   * Upload partial temp data chunk to a buffer at offset (for progressive loading)
-   * @param data Float32Array chunk
-   * @param buffer Target GPUBuffer
-   * @param pointOffset Offset in points (not bytes)
-   */
-  uploadTempDataChunkToBuffer(data: Float32Array, buffer: GPUBuffer, pointOffset: number): void {
-    const byteOffset = pointOffset * 4;
-    this.device.queue.writeBuffer(buffer, byteOffset, data.buffer, data.byteOffset, data.byteLength);
-  }
-
   /** Get pressure layer for external control */
   getPressureLayer(): PressureLayer {
     return this.pressureLayer;
