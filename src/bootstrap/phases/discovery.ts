@@ -44,9 +44,8 @@ export async function runDiscoveryPhase(
     await progress.sub(messages[step] ?? `Discovery: ${step}...`, fractions[step] ?? 0.5);
   });
 
-  // Snap time to closest available timestep
+  // Snap time to closest available timestep and sanitize layers
   await progress.run('Synchronizing time...', 0.9, async () => {
     stateService.sanitize((time: Date) => timestepService.getClosestTimestep(time));
-    stateService.delegateLayers();
   });
 }

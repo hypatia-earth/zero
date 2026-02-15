@@ -11,6 +11,7 @@ import { debounceFlush } from '../utils/debounce-flush';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { LayerService } from './layer/layer-service';
+import { layerIds } from '../config/defaults';
 
 const DEBUG = false;
 
@@ -40,9 +41,11 @@ export class StateService {
   private debouncedUrlSync = debounceFlush(() => this.syncToUrl(), 300);
 
   private optionsService: OptionsService;
+  private layerService: LayerService | null = null;
 
-  /** Post-construction wiring for LayerService (needed for URL sync on custom layer toggle) */
+  /** Post-construction wiring for LayerService (needed for URL sync and layer sanitization) */
   setLayerService(layerService: LayerService): void {
+    this.layerService = layerService;
     // Watch layer registry changes (custom layer enable/disable)
     effect(() => {
       layerService.changed.value;
@@ -102,13 +105,15 @@ export class StateService {
   }
 
   /**
-   * Sanitize viewState after TimestepService ready
+   * Sanitize viewState and layers after TimestepService ready
    * - Snaps time to closest available timestep
    * - Clamps lat/lon/altitude
+   * - Validates and applies layer enables from URL
    */
   sanitize(getClosestTimestep: (time: Date) => Date): void {
     const vs = this.viewState.value;
     const changes: string[] = [];
+    const params = new URLSearchParams(window.location.search);
 
     // Snap time to closest available timestep
     const snappedTime = getClosestTimestep(vs.time);
@@ -119,7 +124,6 @@ export class StateService {
     }
 
     // Log changes
-    const params = new URLSearchParams(window.location.search);
     const llParam = params.get('ll');
     if (!llParam) {
       changes.push(`lat=${vs.lat.toFixed(1)}, lon=${vs.lon.toFixed(1)}`);
@@ -132,10 +136,27 @@ export class StateService {
     if (changes.length) {
     }
 
-    // Update state (without triggering URL sync yet)
+    // Update viewState (without triggering URL sync yet)
     if (newTime !== vs.time) {
       this.viewState.value = { ...this.viewState.value, time: newTime };
     }
+
+    // Sanitize layers: validate and apply from URL
+    const layersStr = params.get('layers');
+    const customIds = this.layerService?.getUserLayers().map(l => l.id) ?? [];
+    const validIds = new Set<string>([...layerIds, ...customIds]);
+
+    let enabledLayers: string[];
+    if (layersStr === null || layersStr === '') {
+      // No layers param: use defaults
+      enabledLayers = [...this.configService.getDefaultLayers()];
+    } else {
+      // Filter to valid layer IDs only
+      enabledLayers = layersStr.split(',').filter(id => validIds.has(id));
+    }
+
+    // Apply sanitized layers to state
+    this.optionsService.setEnabledLayers(new Set(enabledLayers));
 
     // Write sanitized state to URL
     this.syncToUrl();
@@ -183,26 +204,7 @@ export class StateService {
     }
 
     this.viewState.value = vs;
-
-    // Delegate layers to OptionsService (done later via delegateLayers)
-  }
-
-  /**
-   * Parse layers from URL and delegate to OptionsService
-   * Call after OptionsService is wired up
-   */
-  delegateLayers(): void {
-
-    const params = new URLSearchParams(window.location.search);
-    const layersStr = params.get('layers');
-
-    // If no layers param, use config defaults
-    const enabledLayers = layersStr !== null
-      ? new Set(layersStr.split(',').filter(l => l.length > 0))
-      : new Set(this.configService.getDefaultLayers());
-
-    // Delegate to OptionsService
-    this.optionsService.setEnabledLayers(enabledLayers);
+    // Note: layer enables are handled by sanitize() after custom layers are loaded
   }
 
   private parseDateFromUrl(dt: string): Date | null {

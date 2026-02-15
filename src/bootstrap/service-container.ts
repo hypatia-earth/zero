@@ -60,7 +60,7 @@ export function createFoundationServices(): Pick<
 > {
   const layerService = new LayerService();
   const configService = new ConfigService();
-  const optionsService = new OptionsService(configService);
+  const optionsService = new OptionsService();
   // StateService uses effect-based decoupling: watches optionsService.options signal
   const stateService = new StateService(configService, optionsService);
 

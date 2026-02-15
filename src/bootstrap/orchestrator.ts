@@ -126,9 +126,13 @@ async function runBootstrapInner(
     progress
   );
 
-  // Send user layers to worker (loaded from IDB in config phase)
+  // Send user layers to worker (loaded from IDB in config phase, enabled state set by sanitize)
   for (const layer of services.layerService!.getUserLayers()) {
     services.auroraService.send({ type: 'registerUserLayer', layer });
+    if (layer.userLayerIndex !== undefined) {
+      const enabled = services.layerService!.isUserLayerEnabled(layer.id);
+      services.auroraService.send({ type: 'setUserLayerEnabled', layerIndex: layer.userLayerIndex, enabled });
+    }
   }
 
   // Phase 6: Data

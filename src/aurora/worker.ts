@@ -69,6 +69,7 @@ export type AuroraRequest =
   | { type: 'registerUserLayer'; layer: LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'setUserLayerOpacity'; layerIndex: number; opacity: number }
+  | { type: 'setUserLayerEnabled'; layerIndex: number; enabled: boolean }
   | { type: 'updatePalette'; layer: string; textureData: Uint8Array; range: [number, number] }
   | { type: 'cleanup' };
 
@@ -95,8 +96,9 @@ let layerRegistry: LayerService | null = null;
 const paramStores = new Map<string, LayerStore>();
 
 
-// User layer state (opacity defaults to 1.0 when registered)
+// User layer state (opacity defaults to 1.0, enabled defaults to false when registered)
 const userLayerOpacities = new Map<number, number>();  // index -> opacity
+const userLayerEnabled = new Map<number, boolean>();   // index -> enabled
 
 // Slot activation state per param (for uniform building)
 interface SlotState {
@@ -231,9 +233,10 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
       enabled = layerOpts.enabled ?? false;
       opacity = layerOpts.opacity ?? 1.0;
     } else {
-      // User layers: always enabled, opacity from userLayerOpacities
-      enabled = true;
-      opacity = userLayerOpacities.get(layer.userLayerIndex ?? -1) ?? 1.0;
+      // User layers: enabled and opacity from state maps
+      const idx = layer.userLayerIndex ?? -1;
+      enabled = userLayerEnabled.get(idx) ?? false;
+      opacity = userLayerOpacities.get(idx) ?? 1.0;
     }
 
     // Calculate target opacity
@@ -623,6 +626,7 @@ function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerU
 
   if (layer.userLayerIndex !== undefined) {
     userLayerOpacities.set(layer.userLayerIndex, 1.0);
+    userLayerEnabled.set(layer.userLayerIndex, false);  // Default disabled, set from sanitize
   }
 
   console.log(`[Aurora] Registered user layer: ${layer.id} (index ${layer.userLayerIndex})`);
@@ -640,6 +644,7 @@ function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerU
       layerRegistry!.unregister(layer.id);
       if (layer.userLayerIndex !== undefined) {
         userLayerOpacities.delete(layer.userLayerIndex);
+        userLayerEnabled.delete(layer.userLayerIndex);
       }
       const message = err instanceof Error ? err.message : String(err);
       console.error('[Aurora] Shader compilation failed:', message);
@@ -661,6 +666,7 @@ function handleUnregisterUserLayer(data: Extract<AuroraRequest, { type: 'unregis
 
   if (index !== undefined) {
     userLayerOpacities.delete(index);
+    userLayerEnabled.delete(index);
   }
 
   console.log(`[Aurora] Unregistered user layer: ${layerId}`);
@@ -678,6 +684,10 @@ function handleUnregisterUserLayer(data: Extract<AuroraRequest, { type: 'unregis
 
 function handleSetUserLayerOpacity(data: Extract<AuroraRequest, { type: 'setUserLayerOpacity' }>): void {
   userLayerOpacities.set(data.layerIndex, data.opacity);
+}
+
+function handleSetUserLayerEnabled(data: Extract<AuroraRequest, { type: 'setUserLayerEnabled' }>): void {
+  userLayerEnabled.set(data.layerIndex, data.enabled);
 }
 
 function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette' }>): void {
@@ -728,6 +738,7 @@ const handlers: { [K in AuroraRequest['type']]: MessageHandler<K> } = {
   registerUserLayer: handleRegisterUserLayer,
   unregisterUserLayer: handleUnregisterUserLayer,
   setUserLayerOpacity: handleSetUserLayerOpacity,
+  setUserLayerEnabled: handleSetUserLayerEnabled,
   updatePalette: handleUpdatePalette,
   cleanup: handleCleanup,
 };

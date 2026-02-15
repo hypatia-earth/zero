@@ -21,7 +21,6 @@ import { deepMerge, getByPath, setByPath } from '../utils/object';
 import { debounceFlush } from '../utils/debounce-flush';
 import { layerIds } from '../config/defaults';
 import type { TLayer } from '../config/types';
-import type { ConfigService } from './config-service';
 import type { LayerService } from './layer/layer-service';
 import { updatePrefetchConfig } from './sw-registration';
 
@@ -203,7 +202,7 @@ export class OptionsService {
     this.layerService = layerService;
   }
 
-  constructor(private configService: ConfigService) {
+  constructor() {
     // Auto-merge when userOverrides change
     effect(() => {
       this.options.value = deepMerge(defaultOptions, this.userOverrides.value);
@@ -466,27 +465,13 @@ export class OptionsService {
   }
 
   /**
-   * Read layer enables from URL (called during init before StateService delegates)
-   * Note: StateService owns URL, but OptionsService needs initial layer state
+   * Read non-layer options from URL (called during load)
+   * Note: Layer state is handled by StateService.sanitize()
    */
   private readUrlOptions(): Partial<ZeroOptions> {
-    const params = new URLSearchParams(window.location.search);
-    const overrides: Record<string, unknown> = {};
-
-    // Parse layers from URL, fall back to config defaults
-    const layersStr = params.get('layers');
-    const enabledLayers = layersStr !== null
-      ? new Set(layersStr.split(',').filter(l => l.length > 0))
-      : new Set(this.configService.getDefaultLayers());
-
-    for (const layerId of layerIds) {
-      if (!overrides[layerId]) {
-        overrides[layerId] = {};
-      }
-      (overrides[layerId] as Record<string, unknown>).enabled = enabledLayers.has(layerId);
-    }
-
-    return overrides as Partial<ZeroOptions>;
+    // Layer handling moved to StateService.sanitize()
+    // Other URL params could be parsed here if needed
+    return {};
   }
 
   // ----------------------------------------------------------

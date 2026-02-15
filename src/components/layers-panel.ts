@@ -67,8 +67,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
               onToggle: () => {
                 const enabled = layerRegistry.toggleUserLayer(layer.id);
                 if (layer.userLayerIndex !== undefined) {
-                  const opacity = enabled ? layerRegistry.getUserLayerOpacity(layer.id) : 0;
-                  auroraService.send({ type: 'setUserLayerOpacity', layerIndex: layer.userLayerIndex, opacity });
+                  auroraService.send({ type: 'setUserLayerEnabled', layerIndex: layer.userLayerIndex, enabled });
                 }
                 m.redraw();
               },

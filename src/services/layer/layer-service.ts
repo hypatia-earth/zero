@@ -50,8 +50,8 @@ export interface LayerDeclaration {
 /** Stored format for user layers in IDB */
 interface StoredUserLayer {
   declaration: LayerDeclaration;
-  enabled: boolean;
   opacity: number;
+  // Note: enabled state comes from URL via sanitize(), not from IDB
 }
 
 const MAX_USER_LAYERS = 31;  // 0-30, index 31 reserved for preview
@@ -128,7 +128,7 @@ export class LayerService {
 
       let loadedCount = 0;
       for (const stored of layers) {
-        const { declaration, enabled, opacity } = stored;
+        const { declaration, opacity } = stored;
         // Validate and allocate index
         if (!declaration.id || declaration.isBuiltIn) continue;
 
@@ -145,7 +145,7 @@ export class LayerService {
           isBuiltIn: false,
         };
         this.layers.set(layer.id, layer);
-        this.userLayerEnabled.set(layer.id, enabled);
+        // Note: enabled state will be set by StateService.sanitize() from URL
         this.userLayerOpacity.set(layer.id, opacity);
         loadedCount++;
       }
@@ -168,8 +168,8 @@ export class LayerService {
 
     const stored: StoredUserLayer = {
       declaration,
-      enabled: this.userLayerEnabled.get(id) ?? true,
       opacity: this.userLayerOpacity.get(id) ?? 1.0,
+      // Note: enabled state is persisted via URL, not IDB
     };
 
     try {
