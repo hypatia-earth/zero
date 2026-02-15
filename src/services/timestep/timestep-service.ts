@@ -18,8 +18,9 @@ import { PARAM_METADATA } from '../../config/param-metadata';
 
 // Module imports
 import { discoverModel } from './discovery';
-import { querySWCache, setCached as setCachedFn, refreshCacheState as refreshCacheStateFn } from './cache';
-import { setGpuLoaded as setGpuLoadedFn, setGpuUnloaded as setGpuUnloadedFn, clearGpuState as clearGpuStateFn, setGpuState as setGpuStateFn } from './gpu';
+import { querySWCache } from './cache';
+import * as cache from './cache';
+import * as gpu from './gpu';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -166,11 +167,11 @@ export class TimestepService {
 
   setCached(param: string, timestep: TTimestep, sizeBytes: number): void {
     this.ensureParam(param);  // Auto-create if needed
-    setCachedFn(this.state, param, timestep, sizeBytes);
+    cache.setCached(this.state, param, timestep, sizeBytes);
   }
 
   async refreshCacheState(param: string): Promise<void> {
-    await refreshCacheStateFn(this.state, param, this.timestepsData[this.defaultModel]);
+    await cache.refreshCacheState(this.state, param, this.timestepsData[this.defaultModel]);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -179,19 +180,19 @@ export class TimestepService {
 
   setGpuLoaded(param: string, timestep: TTimestep): void {
     this.ensureParam(param);  // Auto-create if needed
-    setGpuLoadedFn(this.state, param, timestep);
+    gpu.setGpuLoaded(this.state, param, timestep);
   }
 
   setGpuUnloaded(param: string, timestep: TTimestep): void {
-    setGpuUnloadedFn(this.state, param, timestep);
+    gpu.setGpuUnloaded(this.state, param, timestep);
   }
 
   clearGpuState(param: string): void {
-    clearGpuStateFn(this.state, param);
+    gpu.clearGpuState(this.state, param);
   }
 
   setGpuState(param: string, timesteps: Set<TTimestep>): void {
-    setGpuStateFn(this.state, param, timesteps);
+    gpu.setGpuState(this.state, param, timesteps);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────

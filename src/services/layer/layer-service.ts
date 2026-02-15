@@ -169,7 +169,7 @@ export class LayerService {
 
     const stored: StoredUserLayer = {
       declaration,
-      opacity: this.userLayerOpacity.get(id) ?? 1.0,
+      opacity: this.userLayerOpacity.get(id)!,
       // Note: enabled state is persisted via URL, not IDB
     };
 
@@ -414,9 +414,9 @@ export class LayerService {
     return !current;
   }
 
-  /** Get user layer opacity (defaults to 1.0) */
+  /** Get user layer opacity */
   getUserLayerOpacity(id: string): number {
-    return this.userLayerOpacity.get(id) ?? 1.0;
+    return this.userLayerOpacity.get(id)!;
   }
 
   /** Set user layer opacity */

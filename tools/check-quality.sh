@@ -50,14 +50,21 @@ else
     echo -e "${GREEN}✓ No 'unknown' casts found${NC}"
 fi
 
-# Check for type assertion chains (excluding test files)
-ASSERTION_CHAIN_COUNT=$(grep -r "as .* as" src --include="*.ts" --include="*.tsx" --exclude-dir=__tests__ --exclude="*.test.ts" --exclude="*.spec.ts" 2>/dev/null | wc -l || echo 0)
+# Check for type assertion chains (as X as Y - actual double casts, not import renames)
+# Pattern: "as SomeType as" - excludes import renames like "foo as bar" and comments
+ASSERTION_CHAIN_COUNT=$(grep -rE "\) as [A-Z][a-zA-Z]+ as [A-Z]" src --include="*.ts" --include="*.tsx" --exclude-dir=__tests__ --exclude="*.test.ts" --exclude="*.spec.ts" 2>/dev/null | wc -l || echo 0)
 if [ "$ASSERTION_CHAIN_COUNT" -gt 0 ]; then
     echo -e "${RED}✗ Found $ASSERTION_CHAIN_COUNT type assertion chains (as X as Y)${NC}"
-    grep -r "as .* as" src --include="*.ts" --include="*.tsx" --exclude-dir=__tests__ --exclude="*.test.ts" --exclude="*.spec.ts" | head -5 || true
+    grep -rE "\) as [A-Z][a-zA-Z]+ as [A-Z]" src --include="*.ts" --include="*.tsx" --exclude-dir=__tests__ --exclude="*.test.ts" --exclude="*.spec.ts" | head -5 || true
     ((ERROR_COUNT+=$ASSERTION_CHAIN_COUNT))
 else
     echo -e "${GREEN}✓ No type assertion chains${NC}"
+fi
+
+# Check for nullish coalescing (potential defensive programming)
+NULLISH_COUNT=$(grep -r ' ?? ' src --include="*.ts" --include="*.tsx" --exclude-dir=__tests__ --exclude="*.test.ts" --exclude="*.spec.ts" 2>/dev/null | wc -l || echo 0)
+if [ "$NULLISH_COUNT" -gt 0 ]; then
+    echo -e "${YELLOW}ℹ Found $NULLISH_COUNT nullish coalescing (??) - review for defensive programming${NC}"
 fi
 
 echo ""

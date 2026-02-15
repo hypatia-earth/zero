@@ -74,11 +74,11 @@ const SIZE_PER_TIMESTEP_MB: Record<string, number> = {
 
 /** Calculate estimated prefetch size in MB */
 function calculatePrefetchSizeMB(days: string, layers: { temp: boolean; pressure: boolean; wind: boolean }): number {
-  const timesteps = TIMESTEPS_BY_DAYS[days] ?? 48;
+  const timesteps = TIMESTEPS_BY_DAYS[days]!;
   let sizePerTimestep = 0;
-  if (layers.temp) sizePerTimestep += SIZE_PER_TIMESTEP_MB.temp ?? 0;
-  if (layers.pressure) sizePerTimestep += SIZE_PER_TIMESTEP_MB.pressure ?? 0;
-  if (layers.wind) sizePerTimestep += SIZE_PER_TIMESTEP_MB.wind ?? 0;
+  if (layers.temp) sizePerTimestep += SIZE_PER_TIMESTEP_MB.temp!;
+  if (layers.pressure) sizePerTimestep += SIZE_PER_TIMESTEP_MB.pressure!;
+  if (layers.wind) sizePerTimestep += SIZE_PER_TIMESTEP_MB.wind!;
   return timesteps * sizePerTimestep;
 }
 
@@ -133,15 +133,15 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
 
   // Special handling for palette selection
   if (path.endsWith('.palette')) {
-    const layerId = path.split('.')[0];
-    const palettes = paletteService.getPalettes(layerId ?? 'temp');
+    const layerId = path.split('.')[0]!;
+    const palettes = paletteService.getPalettes(layerId);
 
     return m(RadioPaletteControl, {
       palettes,
       selected: currentValue as string,
       onSelect: (paletteName: string) => {
         setOptionValue(optionsService, path, paletteName);
-        paletteService.setPalette(layerId ?? 'temp', paletteName);
+        paletteService.setPalette(layerId, paletteName);
       }
     });
   }
@@ -206,8 +206,8 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
 
     case 'radio': {
       const radioMeta = meta as RadioMeta;
-      const layerId = path.split('.')[0];
-      const isLoading = optionsService.loadingLayers.value.has(layerId ?? '');
+      const layerId = path.split('.')[0]!;
+      const isLoading = optionsService.loadingLayers.value.has(layerId);
       const groupDisabled = meta.disabled === true;
 
       return m('div.radio-group', { class: groupDisabled ? 'disabled' : '' }, [
@@ -325,7 +325,7 @@ function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: Opt
 const layerLabels: Record<string, string> = {
   earth: 'Earth',
   sun: 'Sun',
-  grid: 'Grid',
+  graticule: 'Graticule',
   temp: 'Temperature',
   rain: 'Precipitation',
   clouds: 'Cloud Cover',
@@ -376,7 +376,7 @@ function renderGroup(
       if (o.meta.model && o.meta.model !== currentModel) return false;
       return true;
     })
-    .sort((a, b) => (a.meta.order ?? 99) - (b.meta.order ?? 99));
+    .sort((a, b) => a.meta.order - b.meta.order);
 
   if (visibleOptions.length === 0) return null;
 
@@ -384,7 +384,7 @@ function renderGroup(
   if (groupId === 'layers' && !skipGroupHeader) {
     const byLayer = new Map<string, FlatOption[]>();
     for (const opt of visibleOptions) {
-      const layerId = opt.path.split('.')[0] ?? 'other';
+      const layerId = opt.path.split('.')[0]!;
       if (!byLayer.has(layerId)) byLayer.set(layerId, []);
       byLayer.get(layerId)!.push(opt);
     }
@@ -519,8 +519,8 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
     const sortedGroupIds = Object.keys(filteredGroups)
       .filter(id => id !== 'advanced')
       .sort((a, b) => {
-        const orderA = optionGroups[a as keyof typeof optionGroups]?.order ?? 99;
-        const orderB = optionGroups[b as keyof typeof optionGroups]?.order ?? 99;
+        const orderA = optionGroups[a as keyof typeof optionGroups]!.order;
+        const orderB = optionGroups[b as keyof typeof optionGroups]!.order;
         return orderA - orderB;
       });
 
@@ -536,7 +536,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
       queue: 'Download',
     };
     const dialogTitle = filter && filter !== 'global'
-      ? `${filterTitles[filter] ?? layerLabels[filter] ?? filter} Options`
+      ? `${filterTitles[filter] ?? layerLabels[filter]!} Options`
       : 'Options';
 
     const windowStyle: Record<string, string> = {};
