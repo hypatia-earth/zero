@@ -27,9 +27,9 @@ import tempShader from '../layers/temp/temp.wgsl?raw';
 // Rain layer
 import rainShader from '../layers/rain/rain.wgsl?raw';
 
-// Grid layer
-import gridShader from '../layers/grid/grid.wgsl?raw';
-import gridTextShader from '../layers/grid/text.wgsl?raw';
+// Graticule layer (lat/lon grid overlay)
+import graticuleShader from '../layers/graticule/graticule.wgsl?raw';
+import graticuleTextShader from '../layers/graticule/text.wgsl?raw';
 
 // Joker layer (test layer)
 import jokerShader from '../layers/joker/joker.wgsl?raw';
@@ -86,8 +86,8 @@ export function getLayerShaders(): Map<string, LayerShaders> {
       main: rainShader,
     }],
 
-    ['grid', {
-      main: [gridShader, gridTextShader].join('\n\n'),
+    ['graticule', {
+      main: [graticuleShader, graticuleTextShader].join('\n\n'),
     }],
 
     ['joker', {

@@ -118,12 +118,12 @@ export class ShaderComposer {
       }
     }
 
-    // 4. Grid shader (special - always included for back-side grid logic)
-    const gridLayer = allLayers.find(l => l.id === 'grid');
-    const gridShader = gridLayer?.shaders?.main ?? this.mainShaders.get('grid');
-    if (gridShader) {
-      parts.push('// --- Layer: grid ---');
-      parts.push(gridShader);
+    // 4. Graticule shader (special - always included for back-side graticule logic)
+    const graticuleLayer = allLayers.find(l => l.id === 'graticule');
+    const graticuleShader = graticuleLayer?.shaders?.main ?? this.mainShaders.get('graticule');
+    if (graticuleShader) {
+      parts.push('// --- Layer: graticule ---');
+      parts.push(graticuleShader);
     }
 
     // 5. Generate dynamic param bindings

@@ -291,11 +291,11 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     sunGlowRadius: 0.02,
     sunCoreColor: new Float32Array([1, 1, 0.9]),
     sunGlowColor: new Float32Array([1, 0.8, 0.4]),
-    // Grid (animated opacity)
-    gridOpacity: getAnimatedOpacity('grid'),
-    gridFontSize: opts?.grid.fontSize ?? 12,
-    gridLabelMaxRadius: 280,
-    gridLineWidth: opts?.grid.lineWidth ?? 1,
+    // Graticule (animated opacity)
+    graticuleOpacity: getAnimatedOpacity('graticule'),
+    graticuleFontSize: opts?.grid.fontSize ?? 12,
+    graticuleLabelMaxRadius: 280,
+    graticuleLineWidth: opts?.grid.lineWidth ?? 1,
     // Layers (animated opacities)
     earthOpacity: getAnimatedOpacity('earth'),
     tempOpacity: getAnimatedOpacity('temp'),

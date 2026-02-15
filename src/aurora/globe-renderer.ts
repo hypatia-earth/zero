@@ -7,7 +7,7 @@ import { type ComposedShaders, activeParamBindings, type ParamBindingConfig } fr
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 import { PressureLayer } from '../layers/pressure';
 import { WindLayer } from '../layers/wind';
-import { GridAnimator, GRID_BUFFER_SIZE } from '../layers/grid/grid-animator';
+import { GraticuleAnimator, GRATICULE_BUFFER_SIZE } from '../layers/graticule/graticule-animator';
 import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getParamLerpOffset, getParamReadyOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 
@@ -20,7 +20,7 @@ import type { PressureColorOption } from '../schemas/options.schema';
 // Layer indices for uniform array access (must match registration order)
 const LAYER_EARTH = 0;
 const LAYER_SUN = 1;
-const LAYER_GRID = 2;
+const LAYER_GRATICULE = 2;
 const LAYER_TEMP = 3;
 const LAYER_RAIN = 4;
 const LAYER_PRESSURE = 5;
@@ -39,10 +39,10 @@ export interface GlobeUniforms {
   sunGlowRadius: number;
   sunCoreColor: Float32Array;
   sunGlowColor: Float32Array;
-  gridOpacity: number;      // written to layer array, not direct uniform
-  gridFontSize: number;
-  gridLabelMaxRadius: number;
-  gridLineWidth: number;
+  graticuleOpacity: number;      // written to layer array, not direct uniform
+  graticuleFontSize: number;
+  graticuleLabelMaxRadius: number;
+  graticuleLineWidth: number;
   earthOpacity: number;
   tempOpacity: number;
   rainOpacity: number;
@@ -95,9 +95,9 @@ export class GlobeRenderer {
   private paramBuffers = new Map<string, { slot0: GPUBuffer; slot1: GPUBuffer }>();
   // Current param binding config (set by recreatePipeline)
   private currentParamBindings: ParamBindingConfig[] = [];
-  // Grid animation
-  private gridLinesBuffer!: GPUBuffer;
-  private gridAnimator!: GridAnimator;
+  // Graticule animation
+  private graticuleLinesBuffer!: GPUBuffer;
+  private graticuleAnimator!: GraticuleAnimator;
   private postProcessPipeline!: GPURenderPipeline;
   private postProcessBindGroup!: GPUBindGroup;
   private postProcessBindGroupLayout!: GPUBindGroupLayout;
@@ -231,19 +231,19 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Grid lines buffer for animated LoD
-    this.gridLinesBuffer = this.device.createBuffer({
-      size: GRID_BUFFER_SIZE,
+    // Graticule lines buffer for animated LoD
+    this.graticuleLinesBuffer = this.device.createBuffer({
+      size: GRATICULE_BUFFER_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Grid animator for LoD transitions (initialize at correct LoD for globe screen size)
+    // Graticule animator for LoD transitions (initialize at correct LoD for globe screen size)
     const distance = this.camera.getState().distance;
     const fov = 2 * Math.atan(this.camera.getTanFov());
     // Use canvas height (already device pixels in worker, CSS pixels on main thread)
     const heightPx = 'clientHeight' in this.canvas ? (this.canvas.clientHeight || 800) : this.canvas.height;
     const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightPx / fov);
-    this.gridAnimator = new GridAnimator(initialGlobeRadiusPx);
+    this.graticuleAnimator = new GraticuleAnimator(initialGlobeRadiusPx);
 
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
     this.fontAtlasTexture = this.device.createTexture({
@@ -565,7 +565,7 @@ export class GlobeRenderer {
     // Built-in layer opacities (indexed array)
     view.setFloat32(getLayerOpacityOffset(LAYER_EARTH), uniforms.earthOpacity, true);
     view.setFloat32(getLayerOpacityOffset(LAYER_SUN), uniforms.sunOpacity, true);
-    view.setFloat32(getLayerOpacityOffset(LAYER_GRID), uniforms.gridOpacity, true);
+    view.setFloat32(getLayerOpacityOffset(LAYER_GRATICULE), uniforms.graticuleOpacity, true);
     view.setFloat32(getLayerOpacityOffset(LAYER_TEMP), uniforms.tempOpacity, true);
     view.setFloat32(getLayerOpacityOffset(LAYER_RAIN), uniforms.rainOpacity, true);
     view.setFloat32(getLayerOpacityOffset(LAYER_PRESSURE), uniforms.pressureOpacity, true);
@@ -580,10 +580,10 @@ export class GlobeRenderer {
     this.currentEarthOpacity = uniforms.earthOpacity;
     this.currentTempOpacity = uniforms.tempOpacity;
 
-    // Grid settings
-    view.setFloat32(O.gridFontSize, uniforms.gridFontSize, true);
-    view.setFloat32(O.gridLabelMaxRadius, uniforms.gridLabelMaxRadius, true);
-    view.setFloat32(O.gridLineWidth, uniforms.gridLineWidth, true);
+    // Graticule settings
+    view.setFloat32(O.graticuleFontSize, uniforms.graticuleFontSize, true);
+    view.setFloat32(O.graticuleLabelMaxRadius, uniforms.graticuleLabelMaxRadius, true);
+    view.setFloat32(O.graticuleLineWidth, uniforms.graticuleLineWidth, true);
 
     // vec2 tempPaletteRange (alignment handled by layout)
     view.setFloat32(O.tempPaletteRange, uniforms.tempPaletteRange[0]!, true);
@@ -594,7 +594,7 @@ export class GlobeRenderer {
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 
-    // Update grid animation based on globe screen size
+    // Update graticule animation based on globe screen size
     const cameraDistance = Math.sqrt(
       uniforms.eyePosition[0]! ** 2 +
       uniforms.eyePosition[1]! ** 2 +
@@ -605,8 +605,8 @@ export class GlobeRenderer {
     const dpr = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1;
     const heightCss = uniforms.resolution[1]! / dpr;
     const globeRadiusPx = Math.asin(1 / cameraDistance) * (heightCss / fov);
-    const gridBuffer = this.gridAnimator.packToBuffer(globeRadiusPx, this.frameDeltaMs);
-    this.device.queue.writeBuffer(this.gridLinesBuffer, 0, gridBuffer);
+    const graticuleBuffer = this.graticuleAnimator.packToBuffer(globeRadiusPx, this.frameDeltaMs);
+    this.device.queue.writeBuffer(this.graticuleLinesBuffer, 0, graticuleBuffer);
 
     // Update pressure layer based on opacity
     const pressureVisible = uniforms.pressureOpacity > 0.01;
@@ -858,7 +858,7 @@ export class GlobeRenderer {
       // Bindings 15-18 removed (legacy weather data buffers)
       { binding: 19, resource: this.logoTexture.createView() },
       { binding: 20, resource: this.logoSampler },
-      { binding: 21, resource: { buffer: this.gridLinesBuffer } },
+      { binding: 21, resource: { buffer: this.graticuleLinesBuffer } },
     ];
 
     // Add dynamic param buffer entries
@@ -924,7 +924,7 @@ export class GlobeRenderer {
       // Bindings 15-18 removed (legacy weather data buffers)
       { binding: 19, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // logo
       { binding: 20, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-      { binding: 21, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },  // grid lines
+      { binding: 21, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },  // graticule lines
     ];
 
     // Add dynamic param entries from activeParamBindings

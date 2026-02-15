@@ -1,4 +1,4 @@
-// Grid text labels - MSDF text at grid line intersections
+// Graticule text labels - MSDF text at graticule line intersections
 // Renders coordinate labels (e.g., "15N", "45W") on the globe surface
 
 // Font atlas binding
@@ -125,15 +125,15 @@ fn renderLonRow(
   return opacity;
 }
 
-// Find nearest line from gridLines uniform (uses helper functions from grid.wgsl)
+// Find nearest line from graticuleLines uniform (uses helper functions from graticule.wgsl)
 fn findNearestLon(lonDeg: f32) -> vec2<f32> {
   var nearestDeg = 0.0;
   var nearestDist = 999.0;
   var nearestOpacity = 0.0;
 
-  for (var i = 0u; i < gridLines.lonCount; i++) {
-    let lineDeg = getGridLonDeg(i);
-    let opacity = getGridLonOpacity(i);
+  for (var i = 0u; i < graticuleLines.lonCount; i++) {
+    let lineDeg = getGraticuleLonDeg(i);
+    let opacity = getGraticuleLonOpacity(i);
     if (opacity < 0.01) { continue; }
 
     var diff = abs(lonDeg - lineDeg);
@@ -153,9 +153,9 @@ fn findNearestLat(latDeg: f32) -> vec2<f32> {
   var nearestDist = 999.0;
   var nearestOpacity = 0.0;
 
-  for (var i = 0u; i < gridLines.latCount; i++) {
-    let lineDeg = getGridLatDeg(i);
-    let opacity = getGridLatOpacity(i);
+  for (var i = 0u; i < graticuleLines.latCount; i++) {
+    let lineDeg = getGraticuleLatDeg(i);
+    let opacity = getGraticuleLatOpacity(i);
     if (opacity < 0.01) { continue; }
 
     let diff = abs(latDeg - lineDeg);
@@ -168,26 +168,26 @@ fn findNearestLat(latDeg: f32) -> vec2<f32> {
   return vec2<f32>(nearestDeg, nearestOpacity);
 }
 
-// Blend grid text labels onto surface
-fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
-  let gridOpacity = getLayerOpacity(LAYER_GRID);
-  if (gridOpacity < 0.01) { return color; }
+// Blend graticule text labels onto surface
+fn blendGraticuleText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
+  let graticuleOpacity = getLayerOpacity(LAYER_GRATICULE);
+  if (graticuleOpacity < 0.01) { return color; }
 
   let latDeg = degrees(lat);
   var lonDeg = degrees(lon);
   if (lonDeg < 0.0) { lonDeg += 360.0; }
 
   // Globe-space metrics (font size fixed on globe surface)
-  let fontSizeWorld = u.gridFontSize * 0.002;  // gridFontSize in globe units
+  let fontSizeWorld = u.graticuleFontSize * 0.002;  // graticuleFontSize in globe units
   let dist = length(hitPoint - u.eyePosition);
   let worldUnitsPerPixel = (2.0 * u.tanFov * dist) / u.resolution.y;
 
   // Clamp font size when zoomed in past threshold
   let globeRadiusPx = 1.0 / worldUnitsPerPixel;  // EARTH_RADIUS = 1
-  let fontScale = min(1.0, u.gridLabelMaxRadius / globeRadiusPx);
+  let fontScale = min(1.0, u.graticuleLabelMaxRadius / globeRadiusPx);
   let screenPxRange = (fontSizeWorld * fontScale / worldUnitsPerPixel) / DISTANCE_RANGE;
 
-  // Find nearest grid intersection from animated line positions
+  // Find nearest graticule intersection from animated line positions
   let nearestLatInfo = findNearestLat(latDeg);
   let nearestLonInfo = findNearestLon(lonDeg);
   let nearestLat = nearestLatInfo.x;
@@ -249,5 +249,5 @@ fn blendGridText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4f {
     return color;
   }
 
-  return vec4f(mix(color.rgb, vec3f(1.0), opacity * TEXT_OPACITY * gridOpacity * labelOpacity), color.a);
+  return vec4f(mix(color.rgb, vec3f(1.0), opacity * TEXT_OPACITY * graticuleOpacity * labelOpacity), color.a);
 }

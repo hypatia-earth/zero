@@ -48,9 +48,9 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['layerDataReady2', 'vec4u'],    // 288: layers 8-11
   ['layerDataReady3', 'vec4u'],    // 304: layers 12-15
 
-  ['gridFontSize', 'f32'],         // 320
-  ['gridLabelMaxRadius', 'f32'],   // 340
-  ['gridLineWidth', 'f32'],        // 344
+  ['graticuleFontSize', 'f32'],         // 320
+  ['graticuleLabelMaxRadius', 'f32'],   // 340
+  ['graticuleLineWidth', 'f32'],        // 344
   ['tempPaletteRange', 'vec2f'],   // 352 (vec2f needs 8-byte align)
 
   ['logoOpacity', 'f32'],          // 360
@@ -119,9 +119,9 @@ export const U = GLOBE_UNIFORMS.offsets as {
   layerDataReady1: number;
   layerDataReady2: number;
   layerDataReady3: number;
-  gridFontSize: number;
-  gridLabelMaxRadius: number;
-  gridLineWidth: number;
+  graticuleFontSize: number;
+  graticuleLabelMaxRadius: number;
+  graticuleLineWidth: number;
   tempPaletteRange: number;
   logoOpacity: number;
   logoPad: number;

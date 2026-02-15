@@ -23,9 +23,9 @@ struct Uniforms {
   // Indices: earth=0, sun=1, grid=2, temp=3, rain=4, pressure=5, wind=6
   layerOpacity: array<vec4<f32>, 4>,     // 16 opacity values (4 vec4s)
   layerDataReady: array<vec4<u32>, 4>,   // 16 data ready flags (4 vec4s)
-  gridFontSize: f32,      // font size in screen pixels for grid labels
-  gridLabelMaxRadius: f32, // max globe radius (px) before labels shrink
-  gridLineWidth: f32,     // line width in screen pixels
+  graticuleFontSize: f32,      // font size in screen pixels for graticule labels
+  graticuleLabelMaxRadius: f32, // max globe radius (px) before labels shrink
+  graticuleLineWidth: f32,     // line width in screen pixels
   tempPaletteRange: vec2f, // min/max temperature values for palette mapping (Celsius)
   logoOpacity: f32,       // computed from all layer opacities
   logoPad: f32,           // padding for alignment

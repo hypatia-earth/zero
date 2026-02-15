@@ -15,7 +15,7 @@
 @group(0) @binding(8) var atm_scattering: texture_3d<f32>;
 @group(0) @binding(9) var atm_irradiance: texture_2d<f32>;
 @group(0) @binding(10) var atm_sampler: sampler;
-// Font atlas for grid labels (declared in grid-text.wgsl)
+// Font atlas for graticule labels (declared in text.wgsl)
 // @group(0) @binding(11) var fontAtlas: texture_2d<f32>;
 // @group(0) @binding(12) var fontSampler: sampler;
 // Temperature palette (1D texture for color mapping)
@@ -109,15 +109,15 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
       let backLat = asin(farHit.point.y);
       let backLon = atan2(farHit.point.x, farHit.point.z);
       let colorBeforeBack = color;
-      color = blendGrid(color, backLat, backLon, farHit.point);
-      color = blendGridText(color, backLat, backLon, farHit.point);
+      color = blendGraticule(color, backLat, backLon, farHit.point);
+      color = blendGraticuleText(color, backLat, backLon, farHit.point);
       color = mix(colorBeforeBack, color, backOpacity);
     }
   }
 
-  // Front grid (always on top)
-  color = blendGrid(color, lat, lon, hit.point);
-  color = blendGridText(color, lat, lon, hit.point);
+  // Front graticule (always on top)
+  color = blendGraticule(color, lat, lon, hit.point);
+  color = blendGraticuleText(color, lat, lon, hit.point);
 
   // Logo (only visible when all layers are off)
   color = blendLogo(color, fragPos.xy);

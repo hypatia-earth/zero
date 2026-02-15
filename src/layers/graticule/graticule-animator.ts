@@ -1,5 +1,5 @@
 /**
- * GridAnimator - Manages animated grid LoD transitions
+ * GraticuleAnimator - Manages animated graticule LoD transitions
  *
  * Lines are born at 0° and slide to position, reverse for death.
  * LoD level changes based on altitude with hysteresis.
@@ -23,7 +23,7 @@ interface LineState {
 // Constants
 const MAX_LINES = 80;  // max lines per axis (72 lon + margin)
 const ANIMATION_DURATION = 1000;  // ms per birth/death cycle
-export const GRID_BUFFER_SIZE = 1328;  // bytes for GPU buffer (aligned to 16)
+export const GRATICULE_BUFFER_SIZE = 1328;  // bytes for GPU buffer (aligned to 16)
 
 // LoD levels from config (includes spacing and pixel thresholds)
 const LOD_LEVELS: GridLodLevel[] = defaultConfig.grid.lodLevels;
@@ -47,7 +47,7 @@ function generateLatLines(spacing: number): number[] {
   return lines.sort((a, b) => a - b);
 }
 
-export class GridAnimator {
+export class GraticuleAnimator {
   private lodLevel = 0;
   private lonLines: LineState[] = [];
   private latLines: LineState[] = [];
@@ -98,7 +98,7 @@ export class GridAnimator {
     const targetLevel = this.getLodForGlobeRadius(globeRadiusPx);
 
     if (targetLevel !== this.lodLevel) {
-      DEBUG && console.log(`GridAnimator: LoD ${this.lodLevel} → ${targetLevel} at ${globeRadiusPx}px`);
+      DEBUG && console.log(`GraticuleAnimator: LoD ${this.lodLevel} → ${targetLevel} at ${globeRadiusPx}px`);
       this.startTransition(targetLevel);
     }
   }
@@ -370,7 +370,7 @@ export class GridAnimator {
     this.checkLodTransition(globeRadiusPx);
     if (this.animating) this.updateAnimation(dt);
 
-    const buffer = new ArrayBuffer(GRID_BUFFER_SIZE);
+    const buffer = new ArrayBuffer(GRATICULE_BUFFER_SIZE);
     const view = new DataView(buffer);
     let offset = 0;
 
