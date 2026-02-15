@@ -152,14 +152,14 @@ export class ParamSlotService {
     const [t0, t1] = this.timestepService.adjacent(time);
     const window: TTimestep[] = [t0, t1];
 
-    let pastCursor = this.timestepService.prev(t0);
-    let futureCursor = this.timestepService.next(t1);
+    let pastCursor = t0;
+    let futureCursor = t1;
 
     const numSlots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
 
     while (window.length < numSlots) {
-      const canAddFuture = futureCursor && this.isInDataWindow(futureCursor);
-      const canAddPast = pastCursor && this.isInDataWindow(pastCursor);
+      const canAddFuture = futureCursor !== this.dataWindowEnd;
+      const canAddPast = pastCursor !== this.dataWindowStart;
 
       if (!canAddFuture && !canAddPast) break;
 
@@ -167,23 +167,18 @@ export class ParamSlotService {
       const pastCount = window.filter(ts => ts < t0).length;
 
       if (futureCount <= pastCount && canAddFuture) {
-        window.push(futureCursor!);
-        futureCursor = this.timestepService.next(futureCursor!);
+        futureCursor = this.timestepService.next(futureCursor);
+        window.push(futureCursor);
       } else if (canAddPast) {
-        window.push(pastCursor!);
-        pastCursor = this.timestepService.prev(pastCursor!);
+        pastCursor = this.timestepService.prev(pastCursor);
+        window.push(pastCursor);
       } else if (canAddFuture) {
-        window.push(futureCursor!);
-        futureCursor = this.timestepService.next(futureCursor!);
+        futureCursor = this.timestepService.next(futureCursor);
+        window.push(futureCursor);
       }
     }
 
     return window;
-  }
-
-  /** Check if timestep is within data window */
-  private isInDataWindow(timestep: TTimestep): boolean {
-    return timestep >= this.dataWindowStart && timestep <= this.dataWindowEnd;
   }
 
   /**

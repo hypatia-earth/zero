@@ -216,25 +216,18 @@ export class TimestepService {
     return parseTimestep(ts);
   }
 
-  next(ts: TTimestep, model?: TModel): TTimestep | null {
-    const m = model ?? this.defaultModel;
-    const idx = this.timestepIndex[m].get(ts);
-    if (idx === undefined) return null;
-    const nextEntry = this.timestepsData[m][idx + 1];
-    return nextEntry?.timestep ?? null;
+  next(ts: TTimestep): TTimestep {
+    const idx = this.timestepIndex[this.defaultModel].get(ts)!;
+    return this.timestepsData[this.defaultModel][idx + 1]!.timestep;
   }
 
-  prev(ts: TTimestep, model?: TModel): TTimestep | null {
-    const m = model ?? this.defaultModel;
-    const idx = this.timestepIndex[m].get(ts);
-    if (idx === undefined || idx === 0) return null;
-    const prevEntry = this.timestepsData[m][idx - 1];
-    return prevEntry?.timestep ?? null;
+  prev(ts: TTimestep): TTimestep {
+    const idx = this.timestepIndex[this.defaultModel].get(ts)!;
+    return this.timestepsData[this.defaultModel][idx - 1]!.timestep;
   }
 
-  adjacent(time: Date, model?: TModel): [TTimestep, TTimestep] {
-    const m = model ?? this.defaultModel;
-    const data = this.timestepsData[m];
+  adjacent(time: Date): [TTimestep, TTimestep] {
+    const data = this.timestepsData[this.defaultModel];
     const targetMs = time.getTime();
 
     // Binary search for the right bracket
@@ -262,32 +255,28 @@ export class TimestepService {
     return [t0, t1];
   }
 
-  url(ts: TTimestep, model?: TModel): string {
-    const m = model ?? this.defaultModel;
-    const idx = this.timestepIndex[m].get(ts);
+  url(ts: TTimestep): string {
+    const idx = this.timestepIndex[this.defaultModel].get(ts);
     if (idx === undefined) throw new Error(`Unknown timestep: ${ts}`);
-    return this.timestepsData[m][idx]!.url;
+    return this.timestepsData[this.defaultModel][idx]!.url;
   }
 
-  first(model?: TModel): TTimestep {
-    const m = model ?? this.defaultModel;
-    return this.timestepsData[m][0]!.timestep;
+  first(): TTimestep {
+    return this.timestepsData[this.defaultModel][0]!.timestep;
   }
 
-  last(model?: TModel): TTimestep {
-    const m = model ?? this.defaultModel;
-    const data = this.timestepsData[m];
+  last(): TTimestep {
+    const data = this.timestepsData[this.defaultModel];
     return data[data.length - 1]!.timestep;
   }
 
-  getExactTimestep(time: Date, model?: TModel): TTimestep | null {
-    const m = model ?? this.defaultModel;
+  getExactTimestep(time: Date): TTimestep | null {
     const ts = formatTimestep(time);
-    return this.timestepIndex[m].has(ts) ? ts : null;
+    return this.timestepIndex[this.defaultModel].has(ts) ? ts : null;
   }
 
-  getClosestTimestep(time: Date, model?: TModel): Date {
-    const [t0, t1] = this.adjacent(time, model);
+  getClosestTimestep(time: Date): Date {
+    const [t0, t1] = this.adjacent(time);
     const t0Date = parseTimestep(t0);
     const t1Date = parseTimestep(t1);
     const d0 = Math.abs(time.getTime() - t0Date.getTime());
@@ -302,13 +291,15 @@ export class TimestepService {
   getWindow(time: Date, numSlots: number): TTimestep[] {
     const [t0, t1] = this.adjacent(time);
     const window: TTimestep[] = [t0, t1];
+    const first = this.first();
+    const last = this.last();
 
-    let pastCursor = this.prev(t0);
-    let futureCursor = this.next(t1);
+    let pastCursor = t0;
+    let futureCursor = t1;
 
     while (window.length < numSlots) {
-      const canAddFuture = futureCursor !== null;
-      const canAddPast = pastCursor !== null;
+      const canAddFuture = futureCursor !== last;
+      const canAddPast = pastCursor !== first;
 
       if (!canAddFuture && !canAddPast) break;
 
@@ -316,14 +307,14 @@ export class TimestepService {
       const pastCount = window.filter(ts => ts < t0).length;
 
       if (futureCount <= pastCount && canAddFuture) {
-        window.push(futureCursor!);
-        futureCursor = this.next(futureCursor!);
+        futureCursor = this.next(futureCursor);
+        window.push(futureCursor);
       } else if (canAddPast) {
-        window.push(pastCursor!);
-        pastCursor = this.prev(pastCursor!);
+        pastCursor = this.prev(pastCursor);
+        window.push(pastCursor);
       } else if (canAddFuture) {
-        window.push(futureCursor!);
-        futureCursor = this.next(futureCursor!);
+        futureCursor = this.next(futureCursor);
+        window.push(futureCursor);
       }
     }
 
@@ -338,19 +329,18 @@ export class TimestepService {
     const tasks: QueueTask[] = [];
 
     for (const layer of activeLayers) {
-      const layerDecl = this.layerService.get(layer);
-      const omParams = layerDecl?.params ?? [layer];
+      const layerDecl = this.layerService.get(layer)!;
+      const omParams = layerDecl.params!;
 
       for (const timestep of window) {
         for (let slabIndex = 0; slabIndex < omParams.length; slabIndex++) {
           const omParam = omParams[slabIndex]!;
 
-          const paramState = this.state.value.params.get(omParam);
-          if (paramState?.gpu.has(timestep)) continue;
+          const paramState = this.state.value.params.get(omParam)!;
+          if (paramState.gpu.has(timestep)) continue;
 
-          const isFast = paramState?.cache.has(timestep) ?? false;
-          const defaultSize = PARAM_METADATA[omParam]?.sizeEstimate ?? 0;
-          const sizeEstimate = paramState?.sizes.get(timestep) ?? defaultSize;
+          const isFast = paramState.cache.has(timestep);
+          const sizeEstimate = paramState.sizes.get(timestep) ?? PARAM_METADATA[omParam]!.sizeEstimate;
           const url = this.url(timestep);
 
           tasks.push({
