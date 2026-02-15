@@ -110,8 +110,9 @@ export class ShaderComposer {
     // 3. Layer blend functions (sorted by render order)
     const sortedLayers = [...surfaceLayers].sort((a, b) => (a.order) - (b.order));
     for (const layer of sortedLayers) {
-      // Prefer inline shader from declaration, fall back to shader-loader
-      const shaderCode = layer.shaders?.main ?? this.mainShaders.get(layer.id);
+      const shaderCode = layer.isBuiltIn
+        ? this.mainShaders.get(layer.id)!
+        : layer.shaders!.main;
       if (shaderCode) {
         parts.push(`// --- Layer: ${layer.id} ---`);
         parts.push(shaderCode);
@@ -119,8 +120,7 @@ export class ShaderComposer {
     }
 
     // 4. Graticule shader (special - always included for back-side graticule logic)
-    const graticuleLayer = allLayers.find(l => l.id === 'graticule');
-    const graticuleShader = graticuleLayer?.shaders?.main ?? this.mainShaders.get('graticule');
+    const graticuleShader = this.mainShaders.get('graticule');
     if (graticuleShader) {
       parts.push('// --- Layer: graticule ---');
       parts.push(graticuleShader);
@@ -247,8 +247,10 @@ fn sampleParam_${safeName}(cell: u32) -> f32 {
     const calls: string[] = [];
 
     for (const layer of layers) {
-      const blendFn = layer.blendFn ?? `blend${this.capitalize(layer.id)}`;
-      const signature = BLEND_SIGNATURES[blendFn] ?? '(color, lat, lon)';
+      const blendFn = layer.blendFn!;
+      const signature = layer.isBuiltIn
+        ? BLEND_SIGNATURES[blendFn]!
+        : '(color, lat, lon)';
       calls.push(`  color = ${blendFn}${signature};`);
     }
 
@@ -267,14 +269,6 @@ fn sampleParam_${safeName}(cell: u32) -> f32 {
   /** Check if layer has post shader code available */
   hasPostShader(layerId: string): boolean {
     return this.postShaders.has(layerId);
-  }
-
-  /** Get blend order for fs_main composition */
-  getBlendOrder(layers: LayerDeclaration[]): string[] {
-    return layers
-      .filter(l => l.blendFn && l.pass !== 'geometry')
-      .sort((a, b) => (a.order) - (b.order))
-      .map(l => l.blendFn ?? l.id);
   }
 
   private capitalize(s: string): string {

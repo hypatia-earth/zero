@@ -177,7 +177,7 @@ function drawPalette(
 
   const labelHeight = height / 2;
 
-  // Get value range for position mapping
+  // Get value range for position mapping (QC-OK: palette format allows nulls)
   const values = stops.map(s => s.value).filter((v): v is number => v !== null);
   const minVal = values[0] ?? 0;
   const maxVal = values[values.length - 1] ?? 1;
@@ -201,8 +201,8 @@ function drawPalette(
     let color: [number, number, number];
     const stop1 = stops[idx]!;
     const stop2 = stops[idx + 1]!;
-    const v1 = stop1.value ?? minVal;
-    const v2 = stop2.value ?? maxVal;
+    const v1 = stop1.value ?? minVal; // QC-OK: palette format
+    const v2 = stop2.value ?? maxVal; // QC-OK: palette format
     const t = v2 !== v1 ? (value - v1) / (v2 - v1) : 0;
 
     if (interpolate) {
@@ -215,7 +215,7 @@ function drawPalette(
       color = t < 0.5 ? stop1.color : stop2.color;
     }
 
-    const alpha = (t < 0.5 ? stop1.alpha : stop2.alpha) ?? 1;
+    const alpha = (t < 0.5 ? stop1.alpha : stop2.alpha) ?? 1; // QC-OK: alpha optional
     ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
     ctx.fillRect(x, labelHeight, 1, height - labelHeight);
   }
