@@ -150,7 +150,7 @@ export class StateService {
 
     // Sanitize layers: validate and apply from URL
     const layersStr = params.get('layers');
-    const customIds = this.layerService?.getAll().filter(l => !l.isBuiltIn).map(l => l.id) ?? [];
+    const customIds = this.layerService!.getAll().filter(l => !l.isBuiltIn).map(l => l.id);
     const validIds = new Set<string>([...layerIds, ...customIds]);
 
     let enabledLayers: string[];
@@ -192,12 +192,14 @@ export class StateService {
     // Parse ll (lat,lon)
     const ll = params.get('ll');
     if (ll) {
-      const [latStr, lonStr] = ll.split(',');
-      const lat = parseFloat(latStr ?? '');
-      const lon = parseFloat(lonStr ?? '');
-      if (!isNaN(lat) && !isNaN(lon)) {
-        vs.lat = Math.max(-90, Math.min(90, lat));
-        vs.lon = ((lon + 180) % 360) - 180;
+      const parts = ll.split(',');
+      if (parts.length >= 2) {
+        const lat = parseFloat(parts[0]!);
+        const lon = parseFloat(parts[1]!);
+        if (!isNaN(lat) && !isNaN(lon)) {
+          vs.lat = Math.max(-90, Math.min(90, lat));
+          vs.lon = ((lon + 180) % 360) - 180;
+        }
       }
     }
 
