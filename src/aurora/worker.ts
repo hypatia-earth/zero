@@ -324,6 +324,10 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
 // ============================================================
 
 async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promise<void> {
+  if (!data.canvas) {
+    console.warn('[Aurora] init called with null canvas, ignoring');
+    return;
+  }
   const { config, assets } = data;
   canvas = data.canvas;
   canvas.width = data.width;
@@ -420,6 +424,7 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
 }
 
 function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): void {
+  if (!canvas || !renderer) return;
   const t0 = performance.now();
   const { camera, time } = data;
   const opts = currentOptions!;
@@ -509,9 +514,10 @@ function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): void {
 }
 
 function handleResize(data: Extract<AuroraRequest, { type: 'resize' }>): void {
-  canvas!.width = data.width;
-  canvas!.height = data.height;
-  renderer!.resize(data.width, data.height);
+  if (!canvas || !renderer) return;
+  canvas.width = data.width;
+  canvas.height = data.height;
+  renderer.resize(data.width, data.height);
 }
 
 function handleUploadData(data: Extract<AuroraRequest, { type: 'uploadData' }>): void {
