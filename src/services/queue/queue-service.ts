@@ -6,12 +6,12 @@
  * Single source of truth for all pending downloads.
  */
 
-import { signal, computed, effect } from '@preact/signals-core';
-import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, QueueTask } from '../../config/types';
+import { computed, effect } from '@preact/signals-core';
+import type { FileOrder, IQueueService, TimestepOrder, OmSlice, QueueTask } from '../../config/types';
 import { isWeatherLayer } from '../../config/types';
 import { fetchStreaming } from '../../utils/fetch';
-import { calcBandwidth, calcEta, pruneSamples, type Sample } from '../../utils/bandwidth';
 import { sortByTimestep } from './sorter';
+import { QueueStatsTracker } from './stats';
 import type { OmService } from './om-service';
 import type { OptionsService } from '../options-service';
 import type { ConfigService } from '../config-service';
@@ -43,30 +43,9 @@ interface InFlightTask {
 }
 
 export class QueueService implements IQueueService {
-  readonly queueStats = signal<QueueStats>({
-    bytesQueued: 0,
-    bytesCompleted: 0,
-    bytesPerSec: undefined,
-    etaSeconds: undefined,
-    status: 'idle',
-  });
-
-  // Bandwidth measurement
-  private samples: Sample[] = [];
-
-  // Compression ratio learning (rolling average)
-  private compressionRatio = 1.0;
-  private compressionSamples = 0;
-
-  // Active download tracking
-  private pendingExpectedBytes = 0;
-  private activeExpectedBytes = 0;
-  private activeActualBytes = 0;
-  private totalBytesCompleted = 0;
-
-  // Batch stats (reset when new orders arrive after idle)
-  private batchStartTime = 0;
-  private batchBytesCompleted = 0;
+  // Stats tracking (bandwidth, ETA, compression learning)
+  private readonly statsTracker = new QueueStatsTracker();
+  readonly queueStats = this.statsTracker.stats;
 
   // Timestep queue (replaceable)
   private timestepQueue: QueuedTimestepOrder[] = [];
@@ -160,7 +139,7 @@ export class QueueService implements IQueueService {
 
     // Sum expected bytes for all orders
     for (const order of orders) {
-      this.pendingExpectedBytes += order.size;
+      this.statsTracker.pendingExpectedBytes += order.size;
     }
     this.updateStats();
 
@@ -213,9 +192,9 @@ export class QueueService implements IQueueService {
         onSlice,
         onPreflight: (actualBytes: number) => {
           // Transfer from pending to active tracking
-          this.pendingExpectedBytes -= estimatedBytes;
-          this.activeExpectedBytes = actualBytes;
-          this.activeActualBytes = 0;
+          this.statsTracker.pendingExpectedBytes -= estimatedBytes;
+          this.statsTracker.activeExpectedBytes = actualBytes;
+          this.statsTracker.activeActualBytes = 0;
           this.updateStats();
           onPreflight?.(order, actualBytes);
         },
@@ -227,7 +206,7 @@ export class QueueService implements IQueueService {
     this.sortQueueByStrategy();
 
     // Calculate pending bytes from estimates (instant)
-    this.pendingExpectedBytes = this.timestepQueue.reduce((sum, q) => sum + q.estimatedBytes, 0);
+    this.statsTracker.pendingExpectedBytes = this.timestepQueue.reduce((sum, q) => sum + q.estimatedBytes, 0);
     this.updateStats();
 
     // Log one line per param (grouped, in order of first appearance)
@@ -286,8 +265,8 @@ export class QueueService implements IQueueService {
       }
 
       // Reset active tracking
-      this.activeExpectedBytes = 0;
-      this.activeActualBytes = 0;
+      this.statsTracker.activeExpectedBytes = 0;
+      this.statsTracker.activeActualBytes = 0;
       this.currentlyFetching = null;
       this.currentAbortController = null;
     }
@@ -298,9 +277,9 @@ export class QueueService implements IQueueService {
 
   private async fetchWithProgress(order: FileOrder): Promise<ArrayBuffer> {
     // Start tracking this file
-    this.pendingExpectedBytes -= order.size;
-    this.activeExpectedBytes = order.size;
-    this.activeActualBytes = 0;
+    this.statsTracker.pendingExpectedBytes -= order.size;
+    this.statsTracker.activeExpectedBytes = order.size;
+    this.statsTracker.activeActualBytes = 0;
 
     const buffer = await fetchStreaming(
       order.url,
@@ -309,80 +288,27 @@ export class QueueService implements IQueueService {
     );
 
     // File complete - learn compression ratio
-    this.learnCompressionRatio(this.activeExpectedBytes, this.activeActualBytes);
-    this.activeExpectedBytes = 0;
-    this.activeActualBytes = 0;
+    this.statsTracker.learnCompressionRatio(this.statsTracker.activeExpectedBytes, this.statsTracker.activeActualBytes);
+    this.statsTracker.activeExpectedBytes = 0;
+    this.statsTracker.activeActualBytes = 0;
 
     return buffer;
   }
 
   private onChunk(bytes: number): void {
-    this.activeActualBytes += bytes;
-    this.totalBytesCompleted += bytes;
-    this.batchBytesCompleted += bytes;
-    if (this.batchStartTime === 0) {
-      this.batchStartTime = performance.now();
-    }
-    this.samples.push({ timestamp: performance.now(), bytes });
-    this.samples = pruneSamples(this.samples);
+    this.statsTracker.onChunk(bytes);
     this.updateStats();
   }
 
-  private learnCompressionRatio(expectedBytes: number, actualBytes: number): void {
-    if (expectedBytes === 0) return;
-    const ratio = actualBytes / expectedBytes;
-    // Rolling average
-    this.compressionSamples++;
-    this.compressionRatio += (ratio - this.compressionRatio) / this.compressionSamples;
-  }
-
   private updateStats(): void {
-    const bytesPerSec = calcBandwidth(this.samples);
-
-    // Estimate remaining bytes from old path (submitTimestepOrders)
-    const oldPathPending = this.pendingExpectedBytes * this.compressionRatio;
-    const oldPathActive = (this.activeExpectedBytes * this.compressionRatio) - this.activeActualBytes;
-
-    // Estimate remaining bytes from new reactive path (taskQueue + inFlight)
-    const queuedBytes = this.taskQueue.reduce((sum, t) => sum + (t.sizeEstimate || 0), 0);
     const inFlightBytes = Array.from(this.inFlight.values())
       .reduce((sum, { task }) => sum + (task.sizeEstimate || 0), 0);
-    // Don't subtract activeActualBytes - it accumulates across batches and causes undercount
-    // Just use the estimated pending bytes directly
-    const reactivePathPending = (queuedBytes + inFlightBytes) * this.compressionRatio;
-
-    // Use reactive path if any reactive work pending (queue or inFlight)
-    const useReactivePath = this.inFlight.size > 0 || this.taskQueue.length > 0;
-    const bytesQueued = useReactivePath
-      ? Math.max(0, oldPathPending + reactivePathPending)  // reactive path
-      : Math.max(0, oldPathPending + oldPathActive);        // old path only
-
-    // Update stats signal (no cycle risk: SlotService uses queueMicrotask for fetching)
-    const wasDownloading = this.queueStats.value.status === 'downloading';
-    const newStatus = bytesQueued > 0 ? 'downloading' : 'idle';
-    this.queueStats.value = {
-      bytesQueued,
-      bytesCompleted: this.totalBytesCompleted,
-      bytesPerSec,
-      etaSeconds: calcEta(bytesQueued, bytesPerSec),
-      status: newStatus,
-    };
-
-    // Batch complete - log summary and reset (skip small batches < 100KB)
-    if (wasDownloading && newStatus === 'idle') {
-      if (this.batchBytesCompleted > 100 * 1024) {
-        const elapsed = (performance.now() - this.batchStartTime) / 1000;
-        const mb = this.batchBytesCompleted / (1024 * 1024);
-        const speed = elapsed > 0 ? mb / elapsed : 0;
-        console.log(`[Queue] Done: ${mb.toFixed(1)} MB in ${elapsed.toFixed(1)}s (${speed.toFixed(1)} MB/s)`);
-      }
-      this.batchStartTime = 0;
-      this.batchBytesCompleted = 0;
-
-      // Refresh cache state from SW (with longer timeout since queue is idle)
-      this.refreshAllCacheStates();
-    }
-    DEBUG && console.log('[Queue]', formatStats(this.queueStats.value));
+    this.statsTracker.update(
+      this.taskQueue,
+      this.inFlight.size,
+      inFlightBytes,
+      () => this.refreshAllCacheStates()
+    );
   }
 
   /** Sort queue by loading strategy */
@@ -590,19 +516,6 @@ export class QueueService implements IQueueService {
     this.inFlight.clear();
     this.taskQueue = [];
 
-    this.samples = [];
-    this.compressionRatio = 1.0;
-    this.compressionSamples = 0;
-    this.pendingExpectedBytes = 0;
-    this.activeExpectedBytes = 0;
-    this.activeActualBytes = 0;
-    this.totalBytesCompleted = 0;
+    this.statsTracker.reset();
   }
-}
-
-function formatStats(s: QueueStats): string {
-  const kb = (b: number) => (b / 1024).toFixed(0);
-  const bps = s.bytesPerSec ? `${kb(s.bytesPerSec)}KB/s` : '?';
-  const eta = s.etaSeconds !== undefined ? `${s.etaSeconds.toFixed(1)}s` : '?';
-  return `Q:${kb(s.bytesQueued)}KB D:${kb(s.bytesCompleted)}KB ${bps} ${eta}`;
 }
