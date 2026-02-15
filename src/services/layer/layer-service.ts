@@ -28,9 +28,9 @@ export interface LayerDeclaration {
   id: string;
   type: LayerType;
   // UI metadata
-  label?: string;              // Full name (e.g., "Temperature")
-  buttonLabel?: string;        // Short name for UI buttons (e.g., "Temp")
-  category?: TLayerCategory;   // celestial, weather, reference, custom
+  label: string;               // Full name (e.g., "Temperature")
+  buttonLabel: string;         // Short name for UI buttons (e.g., "Temp")
+  category: TLayerCategory;    // celestial, weather, reference, custom
   // Runtime config
   params?: string[];           // Data params to fetch (e.g., ['temperature_2m'])
   slabs?: SlabConfig[];        // GPU buffer slabs (e.g., [{ name: 'data', sizeMB: 26 }])
@@ -40,11 +40,12 @@ export interface LayerDeclaration {
   shaders?: LayerShaders;      // Inline shader code
   triggers?: Record<string, ComputeTrigger>;  // Compute stage triggers
   topology?: 'triangle-list' | 'line-list';
-  pass?: RenderPass;
-  order?: number;              // Render order within pass
-  index?: number;              // Uniform array index (0-15 for built-in, assigned at registration)
+  pass: RenderPass;            // Which render pass (surface, geometry, post)
+  order: number;               // Render order within pass
+  // Runtime fields (assigned at registration)
+  index?: number;              // Uniform array index (0-15 for built-in)
   isBuiltIn?: boolean;         // true for core layers, false for user layers
-  userLayerIndex?: number;     // 0-31 for user layers (uniform slot index)
+  userLayerIndex?: number;     // 0-31 for user layers
 }
 
 /** Stored format for user layers in IDB */

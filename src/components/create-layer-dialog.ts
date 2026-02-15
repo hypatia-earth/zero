@@ -13,7 +13,7 @@ import { effect } from '@preact/signals-core';
 import type { LayerService, LayerDeclaration } from '../services/layer/layer-service';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
-import { defineLayer, withType, withParams, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
+import { defineLayer, withType, withUI, withParams, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
 import { DialogHeader } from './dialog-header';
 import { PARAM_METADATA, getParamMeta, getCustomLayerParams, type ParamMeta } from '../config/param-metadata';
 
@@ -174,6 +174,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     // Create and register permanent layer
     const declaration = defineLayer(state.id,
       withType('texture'),
+      withUI(state.id, state.id, 'custom'),
       withParams([state.param]),
       withOptions([`${state.id}.enabled`, `${state.id}.opacity`]),
       withBlend(blendFn),
@@ -230,6 +231,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     // Create preview layer declaration
     const declaration = defineLayer('_preview',
       withType('texture'),
+      withUI('_preview', '_preview', 'custom'),
       withParams([state.param]),
       withOptions([]),  // Preview has no options
       withBlend(blendFn),

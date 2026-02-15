@@ -24,54 +24,50 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
     view({ attrs }) {
       const { configService, optionsService, layerRegistry, auroraService, dialogService } = attrs;
       const readyLayerIds = new Set<string>(configService.getReadyLayers());
-      const layers = layerRegistry.getAll().filter(l => l.isBuiltIn && readyLayerIds.has(l.id));
-      const opts = optionsService.options.value;
 
-      // Get user layers from registry (exclude preview)
-      const userLayers = layerRegistry.getAll().filter(l => !l.isBuiltIn && l.id !== '_preview');
+      // All displayable layers: built-in (if ready) + custom (exclude preview)
+      const allLayers = layerRegistry.getAll().filter(l =>
+        l.isBuiltIn ? readyLayerIds.has(l.id) : l.id !== '_preview'
+      );
 
-      // Build groups array without holes
+      // Toggle handler for any layer
+      const toggleLayer = (layer: typeof allLayers[0]) => {
+        if (layer.isBuiltIn) {
+          const id = layer.id as TLayer;
+          optionsService.update(draft => { draft[id].enabled = !draft[id].enabled; });
+        } else {
+          const enabled = layerRegistry.toggleUserLayer(layer.id);
+          if (layer.userLayerIndex !== undefined) {
+            auroraService.send({ type: 'setUserLayerEnabled', layerIndex: layer.userLayerIndex, enabled });
+          }
+          m.redraw();
+        }
+      };
+
+      // Options handler for any layer
+      const openOptions = (layer: typeof allLayers[0]) => {
+        if (layer.isBuiltIn) {
+          dialogService.open('options', { filter: layer.id as TLayer });
+        } else {
+          dialogService.open('create-layer', { editLayerId: layer.id });
+        }
+      };
+
+      // Build groups by category
       const groups: m.Vnode[] = [];
-
-      // Built-in categories (celestial, weather, reference)
       for (const category of LAYER_CATEGORIES) {
-        if (category === 'custom') continue;
-        const categoryLayers = layers.filter(l => l.category === category);
+        const categoryLayers = allLayers.filter(l => l.category === category);
         if (categoryLayers.length === 0) continue;
 
         groups.push(m('.group', { key: category }, [
           m('h4', LAYER_CATEGORY_LABELS[category]),
-          categoryLayers.map(layer => {
-            const id = layer.id as TLayer;
-            return m(LayerWidget, {
-              key: id,
-              layer,
-              active: opts[id].enabled,
-              onToggle: () => optionsService.update(draft => { draft[id].enabled = !draft[id].enabled; }),
-              onOptions: () => dialogService.open('options', { filter: id }),
-            });
-          }
-          ),
-        ]));
-      }
-
-      // Custom category: user layers from registry
-      if (userLayers.length > 0) {
-        groups.push(m('.group', { key: 'custom' }, [
-          m('h4', LAYER_CATEGORY_LABELS.custom),
-          userLayers.map(layer =>
+          categoryLayers.map(layer =>
             m(LayerWidget, {
               key: layer.id,
-              layer: { id: layer.id as TLayer, label: layer.id, buttonLabel: layer.id },
+              layer,
               active: layerRegistry.isLayerEnabled(layer.id),
-              onToggle: () => {
-                const enabled = layerRegistry.toggleUserLayer(layer.id);
-                if (layer.userLayerIndex !== undefined) {
-                  auroraService.send({ type: 'setUserLayerEnabled', layerIndex: layer.userLayerIndex, enabled });
-                }
-                m.redraw();
-              },
-              onOptions: () => dialogService.open('create-layer', { editLayerId: layer.id }),
+              onToggle: () => toggleLayer(layer),
+              onOptions: () => openOptions(layer),
             })
           ),
         ]));
