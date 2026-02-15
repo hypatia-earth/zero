@@ -358,10 +358,10 @@ export class OptionsService {
 
     // Custom layers: update LayerService
     if (this.layerService) {
-      for (const userLayer of this.layerService.getUserLayers()) {
-        const shouldEnable = enabledSet.has(userLayer.id);
-        if (this.layerService.isUserLayerEnabled(userLayer.id) !== shouldEnable) {
-          this.layerService.setUserLayerEnabled(userLayer.id, shouldEnable);
+      for (const layer of this.layerService.getAll().filter(l => !l.isBuiltIn)) {
+        const shouldEnable = enabledSet.has(layer.id);
+        if (this.layerService.isLayerEnabled(layer.id) !== shouldEnable) {
+          this.layerService.setUserLayerEnabled(layer.id, shouldEnable);
         }
       }
     }
@@ -379,9 +379,9 @@ export class OptionsService {
 
     // Custom layers from LayerService
     if (this.layerService) {
-      for (const userLayer of this.layerService.getUserLayers()) {
-        if (this.layerService.isUserLayerEnabled(userLayer.id)) {
-          enabled.push(userLayer.id);
+      for (const layer of this.layerService.getAll().filter(l => !l.isBuiltIn)) {
+        if (this.layerService.isLayerEnabled(layer.id)) {
+          enabled.push(layer.id);
         }
       }
     }

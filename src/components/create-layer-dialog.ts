@@ -326,7 +326,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
         // Generate unique ID for new layers
         if (!editLayerId) {
-          const existing = new Set(layerRegistry.getUserLayers().map(l => l.id));
+          const existing = new Set(layerRegistry.getAll().filter(l => !l.isBuiltIn).map(l => l.id));
           let n = 1;
           while (existing.has(`layer${n}`)) n++;
           state.id = `layer${n}`;

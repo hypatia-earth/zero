@@ -99,18 +99,12 @@ export class QueueService implements IQueueService {
     // Trigger recompute when layer registry changes
     this.layerService.changed.value;
 
-    // Get built-in weather layers that are enabled
-    const builtInLayers = this.layerService.getBuiltIn()
-      .filter(l => l.params && l.params.length > 0)
-      .map(l => l.id as TWeatherLayer);
-    const activeLayers = new Set<string>(builtInLayers.filter(p => opts[p]?.enabled));
-
-    // Add enabled user layers directly (they fetch their own params)
-    for (const userLayer of this.layerService.getUserLayers()) {
-      if (this.layerService.isUserLayerEnabled(userLayer.id) && userLayer.params?.length) {
-        activeLayers.add(userLayer.id);
-      }
-    }
+    // Get all enabled layers with params
+    const activeLayers = new Set<string>(
+      this.layerService.getAll()
+        .filter(l => l.params?.length && this.layerService.isLayerEnabled(l.id))
+        .map(l => l.id)
+    );
 
     return {
       time: this.stateService.viewState.value.time,

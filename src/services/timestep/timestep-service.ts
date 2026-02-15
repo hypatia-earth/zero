@@ -104,7 +104,7 @@ export class TimestepService {
     // Query SW cache per param
     const params = new Map<string, ParamState>();
 
-    for (const param of this.layerService.getActiveParams()) {
+    for (const param of this.layerService.getAllParams()) {
       await onProgress?.('cache', param);
       const { cache, sizes } = await querySWCache(param, this.timestepsData[this.defaultModel]);
       params.set(param, { cache, gpu: new Set(), sizes });

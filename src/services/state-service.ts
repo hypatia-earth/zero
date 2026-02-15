@@ -90,12 +90,19 @@ export class StateService {
 
   /**
    * Set position (lat, lon, altitude)
+   * Rounds to URL precision (1 decimal for lat/lon, integer for altitude) to prevent
+   * continuous micro-changes from physics decay constantly resetting the debounce.
    */
   setPosition(lat: number, lon: number, altitude: number): void {
-    const vs = this.viewState.value;
-    if (vs.lat === lat && vs.lon === lon && vs.altitude === altitude) return;
+    // Round to URL precision
+    const roundedLat = Math.round(lat * 10) / 10;
+    const roundedLon = Math.round(lon * 10) / 10;
+    const roundedAlt = Math.round(altitude);
 
-    this.viewState.value = { ...this.viewState.value, lat, lon, altitude };
+    const vs = this.viewState.value;
+    if (vs.lat === roundedLat && vs.lon === roundedLon && vs.altitude === roundedAlt) return;
+
+    this.viewState.value = { ...this.viewState.value, lat: roundedLat, lon: roundedLon, altitude: roundedAlt };
     this.scheduleUrlSync();
   }
 
@@ -143,7 +150,7 @@ export class StateService {
 
     // Sanitize layers: validate and apply from URL
     const layersStr = params.get('layers');
-    const customIds = this.layerService?.getUserLayers().map(l => l.id) ?? [];
+    const customIds = this.layerService?.getAll().filter(l => !l.isBuiltIn).map(l => l.id) ?? [];
     const validIds = new Set<string>([...layerIds, ...customIds]);
 
     let enabledLayers: string[];

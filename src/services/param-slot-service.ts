@@ -104,25 +104,13 @@ export class ParamSlotService {
   }
 
   /**
-   * Collect all unique params from enabled layers (built-in + user)
+   * Collect all unique params from enabled layers (built-in + custom)
    */
   private collectActiveParams(): Set<string> {
     const params = new Set<string>();
-    const opts = this.optionsService.options.value;
 
-    // Built-in layers
-    for (const layer of this.layerService.getBuiltIn()) {
-      const layerOpts = opts[layer.id as keyof typeof opts] as { enabled?: boolean } | undefined;
-      if (layerOpts?.enabled && layer.params) {
-        for (const param of layer.params) {
-          params.add(param);
-        }
-      }
-    }
-
-    // User layers
-    for (const layer of this.layerService.getUserLayers()) {
-      if (this.layerService.isUserLayerEnabled(layer.id) && layer.params) {
+    for (const layer of this.layerService.getAll()) {
+      if (this.layerService.isLayerEnabled(layer.id) && layer.params) {
         for (const param of layer.params) {
           params.add(param);
         }
@@ -256,7 +244,7 @@ export class ParamSlotService {
 
   /** Get params for a layer (for legacy layer→param conversion) */
   private layerToParams(layer: string): string[] {
-    const decl = this.layerService.getBuiltIn().find(l => l.id === layer);
+    const decl = this.layerService.get(layer);
     return decl?.params ?? [];
   }
 

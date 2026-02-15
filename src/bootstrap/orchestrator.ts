@@ -126,11 +126,11 @@ async function runBootstrapInner(
     progress
   );
 
-  // Send user layers to worker (loaded from IDB in config phase, enabled state set by sanitize)
-  for (const layer of services.layerService!.getUserLayers()) {
+  // Send custom layers to worker (loaded from IDB in config phase, enabled state set by sanitize)
+  for (const layer of services.layerService!.getAll().filter(l => !l.isBuiltIn)) {
     services.auroraService.send({ type: 'registerUserLayer', layer });
     if (layer.userLayerIndex !== undefined) {
-      const enabled = services.layerService!.isUserLayerEnabled(layer.id);
+      const enabled = services.layerService!.isLayerEnabled(layer.id);
       services.auroraService.send({ type: 'setUserLayerEnabled', layerIndex: layer.userLayerIndex, enabled });
     }
   }

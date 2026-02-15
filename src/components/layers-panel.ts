@@ -24,11 +24,11 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
     view({ attrs }) {
       const { configService, optionsService, layerRegistry, auroraService, dialogService } = attrs;
       const readyLayerIds = new Set<string>(configService.getReadyLayers());
-      const layers = layerRegistry.getBuiltIn().filter(l => readyLayerIds.has(l.id));
+      const layers = layerRegistry.getAll().filter(l => l.isBuiltIn && readyLayerIds.has(l.id));
       const opts = optionsService.options.value;
 
       // Get user layers from registry (exclude preview)
-      const userLayers = layerRegistry.getUserLayers().filter(l => l.id !== '_preview');
+      const userLayers = layerRegistry.getAll().filter(l => !l.isBuiltIn && l.id !== '_preview');
 
       // Build groups array without holes
       const groups: m.Vnode[] = [];
@@ -63,7 +63,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
             m(LayerWidget, {
               key: layer.id,
               layer: { id: layer.id as TLayer, label: layer.id, buttonLabel: layer.id },
-              active: layerRegistry.isUserLayerEnabled(layer.id),
+              active: layerRegistry.isLayerEnabled(layer.id),
               onToggle: () => {
                 const enabled = layerRegistry.toggleUserLayer(layer.id);
                 if (layer.userLayerIndex !== undefined) {

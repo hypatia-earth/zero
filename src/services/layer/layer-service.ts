@@ -242,34 +242,18 @@ export class LayerService {
     }
   }
 
+  /** Get a layer by ID */
   get(id: string): LayerDeclaration | undefined {
     return this.layers.get(id);
   }
 
-  /** Get layer index for uniform array access (-1 if not found) */
+  /** Get layer index for uniform array access (NaN if not found) */
   getLayerIndex(id: string): number {
-    return this.layers.get(id)?.index ?? -1;
+    return this.layers.get(id)?.index ?? NaN;
   }
 
   getAll(): LayerDeclaration[] {
     return Array.from(this.layers.values());
-  }
-
-  /** Get all params used by registered layers */
-  getActiveParams(): string[] {
-    const params = new Set<string>();
-    for (const layer of this.layers.values()) {
-      layer.params?.forEach(p => params.add(p));
-    }
-    return [...params];
-  }
-
-  getBuiltIn(): LayerDeclaration[] {
-    return this.getAll().filter(l => l.isBuiltIn);
-  }
-
-  getUserLayers(): LayerDeclaration[] {
-    return this.getAll().filter(l => !l.isBuiltIn);
   }
 
   /** Get layers that use a specific data param */
@@ -416,11 +400,6 @@ export class LayerService {
     return permanent;
   }
 
-  /** Check if user layer is enabled (defaults to true) */
-  isUserLayerEnabled(id: string): boolean {
-    return this.userLayerEnabled.get(id) ?? true;
-  }
-
   /** Set user layer enabled state */
   setUserLayerEnabled(id: string, enabled: boolean): void {
     this.userLayerEnabled.set(id, enabled);
@@ -429,7 +408,7 @@ export class LayerService {
 
   /** Toggle user layer enabled state */
   toggleUserLayer(id: string): boolean {
-    const current = this.isUserLayerEnabled(id);
+    const current = this.isLayerEnabled(id);
     this.setUserLayerEnabled(id, !current);
     return !current;
   }
