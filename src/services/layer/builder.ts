@@ -13,6 +13,7 @@
 
 import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders } from './layer-service';
 import type { TLayerCategory, SlabConfig } from '../../config/types';
+import { PALETTES } from '../../config/palettes';
 
 export interface LayerFeature {
   apply(declaration: Partial<LayerDeclaration>): Partial<LayerDeclaration>;
@@ -37,6 +38,16 @@ export function withType(type: LayerType): LayerFeature {
 export function withParams(params: string[]): LayerFeature {
   return {
     apply: (d) => ({ ...d, params }),
+  };
+}
+
+export function withPalettes(...paletteIds: string[]): LayerFeature {
+  // Validate all palette IDs exist
+  for (const id of paletteIds) {
+    if (!PALETTES[id]) throw new Error(`Unknown palette: ${id}`);
+  }
+  return {
+    apply: (d) => ({ ...d, palettes: paletteIds }),
   };
 }
 

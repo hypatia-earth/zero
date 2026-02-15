@@ -100,8 +100,7 @@ async function runBootstrapInner(
     services.stateService!,
     services.configService!,
     services.optionsService!,
-    services.perfService!,
-    services.paletteService
+    services.perfService!
   );
   services.slotService = createSlotService(
     services.timestepService,

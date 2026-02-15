@@ -10,6 +10,7 @@ import { WindLayer } from '../layers/wind';
 import { GraticuleAnimator, GRATICULE_BUFFER_SIZE } from '../layers/graticule/graticule-animator';
 import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getParamLerpOffset, getParamReadyOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
+import { PaletteTexture } from './palette-texture';
 
 // Re-export for consumers
 export type { PassTimings } from './gpu-timestamp';
@@ -80,8 +81,7 @@ export class GlobeRenderer {
   private format!: GPUTextureFormat;
   private fontAtlasTexture!: GPUTexture;
   private fontAtlasSampler!: GPUSampler;
-  private tempPaletteTexture!: GPUTexture;
-  private tempPaletteSampler!: GPUSampler;
+  private paletteTexture!: PaletteTexture;
   private logoTexture!: GPUTexture;
   private logoSampler!: GPUSampler;
   private depthTexture!: GPUTexture;
@@ -256,17 +256,12 @@ export class GlobeRenderer {
       minFilter: 'linear',
     });
 
-    // Temperature palette texture (256x1 for 1D color lookup)
-    this.tempPaletteTexture = this.device.createTexture({
-      size: [256, 1],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
-    this.tempPaletteSampler = this.device.createSampler({
-      magFilter: 'nearest',
-      minFilter: 'nearest',
-      addressModeU: 'clamp-to-edge',
-    });
+    // Shared palette texture array (256×N, one row per palette)
+    this.paletteTexture = new PaletteTexture(this.device);
+
+    // Initialize palette uniforms
+    this.uniformView.setUint32(U.paletteCount, this.paletteTexture.paletteCount, true);
+    this.uniformView.setUint32(U.tempPaletteIndex, 0, true);  // Default to first palette
 
     // Placeholder logo (1x1, will be replaced by loadLogo)
     this.logoTexture = this.device.createTexture({
@@ -853,8 +848,8 @@ export class GlobeRenderer {
       { binding: 10, resource: this.atmosphereLUTs.sampler },
       { binding: 11, resource: this.fontAtlasTexture.createView() },
       { binding: 12, resource: this.fontAtlasSampler },
-      { binding: 13, resource: this.tempPaletteTexture.createView() },
-      { binding: 14, resource: this.tempPaletteSampler },
+      { binding: 13, resource: this.paletteTexture.texture.createView() },
+      { binding: 14, resource: this.paletteTexture.sampler },
       // Bindings 15-18 removed (legacy weather data buffers)
       { binding: 19, resource: this.logoTexture.createView() },
       { binding: 20, resource: this.logoSampler },
@@ -919,8 +914,8 @@ export class GlobeRenderer {
       { binding: 10, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       { binding: 11, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // font atlas
       { binding: 12, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-      { binding: 13, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // temp palette
-      { binding: 14, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+      { binding: 13, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // palette array
+      { binding: 14, visibility: GPUShaderStage.FRAGMENT, sampler: {} },  // palette sampler
       // Bindings 15-18 removed (legacy weather data buffers)
       { binding: 19, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // logo
       { binding: 20, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
@@ -977,19 +972,19 @@ export class GlobeRenderer {
   }
 
   /**
-   * Update temperature palette texture data
-   * @param colors Array of RGB colors (256 colors x 4 components RGBA, 1024 bytes total)
+   * Set temperature palette by ID
+   * @param paletteId Palette ID from registry (e.g., 'temp-classic')
    */
-  updateTempPalette(colors: Uint8Array): void {
-    if (colors.length !== 256 * 4) {
-      throw new Error(`Expected 1024 bytes (256 RGBA colors), got ${colors.length}`);
-    }
-    this.device.queue.writeTexture(
-      { texture: this.tempPaletteTexture },
-      colors as Uint8Array<ArrayBuffer>,  // WebGPU requires ArrayBuffer, not ArrayBufferLike
-      { bytesPerRow: 256 * 4 },
-      [256, 1]
-    );
+  setTempPalette(paletteId: string): void {
+    const index = this.paletteTexture.getPaletteIndex(paletteId);
+    this.uniformView.setUint32(U.tempPaletteIndex, index, true);
+  }
+
+  /**
+   * Get palette texture for external access
+   */
+  getPaletteTexture(): PaletteTexture {
+    return this.paletteTexture;
   }
 
   /** Get pressure layer for external control */
@@ -1088,7 +1083,7 @@ export class GlobeRenderer {
     this.ringOffsetsBuffer?.destroy();
     this.placeholderBuffer?.destroy();
     this.fontAtlasTexture?.destroy();
-    this.tempPaletteTexture?.destroy();
+    this.paletteTexture?.dispose();
     this.depthTexture?.destroy();
     this.colorTexture?.destroy();
     this.pressureLayer?.dispose();

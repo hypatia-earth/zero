@@ -14,7 +14,6 @@ import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
 import type { OptionsService } from './options-service';
 import type { PerfService } from './perf-service';
-import type { PaletteService } from './palette-service';
 import { Camera } from '../aurora/camera';
 import { setupViewport } from './viewport/viewport';
 
@@ -53,7 +52,7 @@ export interface AuroraService {
   uploadData(param: string, slotIndex: number, data: Float32Array): void;
   activateSlots(param: string, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
   deactivateSlots(param: string): void;
-  updatePalette(layer: string, textureData: Uint8Array, range: [number, number]): void;
+  updatePalette(layer: string, paletteId: string, range: [number, number]): void;
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
@@ -65,8 +64,7 @@ export function createAuroraService(
   stateService: StateService,
   configService: ConfigService,
   optionsService: OptionsService,
-  perfService: PerfService,
-  paletteService?: PaletteService
+  perfService: PerfService
 ): AuroraService {
   // Worker
   const worker = new Worker(
@@ -212,13 +210,10 @@ export function createAuroraService(
         const opts = optionsService.options.value;
         if (opts !== lastOptions) {
           // Check if temp palette changed
-          if (paletteService && opts.temp.palette !== lastTempPalette) {
+          if (opts.temp.palette !== lastTempPalette) {
             lastTempPalette = opts.temp.palette;
-            paletteService.setPalette('temp', opts.temp.palette);
-            const palette = paletteService.getPalette('temp');
-            const textureData = paletteService.generateTextureData(palette);
-            const range = paletteService.getRange(palette);
-            send({ type: 'updatePalette', layer: 'temp', textureData, range: [range.min, range.max] });
+            // Palette ID directly, range from param metadata
+            send({ type: 'updatePalette', layer: 'temp', paletteId: opts.temp.palette, range: [-40, 50] });
           }
           lastOptions = opts;
           send({ type: 'options', value: opts });
@@ -279,8 +274,8 @@ export function createAuroraService(
       send({ type: 'deactivateSlots', param });
     },
 
-    updatePalette(layer: string, textureData: Uint8Array, range: [number, number]): void {
-      send({ type: 'updatePalette', layer, textureData, range });
+    updatePalette(layer: string, paletteId: string, range: [number, number]): void {
+      send({ type: 'updatePalette', layer, paletteId, range });
     },
 
     start(): void {

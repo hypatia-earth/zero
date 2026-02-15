@@ -169,7 +169,8 @@ function drawPalette(
 
   const width = rect.width;
   const height = rect.height;
-  const { stops, unit, interpolate } = palette;
+  const { stops, interpolate } = palette;
+  const unit = '';  // TODO: pass from param metadata when needed
 
   if (stops.length === 0) return;
 

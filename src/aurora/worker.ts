@@ -37,9 +37,9 @@ export interface AuroraAssets {
   basemapFaces: ImageBitmap[];
   fontAtlas: ImageBitmap;
   logo: ImageBitmap;
-  // Initial palette texture (256x1 RGBA) and range for temp layer
-  tempPaletteTexture: Uint8Array;
-  tempPaletteRange: [number, number];  // [min, max] in Celsius
+  // Initial palette for temp layer (textures are built in PaletteTexture)
+  tempPaletteId: string;
+  tempPaletteRange: [number, number];  // [min, max] in Celsius (from param metadata)
 }
 
 export interface AuroraConfig {
@@ -70,7 +70,7 @@ export type AuroraRequest =
   | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'setUserLayerOpacity'; layerIndex: number; opacity: number }
   | { type: 'setUserLayerEnabled'; layerIndex: number; enabled: boolean }
-  | { type: 'updatePalette'; layer: string; textureData: Uint8Array; range: [number, number] }
+  | { type: 'updatePalette'; layer: string; paletteId: string; range: [number, number] }
   | { type: 'cleanup' };
 
 export type AuroraResponse =
@@ -390,8 +390,8 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
     }
   });
 
-  // Apply initial palette texture and range
-  renderer.updateTempPalette(assets.tempPaletteTexture);
+  // Apply initial palette and range for temp layer
+  renderer.setTempPalette(assets.tempPaletteId);
   tempPaletteRange[0] = assets.tempPaletteRange[0];
   tempPaletteRange[1] = assets.tempPaletteRange[1];
 
@@ -673,9 +673,9 @@ function handleSetUserLayerEnabled(data: Extract<AuroraRequest, { type: 'setUser
 }
 
 function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette' }>): void {
-  const { layer, textureData, range } = data;
+  const { layer, paletteId, range } = data;
   if (layer === 'temp' && renderer) {
-    renderer.updateTempPalette(textureData);
+    renderer.setTempPalette(paletteId);
     tempPaletteRange[0] = range[0];
     tempPaletteRange[1] = range[1];
   }

@@ -85,10 +85,8 @@ export async function runGpuInitPhase(
       new Blob([assets.logoBuffer], { type: 'image/png' })
     );
 
-    // Generate initial palette texture (256x1 RGBA) and range
-    const tempPalette = paletteService.getPalette('temp');
-    const tempPaletteTexture = paletteService.generateTextureData(tempPalette);
-    const tempRange = paletteService.getRange(tempPalette);
+    // Get initial palette ID and range for temp layer
+    const tempPaletteId = optionsService.options.value.temp.palette;
 
     const auroraAssets: AuroraAssets = {
       atmosphereLUTs: {
@@ -101,8 +99,8 @@ export async function runGpuInitPhase(
       basemapFaces,
       fontAtlas,
       logo,
-      tempPaletteTexture,
-      tempPaletteRange: [tempRange.min, tempRange.max],
+      tempPaletteId,
+      tempPaletteRange: [-40, 50],  // From param metadata for temperature_2m
     };
 
     // Initialize worker (transfers assets)

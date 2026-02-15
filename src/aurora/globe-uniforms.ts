@@ -52,9 +52,11 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['graticuleLabelMaxRadius', 'f32'],   // 340
   ['graticuleLineWidth', 'f32'],        // 344
   ['tempPaletteRange', 'vec2f'],   // 352 (vec2f needs 8-byte align)
+  ['tempPaletteIndex', 'u32'],     // 360: row index in palette texture
+  ['paletteCount', 'u32'],         // 364: total palettes in texture
 
-  ['logoOpacity', 'f32'],          // 360
-  ['logoPad', 'f32'],              // 364
+  ['logoOpacity', 'f32'],          // 368
+  ['logoPad', 'f32'],              // 372
 
   // User layer slots (32 max) - packed as vec4s for alignment
   // userLayerOpacity: 8 x vec4f = 128 bytes (indices 0-31)
@@ -123,6 +125,8 @@ export const U = GLOBE_UNIFORMS.offsets as {
   graticuleLabelMaxRadius: number;
   graticuleLineWidth: number;
   tempPaletteRange: number;
+  tempPaletteIndex: number;
+  paletteCount: number;
   logoOpacity: number;
   logoPad: number;
   // User layer arrays (8 vec4s each = 32 slots)

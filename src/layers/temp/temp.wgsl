@@ -1,13 +1,16 @@
 // Temperature layer - weather data visualization
 // Uses dynamic param bindings via sampleParam_temperature_2m()
 
-// Texture-based colormap using 1D palette
-fn colormapTemp(tempC: f32) -> vec3f {
+// Texture-based colormap using shared palette array
+fn colormapTemp(tempC: f32) -> vec4f {
+  // Normalize data value using palette range
   let t = clamp(
     (tempC - u.tempPaletteRange.x) / (u.tempPaletteRange.y - u.tempPaletteRange.x),
     0.0, 1.0
   );
-  return textureSampleLevel(tempPalette, tempPaletteSampler, vec2f(t, 0.5), 0.0).rgb;
+  // Sample from correct row in palette array
+  let v = (f32(u.tempPaletteIndex) + 0.5) / f32(u.paletteCount);
+  return textureSampleLevel(paletteArray, paletteSampler, vec2f(t, v), 0.0);
 }
 
 fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
@@ -21,5 +24,6 @@ fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
   if (tempC == 0.0 || tempC < -100.0 || tempC > 100.0) { return color; }
 
   let tempColor = colormapTemp(tempC);
-  return vec4f(mix(color.rgb, tempColor, opacity), color.a);
+  let blendAlpha = opacity * tempColor.a;
+  return vec4f(mix(color.rgb, tempColor.rgb, blendAlpha), color.a);
 }

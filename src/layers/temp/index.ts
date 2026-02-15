@@ -1,4 +1,4 @@
-import { defineLayer, withType, withUI, withParams, withSlabs, withOptions, withBlend, withRender, withShader, asBuiltIn } from '../../services/layer/builder';
+import { defineLayer, withType, withUI, withParams, withSlabs, withOptions, withPalettes, withBlend, withRender, withShader, asBuiltIn } from '../../services/layer/builder';
 import shaderCode from './temp.wgsl?raw';
 
 export const layer = defineLayer('temp',
@@ -6,6 +6,7 @@ export const layer = defineLayer('temp',
   withUI('Temperature', 'Temperature', 'weather'),
   withParams(['temperature_2m']),
   withSlabs([{ name: 'data', sizeMB: 26 }]),
+  withPalettes('temp-classic', 'temp-hypatia', 'temp-gradient'),
   withOptions(['temp.enabled', 'temp.opacity', 'temp.palette']),
   withBlend('blendTemp'),
   withShader('main', shaderCode),

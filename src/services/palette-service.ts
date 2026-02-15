@@ -2,30 +2,31 @@
  * PaletteService - Manages color palettes for data visualization
  *
  * Features:
- * - Load palette JSON files from /images/palettes/
+ * - Unified palette registry (src/config/palettes.ts)
  * - Track active palette per layer
  * - Generate 256x1 RGBA texture data with value-based mapping
  * - Support for both linear and non-linear (log-spaced) palettes
  */
 
 import { signal } from '@preact/signals-core';
+import { PALETTES, getPalettesByPrefix, type Palette } from '../config/palettes';
 
 // ============================================================
 // Types
 // ============================================================
 
 export interface PaletteStop {
-  value: number | null;
+  value: number;               // Normalized 0-1
   color: [number, number, number];
-  alpha?: number;
+  alpha: number;               // 0-255
 }
 
 export type LabelMode = 'value-centered' | 'band-edge' | 'band-range';
 
 export interface PaletteData {
+  id: string;
   name: string;
   description?: string;
-  unit: string;
   interpolate: boolean;
   labelMode: LabelMode;
   stops: PaletteStop[];
@@ -33,43 +34,47 @@ export interface PaletteData {
 
 interface LayerPalettes {
   available: PaletteData[];
-  activeName: string;
+  activeId: string;
 }
 
 // ============================================================
-// Default palettes (fallback if loading fails)
+// Registry → PaletteData conversion
 // ============================================================
 
-const DEFAULT_PALETTES: Record<string, PaletteData> = {
-  temp: {
-    name: 'Classic Temperature',
-    unit: 'F',
-    interpolate: false,
-    labelMode: 'band-edge',
-    stops: [
-      { value: -60, color: [209, 219, 224] },
-      { value: 125, color: [107, 28, 43] },
-    ],
-  },
-};
+function registryToPaletteData(palette: Palette): PaletteData {
+  return {
+    id: palette.id,
+    name: palette.name,
+    description: palette.description,
+    interpolate: palette.interpolate,
+    labelMode: palette.interpolate ? 'value-centered' : 'band-edge',
+    stops: palette.stops.map(s => ({
+      value: s.value,
+      color: s.color,
+      alpha: s.alpha,
+    })),
+      };
+}
 
 // ============================================================
 // PaletteService
 // ============================================================
 
 export class PaletteService {
-  /** Palettes per layer: { layer -> { available, activeName } } */
+  /** Palettes per layer: { layer -> { available, activeId } } */
   private layerPalettes = signal<Map<string, LayerPalettes>>(new Map());
 
   /** Signal that increments when any palette changes (for reactivity) */
   readonly paletteChanged = signal<number>(0);
 
   /**
-   * Load palette JSON files for a layer from /images/palettes/{layer}-*.json
+   * Load palettes for a layer from the registry
+   * Palettes are matched by prefix (e.g., 'temp' matches 'temp-classic', 'temp-hypatia')
    * @throws Error if no palettes found (bootstrap should fail fast)
    */
   async loadPalettes(layer: string): Promise<PaletteData[]> {
-    const palettes = await this.loadPalettesDirectly(layer);
+    const registryPalettes = getPalettesByPrefix(layer);
+    const palettes = registryPalettes.map(registryToPaletteData);
 
     if (palettes.length === 0) {
       throw new Error(`[Palette] No palettes found for '${layer}'`);
@@ -78,34 +83,14 @@ export class PaletteService {
     // Store loaded palettes
     const current = this.layerPalettes.value;
     const existing = current.get(layer);
-    const activeName = existing?.activeName ?? this.getDefaultPaletteName(layer); // QC-OK: first-time load
+    const activeId = existing?.activeId ?? palettes[0]!.id;
 
     current.set(layer, {
       available: palettes,
-      activeName,
+      activeId,
     });
 
     this.layerPalettes.value = new Map(current);
-    return palettes;
-  }
-
-  /** Load palette files by trying known suffixes */
-  private async loadPalettesDirectly(layer: string): Promise<PaletteData[]> {
-    const knownSuffixes = ['classic', 'gradient', 'hypatia'];
-    const palettes: PaletteData[] = [];
-
-    for (const suffix of knownSuffixes) {
-      try {
-        const res = await fetch(`${import.meta.env.BASE_URL}images/palettes/${layer}-${suffix}.json`);
-        if (res.ok) {
-          const palette = await res.json() as PaletteData;
-          palettes.push(palette);
-        }
-      } catch {
-        // Ignore missing files
-      }
-    }
-
     return palettes;
   }
 
@@ -123,40 +108,45 @@ export class PaletteService {
   getPalette(layer: string): PaletteData {
     const entry = this.layerPalettes.value.get(layer);
     if (!entry) {
-      return DEFAULT_PALETTES[layer] ?? { // QC-OK: fallback for unknown layer
+      // Try registry directly as fallback
+      const registryPalettes = getPalettesByPrefix(layer);
+      if (registryPalettes.length > 0) {
+        return registryToPaletteData(registryPalettes[0]!);
+      }
+      // Final fallback for unknown layer
+      return {
+        id: 'default',
         name: 'Default',
-        unit: '',
         interpolate: true,
         labelMode: 'value-centered',
         stops: [
-          { value: 0, color: [0, 0, 0] },
-          { value: 1, color: [255, 255, 255] },
+          { value: 0, color: [0, 0, 0], alpha: 255 },
+          { value: 1, color: [255, 255, 255], alpha: 255 },
         ],
       };
     }
 
-    const active = entry.available.find(p => p.name === entry.activeName);
+    const active = entry.available.find(p => p.id === entry.activeId);
     if (active) return active;
     if (entry.available[0]) return entry.available[0];
-    if (DEFAULT_PALETTES[layer]) return DEFAULT_PALETTES[layer];
 
     // Final fallback
     return {
+      id: 'default',
       name: 'Default',
-      unit: '',
       interpolate: true,
       labelMode: 'value-centered',
       stops: [
-        { value: 0, color: [0, 0, 0] },
-        { value: 1, color: [255, 255, 255] },
+        { value: 0, color: [0, 0, 0], alpha: 255 },
+        { value: 1, color: [255, 255, 255], alpha: 255 },
       ],
     };
   }
 
   /**
-   * Set active palette for a layer
+   * Set active palette for a layer by ID
    */
-  setPalette(layer: string, name: string): void {
+  setPalette(layer: string, id: string): void {
     const current = this.layerPalettes.value;
     const entry = current.get(layer);
 
@@ -165,38 +155,28 @@ export class PaletteService {
       return;
     }
 
-    const palette = entry.available.find(p => p.name === name);
+    const palette = entry.available.find(p => p.id === id);
     if (!palette) {
-      console.warn(`[Palette] Palette '${name}' not found for '${layer}'`);
+      console.warn(`[Palette] Palette '${id}' not found for '${layer}'`);
       return;
     }
 
-    entry.activeName = name;
+    entry.activeId = id;
     this.layerPalettes.value = new Map(current);
     this.paletteChanged.value++;
   }
 
   /**
    * Generate 256x1 RGBA texture data from palette
-   * Uses VALUE-BASED mapping in palette's native unit:
-   * - Pixel 0 maps to min value (first stop)
-   * - Pixel 255 maps to max value (last stop)
-   * - Each pixel represents a specific VALUE in the range
-   * - Interpolate colors between stops
+   * Palette stops use normalized values (0-1).
+   * Pixel i maps to t = i/255, colors interpolated between stops.
    */
   generateTextureData(palette: PaletteData): Uint8Array {
-    // Use raw palette values (native unit), not converted to Celsius
-    const { min, max } = this.getRawRange(palette);
-    const data = new Uint8Array(256 * 4); // 256 pixels, RGBA
+    const data = new Uint8Array(256 * 4);
 
     for (let i = 0; i < 256; i++) {
-      // Map pixel index to value in range [min, max]
       const t = i / 255;
-      const value = min + t * (max - min);
-
-      // Find stops surrounding this value
-      const color = this.interpolateColor(palette, value);
-
+      const color = this.interpolateColor(palette, t);
       data[i * 4 + 0] = color[0];
       data[i * 4 + 1] = color[1];
       data[i * 4 + 2] = color[2];
@@ -206,57 +186,15 @@ export class PaletteService {
     return data;
   }
 
-  /**
-   * Get raw value range from palette (min/max of stops in native unit)
-   */
-  getRawRange(palette: PaletteData): { min: number; max: number } {
-    const values = palette.stops
-      .map(s => s.value)
-      .filter((v): v is number => v !== null);
-
-    if (values.length === 0) {
-      return { min: 0, max: 1 };
-    }
-
-    return {
-      min: Math.min(...values),
-      max: Math.max(...values),
-    };
-  }
-
-  /**
-   * Get value range from palette (min/max of stops), converted to Celsius
-   */
-  getRange(palette: PaletteData): { min: number; max: number } {
-    const values = palette.stops
-      .map(s => s.value)
-      .filter((v): v is number => v !== null);
-
-    if (values.length === 0) {
-      return { min: 0, max: 1 };
-    }
-
-    let min = Math.min(...values);
-    let max = Math.max(...values);
-
-    // Convert Fahrenheit to Celsius if needed (shader expects Celsius)
-    if (palette.unit === 'F') {
-      min = (min - 32) / 1.8;
-      max = (max - 32) / 1.8;
-    }
-
-    return { min, max };
-  }
-
   // ----------------------------------------------------------
   // Private helpers
   // ----------------------------------------------------------
 
   /**
-   * Interpolate color for a specific value
+   * Interpolate color for a normalized value (0-1)
    */
-  private interpolateColor(palette: PaletteData, value: number): [number, number, number, number] {
-    const stops = palette.stops.filter(s => s.value !== null);
+  private interpolateColor(palette: PaletteData, t: number): [number, number, number, number] {
+    const stops = palette.stops;
 
     if (stops.length === 0) {
       return [0, 0, 0, 255];
@@ -270,7 +208,7 @@ export class PaletteService {
       const s1 = stops[i]!;
       const s2 = stops[i + 1]!;
 
-      if (value >= s1.value! && value <= s2.value!) {
+      if (t >= s1.value && t <= s2.value) {
         lowerStop = s1;
         upperStop = s2;
         break;
@@ -278,38 +216,49 @@ export class PaletteService {
     }
 
     // Handle out-of-range values
-    if (value <= lowerStop.value!) {
-      return [...lowerStop.color, lowerStop.alpha ?? 255]; // QC-OK: alpha optional
+    if (t <= lowerStop.value) {
+      return [...lowerStop.color, lowerStop.alpha];
     }
-    if (value >= upperStop.value!) {
-      return [...upperStop.color, upperStop.alpha ?? 255]; // QC-OK: alpha optional
+    if (t >= upperStop.value) {
+      return [...upperStop.color, upperStop.alpha];
     }
 
     // Interpolate between stops
-    const range = upperStop.value! - lowerStop.value!;
-    const t = range > 0 ? (value - lowerStop.value!) / range : 0;
+    const range = upperStop.value - lowerStop.value;
+    const frac = range > 0 ? (t - lowerStop.value) / range : 0;
 
     if (palette.interpolate) {
-      // Linear interpolation
-      const r = Math.round(lowerStop.color[0] + t * (upperStop.color[0] - lowerStop.color[0]));
-      const g = Math.round(lowerStop.color[1] + t * (upperStop.color[1] - lowerStop.color[1]));
-      const b = Math.round(lowerStop.color[2] + t * (upperStop.color[2] - lowerStop.color[2]));
-      // QC-OK: alpha optional, defaults to opaque
-      const a = Math.round((lowerStop.alpha ?? 255) + t * ((upperStop.alpha ?? 255) - (lowerStop.alpha ?? 255)));  // QC-OK: alpha optional
+      const r = Math.round(lowerStop.color[0] + frac * (upperStop.color[0] - lowerStop.color[0]));
+      const g = Math.round(lowerStop.color[1] + frac * (upperStop.color[1] - lowerStop.color[1]));
+      const b = Math.round(lowerStop.color[2] + frac * (upperStop.color[2] - lowerStop.color[2]));
+      const a = Math.round(lowerStop.alpha + frac * (upperStop.alpha - lowerStop.alpha));
       return [r, g, b, a];
     }
 
-    // Default: nearest neighbor
-    return [...lowerStop.color, lowerStop.alpha ?? 255]; // QC-OK: alpha optional
+    // Stepped: use lower stop color
+    return [...lowerStop.color, lowerStop.alpha];
   }
 
   /**
-   * Get default palette name for a layer
+   * Get palette by ID from registry
    */
-  private getDefaultPaletteName(layer: string): string {
-    const defaults: Record<string, string> = {
-      temp: 'Classic Temperature',
-    };
-    return defaults[layer] ?? ''; // QC-OK: no default for this layer
+  getPaletteById(id: string): PaletteData | undefined {
+    const palette = PALETTES[id];
+    return palette ? registryToPaletteData(palette) : undefined;
+  }
+
+  /**
+   * Get all available palette IDs
+   */
+  getAllPaletteIds(): string[] {
+    return Object.keys(PALETTES);
+  }
+
+  /**
+   * Get normalized range (always 0-1 since palettes are normalized)
+   * @deprecated Use param metadata for physical range
+   */
+  getRange(_palette: PaletteData): { min: number; max: number } {
+    return { min: 0, max: 1 };
   }
 }

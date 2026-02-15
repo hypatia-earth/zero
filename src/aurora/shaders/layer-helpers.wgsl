@@ -27,6 +27,8 @@ struct Uniforms {
   graticuleLabelMaxRadius: f32, // max globe radius (px) before labels shrink
   graticuleLineWidth: f32,     // line width in screen pixels
   tempPaletteRange: vec2f, // min/max temperature values for palette mapping (Celsius)
+  tempPaletteIndex: u32,  // row index in palette texture array
+  paletteCount: u32,      // total number of palettes in array
   logoOpacity: f32,       // computed from all layer opacities
   logoPad: f32,           // padding for alignment
   // User layer slots (32 max) - packed as vec4s for alignment

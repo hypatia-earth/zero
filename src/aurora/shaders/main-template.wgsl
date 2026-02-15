@@ -18,9 +18,9 @@
 // Font atlas for graticule labels (declared in text.wgsl)
 // @group(0) @binding(11) var fontAtlas: texture_2d<f32>;
 // @group(0) @binding(12) var fontSampler: sampler;
-// Temperature palette (1D texture for color mapping)
-@group(0) @binding(13) var tempPalette: texture_2d<f32>;
-@group(0) @binding(14) var tempPaletteSampler: sampler;
+// Shared palette array (256xN texture, one row per palette)
+@group(0) @binding(13) var paletteArray: texture_2d<f32>;
+@group(0) @binding(14) var paletteSampler: sampler;
 // Bindings 15-18 removed (legacy weather data - now using dynamic param bindings)
 // Logo texture for idle globe display
 @group(0) @binding(19) var logoTexture: texture_2d<f32>;

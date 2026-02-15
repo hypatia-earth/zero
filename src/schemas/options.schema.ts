@@ -643,7 +643,7 @@ export const optionsSchema = z.object({
       }
     ),
     palette: opt(
-      z.string().default('Classic Temperature'),
+      z.string().default('temp-classic'),
       {
         label: 'Color palette',
         description: 'Visual color scheme for temperature data',
@@ -651,7 +651,11 @@ export const optionsSchema = z.object({
         filter: ['global', 'temp'],
         order: 10.3,
         control: 'select',
-        options: [],
+        options: [
+          { value: 'temp-classic', label: 'Classic' },
+          { value: 'temp-hypatia', label: 'Hypatia' },
+          { value: 'temp-gradient', label: 'Gradient' },
+        ],
       }
     ),
   }),
@@ -1051,7 +1055,7 @@ export const defaultOptions: ZeroOptions = {
   earth: { enabled: true, opacity: 1 },
   sun: { enabled: true, opacity: 1 },
   graticule: { enabled: true, opacity: defaultConfig.graticule.opacity, fontSize: 12, lineWidth: 2 },
-  temp: { enabled: true, opacity: 0.6, palette: 'Classic Temperature' },
+  temp: { enabled: true, opacity: 0.6, palette: 'temp-classic' },
   rain: { enabled: false, opacity: 1.0 },
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },
