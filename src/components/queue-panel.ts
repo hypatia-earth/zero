@@ -11,13 +11,13 @@ import { effect } from '@preact/signals-core';
 import { throttle } from '../utils/debounce';
 import type { IQueueService } from '../config/types';
 import type { OptionsService } from '../services/options-service';
-import type { ISlotService } from '../services/queue/queue-service';
+import type { ParamSlotService } from '../services/param-slot-service';
 import type { DialogService } from '../services/dialog-service';
 
 export interface QueuePanelAttrs {
   queueService: IQueueService;
   optionsService: OptionsService;
-  slotService: ISlotService;
+  slotService: ParamSlotService;
   dialogService: DialogService;
 }
 

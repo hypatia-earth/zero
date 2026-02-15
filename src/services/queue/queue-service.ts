@@ -6,8 +6,8 @@
  * Single source of truth for all pending downloads.
  */
 
-import { signal, computed, effect, type Signal, type ReadonlySignal } from '@preact/signals-core';
-import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, TWeatherLayer, TTimestep, QueueTask } from '../../config/types';
+import { signal, computed, effect } from '@preact/signals-core';
+import type { FileOrder, QueueStats, IQueueService, TimestepOrder, OmSlice, QueueTask } from '../../config/types';
 import { isWeatherLayer } from '../../config/types';
 import { fetchStreaming } from '../../utils/fetch';
 import { calcBandwidth, calcEta, pruneSamples, type Sample } from '../../utils/bandwidth';
@@ -18,20 +18,7 @@ import type { ConfigService } from '../config-service';
 import type { StateService } from '../state-service';
 import type { TimestepService } from '../timestep/timestep-service';
 import type { LayerService } from '../layer/layer-service';
-
-/** Common interface for slot services (SlotService and ParamSlotService) */
-export interface ISlotReceiver {
-  receiveData(param: TWeatherLayer | string, timestep: TTimestep, slabIndex: number, data: Float32Array): boolean;
-}
-
-/** Extended interface for slot services used in bootstrap phases */
-export interface ISlotService extends ISlotReceiver {
-  setGaussianLats(lats: Float32Array): void;
-  initialize(onProgress?: (param: TWeatherLayer | string, index: number, total: number) => Promise<void>): Promise<void>;
-  getActiveTimesteps(param: TWeatherLayer | string): TTimestep[];
-  readonly slotsVersion: Signal<number>;
-  readonly memoryStats: ReadonlySignal<{ allocatedMB: number; capacityMB: number }>;
-}
+import type { ParamSlotService } from '../param-slot-service';
 
 const DEBUG = false;
 
@@ -90,7 +77,7 @@ export class QueueService implements IQueueService {
   // Reactive queue (Phase 3)
   private taskQueue: QueueTask[] = [];
   private inFlight: Map<string, InFlightTask> = new Map(); // key: `${param}:${timestep}:${slabIndex}`
-  private slotService: ISlotReceiver | null = null;
+  private slotService: ParamSlotService | null = null;
   private disposeEffect: (() => void) | null = null;
 
   /** Reactive parameters for queue management */
@@ -125,7 +112,7 @@ export class QueueService implements IQueueService {
   ) {}
 
   /** Set SlotService reference (avoids circular dependency) */
-  setSlotService(ss: ISlotReceiver): void {
+  setSlotService(ss: ParamSlotService): void {
     this.slotService = ss;
   }
 
