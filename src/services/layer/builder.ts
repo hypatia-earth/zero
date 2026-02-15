@@ -25,11 +25,6 @@ export function defineLayer(id: string, ...features: LayerFeature[]): LayerDecla
     declaration = feature.apply(declaration);
   }
 
-  // Ensure required fields
-  if (!declaration.type) {
-    declaration.type = 'texture';  // default type
-  }
-
   return declaration as LayerDeclaration;
 }
 

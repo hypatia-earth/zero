@@ -80,7 +80,7 @@ export class ShaderComposer {
     const postLayers = layers.filter(l => l.postFn);
 
     console.log('[ShaderComposer] Composing surface layers:',
-      surfaceLayers.map(l => `${l.id}(order:${l.order ?? 0})`).join(', '));
+      surfaceLayers.map(l => `${l.id}(order:${l.order})`).join(', '));
 
     const main = this.composeMain(surfaceLayers, layers);
     const post = this.composePost(postLayers);
@@ -104,7 +104,7 @@ export class ShaderComposer {
     parts.push(logoCode);
 
     // 3. Layer blend functions (sorted by render order)
-    const sortedLayers = [...surfaceLayers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const sortedLayers = [...surfaceLayers].sort((a, b) => (a.order) - (b.order));
     for (const layer of sortedLayers) {
       // Prefer inline shader from declaration, fall back to shader-loader
       const shaderCode = layer.shaders?.main ?? this.mainShaders.get(layer.id);
@@ -269,7 +269,7 @@ fn sampleParam_${safeName}(cell: u32) -> f32 {
   getBlendOrder(layers: LayerDeclaration[]): string[] {
     return layers
       .filter(l => l.blendFn && l.pass !== 'geometry')
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      .sort((a, b) => (a.order) - (b.order))
       .map(l => l.blendFn ?? l.id);
   }
 
