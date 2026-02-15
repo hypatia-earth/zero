@@ -130,16 +130,10 @@ function findLayerForParam(param: string): string | undefined {
   return undefined;
 }
 
-// Get params for a layer (from layerRegistry)
-function getLayerParams(layerId: string): string[] {
-  return layerRegistry?.get(layerId)?.params ?? [];
-}
-
 // Get slot state for a layer (looks up first param's state)
-function getLayerSlotState(layerId: string): SlotState | undefined {
-  const params = getLayerParams(layerId);
-  if (params.length === 0) return undefined;
-  return paramSlotStates.get(params[0]!);
+function getLayerSlotState(layerId: string): SlotState {
+  const params = layerRegistry!.get(layerId)!.params!;
+  return paramSlotStates.get(params[0]!)!;
 }
 
 // Rebuild paramBindings after shader recomposition (indices may shift)
@@ -566,8 +560,8 @@ function handleActivateSlots(data: Extract<AuroraRequest, { type: 'activateSlots
   // Wind and pressure have special handling, all others use generic param bindings
   if (layerId === 'wind') {
     // Multi-param layer: check if ALL params are ready
-    const windParams = getLayerParams('wind');
-    const allReady = windParams.every(p => paramSlotStates.get(p)?.dataReady);
+    const windParams = ['wind_u_component_10m', 'wind_v_component_10m'];
+    const allReady = windParams.every(p => paramSlotStates.get(p)!.dataReady);
     if (allReady) {
       const uStore = paramStores.get('wind_u_component_10m');
       const vStore = paramStores.get('wind_v_component_10m');
