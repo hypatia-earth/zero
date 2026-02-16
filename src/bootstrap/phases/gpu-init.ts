@@ -16,6 +16,7 @@ import type { ParamSlotService } from '../../services/param-slot-service';
 import type { Progress } from '../progress';
 import type { LoadedAssets } from './assets';
 import { isWeatherLayer } from '../../config/types';
+import { getPublishedParams } from '../../config/param-metadata';
 
 export async function runGpuInitPhase(
   canvas: HTMLCanvasElement,
@@ -42,8 +43,9 @@ export async function runGpuInitPhase(
   const windLineCount = optionsService.options.value.wind.seedCount;
   const readyLayers = configService.getReadyLayers().filter(isWeatherLayer);
 
-  // Build param configs for worker buffer creation (all registered layers)
-  const paramSet = new Set<string>();
+  // Build param configs for worker buffer creation
+  // Include all published params so custom layers can use any param at runtime
+  const paramSet = new Set<string>(getPublishedParams());
   for (const layer of layerService.getAll()) {
     if (layer.params) {
       for (const param of layer.params) {

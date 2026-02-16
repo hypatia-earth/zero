@@ -55,7 +55,7 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['tempPaletteIndex', 'u32'],     // 360: row index in palette texture
   ['paletteCount', 'u32'],         // 364: total palettes in texture
   ['rainPaletteIndex', 'u32'],     // 368: row index for rain palette
-  ['tempPaletteStepped', 'u32'],   // 372: 1 = stepped (no interpolation), 0 = smooth
+  ['paletteStepped', 'u32'],       // 372: bitmask — bit i = 1 means palette i is stepped
 
   ['logoOpacity', 'f32'],          // 372
   ['logoPad', 'f32'],              // 376
@@ -80,6 +80,16 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['userLayerDataReady5', 'vec4u'], // 480: user layers 20-23
   ['userLayerDataReady6', 'vec4u'], // 496: user layers 24-27
   ['userLayerDataReady7', 'vec4u'], // 512: user layers 28-31
+
+  // userLayerPaletteIndex: 8 x vec4u = 128 bytes (indices 0-31)
+  ['userLayerPaletteIndex0', 'vec4u'],
+  ['userLayerPaletteIndex1', 'vec4u'],
+  ['userLayerPaletteIndex2', 'vec4u'],
+  ['userLayerPaletteIndex3', 'vec4u'],
+  ['userLayerPaletteIndex4', 'vec4u'],
+  ['userLayerPaletteIndex5', 'vec4u'],
+  ['userLayerPaletteIndex6', 'vec4u'],
+  ['userLayerPaletteIndex7', 'vec4u'],
 
   // Dynamic param state (16 params max) - for per-param interpolation
   // paramLerp: 4 x vec4f = 64 bytes (lerp factors 0.0-1.0)
@@ -130,7 +140,7 @@ export const U = GLOBE_UNIFORMS.offsets as {
   tempPaletteIndex: number;
   paletteCount: number;
   rainPaletteIndex: number;
-  tempPaletteStepped: number;
+  paletteStepped: number;
   logoOpacity: number;
   logoPad: number;
   // User layer arrays (8 vec4s each = 32 slots)
@@ -150,6 +160,15 @@ export const U = GLOBE_UNIFORMS.offsets as {
   userLayerDataReady5: number;
   userLayerDataReady6: number;
   userLayerDataReady7: number;
+  // User layer palette indices (8 vec4us = 32 slots)
+  userLayerPaletteIndex0: number;
+  userLayerPaletteIndex1: number;
+  userLayerPaletteIndex2: number;
+  userLayerPaletteIndex3: number;
+  userLayerPaletteIndex4: number;
+  userLayerPaletteIndex5: number;
+  userLayerPaletteIndex6: number;
+  userLayerPaletteIndex7: number;
   // Dynamic param state (16 params max)
   paramLerp0: number;
   paramLerp1: number;
@@ -174,6 +193,14 @@ export function getUserLayerDataReadyOffset(index: number): number {
   const vecIndex = Math.floor(index / 4);
   const compIndex = index % 4;
   const baseOffset = U.userLayerDataReady0 + vecIndex * 16;
+  return baseOffset + compIndex * 4;
+}
+
+/** Get uniform buffer offset for user layer palette index by index (0-31) */
+export function getUserLayerPaletteIndexOffset(index: number): number {
+  const vecIndex = Math.floor(index / 4);
+  const compIndex = index % 4;
+  const baseOffset = U.userLayerPaletteIndex0 + vecIndex * 16;
   return baseOffset + compIndex * 4;
 }
 

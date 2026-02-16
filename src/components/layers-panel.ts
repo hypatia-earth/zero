@@ -38,7 +38,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
         } else {
           const enabled = layerRegistry.toggleUserLayer(layer.id);
           if (layer.userLayerIndex !== undefined) {
-            auroraService.send({ type: 'setUserLayerEnabled', layerIndex: layer.userLayerIndex, enabled });
+            auroraService.send({ type: 'setUserLayerOptions', layerIndex: layer.userLayerIndex, enabled });
           }
           m.redraw();
         }

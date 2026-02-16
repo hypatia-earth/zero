@@ -8,7 +8,7 @@ import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } fro
 import { PressureLayer } from '../layers/pressure';
 import { WindLayer } from '../layers/wind';
 import { GraticuleAnimator, GRATICULE_BUFFER_SIZE } from '../layers/graticule/graticule-animator';
-import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getParamLerpOffset, getParamReadyOffset } from './globe-uniforms';
+import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getParamLerpOffset, getParamReadyOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
 
@@ -17,6 +17,7 @@ export type { PassTimings } from './gpu-timestamp';
 import type { LayerState } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import type { PressureColorOption } from '../schemas/options.schema';
+import { PALETTE_IDS, PALETTES } from '../config/palettes';
 
 // Layer indices for uniform array access (must match registration order)
 const LAYER_EARTH = 0;
@@ -262,8 +263,16 @@ export class GlobeRenderer {
     // Initialize palette uniforms
     this.uniformView.setUint32(U.paletteCount, this.paletteTexture.paletteCount, true);
     this.uniformView.setUint32(U.tempPaletteIndex, 0, true);  // Default to first palette
-    this.uniformView.setUint32(U.tempPaletteStepped, this.paletteTexture.isStepped('temp-classic') ? 1 : 0, true);
     this.uniformView.setUint32(U.rainPaletteIndex, this.paletteTexture.getPaletteIndex('rain-type'), true);
+
+    // Compute paletteStepped bitmask — bit i = 1 means palette i is stepped
+    let steppedBitmask = 0;
+    for (let i = 0; i < PALETTE_IDS.length && i < 32; i++) {
+      if (!PALETTES[PALETTE_IDS[i]!]!.interpolate) {
+        steppedBitmask |= (1 << i);
+      }
+    }
+    this.uniformView.setUint32(U.paletteStepped, steppedBitmask, true);
 
     // Placeholder logo (1x1, will be replaced by loadLogo)
     this.logoTexture = this.device.createTexture({
@@ -390,6 +399,14 @@ export class GlobeRenderer {
       const offset = getUserLayerOpacityOffset(index);
       this.uniformView.setFloat32(offset, opacity, true);
     }
+  }
+
+  /**
+   * Set user layer palette index uniform
+   */
+  setUserLayerPaletteIndex(layerIndex: number, paletteIndex: number): void {
+    const offset = getUserLayerPaletteIndexOffset(layerIndex);
+    this.uniformView.setUint32(offset, paletteIndex, true);
   }
 
   /**
@@ -982,7 +999,6 @@ export class GlobeRenderer {
   setTempPalette(paletteId: string): void {
     const index = this.paletteTexture.getPaletteIndex(paletteId);
     this.uniformView.setUint32(U.tempPaletteIndex, index, true);
-    this.uniformView.setUint32(U.tempPaletteStepped, this.paletteTexture.isStepped(paletteId) ? 1 : 0, true);
   }
 
   /**

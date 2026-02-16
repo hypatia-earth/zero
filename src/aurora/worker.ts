@@ -16,7 +16,7 @@ import { LayerStore } from './layer-store';
 import type { ZeroOptions } from '../schemas/options.schema';
 import type { TLayer } from '../config/types';
 import { getSunDirection } from '../utils/sun-position';
-import { shaderComposer, activeParamBindings } from './shader-composer';
+import { shaderComposer, activeParamBindings, type ComposedShaders } from './shader-composer';
 import { LayerService, type LayerDeclaration } from '../services/layer/layer-service';
 
 // ============================================================
@@ -68,8 +68,7 @@ export type AuroraRequest =
   | { type: 'resize'; width: number; height: number }
   | { type: 'registerUserLayer'; layer: LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
-  | { type: 'setUserLayerOpacity'; layerIndex: number; opacity: number }
-  | { type: 'setUserLayerEnabled'; layerIndex: number; enabled: boolean }
+  | { type: 'setUserLayerOptions'; layerIndex: number; enabled?: boolean; opacity?: number; paletteIndex?: number }
   | { type: 'updatePalette'; layer: string; paletteId: string; range: [number, number] }
   | { type: 'cleanup' };
 
@@ -95,6 +94,14 @@ let layerRegistry: LayerService | null = null;
 // Param stores for GPU buffer management (keyed by param name)
 const paramStores = new Map<string, LayerStore>();
 
+
+// Pipeline recreation queue — serializes concurrent recreatePipeline calls
+let pipelineQueue: Promise<void> = Promise.resolve();
+
+function queuePipelineRecreation(composedShaders: ComposedShaders): Promise<void> {
+  pipelineQueue = pipelineQueue.then(() => renderer!.recreatePipeline(composedShaders));
+  return pipelineQueue;
+}
 
 // User layer state (opacity defaults to 1.0, enabled defaults to false when registered)
 const userLayerOpacities = new Map<number, number>();  // index -> opacity
@@ -603,7 +610,7 @@ function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerU
 
   const layers = layerRegistry.getAll();
   const composedShaders = shaderComposer.compose(layers);
-  renderer.recreatePipeline(composedShaders)
+  queuePipelineRecreation(composedShaders)
     .then(() => {
       rebuildParamBindings();
       rebindAllParamBuffers();
@@ -643,7 +650,7 @@ function handleUnregisterUserLayer(data: Extract<AuroraRequest, { type: 'unregis
 
   const layers = layerRegistry.getAll();
   const composedShaders = shaderComposer.compose(layers);
-  renderer.recreatePipeline(composedShaders)
+  queuePipelineRecreation(composedShaders)
     .then(() => {
       rebuildParamBindings();
       rebindAllParamBuffers();
@@ -652,12 +659,16 @@ function handleUnregisterUserLayer(data: Extract<AuroraRequest, { type: 'unregis
     .catch((err) => console.error('[Aurora] Pipeline recreation failed:', err));
 }
 
-function handleSetUserLayerOpacity(data: Extract<AuroraRequest, { type: 'setUserLayerOpacity' }>): void {
-  userLayerOpacities.set(data.layerIndex, data.opacity);
-}
-
-function handleSetUserLayerEnabled(data: Extract<AuroraRequest, { type: 'setUserLayerEnabled' }>): void {
-  userLayerEnabled.set(data.layerIndex, data.enabled);
+function handleSetUserLayerOptions(data: Extract<AuroraRequest, { type: 'setUserLayerOptions' }>): void {
+  if (data.enabled !== undefined) {
+    userLayerEnabled.set(data.layerIndex, data.enabled);
+  }
+  if (data.opacity !== undefined) {
+    userLayerOpacities.set(data.layerIndex, data.opacity);
+  }
+  if (data.paletteIndex !== undefined && renderer) {
+    renderer.setUserLayerPaletteIndex(data.layerIndex, data.paletteIndex);
+  }
 }
 
 function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette' }>): void {
@@ -710,8 +721,7 @@ const handlers: { [K in AuroraRequest['type']]: MessageHandler<K> } = {
   deactivateSlots: handleDeactivateSlots,
   registerUserLayer: handleRegisterUserLayer,
   unregisterUserLayer: handleUnregisterUserLayer,
-  setUserLayerOpacity: handleSetUserLayerOpacity,
-  setUserLayerEnabled: handleSetUserLayerEnabled,
+  setUserLayerOptions: handleSetUserLayerOptions,
   updatePalette: handleUpdatePalette,
   cleanup: handleCleanup,
 };

@@ -30,12 +30,14 @@ struct Uniforms {
   tempPaletteIndex: u32,  // row index in palette texture array
   paletteCount: u32,      // total number of palettes in array
   rainPaletteIndex: u32,  // row index for rain palette
-  tempPaletteStepped: u32, // 1 = discrete bands, 0 = smooth gradient
+  paletteStepped: u32, // bitmask — bit i = 1 means palette i is stepped
   logoOpacity: f32,       // computed from all layer opacities
   logoPad: f32,           // padding for alignment
   // User layer slots (32 max) - packed as vec4s for alignment
   userLayerOpacity: array<vec4<f32>, 8>,   // 32 opacity values
   userLayerDataReady: array<vec4<u32>, 8>, // 32 data ready flags
+  // User layer palette indices (32 slots)
+  userLayerPaletteIndex: array<vec4<u32>, 8>,
   // Dynamic param state (16 params max) - for per-param interpolation
   paramLerp: array<vec4<f32>, 4>,          // 16 lerp factors (0.0-1.0)
   paramReady: array<vec4<u32>, 4>,         // 16 data ready flags
@@ -65,6 +67,19 @@ fn getUserLayerDataReady(index: u32) -> bool {
     case 1u: { return v.y != 0u; }
     case 2u: { return v.z != 0u; }
     default: { return v.w != 0u; }
+  }
+}
+
+// Get user layer palette index by index (0-31)
+fn getUserLayerPaletteIndex(index: u32) -> u32 {
+  let vecIdx = index / 4u;
+  let compIdx = index % 4u;
+  let v = u.userLayerPaletteIndex[vecIdx];
+  switch compIdx {
+    case 0u: { return v.x; }
+    case 1u: { return v.y; }
+    case 2u: { return v.z; }
+    default: { return v.w; }
   }
 }
 

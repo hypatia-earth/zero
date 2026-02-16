@@ -64,7 +64,7 @@ function toPaletteData(id: PaletteId): PaletteData {
 }
 
 // Template shader for new layers
-// Placeholders: {BlendName}, {userLayerIndex}, {paletteMin}, {paletteMax}, {samplerFn}, {paletteSample}
+// Placeholders: {BlendName}, {userLayerIndex}, {paletteMin}, {paletteMax}, {samplerFn}
 const SHADER_TEMPLATE = `// Custom blend function - palette visualization
 fn blend{BlendName}(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let opacity = getUserLayerOpacity({userLayerIndex}u);
@@ -74,7 +74,7 @@ fn blend{BlendName}(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let value = {samplerFn}(cell);
 
   let t = clamp((value - {paletteMin}) / ({paletteMax} - {paletteMin}), 0.0, 1.0);
-{paletteSample}
+  let layerColor = samplePalette(t, getUserLayerPaletteIndex({userLayerIndex}u));
   return vec4f(mix(color.rgb, layerColor.rgb, opacity * layerColor.a), color.a);
 }
 `;
@@ -142,21 +142,14 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const blendName = capitalize(state.id || 'Custom');
     const [min, max] = state.paramMeta.range;
     const samplerFn = getSamplerName(state.param);
-    const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
-    const isStepped = !PALETTES[state.paletteId]!.interpolate;
-
-    // Generate palette sampling code (stepped = textureLoad, smooth = textureSampleLevel)
-    const paletteSample = isStepped
-      ? `  let tx = u32(clamp(t * 256.0, 0.0, 255.0));\n  let layerColor = textureLoad(paletteArray, vec2u(tx, ${paletteIndex}u), 0);`
-      : `  let v = (f32(${paletteIndex}u) + 0.5) / f32(u.paletteCount);\n  let layerColor = textureSampleLevel(paletteArray, paletteSampler, vec2f(t, v), 0.0);`;
 
     // Keep {userLayerIndex} placeholder - replaced when index is assigned
+    // Palette index is set via uniform, not baked into shader
     state.shaderCode = SHADER_TEMPLATE
       .replace(/{BlendName}/g, blendName)
       .replace(/{paletteMin}/g, min.toFixed(1))
       .replace(/{paletteMax}/g, max.toFixed(1))
-      .replace(/{samplerFn}/g, samplerFn)
-      .replace(/{paletteSample}/g, paletteSample);
+      .replace(/{samplerFn}/g, samplerFn);
   }
 
   /** Replace index placeholder in shader code with actual index */
@@ -239,9 +232,9 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
     // Send to worker for shader recompilation
     aurora.send({ type: 'registerUserLayer', layer });
-    // Enable and set initial opacity (worker defaults to disabled)
-    aurora.send({ type: 'setUserLayerEnabled', layerIndex: index, enabled: true });
-    aurora.send({ type: 'setUserLayerOpacity', layerIndex: index, opacity: state.opacity });
+    // Enable and set initial opacity + palette (worker defaults to disabled)
+    const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
+    aurora.send({ type: 'setUserLayerOptions', layerIndex: index, enabled: true, opacity: state.opacity, paletteIndex });
 
     console.log(`[CreateLayer] Saved: ${state.id} (index ${index})`);
     suspendedLayer = null;  // Don't restore old layer - new one saved
@@ -294,9 +287,9 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
     // Send to worker for shader recompilation
     aurora.send({ type: 'registerUserLayer', layer });
-    // Enable and set opacity (worker defaults to disabled)
-    aurora.send({ type: 'setUserLayerEnabled', layerIndex: 31, enabled: true });
-    aurora.send({ type: 'setUserLayerOpacity', layerIndex: 31, opacity: state.opacity });
+    // Enable and set opacity + palette (worker defaults to disabled)
+    const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
+    aurora.send({ type: 'setUserLayerOptions', layerIndex: 31, enabled: true, opacity: state.opacity, paletteIndex });
 
     console.log(`[CreateLayer] Preview: ${state.id} (index 31)`);
     m.redraw();  // Update UI (enables Save button)
@@ -496,7 +489,12 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                 value: state.paletteId,
                 onchange: (e: Event) => {
                   state.paletteId = (e.target as HTMLSelectElement).value as PaletteId;
-                  updateShaderTemplate();
+                  // Live palette switching via uniform (no shader recompilation needed)
+                  const index = isEditing ? layerRegistry.get(editLayerId!)?.userLayerIndex : 31;
+                  if (index !== undefined && (layerRegistry.hasPreview() || isEditing)) {
+                    const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
+                    auroraService.send({ type: 'setUserLayerOptions', layerIndex: index, paletteIndex });
+                  }
                 },
               }, PALETTE_OPTIONS.map(p =>
                 m('option', { value: p.value }, p.label)
@@ -538,7 +536,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                   // Send to worker in real-time
                   const index = isEditing ? layerRegistry.get(editLayerId!)?.userLayerIndex : 31;
                   if (index !== undefined) {
-                    auroraService.send({ type: 'setUserLayerOpacity', layerIndex: index, opacity: state.opacity });
+                    auroraService.send({ type: 'setUserLayerOptions', layerIndex: index, opacity: state.opacity });
                   }
                 },
               }),
