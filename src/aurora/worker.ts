@@ -16,7 +16,7 @@ import { LayerStore } from './layer-store';
 import type { ZeroOptions } from '../schemas/options.schema';
 import type { TLayer } from '../config/types';
 import { getSunDirection } from '../utils/sun-position';
-import { shaderComposer } from './shader-composer';
+import { shaderComposer, activeParamBindings } from './shader-composer';
 import { LayerService, type LayerDeclaration } from '../services/layer/layer-service';
 
 // ============================================================
@@ -118,7 +118,6 @@ interface ParamBinding {
   bindingSlot1: number;   // 51, 53, 55, ...
 }
 const paramBindings = new Map<string, ParamBinding>();
-const PARAM_BINDING_START = 50;  // Must match shader-composer.ts
 
 // Find which layer uses a given param (from layerRegistry)
 function findLayerForParam(param: string): string | undefined {
@@ -137,21 +136,17 @@ function getLayerSlotState(layerId: string): SlotState {
   return paramSlotStates.get(params[0]!)!;
 }
 
-// Rebuild paramBindings after shader recomposition (indices may shift)
-function rebuildParamBindings(layers: LayerDeclaration[]): void {
-  const allParams = new Set<string>();
-  for (const layer of layers) {
-    layer.params?.forEach(p => allParams.add(p));
-  }
-  const sortedParams = [...allParams].sort();
+// Rebuild paramBindings from ShaderComposer's activeParamBindings (set during compose())
+// Must match what the shader actually binds — only surface layer params
+function rebuildParamBindings(): void {
   paramBindings.clear();
-  sortedParams.forEach((param, idx) => {
-    paramBindings.set(param, {
-      index: idx,
-      bindingSlot0: PARAM_BINDING_START + idx * 2,
-      bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
+  for (const cfg of activeParamBindings) {
+    paramBindings.set(cfg.param, {
+      index: cfg.index,
+      bindingSlot0: cfg.bindingSlot0,
+      bindingSlot1: cfg.bindingSlot1,
     });
-  });
+  }
 }
 
 // Rebind all active param buffers to renderer
@@ -373,16 +368,6 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
     });
   }
 
-  // Build param binding registry (must match ShaderComposer order)
-  const sortedParams = [...config.paramConfigs.map(c => c.param)].sort();
-  sortedParams.forEach((param, idx) => {
-    paramBindings.set(param, {
-      index: idx,
-      bindingSlot0: PARAM_BINDING_START + idx * 2,
-      bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
-    });
-  });
-
   // Log unexpected device loss (ignore intentional destroy on cleanup)
   device.lost.then((info) => {
     if (info.reason !== 'destroyed') {
@@ -399,6 +384,9 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   const initLayers = layerRegistry.getAll();
   const initShaders = shaderComposer.compose(initLayers);
   await renderer.recreatePipeline(initShaders);
+
+  // Build param binding registry from ShaderComposer (must be after compose())
+  rebuildParamBindings();
   console.log('[Aurora] Using composed shaders for', initLayers.length, 'layers');
 
   self.postMessage({ type: 'ready' } satisfies AuroraResponse);
@@ -617,7 +605,7 @@ function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerU
   const composedShaders = shaderComposer.compose(layers);
   renderer.recreatePipeline(composedShaders)
     .then(() => {
-      rebuildParamBindings(layers);
+      rebuildParamBindings();
       rebindAllParamBuffers();
       console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
       self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: true });
@@ -657,7 +645,7 @@ function handleUnregisterUserLayer(data: Extract<AuroraRequest, { type: 'unregis
   const composedShaders = shaderComposer.compose(layers);
   renderer.recreatePipeline(composedShaders)
     .then(() => {
-      rebuildParamBindings(layers);
+      rebuildParamBindings();
       rebindAllParamBuffers();
       console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
     })

@@ -325,7 +325,7 @@ export async function setupTestEnv(page: Page): Promise<void> {
     (window as any).__hypatia.optionsService.update((d: any) => {
       d.earth.enabled = false;
       d.sun.enabled = false;
-      d.grid.enabled = false;
+      d.graticule.enabled = false;
       d.temp.enabled = false;
       d.rain.enabled = false;
       d.clouds.enabled = false;

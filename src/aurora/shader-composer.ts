@@ -127,7 +127,7 @@ export class ShaderComposer {
     }
 
     // 5. Generate dynamic param bindings
-    const paramShader = this.generateParamBindings(allLayers);
+    const paramShader = this.generateParamBindings(surfaceLayers);
 
     // 6. Main template with blend calls and param bindings injected
     // Note: Layer constants are injected at the beginning of the shader (step 1)
