@@ -132,13 +132,13 @@
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; scale: 0.95; }
+  to { opacity: 1; scale: 1; }
 }
 
 @keyframes scaleOut {
-  from { opacity: 1; transform: scale(1); }
-  to { opacity: 0; transform: scale(0.95); }
+  from { opacity: 1; scale: 1; }
+  to { opacity: 0; scale: 0.95; }
 }
 
 /* Bootstrap Dialog - Startup/Loading modal */
@@ -1151,6 +1151,27 @@
   flex: 1;
   overflow-y: auto;
   padding: 20px;
+  border: none;
+  margin: 0;
+}
+
+.dialog.create-layer .field-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.dialog.create-layer .field-row > .field {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.dialog.create-layer .field-row > .field.opacity {
+  flex: 7;
+}
+
+.dialog.create-layer .field-row > .field.order {
+  flex: 3;
 }
 
 .dialog.create-layer .field {
@@ -1165,6 +1186,7 @@
 }
 
 .dialog.create-layer .field input[type=text],
+.dialog.create-layer .field input[type=range],
 .dialog.create-layer .field input[type=number],
 .dialog.create-layer .field select {
   width: 100%;
@@ -1174,6 +1196,10 @@
   border-radius: 6px;
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
+}
+
+.dialog.create-layer .content > canvas.palette {
+  margin-bottom: 16px;
 }
 
 .dialog.create-layer .field input:focus,
@@ -1251,6 +1277,24 @@
 @media (hover: hover) {
   .dialog.create-layer .footer button.primary:hover {
     background: var(--color-primary-bg-hover);
+  }
+}
+
+.dialog.create-layer .footer button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.dialog.create-layer .footer button.btn-secondary {
+  background: var(--color-btn-secondary-bg);
+  color: var(--color-btn-secondary);
+  border-color: var(--color-btn-secondary-bg-hover);
+}
+
+@media (hover: hover) {
+  .dialog.create-layer .footer button.btn-secondary:hover {
+    background: var(--color-btn-secondary-bg-hover);
   }
 }
 

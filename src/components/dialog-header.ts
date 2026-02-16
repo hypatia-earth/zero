@@ -44,10 +44,7 @@ export const DialogHeader: m.Component<DialogHeaderAttrs> = {
           title: isFloating ? 'Disable floating' : 'Keep floating'
         }, isFloating ? '◎' : '○') : null,
         m('button.close', {
-          onclick: () => {
-            dialogService.resetDragState(dialogId);
-            onClose();
-          }
+          onclick: () => onClose()
         }, '×')
       ])
     ]);

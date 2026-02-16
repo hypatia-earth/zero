@@ -428,7 +428,6 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       const dragOffset = dialogService.getDragOffset('create-layer');
 
       const close = () => {
-        dialogService.resetDragState('create-layer');
         handleClose(layerRegistry, auroraService, () => dialogService.close('create-layer'));
       };
 
@@ -481,82 +480,82 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
               m('.hint', 'Unique identifier (lowercase, no spaces)'),
             ]),
 
-            // Data parameter
-            m('.field', [
-              m('label', 'Data Parameter'),
-              m('select', {
-                'data-testid': 'layer-param-select',
-                value: state.param,
-                onchange: (e: Event) => {
-                  state.param = (e.target as HTMLSelectElement).value;
-                  state.paramMeta = getParamMeta(state.param);
-                  updateShaderTemplate();
-                },
-              }, DATA_PARAMS.map(p =>
-                m('option', { value: p.value }, p.label)
-              )),
-              m('.hint', `Range: ${state.paramMeta.range[0]} – ${state.paramMeta.range[1]} ${state.paramMeta.unit}`),
+            // Data parameter + Palette (side by side)
+            m('.field-row', [
+              m('.field', [
+                m('label', 'Data Parameter'),
+                m('select', {
+                  'data-testid': 'layer-param-select',
+                  value: state.param,
+                  onchange: (e: Event) => {
+                    state.param = (e.target as HTMLSelectElement).value;
+                    state.paramMeta = getParamMeta(state.param);
+                    updateShaderTemplate();
+                  },
+                }, DATA_PARAMS.map(p =>
+                  m('option', { value: p.value }, p.label)
+                )),
+                m('.hint', `Range: ${state.paramMeta.range[0]} – ${state.paramMeta.range[1]} ${state.paramMeta.unit}`),
+              ]),
+              m('.field', [
+                m('label', 'Palette'),
+                m('select', {
+                  'data-testid': 'layer-palette-select',
+                  value: state.paletteId,
+                  onchange: (e: Event) => {
+                    state.paletteId = (e.target as HTMLSelectElement).value as PaletteId;
+                    // Live palette switching via uniform (no shader recompilation needed)
+                    const index = isEditing ? layerRegistry.get(editLayerId!)?.userLayerIndex : 31;
+                    if (index !== undefined && (layerRegistry.hasPreview() || isEditing)) {
+                      const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
+                      auroraService.send({ type: 'setUserLayerOptions', layerIndex: index, paletteIndex });
+                    }
+                  },
+                }, PALETTE_OPTIONS.map(p =>
+                  m('option', { value: p.value }, p.label)
+                )),
+              ]),
             ]),
+            m(PaletteComponent, {
+              palette: toPaletteData(state.paletteId),
+              height: 30,
+              fontSize: 10,
+              color: '#888888',
+            }),
 
-            // Palette
-            m('.field', [
-              m('label', 'Palette'),
-              m('select', {
-                'data-testid': 'layer-palette-select',
-                value: state.paletteId,
-                onchange: (e: Event) => {
-                  state.paletteId = (e.target as HTMLSelectElement).value as PaletteId;
-                  // Live palette switching via uniform (no shader recompilation needed)
-                  const index = isEditing ? layerRegistry.get(editLayerId!)?.userLayerIndex : 31;
-                  if (index !== undefined && (layerRegistry.hasPreview() || isEditing)) {
-                    const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
-                    auroraService.send({ type: 'setUserLayerOptions', layerIndex: index, paletteIndex });
-                  }
-                },
-              }, PALETTE_OPTIONS.map(p =>
-                m('option', { value: p.value }, p.label)
-              )),
-              m(PaletteComponent, {
-                palette: toPaletteData(state.paletteId),
-                height: 30,
-                fontSize: 10,
-                color: '#888888',
-              }),
-            ]),
-
-            // Render order
-            m('.field', [
-              m('label', 'Render Order'),
-              m('input[type=number]', {
-                'data-testid': 'layer-order-input',
-                min: 0,
-                max: 100,
-                value: state.order,
-                oninput: (e: Event) => {
-                  state.order = parseInt((e.target as HTMLInputElement).value) || 50;
-                },
-              }),
-              m('.hint', 'Lower = behind, higher = on top (earth=0, temp=10)'),
-            ]),
-
-            // Opacity slider (only active after Try or when editing)
-            m('.field', [
-              m('label', `Opacity: ${Math.round(state.opacity * 100)}%`),
-              m('input[type=range]', {
-                'data-testid': 'layer-opacity-slider',
-                min: 0,
-                max: 100,
-                value: state.opacity * 100,
-                disabled: !layerRegistry.hasPreview() && !isEditing,
-                oninput: (e: Event) => {
-                  state.opacity = parseInt((e.target as HTMLInputElement).value) / 100;
-                  // Send to worker in real-time
-                  const index = isEditing ? layerRegistry.get(editLayerId!)?.userLayerIndex : 31;
-                  if (index !== undefined) {
-                    auroraService.send({ type: 'setUserLayerOptions', layerIndex: index, opacity: state.opacity });
-                  }
-                },
-              }),
+            // Opacity + Render order (side by side)
+            m('.field-row', [
+              m('.field.opacity', [
+                m('label', `Opacity: ${Math.round(state.opacity * 100)}%`),
+                m('input[type=range]', {
+                  'data-testid': 'layer-opacity-slider',
+                  min: 0,
+                  max: 100,
+                  value: state.opacity * 100,
+                  disabled: !layerRegistry.hasPreview() && !isEditing,
+                  oninput: (e: Event) => {
+                    state.opacity = parseInt((e.target as HTMLInputElement).value) / 100;
+                    // Send to worker in real-time
+                    const index = isEditing ? layerRegistry.get(editLayerId!)?.userLayerIndex : 31;
+                    if (index !== undefined) {
+                      auroraService.send({ type: 'setUserLayerOptions', layerIndex: index, opacity: state.opacity });
+                    }
+                  },
+                }),
+              ]),
+              m('.field.order', [
+                m('label', 'Render Order'),
+                m('input[type=number]', {
+                  'data-testid': 'layer-order-input',
+                  min: 0,
+                  max: 100,
+                  value: state.order,
+                  oninput: (e: Event) => {
+                    state.order = parseInt((e.target as HTMLInputElement).value) || 50;
+                  },
+                }),
+                m('.hint', 'earth=0, temp=10'),
+              ]),
             ]),
 
             // Shader code
@@ -590,12 +589,12 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
               }, 'Delete'),
             ]),
             m('.right', [
-              m('button', { 'data-testid': 'layer-cancel-btn', onclick: close }, 'Cancel'),
               m('button.primary', {
                 'data-testid': 'layer-save-btn',
                 disabled: state.tryPhase !== 'idle' || !layerRegistry.hasPreview(),
                 onclick: () => validateAndCreate(layerRegistry, auroraService, close),
               }, 'Save'),
+              m('button.btn.btn-secondary', { 'data-testid': 'layer-close-btn', onclick: close }, 'Close'),
             ]),
           ]),
         ]),

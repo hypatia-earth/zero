@@ -49,10 +49,7 @@ export const AboutDialog: m.ClosureComponent<AboutDialogAttrs> = () => {
       const floatingClass = isFloating ? (isTop ? 'floating top' : 'floating behind') : '';
       const closingClass = dialogService.isClosing('about') ? 'closing' : '';
 
-      const close = () => {
-        dialogService.resetDragState('about');
-        dialogService.close('about');
-      };
+      const close = () => dialogService.close('about');
 
       return m('div.dialog.about', { class: `${floatingClass} ${closingClass}` }, [
         m('div.backdrop', {

@@ -90,17 +90,19 @@ export class DialogService {
     if (!this.openDialogs.has(id)) return;
 
     if (ANIMATED_DIALOGS.includes(id)) {
-      // Animated close
+      // Animated close — keep drag offset during animation so dialog fades in place
       this.closingDialogs.add(id);
       m.redraw();
       setTimeout(() => {
         this.openDialogs.delete(id);
         this.closingDialogs.delete(id);
+        this.resetDragState(id);
         m.redraw();
       }, ANIMATION_DURATION);
     } else {
       // Immediate close
       this.openDialogs.delete(id);
+      this.resetDragState(id);
       m.redraw();
     }
   }
