@@ -7,11 +7,12 @@
 import m from 'mithril';
 import { PaletteComponent } from './palette-component';
 import type { PaletteData } from '../services/palette-service';
+import type { PaletteId } from '../config/palettes';
 
 export interface RadioPaletteControlAttrs {
   palettes: PaletteData[];
-  selected: string;
-  onSelect: (paletteName: string) => void;
+  selected: PaletteId;
+  onSelect: (paletteId: PaletteId) => void;
 }
 
 export const RadioPaletteControl: m.ClosureComponent<RadioPaletteControlAttrs> = () => {
@@ -28,9 +29,9 @@ export const RadioPaletteControl: m.ClosureComponent<RadioPaletteControlAttrs> =
       return m('div.radio-palette-control', [
         palettes.map(palette =>
           m('div.palette-option', {
-            key: palette.name,
-            class: selected === palette.name ? 'selected' : '',
-            onclick: () => onSelect(palette.name)
+            key: palette.id,
+            class: selected === palette.id ? 'selected' : '',
+            onclick: () => onSelect(palette.id)
           }, [
             m('div.palette-name', palette.name),
             palette.description ? m('div.palette-description', palette.description) : null,

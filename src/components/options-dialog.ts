@@ -26,6 +26,7 @@ import type { DialogService } from '../services/dialog-service';
 import type { CapabilitiesService } from '../services/capabilities-service';
 import { clearCache, nuke } from '../services/sw-registration';
 import { RadioPaletteControl } from './radio-palette-control';
+import { isPaletteId } from '../config/palettes';
 import { PressureColorControl } from './pressure-color-control';
 import { DialogHeader } from './dialog-header';
 
@@ -136,12 +137,14 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
     const layerId = path.split('.')[0]!;
     const palettes = paletteService.getPalettes(layerId);
 
+    if (!isPaletteId(currentValue)) return null;
+
     return m(RadioPaletteControl, {
       palettes,
-      selected: currentValue as string,
-      onSelect: (paletteName: string) => {
-        setOptionValue(optionsService, path, paletteName);
-        paletteService.setPalette(layerId, paletteName);
+      selected: currentValue,
+      onSelect: (paletteId) => {
+        setOptionValue(optionsService, path, paletteId);
+        paletteService.setPalette(layerId, paletteId);
       }
     });
   }

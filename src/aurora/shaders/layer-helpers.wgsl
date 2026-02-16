@@ -30,6 +30,7 @@ struct Uniforms {
   tempPaletteIndex: u32,  // row index in palette texture array
   paletteCount: u32,      // total number of palettes in array
   rainPaletteIndex: u32,  // row index for rain palette
+  tempPaletteStepped: u32, // 1 = discrete bands, 0 = smooth gradient
   logoOpacity: f32,       // computed from all layer opacities
   logoPad: f32,           // padding for alignment
   // User layer slots (32 max) - packed as vec4s for alignment

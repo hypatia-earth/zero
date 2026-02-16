@@ -9,7 +9,7 @@
  */
 
 import { signal } from '@preact/signals-core';
-import { PALETTES, getPalettesByPrefix, type Palette } from '../config/palettes';
+import { PALETTES, getPalettesByPrefix, type Palette, type PaletteId } from '../config/palettes';
 
 // ============================================================
 // Types
@@ -24,7 +24,7 @@ export interface PaletteStop {
 export type LabelMode = 'value-centered' | 'band-edge' | 'band-range';
 
 export interface PaletteData {
-  id: string;
+  id: PaletteId;
   name: string;
   description?: string;
   interpolate: boolean;
@@ -113,40 +113,20 @@ export class PaletteService {
       if (registryPalettes.length > 0) {
         return registryToPaletteData(registryPalettes[0]!);
       }
-      // Final fallback for unknown layer
-      return {
-        id: 'default',
-        name: 'Default',
-        interpolate: true,
-        labelMode: 'value-centered',
-        stops: [
-          { value: 0, color: [0, 0, 0], alpha: 255 },
-          { value: 1, color: [255, 255, 255], alpha: 255 },
-        ],
-      };
+      throw new Error(`[Palette] No palettes found for layer '${layer}'`);
     }
 
     const active = entry.available.find(p => p.id === entry.activeId);
     if (active) return active;
     if (entry.available[0]) return entry.available[0];
 
-    // Final fallback
-    return {
-      id: 'default',
-      name: 'Default',
-      interpolate: true,
-      labelMode: 'value-centered',
-      stops: [
-        { value: 0, color: [0, 0, 0], alpha: 255 },
-        { value: 1, color: [255, 255, 255], alpha: 255 },
-      ],
-    };
+    throw new Error(`[Palette] No available palettes for layer '${layer}'`);
   }
 
   /**
    * Set active palette for a layer by ID
    */
-  setPalette(layer: string, id: string): void {
+  setPalette(layer: string, id: PaletteId): void {
     const current = this.layerPalettes.value;
     const entry = current.get(layer);
 

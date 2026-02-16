@@ -64,6 +64,14 @@ export class PaletteTexture {
   }
 
   /**
+   * Check if a palette uses stepped (discrete) colors
+   */
+  isStepped(id: string): boolean {
+    const palette = PALETTES[id];
+    return palette ? !palette.interpolate : false;
+  }
+
+  /**
    * Generate 256-entry RGBA from palette stops
    */
   private generateRGBA(palette: Palette): Uint8Array {

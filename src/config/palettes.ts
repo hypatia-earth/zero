@@ -19,7 +19,7 @@ export interface PaletteStop {
 }
 
 export interface Palette {
-  id: string;
+  id: PaletteId;
   name: string;
   description: string;
   interpolate: boolean;        // true = smooth gradient, false = stepped bands
@@ -37,6 +37,14 @@ for (const [key, palette] of Object.entries(raw)) {
 export const PALETTES: Record<string, Palette> = raw;
 export const PALETTE_IDS = Object.keys(PALETTES);
 
+// Typed palette ID — derived from JSON keys
+export type PaletteId = keyof typeof palettesJson;
+
+// Palette IDs by prefix for z.enum() — must be const tuples for Zod to infer literal types
+export const TEMP_PALETTE_IDS = ['temp-classic', 'temp-hypatia', 'temp-gradient'] as const satisfies readonly PaletteId[];
+export const RAIN_PALETTE_IDS = ['rain-intensity', 'rain-type'] as const satisfies readonly PaletteId[];
+export const WIND_PALETTE_IDS = ['wind-speed'] as const satisfies readonly PaletteId[];
+
 export function getPalette(id: string): Palette {
   const palette = PALETTES[id];
   if (!palette) throw new Error(`Unknown palette: ${id}`);
@@ -45,4 +53,8 @@ export function getPalette(id: string): Palette {
 
 export function getPalettesByPrefix(prefix: string): Palette[] {
   return Object.values(PALETTES).filter(p => p.id.startsWith(prefix));
+}
+
+export function isPaletteId(value: unknown): value is PaletteId {
+  return typeof value === 'string' && value in PALETTES;
 }

@@ -262,6 +262,7 @@ export class GlobeRenderer {
     // Initialize palette uniforms
     this.uniformView.setUint32(U.paletteCount, this.paletteTexture.paletteCount, true);
     this.uniformView.setUint32(U.tempPaletteIndex, 0, true);  // Default to first palette
+    this.uniformView.setUint32(U.tempPaletteStepped, this.paletteTexture.isStepped('temp-classic') ? 1 : 0, true);
     this.uniformView.setUint32(U.rainPaletteIndex, this.paletteTexture.getPaletteIndex('rain-type'), true);
 
     // Placeholder logo (1x1, will be replaced by loadLogo)
@@ -981,6 +982,7 @@ export class GlobeRenderer {
   setTempPalette(paletteId: string): void {
     const index = this.paletteTexture.getPaletteIndex(paletteId);
     this.uniformView.setUint32(U.tempPaletteIndex, index, true);
+    this.uniformView.setUint32(U.tempPaletteStepped, this.paletteTexture.isStepped(paletteId) ? 1 : 0, true);
   }
 
   /**

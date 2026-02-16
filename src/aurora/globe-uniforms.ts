@@ -55,6 +55,7 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['tempPaletteIndex', 'u32'],     // 360: row index in palette texture
   ['paletteCount', 'u32'],         // 364: total palettes in texture
   ['rainPaletteIndex', 'u32'],     // 368: row index for rain palette
+  ['tempPaletteStepped', 'u32'],   // 372: 1 = stepped (no interpolation), 0 = smooth
 
   ['logoOpacity', 'f32'],          // 372
   ['logoPad', 'f32'],              // 376
@@ -129,6 +130,7 @@ export const U = GLOBE_UNIFORMS.offsets as {
   tempPaletteIndex: number;
   paletteCount: number;
   rainPaletteIndex: number;
+  tempPaletteStepped: number;
   logoOpacity: number;
   logoPad: number;
   // User layer arrays (8 vec4s each = 32 slots)
