@@ -12,6 +12,8 @@ struct Uniforms {
   randomSeed: f32,     // random offset for phase distribution
   showBackface: f32,   // 1.0 = show full geometry (no texture layers visible)
   radius: f32,         // sphere radius for wind particles (earth = 1.0)
+  paletteIndex: u32,   // row index in palette texture array
+  paletteCount: u32,   // total palettes in texture
 }
 
 struct LinePoint {
@@ -33,6 +35,8 @@ struct FragmentOutput {
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var<storage, read> linePoints: array<LinePoint>;
+@group(0) @binding(2) var paletteArray: texture_2d<f32>;
+@group(0) @binding(3) var paletteSampler: sampler;
 
 // Pseudo-random hash for per-line phase offset
 fn hash(n: u32) -> f32 {
@@ -124,73 +128,12 @@ fn vertexMain(
   return out;
 }
 
-// Wind speed palette - matches wind-speed in palettes.ts
+// Wind speed palette - samples from shared palette texture array
 // Normalized t = speed / 50.0 (max 50 m/s)
-// Colors: calm white → light blue → cyan → red gradient
 fn speedToColor(speed: f32) -> vec4<f32> {
-  let maxSpeed = 50.0;
-  let t = clamp(speed / maxSpeed, 0.0, 1.0);
-
-  // Palette stops (from palettes.ts wind-speed)
-  // 0.00: [245,245,245] alpha=0
-  // 0.12: [200,230,255] alpha=89
-  // 0.22: [100,220,255] alpha=166
-  // 0.34: [255,180,180] alpha=255
-  // 0.40: [255,100,100] alpha=255
-  // 0.48: [230,50,50] alpha=255
-  // 0.60: [200,30,30] alpha=255
-  // 0.80: [170,0,20] alpha=255
-  // 1.00: [140,0,30] alpha=255
-
-  if (t < 0.12) {
-    let f = t / 0.12;
-    return vec4<f32>(
-      mix(0.96, 0.78, f),
-      mix(0.96, 0.90, f),
-      mix(0.96, 1.0, f),
-      mix(0.0, 0.35, f)
-    );
-  } else if (t < 0.22) {
-    let f = (t - 0.12) / 0.10;
-    return vec4<f32>(
-      mix(0.78, 0.39, f),
-      mix(0.90, 0.86, f),
-      mix(1.0, 1.0, f),
-      mix(0.35, 0.65, f)
-    );
-  } else if (t < 0.34) {
-    let f = (t - 0.22) / 0.12;
-    return vec4<f32>(
-      mix(0.39, 1.0, f),
-      mix(0.86, 0.71, f),
-      mix(1.0, 0.71, f),
-      mix(0.65, 1.0, f)
-    );
-  } else if (t < 0.48) {
-    let f = (t - 0.34) / 0.14;
-    return vec4<f32>(
-      mix(1.0, 0.90, f),
-      mix(0.71, 0.20, f),
-      mix(0.71, 0.20, f),
-      1.0
-    );
-  } else if (t < 0.80) {
-    let f = (t - 0.48) / 0.32;
-    return vec4<f32>(
-      mix(0.90, 0.67, f),
-      mix(0.20, 0.0, f),
-      mix(0.20, 0.08, f),
-      1.0
-    );
-  } else {
-    let f = (t - 0.80) / 0.20;
-    return vec4<f32>(
-      mix(0.67, 0.55, f),
-      0.0,
-      mix(0.08, 0.12, f),
-      1.0
-    );
-  }
+  let t = clamp(speed / 50.0, 0.0, 1.0);
+  let v = (f32(uniforms.paletteIndex) + 0.5) / f32(uniforms.paletteCount);
+  return textureSampleLevel(paletteArray, paletteSampler, vec2f(t, v), 0.0);
 }
 
 @fragment

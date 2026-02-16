@@ -1,17 +1,14 @@
 // Rain/precipitation type layer
 // Uses dynamic param bindings via sampleParam_precipitation_type()
 // Values: 0=none, 1=rain, 2=snow, 3=mix
+// Palette: rain-type (stepped, 4 categories mapped to 0.0, 0.33, 0.66, 1.0)
 
 fn colormapPrecipType(ptype: f32, opacity: f32) -> vec4f {
-  // Round to nearest integer category
-  let cat = u32(ptype + 0.5);
-
-  switch cat {
-    case 1u: { return vec4f(0.3, 0.5, 1.0, opacity); }   // rain: blue
-    case 2u: { return vec4f(0.9, 0.95, 1.0, opacity); }  // snow: white
-    case 3u: { return vec4f(0.6, 0.4, 0.8, opacity); }   // mix: purple
-    default: { return vec4f(0.0); }                       // none: transparent
-  }
+  if (ptype < 0.5) { return vec4f(0.0); }  // none: transparent
+  let t = clamp((ptype - 0.5) / 2.5, 0.0, 1.0);
+  let v = (f32(u.rainPaletteIndex) + 0.5) / f32(u.paletteCount);
+  let c = textureSampleLevel(paletteArray, paletteSampler, vec2f(t, v), 0.0);
+  return vec4f(c.rgb, c.a * opacity);
 }
 
 fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {

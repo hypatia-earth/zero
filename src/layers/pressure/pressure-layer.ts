@@ -18,6 +18,7 @@ import pressContourCode from './contour.wgsl?raw';
 import pressPrefixSumCode from './prefix-sum.wgsl?raw';
 import pressChaikinCode from './chaikin.wgsl?raw';
 import type { PressureColorOption } from '../../schemas/options.schema';
+import type { PaletteTexture } from '../../aurora/palette-texture';
 
 
 /** Isobar configuration */
@@ -65,6 +66,7 @@ const SCAN_BLOCK_SIZE = 512;
 export class PressureLayer {
   private device: GPUDevice;
   private format: GPUTextureFormat;
+  private paletteTexture: PaletteTexture;
   private uniformAlignment: number;  // Queried from device.limits
 
   // Grid dimensions (fixed at 2° resolution)
@@ -131,9 +133,10 @@ export class PressureLayer {
   private currentLevelCount = 21;  // Default for 4 hPa spacing
 
 
-  constructor(device: GPUDevice, format: GPUTextureFormat) {
+  constructor(device: GPUDevice, format: GPUTextureFormat, paletteTexture: PaletteTexture) {
     this.device = device;
     this.format = format;
+    this.paletteTexture = paletteTexture;
     this.uniformAlignment = device.limits.minUniformBufferOffsetAlignment;
 
     this.createComputePipelines();
@@ -339,11 +342,13 @@ export class PressureLayer {
   }
 
   private createRenderPipeline(): void {
-    // Render bind group layout
+    // Render bind group layout (uniforms + vertices + palette texture/sampler)
     this.renderBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
         { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       ],
     });
 
@@ -379,12 +384,14 @@ export class PressureLayer {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Create bind group
+    // Create bind group (uniforms + vertices + shared palette texture)
     this.renderBindGroup = this.device.createBindGroup({
       layout: this.renderBindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.renderUniformBuffer } },
         { binding: 1, resource: { buffer: this.vertexBuffer } },
+        { binding: 2, resource: this.paletteTexture.texture.createView() },
+        { binding: 3, resource: this.paletteTexture.sampler },
       ],
     });
   }
@@ -863,24 +870,31 @@ export class PressureLayer {
 
     // Color mode and pressure range - offset 24
     // Symmetric range around 1012: ±36 hPa for balanced gradient
-    const modeMap = { solid: 0, gradient: 1, normal: 2, debug: 3 } as const;
+    const modeMap = { solid: 0, gradient: 1, normal: 2, debug: 3, palette: 4 } as const;
     uintView[24] = modeMap[colorOption.mode];
     floatView[25] = 97600;   // pressureMin (976 hPa)
     floatView[26] = 104800;  // pressureMax (1048 hPa)
     floatView[27] = 101200;  // pressureRef (1012 hPa)
 
     // Colors - offset 28 (vec4 each = 4 floats)
-    if (colorOption.mode !== 'debug') {
+    if (colorOption.mode !== 'debug' && colorOption.mode !== 'palette') {
       const colors = colorOption.colors;
       floatView.set(colors[0], 28);                           // color0
       floatView.set(colors[1] ?? [1, 1, 1, 1], 32);           // color1  QC-OK: optional
       floatView.set(colors[2] ?? [1, 1, 1, 1], 36);           // color2  QC-OK: optional
     } else {
-      // Debug mode: colors not used, but set defaults
       floatView.set([1, 1, 1, 1], 28);
       floatView.set([1, 1, 1, 1], 32);
       floatView.set([1, 1, 1, 1], 36);
     }
+
+    // Palette fields - offset 40
+    if (colorOption.mode === 'palette') {
+      uintView[40] = this.paletteTexture.getPaletteIndex(colorOption.paletteId);
+    } else {
+      uintView[40] = this.paletteTexture.getPaletteIndex('pressure-gradient');
+    }
+    uintView[41] = this.paletteTexture.paletteCount;
 
     this.device.queue.writeBuffer(this.renderUniformBuffer, 0, uniformData);
   }

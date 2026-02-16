@@ -1,5 +1,4 @@
 export { WindLayer } from './wind-layer';
-export { createWindPalette } from './wind-palette';
 
 import { defineLayer, withUI, withParams, withSlabs, withOptions, withPalettes, withCompute, withRender, asBuiltIn } from '../../services/layer/builder';
 

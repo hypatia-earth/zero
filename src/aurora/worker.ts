@@ -674,10 +674,13 @@ function handleSetUserLayerEnabled(data: Extract<AuroraRequest, { type: 'setUser
 
 function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette' }>): void {
   const { layer, paletteId, range } = data;
-  if (layer === 'temp' && renderer) {
+  if (!renderer) return;
+  if (layer === 'temp') {
     renderer.setTempPalette(paletteId);
     tempPaletteRange[0] = range[0];
     tempPaletteRange[1] = range[1];
+  } else if (layer === 'rain') {
+    renderer.setRainPalette(paletteId);
   }
 }
 

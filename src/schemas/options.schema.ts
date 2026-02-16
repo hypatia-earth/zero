@@ -158,6 +158,10 @@ export const PressureColorOptionSchema = z.discriminatedUnion('mode', [
     colors: z.tuple([Color, Color]),    // [ref, other]
   }),
   z.object({
+    mode: z.literal('palette'),
+    paletteId: z.string(),
+  }),
+  z.object({
     mode: z.literal('debug'),
   }),
 ]);

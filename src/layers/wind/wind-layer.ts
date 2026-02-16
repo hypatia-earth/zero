@@ -13,6 +13,7 @@ import { generateFibonacciSphere } from '../../utils/fibonacci-sphere';
 import { generateGaussianLUTs } from '../../utils/gaussian-grid';
 import { defaultConfig } from '../../config/defaults';
 import type { LayerState } from '../../config/types';
+import type { PaletteTexture } from '../../aurora/palette-texture';
 
 const DEBUG = false;
 
@@ -25,11 +26,14 @@ interface WindUniforms {
   lineWidth: number;    // screen-space width factor
   showBackface: number; // 1.0 when no texture layers visible (show full geometry)
   radius: number;       // sphere radius for wind particles (earth = 1.0)
+  paletteIndex: number; // row index in palette texture array
+  paletteCount: number; // total palettes in texture
 }
 
 export class WindLayer {
   private device: GPUDevice;
   private format: GPUTextureFormat;
+  private paletteTexture: PaletteTexture;
 
   // Compute pipeline
   private computePipeline!: GPUComputePipeline;
@@ -73,9 +77,10 @@ export class WindLayer {
   private lastState: LayerState | null = null;
   private needsCompute = true;
 
-  constructor(device: GPUDevice, format: GPUTextureFormat, lineCount = 8192) {
+  constructor(device: GPUDevice, format: GPUTextureFormat, paletteTexture: PaletteTexture, lineCount = 8192) {
     this.device = device;
     this.format = format;
+    this.paletteTexture = paletteTexture;
     this.seedCount = lineCount;
 
     this.createComputePipeline();
@@ -191,11 +196,13 @@ export class WindLayer {
   }
 
   private createRenderPipeline(): void {
-    // Render bind group layout (uniforms + linePoints buffer)
+    // Render bind group layout (uniforms + linePoints + palette texture/sampler)
     this.renderBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
         { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       ],
     });
 
@@ -230,19 +237,21 @@ export class WindLayer {
   }
 
   private createRenderBuffers(): void {
-    // Render uniform buffer (viewProj + eyePos + opacity + animPhase + snakeLength + lineWidth + randomSeed + showBackface)
-    // mat4(64) + vec3(12) + f32(4) + f32×5(20) + pad(12) = 112 bytes
+    // Render uniform buffer (viewProj + eyePos + opacity + animPhase + snakeLength + lineWidth + randomSeed + showBackface + radius + paletteIndex + paletteCount)
+    // mat4(64) + vec3+f32(16) + f32×6(24) + u32×2(8) = 112 bytes (fits existing alignment)
     this.renderUniformBuffer = this.device.createBuffer({
       size: 112,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Create bind group (uses linePoints buffer from compute)
+    // Create bind group (uses linePoints buffer from compute + shared palette texture)
     this.renderBindGroup = this.device.createBindGroup({
       layout: this.renderBindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.renderUniformBuffer } },
         { binding: 1, resource: { buffer: this.linePointsBuffer } },
+        { binding: 2, resource: this.paletteTexture.texture.createView() },
+        { binding: 3, resource: this.paletteTexture.sampler },
       ],
     });
   }
@@ -333,8 +342,9 @@ export class WindLayer {
    * Update render uniforms
    */
   updateUniforms(uniforms: WindUniforms): void {
-    const uniformData = new ArrayBuffer(112);  // 28 floats (96 + 16 for alignment)
+    const uniformData = new ArrayBuffer(112);
     const floatView = new Float32Array(uniformData);
+    const uintView = new Uint32Array(uniformData);
 
     // viewProj (16 floats)
     floatView.set(uniforms.viewProj, 0);
@@ -354,6 +364,10 @@ export class WindLayer {
     floatView[24] = uniforms.showBackface;
     // radius (1 float)
     floatView[25] = uniforms.radius;
+    // paletteIndex (u32)
+    uintView[26] = uniforms.paletteIndex;
+    // paletteCount (u32)
+    uintView[27] = uniforms.paletteCount;
 
     this.device.queue.writeBuffer(this.renderUniformBuffer, 0, uniformData);
   }
@@ -466,6 +480,8 @@ export class WindLayer {
       entries: [
         { binding: 0, resource: { buffer: this.renderUniformBuffer } },
         { binding: 1, resource: { buffer: this.linePointsBuffer } },
+        { binding: 2, resource: this.paletteTexture.texture.createView() },
+        { binding: 3, resource: this.paletteTexture.sampler },
       ],
     });
   }

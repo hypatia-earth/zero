@@ -262,6 +262,7 @@ export class GlobeRenderer {
     // Initialize palette uniforms
     this.uniformView.setUint32(U.paletteCount, this.paletteTexture.paletteCount, true);
     this.uniformView.setUint32(U.tempPaletteIndex, 0, true);  // Default to first palette
+    this.uniformView.setUint32(U.rainPaletteIndex, this.paletteTexture.getPaletteIndex('rain-type'), true);
 
     // Placeholder logo (1x1, will be replaced by loadLogo)
     this.logoTexture = this.device.createTexture({
@@ -344,10 +345,10 @@ export class GlobeRenderer {
     });
 
     // Initialize pressure layer with configured resolution
-    this.pressureLayer = new PressureLayer(this.device, this.format);
+    this.pressureLayer = new PressureLayer(this.device, this.format, this.paletteTexture);
 
-    // Initialize wind layer (2K lines for debugging)
-    this.windLayer = new WindLayer(this.device, this.format, windLineCount);
+    // Initialize wind layer
+    this.windLayer = new WindLayer(this.device, this.format, this.paletteTexture, windLineCount);
 
     this.resize();
   }
@@ -658,6 +659,8 @@ export class GlobeRenderer {
         lineWidth: this.windLineWidth,
         showBackface,
         radius: this.windRadius,
+        paletteIndex: this.paletteTexture.getPaletteIndex('wind-speed'),
+        paletteCount: this.paletteTexture.paletteCount,
       });
     }
   }
@@ -978,6 +981,15 @@ export class GlobeRenderer {
   setTempPalette(paletteId: string): void {
     const index = this.paletteTexture.getPaletteIndex(paletteId);
     this.uniformView.setUint32(U.tempPaletteIndex, index, true);
+  }
+
+  /**
+   * Set rain palette by ID
+   * @param paletteId Palette ID from registry (e.g., 'rain-type')
+   */
+  setRainPalette(paletteId: string): void {
+    const index = this.paletteTexture.getPaletteIndex(paletteId);
+    this.uniformView.setUint32(U.rainPaletteIndex, index, true);
   }
 
   /**

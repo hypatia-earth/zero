@@ -23,6 +23,8 @@ struct Uniforms {
   color0: vec4<f32>,        // solid: all, gradient: low, normal: ref
   color1: vec4<f32>,        // gradient: ref (1012), normal: other
   color2: vec4<f32>,        // gradient: high
+  paletteIndex: u32,        // row index in palette texture array
+  paletteCount: u32,        // total palettes in texture
 }
 
 struct VertexOutput {
@@ -39,6 +41,8 @@ struct FragmentOutput {
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var<storage, read> vertices: array<vec4<f32>>;
+@group(0) @binding(2) var paletteArray: texture_2d<f32>;
+@group(0) @binding(3) var paletteSampler: sampler;
 
 @vertex
 fn vertexMain(@builtin(vertex_index) idx: u32) -> VertexOutput {
@@ -89,6 +93,10 @@ fn fragmentMain(in: VertexOutput) -> FragmentOutput {
       } else {
         color = vec4<f32>(1.0, 1.0, 0.0, 1.0);  // yellow
       }
+    }
+    case 4u: { // palette: sample from shared palette texture
+      let v = (f32(uniforms.paletteIndex) + 0.5) / f32(uniforms.paletteCount);
+      color = textureSampleLevel(paletteArray, paletteSampler, vec2f(t, v), 0.0);
     }
     default: {
       color = vec4<f32>(1.0);

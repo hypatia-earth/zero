@@ -29,6 +29,7 @@ struct Uniforms {
   tempPaletteRange: vec2f, // min/max temperature values for palette mapping (Celsius)
   tempPaletteIndex: u32,  // row index in palette texture array
   paletteCount: u32,      // total number of palettes in array
+  rainPaletteIndex: u32,  // row index for rain palette
   logoOpacity: f32,       // computed from all layer opacities
   logoPad: f32,           // padding for alignment
   // User layer slots (32 max) - packed as vec4s for alignment

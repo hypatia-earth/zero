@@ -45,7 +45,7 @@ function colorsEqual(
 }
 
 function getSelectedPresetIndex(option: PressureColorOption): number {
-  if (option.mode === 'debug' || option.mode === 'gradient') return 0;
+  if (option.mode === 'debug' || option.mode === 'gradient' || option.mode === 'palette') return 0;
   const targetColor = option.colors[0];
   return colorPresets.findIndex(p => colorsEqual(p.color, targetColor));
 }
@@ -76,6 +76,9 @@ function buildOption(mode: ColorMode, presetIndex: number): PressureColorOption 
           [...defaultConfig.pressureColors.normalOther] as [number, number, number, number],
         ],
       };
+
+    case 'palette':
+      return { mode: 'palette', paletteId: 'pressure-gradient' };
 
     case 'debug':
       return { mode: 'debug' };
