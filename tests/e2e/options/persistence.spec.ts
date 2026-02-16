@@ -21,6 +21,7 @@ const SKIP_PATHS = new Set([
 
 test.describe('options persistence', () => {
   test('all options persist after reload', async ({ page }) => {
+    test.setTimeout(120000);  // Reload with all layers enabled triggers data fetching
     const zero = createZeroAPI(page);
 
     // Clear IndexedDB and load fresh

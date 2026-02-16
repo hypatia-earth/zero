@@ -24,7 +24,7 @@ const FIXTURE_MINUS20 = loadFixture('uniform-minus20');
 
 // Expected RGB values from Classic Temperature palette
 const RGB_55: RGB = [107, 28, 43];        // 55°C (above max, clamped)
-const RGB_MINUS20: RGB = [112, 143, 166]; // -20°C = -4°F → -5°F band in Classic
+const RGB_MINUS20: RGB = [143, 168, 184]; // -20°C → t=0.222 → stop 0.216 in Classic
 
 let page: Page;
 let zero: ZeroTestAPI;
@@ -51,7 +51,7 @@ test.describe('temp layer', () => {
   // ============================================================
 
   test('55°C renders correct RGB at opacity 1.0', async () => {
-    await zero.PaletteService.setPalette('temp', 'Classic Temperature');
+    await zero.PaletteService.setPalette('temp', 'temp-classic');
     await zero.OptionsService.toggleLayer('temp', true);
     await zero.OptionsService.setOpacity('temp', 1.0);
     await page.waitForTimeout(300);
@@ -63,7 +63,7 @@ test.describe('temp layer', () => {
   });
 
   test('55°C at opacity 0.5 blends with background', async () => {
-    await zero.PaletteService.setPalette('temp', 'Classic Temperature');
+    await zero.PaletteService.setPalette('temp', 'temp-classic');
     await zero.OptionsService.toggleLayer('temp', true);
     await zero.OptionsService.setOpacity('temp', 0.5);
     await page.waitForTimeout(300);
@@ -90,7 +90,7 @@ test.describe('temp layer', () => {
   // ============================================================
 
   test('-20°C renders correct RGB', async () => {
-    await zero.PaletteService.setPalette('temp', 'Classic Temperature');
+    await zero.PaletteService.setPalette('temp', 'temp-classic');
     await zero.OptionsService.toggleLayer('temp', true);
     await zero.OptionsService.setOpacity('temp', 1.0);
     await page.waitForTimeout(300);
@@ -128,7 +128,7 @@ test.describe('temp layer', () => {
   // ============================================================
 
   test('palette change affects color', async () => {
-    await zero.PaletteService.setPalette('temp', 'Classic Temperature');
+    await zero.PaletteService.setPalette('temp', 'temp-classic');
     await zero.OptionsService.toggleLayer('temp', true);
     await page.waitForTimeout(300);
     await zero.SlotService.injectTestData('temp', FIXTURE_55);
@@ -136,7 +136,7 @@ test.describe('temp layer', () => {
 
     const pixelClassic = await zero.Canvas.readCenterPixel();
 
-    await zero.PaletteService.setPalette('temp', 'Hypatia Temperature');
+    await zero.PaletteService.setPalette('temp', 'temp-hypatia');
     await page.waitForTimeout(500);  // Extra time for worker palette update
 
     const pixelHypatia = await zero.Canvas.readCenterPixel();

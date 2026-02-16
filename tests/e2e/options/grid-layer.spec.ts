@@ -35,7 +35,7 @@ test.describe('grid layer', () => {
   });
 
   test.afterEach(async () => {
-    await zero.OptionsService.toggleLayer('grid', false);
+    await zero.OptionsService.toggleLayer('graticule', false);
     await page.waitForTimeout(100);
   });
 
@@ -44,10 +44,10 @@ test.describe('grid layer', () => {
   // ============================================================
 
   test('enabled - grid visible', async () => {
-    await zero.OptionsService.toggleLayer('grid', true);
-    await zero.OptionsService.setOpacity('grid', 1.0);
-    await zero.OptionsService.set('grid.fontSize', 12);
-    await zero.OptionsService.set('grid.lineWidth', 2);
+    await zero.OptionsService.toggleLayer('graticule', true);
+    await zero.OptionsService.setOpacity('graticule', 1.0);
+    await zero.OptionsService.set('graticule.fontSize', 12);
+    await zero.OptionsService.set('graticule.lineWidth', 2);
     await page.waitForTimeout(300);
 
     const canvas = page.locator('#globe');
@@ -61,10 +61,10 @@ test.describe('grid layer', () => {
   // ============================================================
 
   test('opacity 0.3 - faint grid', async () => {
-    await zero.OptionsService.toggleLayer('grid', true);
-    await zero.OptionsService.setOpacity('grid', 0.3);
-    await zero.OptionsService.set('grid.fontSize', 12);
-    await zero.OptionsService.set('grid.lineWidth', 2);
+    await zero.OptionsService.toggleLayer('graticule', true);
+    await zero.OptionsService.setOpacity('graticule', 0.3);
+    await zero.OptionsService.set('graticule.fontSize', 12);
+    await zero.OptionsService.set('graticule.lineWidth', 2);
     await page.waitForTimeout(300);
 
     const canvas = page.locator('#globe');
@@ -74,10 +74,10 @@ test.describe('grid layer', () => {
   });
 
   test('opacity 1.0 - full brightness', async () => {
-    await zero.OptionsService.toggleLayer('grid', true);
-    await zero.OptionsService.setOpacity('grid', 1.0);
-    await zero.OptionsService.set('grid.fontSize', 12);
-    await zero.OptionsService.set('grid.lineWidth', 2);
+    await zero.OptionsService.toggleLayer('graticule', true);
+    await zero.OptionsService.setOpacity('graticule', 1.0);
+    await zero.OptionsService.set('graticule.fontSize', 12);
+    await zero.OptionsService.set('graticule.lineWidth', 2);
     await page.waitForTimeout(300);
 
     const canvas = page.locator('#globe');
@@ -91,10 +91,10 @@ test.describe('grid layer', () => {
   // ============================================================
 
   test('fontSize 8 - small labels', async () => {
-    await zero.OptionsService.toggleLayer('grid', true);
-    await zero.OptionsService.setOpacity('grid', 1.0);
-    await zero.OptionsService.set('grid.fontSize', 8);
-    await zero.OptionsService.set('grid.lineWidth', 2);
+    await zero.OptionsService.toggleLayer('graticule', true);
+    await zero.OptionsService.setOpacity('graticule', 1.0);
+    await zero.OptionsService.set('graticule.fontSize', 8);
+    await zero.OptionsService.set('graticule.lineWidth', 2);
     await page.waitForTimeout(300);
 
     const canvas = page.locator('#globe');
@@ -104,10 +104,10 @@ test.describe('grid layer', () => {
   });
 
   test('fontSize 16 - large labels', async () => {
-    await zero.OptionsService.toggleLayer('grid', true);
-    await zero.OptionsService.setOpacity('grid', 1.0);
-    await zero.OptionsService.set('grid.fontSize', 16);
-    await zero.OptionsService.set('grid.lineWidth', 2);
+    await zero.OptionsService.toggleLayer('graticule', true);
+    await zero.OptionsService.setOpacity('graticule', 1.0);
+    await zero.OptionsService.set('graticule.fontSize', 16);
+    await zero.OptionsService.set('graticule.lineWidth', 2);
     await page.waitForTimeout(300);
 
     const canvas = page.locator('#globe');
@@ -121,10 +121,10 @@ test.describe('grid layer', () => {
   // ============================================================
 
   test('lineWidth 1 - thin lines', async () => {
-    await zero.OptionsService.toggleLayer('grid', true);
-    await zero.OptionsService.setOpacity('grid', 1.0);
-    await zero.OptionsService.set('grid.fontSize', 12);
-    await zero.OptionsService.set('grid.lineWidth', 1);
+    await zero.OptionsService.toggleLayer('graticule', true);
+    await zero.OptionsService.setOpacity('graticule', 1.0);
+    await zero.OptionsService.set('graticule.fontSize', 12);
+    await zero.OptionsService.set('graticule.lineWidth', 1);
     await page.waitForTimeout(300);
 
     const canvas = page.locator('#globe');
@@ -134,10 +134,10 @@ test.describe('grid layer', () => {
   });
 
   test('lineWidth 3 - medium lines', async () => {
-    await zero.OptionsService.toggleLayer('grid', true);
-    await zero.OptionsService.setOpacity('grid', 1.0);
-    await zero.OptionsService.set('grid.fontSize', 12);
-    await zero.OptionsService.set('grid.lineWidth', 3);
+    await zero.OptionsService.toggleLayer('graticule', true);
+    await zero.OptionsService.setOpacity('graticule', 1.0);
+    await zero.OptionsService.set('graticule.fontSize', 12);
+    await zero.OptionsService.set('graticule.lineWidth', 3);
     await page.waitForTimeout(300);
 
     const canvas = page.locator('#globe');
@@ -147,10 +147,10 @@ test.describe('grid layer', () => {
   });
 
   test('lineWidth 5 - thick lines', async () => {
-    await zero.OptionsService.toggleLayer('grid', true);
-    await zero.OptionsService.setOpacity('grid', 1.0);
-    await zero.OptionsService.set('grid.fontSize', 12);
-    await zero.OptionsService.set('grid.lineWidth', 5);
+    await zero.OptionsService.toggleLayer('graticule', true);
+    await zero.OptionsService.setOpacity('graticule', 1.0);
+    await zero.OptionsService.set('graticule.fontSize', 12);
+    await zero.OptionsService.set('graticule.lineWidth', 5);
     await page.waitForTimeout(300);
 
     const canvas = page.locator('#globe');
@@ -165,9 +165,9 @@ test.describe('grid layer', () => {
   // ============================================================
 
   test('lod 0 - zoomed out (30° spacing)', async () => {
-    await zero.OptionsService.toggleLayer('grid', true);
-    await zero.OptionsService.setOpacity('grid', 1.0);
-    await zero.OptionsService.set('grid.lineWidth', 2);
+    await zero.OptionsService.toggleLayer('graticule', true);
+    await zero.OptionsService.setOpacity('graticule', 1.0);
+    await zero.OptionsService.set('graticule.lineWidth', 2);
     await zero.AuroraService.setCamera(0, 0, 6.0);  // Far out
     await page.waitForTimeout(2000);  // Wait for animation to settle
 
@@ -178,9 +178,9 @@ test.describe('grid layer', () => {
   });
 
   test('lod 2 - medium zoom (15° spacing)', async () => {
-    await zero.OptionsService.toggleLayer('grid', true);
-    await zero.OptionsService.setOpacity('grid', 1.0);
-    await zero.OptionsService.set('grid.lineWidth', 2);
+    await zero.OptionsService.toggleLayer('graticule', true);
+    await zero.OptionsService.setOpacity('graticule', 1.0);
+    await zero.OptionsService.set('graticule.lineWidth', 2);
     await zero.AuroraService.setCamera(0, 0, 2.5);  // Medium
     await page.waitForTimeout(2000);  // Wait for animation to settle
 
@@ -191,9 +191,9 @@ test.describe('grid layer', () => {
   });
 
   test('lod 4 - zoomed in (5° spacing)', async () => {
-    await zero.OptionsService.toggleLayer('grid', true);
-    await zero.OptionsService.setOpacity('grid', 1.0);
-    await zero.OptionsService.set('grid.lineWidth', 2);
+    await zero.OptionsService.toggleLayer('graticule', true);
+    await zero.OptionsService.setOpacity('graticule', 1.0);
+    await zero.OptionsService.set('graticule.lineWidth', 2);
     await zero.AuroraService.setCamera(0, 0, 1.2);  // Close
     await page.waitForTimeout(2000);  // Wait for animation to settle
 
