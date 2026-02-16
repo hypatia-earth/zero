@@ -76,4 +76,62 @@ test.describe('custom layer', () => {
     // Dialog should be closed
     await expect(page.locator('.dialog.create-layer')).not.toBeVisible();
   });
+
+  test('create via dialog, try, save - button appears', async () => {
+    // Open create layer dialog
+    await page.getByTestId('add-layer-btn').click();
+    await page.waitForTimeout(300);
+
+    // Set layer ID
+    await page.getByTestId('layer-id-input').fill('layersave');
+
+    // Click Try then Save
+    await page.getByTestId('layer-try-btn').click();
+    await page.waitForTimeout(1500);
+
+    await expect(page.getByTestId('layer-error')).not.toBeVisible();
+
+    await page.getByTestId('layer-save-btn').click();
+    await page.waitForTimeout(300);
+
+    // Dialog should be closed
+    await expect(page.locator('.dialog.create-layer')).not.toBeVisible();
+
+    // Layer button should appear in layers panel with correct name
+    await expect(page.locator('.layer.widget button.toggle', { hasText: 'layersave' })).toBeVisible();
+  });
+
+  test('create, save, delete - button removed', async () => {
+    // Open create layer dialog
+    await page.getByTestId('add-layer-btn').click();
+    await page.waitForTimeout(300);
+
+    // Set layer ID
+    await page.getByTestId('layer-id-input').fill('layerdelete');
+
+    // Try and Save
+    await page.getByTestId('layer-try-btn').click();
+    await page.waitForTimeout(1500);
+
+    await expect(page.getByTestId('layer-error')).not.toBeVisible();
+
+    await page.getByTestId('layer-save-btn').click();
+    await page.waitForTimeout(300);
+
+    // Verify button exists
+    const layerButton = page.locator('.layer.widget button.toggle', { hasText: 'layerdelete' });
+    await expect(layerButton).toBeVisible();
+
+    // Open edit dialog via gear icon
+    const widget = page.locator('.layer.widget', { hasText: 'layerdelete' });
+    await widget.locator('button.options').click();
+    await page.waitForTimeout(300);
+
+    // Delete the layer
+    await page.getByTestId('layer-delete-btn').click();
+    await page.waitForTimeout(300);
+
+    // Button should be removed
+    await expect(layerButton).not.toBeVisible();
+  });
 });
