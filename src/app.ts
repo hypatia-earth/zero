@@ -72,6 +72,7 @@ export const App: m.ClosureComponent = () => {
             layerRegistry: services.layerService!,
             auroraService: services.auroraService!,
             dialogService: services.dialogService!,
+            slotService: services.slotService!,
           }),
           m('.ui-container', [
             m(PanelStack, { side: 'left' }, [

@@ -549,7 +549,8 @@ function handleActivateSlots(data: Extract<AuroraRequest, { type: 'activateSlots
   }
 
   // Bind to renderer based on layer type
-  // Wind and pressure have special handling, all others use generic param bindings
+  // Wind and pressure have special handling; param bindings always checked separately
+  // since a param can be used by both a built-in layer AND a custom layer
   if (layerId === 'wind') {
     // Multi-param layer: check if ALL params are ready
     const windParams = ['wind_u_component_10m', 'wind_v_component_10m'];
@@ -574,8 +575,10 @@ function handleActivateSlots(data: Extract<AuroraRequest, { type: 'activateSlots
     if (rawBuffer) {
       renderer!.triggerPressureRegrid(slot0, rawBuffer);
     }
-  } else if (paramBindings.has(param)) {
-    // Custom layer or other param-based layer - bind via param bindings
+  }
+
+  // Always bind to generic param bindings if this param is used by any custom layer
+  if (paramBindings.has(param)) {
     const buffer0 = store.getSlotBuffer(slot0, 0);
     const buffer1 = store.getSlotBuffer(slot1, 0);
     if (buffer0 && buffer1) {

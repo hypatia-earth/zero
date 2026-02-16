@@ -439,6 +439,12 @@ export class ParamSlotService {
     return this.paramSlots.get(param)!.getActiveTimesteps();
   }
 
+  /** Check if a param has data activated in the shader */
+  isParamReady(param: string): boolean {
+    const ps = this.paramSlots.get(param);
+    return ps ? ps.getActiveTimesteps().length > 0 : false;
+  }
+
   /** GPU memory stats signal from worker */
   get memoryStats() {
     return this.auroraService.memoryStats;
