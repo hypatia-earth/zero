@@ -206,7 +206,8 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
     // Send to worker for shader recompilation
     aurora.send({ type: 'registerUserLayer', layer });
-    // Set initial opacity
+    // Enable and set initial opacity (worker defaults to disabled)
+    aurora.send({ type: 'setUserLayerEnabled', layerIndex: index, enabled: true });
     aurora.send({ type: 'setUserLayerOpacity', layerIndex: index, opacity: state.opacity });
 
     console.log(`[CreateLayer] Saved: ${state.id} (index ${index})`);
@@ -258,6 +259,9 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
     // Send to worker for shader recompilation
     aurora.send({ type: 'registerUserLayer', layer });
+    // Enable and set opacity (worker defaults to disabled)
+    aurora.send({ type: 'setUserLayerEnabled', layerIndex: 31, enabled: true });
+    aurora.send({ type: 'setUserLayerOpacity', layerIndex: 31, opacity: state.opacity });
 
     console.log(`[CreateLayer] Preview: ${state.id} (index 31)`);
     m.redraw();  // Update UI (enables Save button)
@@ -414,6 +418,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
             m('.field', [
               m('label', 'Layer ID'),
               m('input[type=text]', {
+                'data-testid': 'layer-id-input',
                 placeholder: 'e.g., mytemp',
                 disabled: isEditing,
                 value: state.id,
@@ -429,6 +434,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
             m('.field', [
               m('label', 'Data Parameter'),
               m('select', {
+                'data-testid': 'layer-param-select',
                 value: state.param,
                 onchange: (e: Event) => {
                   state.param = (e.target as HTMLSelectElement).value;
@@ -445,6 +451,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
             m('.field', [
               m('label', 'Render Order'),
               m('input[type=number]', {
+                'data-testid': 'layer-order-input',
                 min: 0,
                 max: 100,
                 value: state.order,
@@ -459,6 +466,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
             m('.field', [
               m('label', `Opacity: ${Math.round(state.opacity * 100)}%`),
               m('input[type=range]', {
+                'data-testid': 'layer-opacity-slider',
                 min: 0,
                 max: 100,
                 value: state.opacity * 100,
@@ -478,6 +486,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
             m('.field.shader', [
               m('label', 'Blend Shader (WGSL)'),
               m('textarea', {
+                'data-testid': 'layer-shader-textarea',
                 value: state.shaderCode,
                 oninput: (e: Event) => {
                   state.shaderCode = (e.target as HTMLTextAreaElement).value;
@@ -486,22 +495,25 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
             ]),
 
             // Error message
-            state.error && m('.error', state.error),
+            state.error && m('.error', { 'data-testid': 'layer-error' }, state.error),
           ]),
 
           // Footer
           m('.footer', [
             m('.left', [
               m('button', {
+                'data-testid': 'layer-try-btn',
                 onclick: () => tryLayer(layerRegistry, auroraService),
               }, 'Try'),
               exists && m('button.danger', {
+                'data-testid': 'layer-delete-btn',
                 onclick: () => deleteLayer(layerRegistry, auroraService, close),
               }, 'Delete'),
             ]),
             m('.right', [
-              m('button', { onclick: close }, 'Cancel'),
+              m('button', { 'data-testid': 'layer-cancel-btn', onclick: close }, 'Cancel'),
               m('button.primary', {
+                'data-testid': 'layer-save-btn',
                 disabled: !layerRegistry.hasPreview(),
                 onclick: () => validateAndCreate(layerRegistry, auroraService, close),
               }, 'Save'),
