@@ -59,12 +59,13 @@
   "wind-speed": {
     "id": "wind-speed",
     "name": "Wind Speed",
-    "description": "Calm white to storm red",
+    "description": "White below 17 m/s, increasingly red above (Beaufort scale)",
     "interpolate": true,
     "stops": [
-      { "value": 0.00, "color": [245, 245, 245], "alpha": 0 },
-      { "value": 0.12, "color": [200, 230, 255], "alpha": 89 },
-      { "value": 0.22, "color": [100, 220, 255], "alpha": 166 },
+      { "value": 0.00, "color": [245, 245, 245], "alpha": 20 },
+      { "value": 0.12, "color": [245, 245, 245], "alpha": 89 },
+      { "value": 0.22, "color": [245, 245, 245], "alpha": 166 },
+      { "value": 0.33, "color": [245, 245, 245], "alpha": 255 },
       { "value": 0.34, "color": [255, 180, 180], "alpha": 255 },
       { "value": 0.40, "color": [255, 100, 100], "alpha": 255 },
       { "value": 0.48, "color": [230, 50, 50], "alpha": 255 },
