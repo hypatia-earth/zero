@@ -15,7 +15,7 @@ import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
 import { defineLayer, withType, withUI, withParams, withPalettes, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
 import { DialogHeader } from './dialog-header';
-import { PARAM_METADATA, getParamMeta, getCustomLayerParams, type ParamMeta } from '../config/param-metadata';
+import { PARAM_METADATA, getParamMeta, getPublishedParams, type ParamMeta } from '../config/param-metadata';
 import { PALETTES, PALETTE_IDS, type PaletteId } from '../config/palettes';
 import { PaletteComponent } from './palette-component';
 import type { PaletteData, LabelMode } from '../services/palette-service';
@@ -27,7 +27,7 @@ interface CreateLayerDialogAttrs {
 }
 
 // Params available for custom layers (from metadata)
-const ALLOWED_PARAMS = getCustomLayerParams();
+const ALLOWED_PARAMS = getPublishedParams();
 
 const DEFAULT_PARAM = 'temperature_2m' satisfies keyof typeof PARAM_METADATA;
 const DEFAULT_PALETTE: PaletteId = PALETTE_IDS[0] as PaletteId;  // temp-classic
@@ -88,6 +88,7 @@ interface FormState {
   order: number;
   opacity: number;
   userLayerIndex: number | null;  // Assigned on first Try/Save
+  trying: boolean;                // True while waiting for shader compilation
   error: string | null;
 }
 
@@ -101,6 +102,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     order: 50,
     opacity: 0.5,
     userLayerIndex: null,
+    trying: false,
     error: null,
   };
 
@@ -249,6 +251,8 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
   function tryLayer(registry: LayerService, aurora: AuroraService) {
     state.error = null;
+    state.trying = true;
+    aurora.userLayerState.value = null;  // Reset so signal fires on next ok/error
 
     if (!state.id) {
       state.error = 'Layer ID is required';
@@ -342,6 +346,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     state.order = 50;
     state.opacity = 0.5;
     state.userLayerIndex = null;
+    state.trying = false;
     state.error = null;
     initialized = false;
     suspendedLayer = null;
@@ -374,7 +379,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       if (!wasOpen) {
         wasOpen = true;
         resetState();
-        auroraService.userLayerError.value = null;
+        auroraService.userLayerState.value = null;
 
         // Generate unique ID for new layers
         if (!editLayerId) {
@@ -385,13 +390,17 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
           updateShaderTemplate();
         }
 
-        // Watch for shader compilation errors from worker
+        // Watch for shader compilation result from worker
         disposeErrorEffect = effect(() => {
-          const err = auroraService.userLayerError.value;
-          if (err && err.layerId === '_preview') {
-            state.error = `Shader error: ${err.error}`;
-            m.redraw();
+          const result = auroraService.userLayerState.value;
+          if (result === null) return;
+          if (result === 'ok') {
+            state.trying = false;
+          } else if (result.layerId === '_preview') {
+            state.error = `Shader error: ${result.error}`;
+            state.trying = false;
           }
+          m.redraw();
         });
       }
 
@@ -444,8 +453,8 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
             onClose: close,
           }),
 
-          // Content
-          m('.content', [
+          // Content (fieldset disables all inputs while shader compiles)
+          m('fieldset.content', { disabled: state.trying }, [
             // Layer ID
             m('.field', [
               m('label', 'Layer ID'),
@@ -556,10 +565,12 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
             m('.left', [
               m('button', {
                 'data-testid': 'layer-try-btn',
+                disabled: state.trying,
                 onclick: () => tryLayer(layerRegistry, auroraService),
-              }, 'Try'),
+              }, state.trying ? 'Compiling…' : 'Try'),
               exists && m('button.danger', {
                 'data-testid': 'layer-delete-btn',
+                disabled: state.trying,
                 onclick: () => deleteLayer(layerRegistry, auroraService, close),
               }, 'Delete'),
             ]),
@@ -567,7 +578,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
               m('button', { 'data-testid': 'layer-cancel-btn', onclick: close }, 'Cancel'),
               m('button.primary', {
                 'data-testid': 'layer-save-btn',
-                disabled: !layerRegistry.hasPreview(),
+                disabled: state.trying || !layerRegistry.hasPreview(),
                 onclick: () => validateAndCreate(layerRegistry, auroraService, close),
               }, 'Save'),
             ]),

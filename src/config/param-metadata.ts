@@ -12,7 +12,7 @@ export interface ParamMeta {
   palette: string;          // suggested palette name
   sizeEstimate: number;     // compressed bytes per timestep (0 = unknown, learned at runtime)
   description?: string;
-  customLayer?: boolean;    // available for user-created custom layers
+  published?: boolean;      // tested and available for custom layers
   layers?: string[];        // built-in layers using this param (e.g., ['temp'], ['wind'])
 }
 
@@ -26,7 +26,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     range: [-40, 50],  // Data stored in Celsius
     palette: 'thermal',
     sizeEstimate: 8_000_000,
-    customLayer: true,
+    published: true,
     layers: ['temp'],
   },
   'temperature_2m_max': {
@@ -184,7 +184,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     range: [0, 100],
     palette: 'clouds',
     sizeEstimate: 8_000_000,
-    customLayer: true,
+    published: true,
     layers: ['clouds'],
   },
   'cloud_cover_low': {
@@ -225,6 +225,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     range: [-50, 50],
     palette: 'diverging',
     sizeEstimate: 4_100_000,  // ~half of 8.2MB combined
+    published: true,
     layers: ['wind'],
   },
   'wind_v_component_10m': {
@@ -233,6 +234,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     range: [-50, 50],
     palette: 'diverging',
     sizeEstimate: 4_100_000,
+    published: true,
     layers: ['wind'],
   },
   'wind_u_component_100m': {
@@ -280,6 +282,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     range: [97000, 105000],  // 970-1050 hPa
     palette: 'pressure',
     sizeEstimate: 2_000_000,
+    published: true,
     layers: ['pressure'],
   },
 
@@ -408,7 +411,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     range: [0, 3],  // categorical: none, rain, snow, mix
     palette: 'categorical',
     sizeEstimate: 0,
-    customLayer: true,
+    published: true,
     layers: ['rain'],
   },
 };
@@ -432,11 +435,11 @@ export function getKnownParams(): string[] {
 }
 
 /**
- * Get params available for custom layers
+ * Get published params — tested and available for custom layers
  */
-export function getCustomLayerParams(): string[] {
+export function getPublishedParams(): string[] {
   return Object.entries(PARAM_METADATA)
-    .filter(([, meta]) => meta.customLayer)
+    .filter(([, meta]) => meta.published)
     .map(([param]) => param);
 }
 

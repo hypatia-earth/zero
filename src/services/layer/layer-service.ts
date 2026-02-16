@@ -12,6 +12,7 @@ import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import type { TLayerCategory, SlabConfig } from '../../config/types';
 import type { OptionsService } from '../options-service';
 import { builtInLayers } from '../../layers';
+import { getPublishedParams } from '../../config/param-metadata';
 
 export type LayerType = 'decoration' | 'texture' | 'geometry' | 'solid';
 export type ComputeTrigger = 'data-ready' | 'time-change';
@@ -292,11 +293,14 @@ export class LayerService {
     });
   }
 
-  /** Get all unique params needed by registered layers */
+  /** Get all unique params: registered layers + published params from metadata */
   getAllParams(): string[] {
     const params = new Set<string>();
     for (const layer of this.layers.values()) {
       layer.params?.forEach(p => params.add(p));
+    }
+    for (const p of getPublishedParams()) {
+      params.add(p);
     }
     return Array.from(params);
   }

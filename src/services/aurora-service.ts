@@ -56,7 +56,7 @@ export interface AuroraService {
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
-  userLayerError: Signal<{ layerId: string; error: string } | null>;
+  userLayerState: Signal<{ layerId: string; error: string } | 'ok' | null>;
   send(msg: AuroraRequest, transfer?: Transferable[]): void;
 }
 
@@ -85,7 +85,7 @@ export function createAuroraService(
   const memoryStats = signal({ allocatedMB: 0, capacityMB: 0 });
 
   // User layer error (set when shader compilation fails)
-  const userLayerError = signal<{ layerId: string; error: string } | null>(null);
+  const userLayerState = signal<{ layerId: string; error: string } | 'ok' | null>(null);
 
   // Frame throttle state
   let lastRafTime = 0;
@@ -136,9 +136,9 @@ export function createAuroraService(
         break;
       case 'userLayerResult':
         if (!msg.success && msg.error) {
-          userLayerError.value = { layerId: msg.layerId, error: msg.error };
+          userLayerState.value = { layerId: msg.layerId, error: msg.error };
         } else {
-          userLayerError.value = null;
+          userLayerState.value = 'ok';
         }
         break;
     }
@@ -339,7 +339,7 @@ export function createAuroraService(
     },
 
     memoryStats,
-    userLayerError,
+    userLayerState,
 
     cleanup(): void {
       send({ type: 'cleanup' });
