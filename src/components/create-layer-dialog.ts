@@ -13,9 +13,12 @@ import { effect } from '@preact/signals-core';
 import type { LayerService, LayerDeclaration } from '../services/layer/layer-service';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
-import { defineLayer, withType, withUI, withParams, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
+import { defineLayer, withType, withUI, withParams, withPalettes, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
 import { DialogHeader } from './dialog-header';
 import { PARAM_METADATA, getParamMeta, getCustomLayerParams, type ParamMeta } from '../config/param-metadata';
+import { PALETTES, PALETTE_IDS, type PaletteId } from '../config/palettes';
+import { PaletteComponent } from './palette-component';
+import type { PaletteData, LabelMode } from '../services/palette-service';
 
 interface CreateLayerDialogAttrs {
   layerRegistry: LayerService;
@@ -27,6 +30,7 @@ interface CreateLayerDialogAttrs {
 const ALLOWED_PARAMS = getCustomLayerParams();
 
 const DEFAULT_PARAM = 'temperature_2m' satisfies keyof typeof PARAM_METADATA;
+const DEFAULT_PALETTE: PaletteId = PALETTE_IDS[0] as PaletteId;  // temp-classic
 
 // Generate sampler function name from param (e.g., 'temperature_2m' -> 'sampleParam_temperature_2m')
 function getSamplerName(param: string): string {
@@ -40,24 +44,38 @@ const DATA_PARAMS = ALLOWED_PARAMS.map(p => ({
   label: PARAM_METADATA[p]!.label
 }));
 
+// Build palette options for combobox
+const PALETTE_OPTIONS = PALETTE_IDS.map(id => ({
+  value: id,
+  label: PALETTES[id]!.name,
+}));
+
+/** Convert registry palette to PaletteData for PaletteComponent */
+function toPaletteData(id: PaletteId): PaletteData {
+  const p = PALETTES[id]!;
+  return {
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    interpolate: p.interpolate,
+    labelMode: (p.interpolate ? 'value-centered' : 'band-edge') as LabelMode,
+    stops: p.stops,
+  };
+}
+
 // Template shader for new layers
-// Placeholders: {BlendName}, {userLayerIndex}, {paletteMin}, {paletteMax}, {samplerFn}
-const SHADER_TEMPLATE = `// Custom blend function - red-green palette
+// Placeholders: {BlendName}, {userLayerIndex}, {paletteMin}, {paletteMax}, {samplerFn}, {paletteSample}
+const SHADER_TEMPLATE = `// Custom blend function - palette visualization
 fn blend{BlendName}(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let opacity = getUserLayerOpacity({userLayerIndex}u);
   if (opacity <= 0.0) { return color; }
 
-  // Sample data using dynamic param sampler (handles interpolation)
   let cell = o1280LatLonToCell(lat, lon);
   let value = {samplerFn}(cell);
 
-  // Normalize to 0-1 and apply red-green palette
-  let vMin = {paletteMin};
-  let vMax = {paletteMax};
-  let t = clamp((value - vMin) / (vMax - vMin), 0.0, 1.0);
-  let layerColor = vec3f(1.0 - t, t, 0.0);  // red → green
-
-  return vec4f(mix(color.rgb, layerColor, opacity), color.a);
+  let t = clamp((value - {paletteMin}) / ({paletteMax} - {paletteMin}), 0.0, 1.0);
+{paletteSample}
+  return vec4f(mix(color.rgb, layerColor.rgb, opacity * layerColor.a), color.a);
 }
 `;
 
@@ -65,6 +83,7 @@ interface FormState {
   id: string;
   param: string;
   paramMeta: ParamMeta;
+  paletteId: PaletteId;
   shaderCode: string;
   order: number;
   opacity: number;
@@ -77,6 +96,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     id: '',
     param: DEFAULT_PARAM,
     paramMeta: getParamMeta(DEFAULT_PARAM),
+    paletteId: DEFAULT_PALETTE,
     shaderCode: SHADER_TEMPLATE,
     order: 50,
     opacity: 0.5,
@@ -109,6 +129,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     state.id = layer.id;
     state.param = param;
     state.paramMeta = getParamMeta(param);
+    state.paletteId = (layer.palettes?.[0] ?? DEFAULT_PALETTE) as PaletteId;
     state.shaderCode = shaderCode;
     state.order = order;
     state.opacity = registry.getUserLayerOpacity(layerId);
@@ -119,12 +140,21 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const blendName = capitalize(state.id || 'Custom');
     const [min, max] = state.paramMeta.range;
     const samplerFn = getSamplerName(state.param);
+    const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
+    const isStepped = !PALETTES[state.paletteId]!.interpolate;
+
+    // Generate palette sampling code (stepped = textureLoad, smooth = textureSampleLevel)
+    const paletteSample = isStepped
+      ? `  let tx = u32(clamp(t * 256.0, 0.0, 255.0));\n  let layerColor = textureLoad(paletteArray, vec2u(tx, ${paletteIndex}u), 0);`
+      : `  let v = (f32(${paletteIndex}u) + 0.5) / f32(u.paletteCount);\n  let layerColor = textureSampleLevel(paletteArray, paletteSampler, vec2f(t, v), 0.0);`;
+
     // Keep {userLayerIndex} placeholder - replaced when index is assigned
     state.shaderCode = SHADER_TEMPLATE
       .replace(/{BlendName}/g, blendName)
       .replace(/{paletteMin}/g, min.toFixed(1))
       .replace(/{paletteMax}/g, max.toFixed(1))
-      .replace(/{samplerFn}/g, samplerFn);
+      .replace(/{samplerFn}/g, samplerFn)
+      .replace(/{paletteSample}/g, paletteSample);
   }
 
   /** Replace index placeholder in shader code with actual index */
@@ -190,6 +220,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       withType('texture'),
       withUI(state.id, state.id, 'custom'),
       withParams([state.param]),
+      withPalettes(state.paletteId),
       withOptions([`${state.id}.enabled`, `${state.id}.opacity`]),
       withBlend(blendFn),
       withShader('main', finalizedCode),
@@ -307,6 +338,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     state.id = '';
     state.param = DEFAULT_PARAM;
     state.paramMeta = getParamMeta(DEFAULT_PARAM);
+    state.paletteId = DEFAULT_PALETTE;
     state.order = 50;
     state.opacity = 0.5;
     state.userLayerIndex = null;
@@ -445,6 +477,27 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                 m('option', { value: p.value }, p.label)
               )),
               m('.hint', `Range: ${state.paramMeta.range[0]} – ${state.paramMeta.range[1]} ${state.paramMeta.unit}`),
+            ]),
+
+            // Palette
+            m('.field', [
+              m('label', 'Palette'),
+              m('select', {
+                'data-testid': 'layer-palette-select',
+                value: state.paletteId,
+                onchange: (e: Event) => {
+                  state.paletteId = (e.target as HTMLSelectElement).value as PaletteId;
+                  updateShaderTemplate();
+                },
+              }, PALETTE_OPTIONS.map(p =>
+                m('option', { value: p.value }, p.label)
+              )),
+              m(PaletteComponent, {
+                palette: toPaletteData(state.paletteId),
+                height: 30,
+                fontSize: 10,
+                color: '#888888',
+              }),
             ]),
 
             // Render order
