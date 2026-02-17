@@ -64,7 +64,6 @@ export class ShaderComposer {
     this.mainShaders = getMainShaders();
     this.postShaders = getPostShaders();
     this.initialized = true;
-    console.log('[ShaderComposer] Initialized with layers:', Array.from(this.mainShaders.keys()).join(', '));
   }
 
   /** Compose shader from layer declarations */
@@ -79,9 +78,6 @@ export class ShaderComposer {
       l.type !== 'decoration' || l.id === 'earth'  // earth is decoration but renders on surface
     );
     const postLayers = layers.filter(l => l.postFn);
-
-    console.log('[ShaderComposer] Composing surface layers:',
-      surfaceLayers.map(l => `${l.id}(order:${l.order})`).join(', '));
 
     const main = this.composeMain(surfaceLayers, layers);
     const post = this.composePost(postLayers, layers);

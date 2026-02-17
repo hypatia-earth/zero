@@ -51,10 +51,6 @@ export class ConfigService {
     return this.config.dataBaseUrl;
   }
 
-  getGpuConfig(): ZeroConfig['gpu'] {
-    return this.config.gpu;
-  }
-
   getCameraConfig(): ZeroConfig['camera'] {
     return this.config.camera;
   }

@@ -48,7 +48,6 @@ export class PaletteTexture {
       );
     });
 
-    console.log(`[PaletteTexture] Created ${this.paletteCount} palettes`);
   }
 
   /**

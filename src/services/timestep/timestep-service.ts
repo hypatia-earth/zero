@@ -40,7 +40,7 @@ export interface TimestepState {
 }
 
 /** 4-letter uppercase param code for logs */
-const P = (param: string) => param.slice(0, 4).toUpperCase();
+const P = (param: string) => param.replace(/_/g, '').slice(0, 5).toUpperCase();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TimestepService
@@ -110,10 +110,10 @@ export class TimestepService {
       const { cache, sizes } = await querySWCache(param, this.timestepsData[this.defaultModel]);
       params.set(param, { cache, gpu: new Set(), sizes });
 
-      const avgMB = sizes.size > 0
-        ? ([...sizes.values()].reduce((a, b) => a + b, 0) / sizes.size / 1024 / 1024).toFixed(1)
-        : '0';
-      console.log(`[Timestep] ${P(param)}: ${sizes.size} cached, avg ${avgMB}MB`);
+      if (sizes.size > 0) {
+        const avgMB = ([...sizes.values()].reduce((a, b) => a + b, 0) / sizes.size / 1024 / 1024).toFixed(1);
+        console.log(`[Timestep] ${P(param)}: ${sizes.size} cached, avg ${avgMB}MB`);
+      }
     }
 
     this.state.value = { ecmwf, params };

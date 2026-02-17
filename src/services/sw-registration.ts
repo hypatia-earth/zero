@@ -89,9 +89,8 @@ export async function registerServiceWorker(): Promise<void> {
       }
     }
 
-    // Ping SW to confirm it's fully activated, then log cache stats
+    // Ping SW to confirm it's fully activated
     await sendSWMessage({ type: 'PING' });
-    await logCachedTimesteps();
 
     // Setup cache utils for debugging (localhost only)
     if (location.hostname === 'localhost') {
@@ -99,22 +98,6 @@ export async function registerServiceWorker(): Promise<void> {
     }
   } catch (error) {
     console.error('[SW] Registration failed:', error);
-  }
-}
-
-/**
- * Log cached timesteps per param
- */
-async function logCachedTimesteps(): Promise<void> {
-  try {
-    const stats = await sendSWMessage<CacheStats>({ type: 'GET_CACHE_STATS' });
-    const parts = Object.entries(stats.params)
-      .filter(([, s]) => s.entries > 0)
-      .map(([param, s]) => `${param.slice(0, 4)}:${s.entries}`);
-    const cacheInfo = parts.length > 0 ? ` cache: ${parts.join(' ')}` : '';
-    console.log(`[SW] Ready${cacheInfo}`);
-  } catch {
-    console.log('[SW] Ready');
   }
 }
 

@@ -92,7 +92,7 @@ export class CapabilitiesService {
       : 'unknown (adapter info blocked)';
 
     DEBUG && console.log(
-      `[GPU] ${gpu}\n` +
+      `[CAPS] ${gpu}\n` +
       `  buffer: ${MB(bufferLimit)}, storage: ${MB(storageLimit)}, ` +
       `storageBuffers: ${adapter.limits.maxStorageBuffersPerShaderStage}, ` +
       `textures: ${adapter.limits.maxTextureArrayLayers}\n` +

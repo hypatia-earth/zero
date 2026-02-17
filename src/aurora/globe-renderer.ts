@@ -460,7 +460,6 @@ export class GlobeRenderer {
     // Recreate bind group with new layout
     this.recreateBindGroup();
 
-    console.log('[GlobeRenderer] Pipeline recreated');
   }
 
   /**

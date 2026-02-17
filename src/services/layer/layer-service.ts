@@ -236,7 +236,6 @@ export class LayerService {
     for (const layer of builtInLayers) {
       this.registerBuiltIn(layer);
     }
-    console.log('[Layers] Registered:', this.getAll().map(l => `${l.id}:${l.index}`).join(', '));
   }
 
   unregister(id: string): void {

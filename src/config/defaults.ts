@@ -34,10 +34,6 @@ export const defaultConfig: ZeroConfig = {
 
   dataBaseUrl: 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs',
 
-  gpu: {
-    timeslotsPerLayer: 4,
-  },
-
   camera: {
     ...CAMERA_DEFAULTS,
     minDistance: 1.047,

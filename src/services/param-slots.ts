@@ -81,7 +81,7 @@ export function createParamSlots(param: string, timeslots: number, slabsCount?: 
   let activeTimesteps: TTimestep[] = [];
   let capacity = timeslots;
 
-  const P = param.slice(0, 4).toUpperCase();
+  const P = param.replace(/_/g, '').slice(0, 5).toUpperCase();
 
   return {
     wanted,

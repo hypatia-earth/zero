@@ -26,7 +26,7 @@ const DEBUG = false;
 const fmt = (ts: TTimestep) => ts.slice(5, 13);
 
 /** 4-letter uppercase param code for logs */
-const P = (param: string) => param.slice(0, 4).toUpperCase();
+const P = (param: string) => param.replace(/_/g, '').slice(0, 5).toUpperCase();
 
 export class ParamSlotService {
   /** Slots keyed by param name (e.g., 'temperature_2m'), not layer name */

@@ -8,7 +8,6 @@
 
 import { computed, effect } from '@preact/signals-core';
 import type { FileOrder, IQueueService, TimestepOrder, OmSlice, QueueTask } from '../../config/types';
-import { isWeatherLayer } from '../../config/types';
 import { fetchStreaming } from '../../utils/fetch';
 import { sortByTimestep } from './sorter';
 import { QueueStatsTracker } from './stats';
@@ -26,7 +25,7 @@ const DEBUG = false;
 const fmt = (ts: string) => ts.slice(5, 13);
 
 /** 4-letter uppercase param code for logs */
-const P = (param: string) => param.slice(0, 4).toUpperCase();
+const P = (param: string) => param.replace(/_/g, '').slice(0, 5).toUpperCase();
 
 /** Queued order with callback */
 interface QueuedTimestepOrder {
@@ -85,7 +84,7 @@ export class QueueService implements IQueueService {
     private omService: OmService,
     private optionsService: OptionsService,
     private stateService: StateService,
-    private configService: ConfigService,
+    _configService: ConfigService,
     private timestepService: TimestepService,
     private layerService: LayerService
   ) {}
@@ -499,9 +498,8 @@ export class QueueService implements IQueueService {
 
   /** Refresh cache state for all weather layers from SW */
   private refreshAllCacheStates(): void {
-    const layers = this.configService.getReadyLayers().filter(isWeatherLayer);
-    for (const layer of layers) {
-      this.timestepService.refreshCacheState(layer);
+    for (const param of this.layerService.getAllParams()) {
+      this.timestepService.refreshCacheState(param);
     }
   }
 

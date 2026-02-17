@@ -277,11 +277,6 @@ export interface ZeroConfig {
   /** Open-Meteo S3 base URL - DEPRECATED: use discovery.root */
   dataBaseUrl: string;
 
-  /** GPU configuration */
-  gpu: {
-    timeslotsPerLayer: number;   // Default timeslots per layer (4)
-  };
-
   /** Camera settings */
   camera: {
     fov: number;           // Field of view in degrees
