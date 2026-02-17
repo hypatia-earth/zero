@@ -22,13 +22,10 @@ interface LayersPanelAttrs {
 export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
   return {
     view({ attrs }) {
-      const { configService, optionsService, layerRegistry, auroraService, dialogService } = attrs;
-      const readyLayerIds = new Set<string>(configService.getReadyLayers());
+      const { optionsService, layerRegistry, auroraService, dialogService } = attrs;
 
-      // All displayable layers: built-in (if ready) + custom (exclude preview)
-      const allLayers = layerRegistry.getAll().filter(l =>
-        l.isBuiltIn ? readyLayerIds.has(l.id) : l.id !== '_preview'
-      );
+      // All displayable layers: built-in + custom (exclude preview)
+      const allLayers = layerRegistry.getAll().filter(l => l.id !== '_preview');
 
       // Toggle handler for any layer
       const toggleLayer = (layer: typeof allLayers[0]) => {

@@ -46,7 +46,6 @@ export interface AuroraConfig {
   cameraConfig: CameraConfig;
   timeslotsPerLayer: number;
   windLineCount: number;
-  readyLayers: string[];
   /** Param configs for buffer management (keyed by param name) */
   paramConfigs: Array<{ param: string; sizeMB: number }>;
   /** Built-in layer declarations (sent from main thread) */

@@ -474,7 +474,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
 
   return {
     view({ attrs }) {
-      const { optionsService, paletteService, dialogService, configService, capabilitiesService } = attrs;
+      const { optionsService, paletteService, dialogService, capabilitiesService } = attrs;
 
     if (!dialogService.isOpen('options')) return null;
 
@@ -486,21 +486,12 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
     const filter = dialogService.getPayload('options')?.filter;
     const options = optionsService.options.value;
 
-    // Only show options for ready layers
-    const readyLayers = new Set<string>(configService.getReadyLayers());
-    const isReadyOption = (opt: FlatOption) => {
-      const layerId = opt.path.split('.')[0];
-      // Non-layer options (viewState, gpu, etc.) are always shown
-      // Layer options only shown if layer is ready
-      return !layerId || !layerLabels[layerId] || readyLayers.has(layerId);
-    };
-
     // Get options based on filter
     let filteredGroups: Record<string, FlatOption[]>;
 
     if (filter && filter !== 'global') {
       // Filter mode: show only options matching the filter
-      const filtered = getOptionsFiltered(filter).filter(isReadyOption);
+      const filtered = getOptionsFiltered(filter);
       filteredGroups = {};
       for (const opt of filtered) {
         const group = opt.meta.group;
@@ -509,7 +500,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
       }
     } else {
       // Global mode: show all options (respecting filter includes 'global')
-      const allOptions = getOptionsFiltered('global').filter(isReadyOption);
+      const allOptions = getOptionsFiltered('global');
       filteredGroups = {};
       for (const opt of allOptions) {
         const group = opt.meta.group;

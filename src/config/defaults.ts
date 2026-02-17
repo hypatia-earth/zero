@@ -44,7 +44,6 @@ export const defaultConfig: ZeroConfig = {
   // Layer config now in src/layers/*/index.ts, read via LayerService
 
   defaultLayers: ['earth', 'sun', 'temp'],
-  readyLayers: ['earth', 'sun', 'graticule', 'temp', 'pressure', 'wind'],
 
   sun: {
     coreRadius: 0.015,

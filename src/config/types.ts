@@ -290,9 +290,6 @@ export interface ZeroConfig {
   /** Default active layers */
   defaultLayers: TLayer[];
 
-  /** Ready layers (fully implemented, shown in UI) */
-  readyLayers: TLayer[];
-
   /** Sun rendering settings */
   sun: SunConfig;
 
