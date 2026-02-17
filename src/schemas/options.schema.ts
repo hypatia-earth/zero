@@ -1025,6 +1025,22 @@ export const optionsSchema = z.object({
         ],
       }
     ),
+    renderScale: opt(
+      z.enum(['1', '2', '4']).default('1'),
+      {
+        label: 'Downscale',
+        description: 'Reduce render resolution. Higher = faster but softer',
+        group: 'environmental',
+        filter: 'global',
+        order: 1,
+        control: 'radio',
+        options: [
+          { value: '1', label: 'Off' },
+          { value: '2', label: '2x' },
+          { value: '4', label: '4x' },
+        ],
+      }
+    ),
   }),
 });
 
@@ -1068,7 +1084,7 @@ export const defaultOptions: ZeroOptions = {
   pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
-  debug: { showPerfPanel: false, fpsLimit: 'off' },
+  debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1' },
 };
 
 // ============================================================

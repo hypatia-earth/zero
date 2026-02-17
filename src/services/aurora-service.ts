@@ -171,9 +171,9 @@ export function createAuroraService(
     async init(canvasEl: HTMLCanvasElement, config: AuroraConfig, assets: AuroraAssets): Promise<void> {
       canvas = canvasEl;
       const offscreen = canvas.transferControlToOffscreen();
-      const dpr = window.devicePixelRatio;
-      const width = canvas.clientWidth * dpr;
-      const height = canvas.clientHeight * dpr;
+      const downscale = parseInt(optionsService.options.value.debug.renderScale, 10);
+      const width = Math.round(canvas.clientWidth * window.devicePixelRatio / downscale);
+      const height = Math.round(canvas.clientHeight * window.devicePixelRatio / downscale);
 
       const transferables: Transferable[] = [
         offscreen,
@@ -221,26 +221,31 @@ export function createAuroraService(
       });
 
       // Handle resize
-      const updateScreen = () => perfService.setScreen(canvas!.clientWidth, canvas!.clientHeight);
-      const resizeObserver = new ResizeObserver(() => {
-        const dpr = window.devicePixelRatio;
-        const w = canvas!.clientWidth * dpr;
-        const h = canvas!.clientHeight * dpr;
+      const getDownscale = () => parseInt(optionsService.options.value.debug.renderScale, 10);
+      const sendResize = () => {
+        const d = getDownscale();
+        const w = Math.round(canvas!.clientWidth * window.devicePixelRatio / d);
+        const h = Math.round(canvas!.clientHeight * window.devicePixelRatio / d);
         camera!.setAspect(canvas!.clientWidth, canvas!.clientHeight);
         send({ type: 'resize', width: w, height: h });
-        updateScreen();
-      });
+        perfService.setScreen(canvas!.clientWidth, canvas!.clientHeight);
+      };
+      const resizeObserver = new ResizeObserver(sendResize);
       resizeObserver.observe(canvas);
-      updateScreen();
+      perfService.setScreen(canvas.clientWidth, canvas.clientHeight);
 
       // iOS standalone PWA resize handlers
-      window.addEventListener('resize', () => {
-        const dpr = window.devicePixelRatio;
-        send({ type: 'resize', width: canvas!.clientWidth * dpr, height: canvas!.clientHeight * dpr });
-      });
-      window.addEventListener('orientationchange', () => {
-        const dpr = window.devicePixelRatio;
-        send({ type: 'resize', width: canvas!.clientWidth * dpr, height: canvas!.clientHeight * dpr });
+      window.addEventListener('resize', sendResize);
+      window.addEventListener('orientationchange', sendResize);
+
+      // React to render scale option changes
+      let lastDownscale = optionsService.options.value.debug.renderScale;
+      effect(() => {
+        const ds = optionsService.options.value.debug.renderScale;
+        if (ds !== lastDownscale) {
+          lastDownscale = ds;
+          sendResize();
+        }
       });
 
       // Cleanup handlers
