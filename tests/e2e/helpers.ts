@@ -44,6 +44,8 @@ export interface ZeroTestAPI {
   SlotService: {
     /** Inject test data. For multi-slab layers (wind), pass array of Float32Arrays. */
     injectTestData(layer: string, data: Float32Array | Float32Array[]): Promise<void>;
+    /** Get slot stats per param: { capacity, loaded } */
+    getSlotStats(): Promise<Record<string, { capacity: number; loaded: number }>>;
   };
   OptionsService: {
     toggleLayer(layer: string, enabled: boolean): Promise<void>;
@@ -96,6 +98,12 @@ export function createZeroAPI(page: Page): ZeroTestAPI {
           const data = floatSlabs.length === 1 ? floatSlabs[0] : floatSlabs;
           (window as any).__hypatia.slotService.injectTestData(layer, data);
         }, { layer, b64Slabs: base64Slabs });
+      },
+
+      async getSlotStats(): Promise<Record<string, { capacity: number; loaded: number }>> {
+        return page.evaluate(() =>
+          (window as any).__hypatia.slotService.getSlotStats()
+        );
       },
     },
 

@@ -58,18 +58,19 @@ export class ParamSlotService {
   ) {
     this.timeslotsPerLayer = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
 
-    // Effect: watch for layer changes, update active params
+    // Effect: watch for layer/options/time changes, update active params and resize slots
     let lastActiveParams = '';
     let lastTime = '';
+    let lastTimeslots = this.timeslotsPerLayer;
 
     this.disposeEffect = effect(() => {
-      void this.optionsService.options.value; // Subscribe to options changes
+      const opts = this.optionsService.options.value;
       const time = this.stateService.viewState.value.time;
       void this.layerService.changed.value; // Subscribe to registry changes
 
       if (!this.initialized) return;
 
-      // Collect unique params from all enabled layers
+      const newTimeslots = parseInt(opts.gpu.timeslotsPerLayer, 10);
       const newActiveParams = this.collectActiveParams();
       const newActiveParamsStr = [...newActiveParams].sort().join(',');
       const currTime = time.toISOString().slice(11, 16);
@@ -78,16 +79,48 @@ export class ParamSlotService {
       const changes: string[] = [];
       if (lastActiveParams !== newActiveParamsStr) changes.push(`params=${newActiveParamsStr}`);
       if (lastTime !== currTime) changes.push(`time=${lastTime}→${currTime}`);
+      if (lastTimeslots !== newTimeslots) changes.push(`slots=${lastTimeslots}→${newTimeslots}`);
 
       if (changes.length === 0) return;
       DEBUG && console.log(`[ParamSlot] ${changes.join(', ')}`);
 
+      const prevTimeslots = lastTimeslots;
       lastActiveParams = newActiveParamsStr;
       lastTime = currTime;
+      lastTimeslots = newTimeslots;
+
+      // --- RESIZE HANDLING (if timeslotsPerLayer changed) ---
+      if (newTimeslots !== prevTimeslots) {
+        this.queueService.clearTasks();
+        const isGrowing = newTimeslots > prevTimeslots;
+        const toDate = (ts: TTimestep) => this.timestepService.toDate(ts);
+
+        for (const [param, ps] of this.paramSlots) {
+          if (isGrowing) {
+            ps.grow(newTimeslots);
+          } else {
+            const currentMapping = ps.getTimeslotMapping();
+            const sorted = [...currentMapping.entries()].sort((a, b) => {
+              const distA = Math.abs(toDate(a[0]).getTime() - time.getTime());
+              const distB = Math.abs(toDate(b[0]).getTime() - time.getTime());
+              return distA - distB;
+            });
+            const keptEntries = sorted.slice(0, newTimeslots);
+            const keptMapping = new Map(keptEntries.map(([ts], i) => [ts, i]));
+
+            ps.shrink(newTimeslots, keptMapping);
+            this.timestepService.setGpuState(param, new Set(keptMapping.keys()));
+            ps.setActiveTimesteps([]);
+            this.deactivateParam(param);
+          }
+        }
+
+        this.timeslotsPerLayer = newTimeslots;
+        this.slotsVersion.value++;
+      }
 
       // Ensure ParamSlots exist for all active params
       this.ensureParamSlots(newActiveParams);
-      // Track active params:newActiveParams;
 
       // Update wanted state and activate for each param
       for (const param of newActiveParams) {
@@ -443,6 +476,15 @@ export class ParamSlotService {
   isParamReady(param: string): boolean {
     const ps = this.paramSlots.get(param);
     return ps ? ps.getActiveTimesteps().length > 0 : false;
+  }
+
+  /** Slot stats per param for diagnostics and e2e tests */
+  getSlotStats(): Record<string, { capacity: number; loaded: number }> {
+    const stats: Record<string, { capacity: number; loaded: number }> = {};
+    for (const [param, ps] of this.paramSlots) {
+      stats[param] = { capacity: ps.getCapacity(), loaded: ps.getLoadedCount() };
+    }
+    return stats;
   }
 
   /** GPU memory stats signal from worker */

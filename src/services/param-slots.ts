@@ -57,6 +57,10 @@ export interface ParamSlots {
   getActiveTimesteps(): TTimestep[];
   setActiveTimesteps(ts: TTimestep[]): void;
 
+  // Queries (capacity)
+  getCapacity(): number;
+  getLoadedCount(): number;
+
   // Resize
   grow(newTotal: number): void;
   shrink(newTotal: number, keptMapping: Map<TTimestep, number>): void;
@@ -183,6 +187,9 @@ export function createParamSlots(param: string, timeslots: number, slabsCount?: 
 
     getActiveTimesteps: () => activeTimesteps,
     setActiveTimesteps: (ts) => { activeTimesteps = ts; },
+
+    getCapacity: () => capacity,
+    getLoadedCount: () => [...slots.values()].filter(s => s.loaded).length,
 
     grow(newTotal) {
       if (newTotal <= capacity) return;
