@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const headed = process.argv.includes('--headed');
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
@@ -22,6 +24,9 @@ export default defineConfig({
         channel: 'chrome',
         viewport: { width: 1280, height: 960 },
         deviceScaleFactor: 1,  // Fixed DPR for consistent screenshots
+        launchOptions: headed ? {
+          args: ['--auto-open-devtools-for-tabs'],
+        } : {},
       },
     },
   ],

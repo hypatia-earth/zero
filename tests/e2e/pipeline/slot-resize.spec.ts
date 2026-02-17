@@ -1,25 +1,41 @@
 /**
  * Pipeline: Slot Resize E2E Test
  *
- * Verifies that changing gpu.timeslotsPerLayer at runtime
+ * Verifies that changing gpu.timeslotsPerLayer via the UI
  * correctly grows/shrinks ParamSlots capacity and loads data
  * without warnings or errors.
  *
+ * Uses real UI interactions: gear icon → options dialog → select dropdown.
  * Sequence: 4 (default) → 8 → 16 → 2 (shrink)
  */
 
-import { test, expect } from '@playwright/test';
-import { createZeroAPI, waitForAppReady } from '../helpers';
+import { test, expect, type Page, type ConsoleMessage } from '@playwright/test';
+import { createZeroAPI, waitForAppReady, pauseIfHeaded } from '../helpers';
 
 const PARAM = 'temperature_2m';
+const TIMESLOTS_TESTID = 'gpu.timeslotsPerLayer';
+
+/** Open the options dialog by clicking the gear icon */
+async function openOptions(page: Page): Promise<void> {
+  await page.locator('.panel.options button.control.circle').click();
+  await page.waitForSelector('.dialog.options .window', { state: 'visible' });
+}
+
+/** Close the options dialog */
+async function closeOptions(page: Page): Promise<void> {
+  await page.locator('.dialog.options .footer button.btn-secondary').last().click();
+  await page.waitForSelector('.dialog.options', { state: 'hidden' });
+}
+
+/** Select a timeslots value from the dropdown */
+async function selectTimeslots(page: Page, value: string): Promise<void> {
+  await page.locator(`[data-testid="${TIMESLOTS_TESTID}"] select`).selectOption(value);
+}
 
 /** Collect console warnings/errors during a callback */
-async function withConsoleWatch(
-  page: import('@playwright/test').Page,
-  fn: () => Promise<void>,
-): Promise<string[]> {
+async function withConsoleWatch(page: Page, fn: () => Promise<void>): Promise<string[]> {
   const issues: string[] = [];
-  const handler = (msg: import('@playwright/test').ConsoleMessage) => {
+  const handler = (msg: ConsoleMessage) => {
     const type = msg.type();
     if (type === 'warning' || type === 'error') {
       issues.push(`[${type}] ${msg.text()}`);
@@ -55,13 +71,9 @@ test.describe('slot resize', () => {
 
     // --- GROW: 4 → 8 ---
     const issues8 = await withConsoleWatch(page, async () => {
-      await zero.OptionsService.set('gpu.timeslotsPerLayer', '8');
-      // Nudge time to trigger queue
-      await page.evaluate(() => {
-        const state = (window as any).__hypatia.stateService;
-        const t = new Date(state.viewState.value.time.getTime() + 3600000);
-        state.setTime(t);
-      });
+      await openOptions(page);
+      await selectTimeslots(page, '8');
+      await closeOptions(page);
       await page.waitForTimeout(10000);
     });
 
@@ -71,12 +83,9 @@ test.describe('slot resize', () => {
 
     // --- GROW: 8 → 16 ---
     const issues16 = await withConsoleWatch(page, async () => {
-      await zero.OptionsService.set('gpu.timeslotsPerLayer', '16');
-      await page.evaluate(() => {
-        const state = (window as any).__hypatia.stateService;
-        const t = new Date(state.viewState.value.time.getTime() + 3600000);
-        state.setTime(t);
-      });
+      await openOptions(page);
+      await selectTimeslots(page, '16');
+      await closeOptions(page);
       await page.waitForTimeout(10000);
     });
 
@@ -86,12 +95,9 @@ test.describe('slot resize', () => {
 
     // --- SHRINK: 16 → 2 ---
     const issues2 = await withConsoleWatch(page, async () => {
-      await zero.OptionsService.set('gpu.timeslotsPerLayer', '2');
-      await page.evaluate(() => {
-        const state = (window as any).__hypatia.stateService;
-        const t = new Date(state.viewState.value.time.getTime() + 3600000);
-        state.setTime(t);
-      });
+      await openOptions(page);
+      await selectTimeslots(page, '2');
+      await closeOptions(page);
       await page.waitForTimeout(10000);
     });
 
@@ -99,5 +105,7 @@ test.describe('slot resize', () => {
     expect(stats2[PARAM]?.capacity).toBe(2);
     expect(stats2[PARAM]!.loaded).toBeLessThanOrEqual(2);
     expect(issues2).toHaveLength(0);
+
+    await pauseIfHeaded(page);
   });
 });

@@ -295,7 +295,7 @@ function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: Opt
   const modified = isModified(opt.path, currentValue);
   const isPalette = opt.path.endsWith('.palette');
 
-  return m('div.row', { key: opt.path, class: isPalette ? 'palette-row' : '' }, [
+  return m('div.row', { key: opt.path, class: isPalette ? 'palette-row' : '', 'data-testid': opt.path }, [
     m('div.info', isPalette ? [
       m('div.text', [
         m('label.label', opt.meta.label),

@@ -309,6 +309,15 @@ export function loadFixture(name: string): Float32Array {
 // ============================================================
 
 /**
+ * Pause briefly at end of test so headed browser stays visible.
+ * No-op in headless mode.
+ */
+export async function pauseIfHeaded(page: Page, ms = 5000): Promise<void> {
+  const isHeadless = await page.evaluate(() => navigator.userAgent.includes('Headless'));
+  if (!isHeadless) await page.waitForTimeout(ms);
+}
+
+/**
  * Wait for app bootstrap to complete.
  */
 export async function waitForAppReady(page: Page): Promise<void> {
