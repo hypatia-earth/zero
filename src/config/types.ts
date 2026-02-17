@@ -230,8 +230,7 @@ export interface GraticuleConfig {
 export interface WindConfig {
   /** Default opacity 0-1 */
   opacity: number;
-  /** Animation speed in updates/sec (1 update = 1 segment forward) */
-  animSpeed: number;
+
   /** Fraction of line visible (0-1) */
   snakeLength: number;
   /** Screen-space line width factor */
@@ -240,8 +239,7 @@ export interface WindConfig {
   segmentsPerLine: number;
   /** Wind speed to arc distance scale */
   stepFactor: number;
-  /** Default line count */
-  seedCount: 8192 | 16384 | 32768 | 49152 | 65536;
+
   /** Sphere radius for wind particles (earth = 1.0) */
   radius: number;
 }
@@ -273,9 +271,6 @@ export interface ZeroConfig {
 
   /** Discovery configuration */
   discovery: DiscoveryConfig;
-
-  /** Open-Meteo S3 base URL - DEPRECATED: use discovery.root */
-  dataBaseUrl: string;
 
   /** Camera settings */
   camera: {

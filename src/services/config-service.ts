@@ -47,9 +47,6 @@ export class ConfigService {
     return this.config.app;
   }
 
-  getDataBaseUrl(): string {
-    return this.config.dataBaseUrl;
-  }
 
   getCameraConfig(): ZeroConfig['camera'] {
     return this.config.camera;

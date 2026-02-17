@@ -778,7 +778,7 @@ export const optionsSchema = z.object({
       }
     ),
     seedCount: opt(
-      z.union([z.literal(8192), z.literal(16384), z.literal(32768), z.literal(49152), z.literal(65536)]).default(defaultConfig.wind.seedCount),
+      z.union([z.literal(8192), z.literal(16384), z.literal(32768), z.literal(49152), z.literal(65536)]).default(8192),
       {
         label: 'Wind line count',
         description: 'Number of animated wind lines (affects performance)',
@@ -1080,7 +1080,7 @@ export const defaultOptions: ZeroOptions = {
   rain: { enabled: false, opacity: 1.0 },
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },
-  wind: { enabled: false, seedCount: defaultConfig.wind.seedCount, opacity: defaultConfig.wind.opacity, speed: 30 },
+  wind: { enabled: false, seedCount: 8192, opacity: defaultConfig.wind.opacity, speed: 30 },
   pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },

@@ -32,16 +32,12 @@ export const defaultConfig: ZeroConfig = {
     default: 'ecmwf_ifs',
   },
 
-  dataBaseUrl: 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs',
-
   camera: {
     ...CAMERA_DEFAULTS,
     minDistance: 1.047,
     maxDistance: 6.65,
     defaultDistance: 3.2,
   },
-
-  // Layer config now in src/layers/*/index.ts, read via LayerService
 
   defaultLayers: ['earth', 'sun', 'temp'],
 
@@ -66,15 +62,14 @@ export const defaultConfig: ZeroConfig = {
 
   wind: {
     opacity: 0.8,
-    animSpeed: 30,
     snakeLength: 0.25,
     lineWidth: 0.002,
     segmentsPerLine: 32,
     stepFactor: 0.005,
-    seedCount: 8192,
     radius: 1.0,
   },
 
+  // revisit these, ASAP
   render: {
     opacityAnimationMs: 100,
     logoEnabled: true,
