@@ -9,10 +9,7 @@ const DEBUG = true;
 
 export class CapabilitiesService {
   float32_filterable = false;
-  timestamp_query = false;
-  msaa_8x = false;
   maxBufferSizeMB = 0;
-  minUniformBufferOffsetAlignment = 256;  // Safe default, updated in init()
   hardwareConcurrency = 1;  // CPU cores for worker pool sizing
 
   // For testing buffer allocation - set to small value (e.g., 50) to test without big downloads
@@ -68,13 +65,8 @@ export class CapabilitiesService {
     this.maxBufferSizeMB = Math.floor(effectiveLimit / 1024 / 1024);
 
     this.float32_filterable = adapter.features.has('float32-filterable');
-    this.timestamp_query = adapter.features.has('timestamp-query');
-    this.minUniformBufferOffsetAlignment = adapter.limits.minUniformBufferOffsetAlignment;
     this.hardwareConcurrency = navigator.hardwareConcurrency || 1;
 
-    // MSAA 8x detection removed - WebGPU logs errors even with try/catch
-    // Feature deferred anyway (see zero-feat-gpu-budget.md MSAA section)
-    this.msaa_8x = false;
 
     const MB = (n: number) => `${Math.floor(n / 1024 / 1024)} MB`;
 
@@ -96,7 +88,7 @@ export class CapabilitiesService {
       `  buffer: ${MB(bufferLimit)}, storage: ${MB(storageLimit)}, ` +
       `storageBuffers: ${adapter.limits.maxStorageBuffersPerShaderStage}, ` +
       `textures: ${adapter.limits.maxTextureArrayLayers}\n` +
-      `  features: float32=${this.float32_filterable}, timestamp=${this.timestamp_query}\n` +
+      `  features: float32=${this.float32_filterable}, timestamp=${adapter.features.has('timestamp-query')}\n` +
       `  cores: ${this.hardwareConcurrency}, screen: ${screen.width}x${screen.height} @${devicePixelRatio}x`
     );
   }

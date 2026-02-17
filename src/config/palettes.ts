@@ -43,7 +43,7 @@ export type PaletteId = keyof typeof palettesJson;
 // Palette IDs by prefix for z.enum() — must be const tuples for Zod to infer literal types
 export const TEMP_PALETTE_IDS = ['temp-classic', 'temp-hypatia', 'temp-gradient'] as const satisfies readonly PaletteId[];
 export const RAIN_PALETTE_IDS = ['rain-intensity', 'rain-type'] as const satisfies readonly PaletteId[];
-export const WIND_PALETTE_IDS = ['wind-speed'] as const satisfies readonly PaletteId[];
+export const WIND_PALETTE_IDS = ['wind-speed', 'wind-magnitude'] as const satisfies readonly PaletteId[];
 
 export function getPalette(id: string): Palette {
   const palette = PALETTES[id];
