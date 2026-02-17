@@ -56,13 +56,7 @@ All input sensitivity and invert options are configurable in Settings.
 
 Zero fetches weather data directly from AWS S3 into your browser cache, then uploads to GPU memory. No intermediary servers.
 
-### Source
-
-[ECMWF](https://www.ecmwf.int/) runs the Integrated Forecasting System (IFS) four times daily at 9 km resolution. Since [October 2025](https://openmeteo.substack.com/p/ecmwf-transitions-to-open-data), this data is openly published under CC-BY-4.0.
-
-[Open-Meteo](https://open-meteo.com/) mirrors ECMWF data to AWS S3 (`s3://openmeteo`, `us-west-2`), funded by the [AWS Open Data Sponsorship Program](https://aws.amazon.com/opendata/open-data-sponsorship-program/). See [AWS Registry](https://registry.opendata.aws/open-meteo/).
-
-### Data Window
+[ECMWF](https://www.ecmwf.int/) runs the Integrated Forecasting System (IFS) four times daily at 9 km resolution. Since [October 2025](https://openmeteo.substack.com/p/ecmwf-transitions-to-open-data), this data is openly published under CC-BY-4.0. [Open-Meteo](https://open-meteo.com/) mirrors it to AWS S3 (`s3://openmeteo`, `us-west-2`), funded by the [AWS Open Data Sponsorship Program](https://aws.amazon.com/opendata/open-data-sponsorship-program/).
 
 | Aspect | Value |
 |--------|-------|
@@ -71,7 +65,7 @@ Zero fetches weather data directly from AWS S3 into your browser cache, then upl
 | Resolution | 1-hourly (0-90h), 3-hourly (90-144h), 6-hourly (144h+) |
 | Updates | 4 times daily |
 
-Sources: [Open-Meteo AWS open-data](https://github.com/open-meteo/open-data) · [ECMWF Open Data](https://www.ecmwf.int/en/forecasts/datasets/open-data)
+Sources: [ECMWF Open Data](https://www.ecmwf.int/en/forecasts/datasets/open-data) · [Open-Meteo AWS open-data](https://github.com/open-meteo/open-data) · [AWS Registry](https://registry.opendata.aws/open-meteo/)
 
 ## Install as App
 
@@ -87,11 +81,18 @@ For fullscreen experience, install as a Progressive Web App:
 
 **Not all combinations work equally well.** Basemaps and weather layers use different color palettes. Some combinations provide better contrast than others. Experiment with basemap and palette settings to find what works best for the data you're viewing.
 
+### Performance
+
+If the globe feels sluggish, especially on tablets or with the wind layer active, two settings in the Environmental section help:
+
+- **Downscale** renders at reduced resolution. The globe looks slightly softer but interaction becomes much smoother. On a tablet, 2x downscale with 64K wind lines runs as well as full resolution without wind.
+- **Frame rate limit** caps rendering to 30 or 60 fps. At 30 fps, the GPU has twice the time per frame. Combined with downscale, this makes even demanding layer combinations usable on mobile.
+
+Both settings take effect immediately—no reload needed.
+
 ## Known Issues
 
 **Pressure isobars may not close.** Some contour lines appear open at the edges. Under investigation.
-
-**Grid layer is demanding on mobile.** When zoomed in, grid rendering can slow down older mobile devices. Disable the grid layer in Settings if you experience lag.
 
 **Download ETA is approximate.** Caching, bandwidth, and file sizes vary. The estimate improves as downloads progress.
 
