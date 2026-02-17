@@ -20,6 +20,7 @@
     "predeploy": "npm run quality",
     "convert-luts": "node scripts/convert-luts-float16.js",
     "deploy:zero": "cd ../server/scripts && ./build-zero.sh && ./deploy-zero.sh",
+    "deploy:beta": "cd ../server/scripts && ./build-zero-beta.sh && ./deploy-zero-beta.sh",
     "font:generate": "npx msdf-bmfont -f json -o public/fonts/plex-mono.png --font-size 32 --charset public/fonts/charset.txt public/fonts/IBMPlexMono-Regular.ttf && mv public/fonts/plex-mono.json public/fonts/IBMPlexMono-Regular.json",
     "wiki": "python3 scripts/publish-wiki.py",
     "wiki:push": "python3 scripts/publish-wiki.py --push",
