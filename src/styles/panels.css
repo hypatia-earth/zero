@@ -168,9 +168,8 @@
   pointer-events: auto;
 }
 
-/* Add layer button - desktop only (height >= 960px) */
+/* Add layer button - uses .desktop-only from layout.css */
 .panel.layers .add-layer {
-  display: none;
   width: 100%;
   padding: 8px 12px;
   margin-top: 8px;
@@ -181,17 +180,6 @@
   font-size: var(--font-size-sm);
   cursor: pointer;
   transition: all 0.15s;
-}
-
-@media (min-height: 960px) {
-  .panel.layers .add-layer {
-    display: block;
-  }
-}
-
-/* Dev mode: always show Add Layer button (localhost testing) */
-body.dev .panel.layers .add-layer {
-  display: block;
 }
 
 .panel.layers .add-layer:hover {

@@ -75,7 +75,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
 
       // Add layer button
       groups.push(m('.group', { key: 'add-layer' }, [
-        m('button.add-layer', {
+        m('button.add-layer.desktop-only', {
           'data-testid': 'add-layer-btn',
           onclick: () => dialogService.open('create-layer', {}),
           title: 'Create custom layer',

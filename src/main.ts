@@ -25,9 +25,9 @@ import { App } from './app';
 
 console.log(`%c[ZERO] v${__APP_VERSION__} (${__APP_HASH__})`, 'color: darkgreen; font-weight: bold');
 
-// Add dev class for CSS overrides (e.g., show Add Layer button on small viewports)
-if (import.meta.env.DEV) {
-  document.body.classList.add('dev');
+// Localhost class for CSS overrides (e.g., .desktop-only visible at any viewport)
+if (location.hostname === 'localhost') {
+  document.body.classList.add('localhost');
 }
 
 // Mount App immediately - SW registration happens in bootstrap Step 3
