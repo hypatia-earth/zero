@@ -410,7 +410,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     unit: 'code',
     range: [0, 3],  // categorical: none, rain, snow, mix
     palette: 'categorical',
-    sizeEstimate: 0,
+    sizeEstimate: 800_000,
     published: true,
     layers: ['rain'],
   },
