@@ -5,7 +5,7 @@
  * Adapter is discarded after check - RenderService requests its own.
  */
 
-const DEBUG = false;
+const DEBUG = true;
 
 export class CapabilitiesService {
   float32_filterable = false;
@@ -76,6 +76,28 @@ export class CapabilitiesService {
     // Feature deferred anyway (see zero-feat-gpu-budget.md MSAA section)
     this.msaa_8x = false;
 
-    DEBUG && console.log(`[Capabilities] cores: ${this.hardwareConcurrency}, float32: ${this.float32_filterable}, timestamp: ${this.timestamp_query}`);
+    const MB = (n: number) => `${Math.floor(n / 1024 / 1024)} MB`;
+
+    // Try device.adapterInfo first (typed), fall back to adapter (runtime-only, blocked by Safari)
+    let info: GPUAdapterInfo | undefined;
+    const tempDevice = await adapter.requestDevice();
+    info = tempDevice.adapterInfo;
+    tempDevice.destroy();
+    if (!info?.vendor) {
+      info = (adapter as unknown as { adapterInfo?: GPUAdapterInfo }).adapterInfo;
+    }
+
+    const gpu = info?.vendor && info?.architecture
+      ? `${info.vendor} ${info.architecture} — ${info.device || info.description || 'unknown'}`
+      : 'unknown (adapter info blocked)';
+
+    DEBUG && console.log(
+      `[GPU] ${gpu}\n` +
+      `  buffer: ${MB(bufferLimit)}, storage: ${MB(storageLimit)}, ` +
+      `storageBuffers: ${adapter.limits.maxStorageBuffersPerShaderStage}, ` +
+      `textures: ${adapter.limits.maxTextureArrayLayers}\n` +
+      `  features: float32=${this.float32_filterable}, timestamp=${this.timestamp_query}\n` +
+      `  cores: ${this.hardwareConcurrency}, screen: ${screen.width}x${screen.height} @${devicePixelRatio}x`
+    );
   }
 }
