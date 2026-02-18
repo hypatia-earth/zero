@@ -125,7 +125,14 @@ fn renderLonRow(
   return opacity;
 }
 
+// Bias factor for label catchment area.
+// Labels extend in one direction (E/W, N/S) from the intersection.
+// Bias < 0.5 extends the catchment beyond the geometric midpoint.
+// 0.33 → catchment extends to ~75% of the spacing in the label's direction.
+const LABEL_CATCHMENT_BIAS: f32 = 0.33;
+
 // Find nearest line from graticuleLines uniform (uses helper functions from graticule.wgsl)
+// Biased: catchment extends further in the label's direction (E for 0-180°, W for 181-359°)
 fn findNearestLon(lonDeg: f32) -> vec2<f32> {
   var nearestDeg = 0.0;
   var nearestDist = 999.0;
@@ -139,6 +146,18 @@ fn findNearestLon(lonDeg: f32) -> vec2<f32> {
     var diff = abs(lonDeg - lineDeg);
     if (diff > 180.0) { diff = 360.0 - diff; }
 
+    // Signed diff: positive = fragment is east of line
+    var signedDiff = lonDeg - lineDeg;
+    if (signedDiff > 180.0) { signedDiff -= 360.0; }
+    if (signedDiff < -180.0) { signedDiff += 360.0; }
+
+    // East lines (0-180°) extend east, West lines (181-359°) extend west
+    let isEast = lineDeg <= 180.0;
+    let inLabelDir = (isEast && signedDiff > 0.0) || (!isEast && signedDiff < 0.0);
+    if (inLabelDir) {
+      diff *= LABEL_CATCHMENT_BIAS;
+    }
+
     if (diff < nearestDist) {
       nearestDist = diff;
       nearestDeg = lineDeg;
@@ -148,6 +167,7 @@ fn findNearestLon(lonDeg: f32) -> vec2<f32> {
   return vec2<f32>(nearestDeg, nearestOpacity);
 }
 
+// Biased: catchment extends further in the label's direction (N for >=0°, S for <0°)
 fn findNearestLat(latDeg: f32) -> vec2<f32> {
   var nearestDeg = 0.0;
   var nearestDist = 999.0;
@@ -158,7 +178,16 @@ fn findNearestLat(latDeg: f32) -> vec2<f32> {
     let opacity = getGraticuleLatOpacity(i);
     if (opacity < 0.01) { continue; }
 
-    let diff = abs(latDeg - lineDeg);
+    var diff = abs(latDeg - lineDeg);
+
+    // North lines (>=0°) extend north, South lines (<0°) extend south
+    let signedDiff = latDeg - lineDeg;
+    let isNorth = lineDeg >= 0.0;
+    let inLabelDir = (isNorth && signedDiff > 0.0) || (!isNorth && signedDiff < 0.0);
+    if (inLabelDir) {
+      diff *= LABEL_CATCHMENT_BIAS;
+    }
+
     if (diff < nearestDist) {
       nearestDist = diff;
       nearestDeg = lineDeg;

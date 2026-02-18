@@ -588,7 +588,7 @@ export const optionsSchema = z.object({
       }
     ),
     fontSize: opt(
-      z.number().min(2).max(16).default(12),
+      z.number().min(8).max(24).default(12),
       {
         label: 'Label size',
         description: 'Font size for graticule coordinate labels',
@@ -596,8 +596,8 @@ export const optionsSchema = z.object({
         filter: ['global', 'graticule'],
         order: 5,
         control: 'slider',
-        min: 2,
-        max: 16,
+        min: 8,
+        max: 24,
         step: 1,
       }
     ),

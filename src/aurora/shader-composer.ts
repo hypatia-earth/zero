@@ -247,7 +247,17 @@ fn sampleParam_${safeName}(cell: u32) -> f32 {
       const signature = layer.isBuiltIn
         ? BLEND_SIGNATURES[blendFn]!
         : '(color, lat, lon)';
-      calls.push(`  color = ${blendFn}${signature};`);
+      const call = `color = ${blendFn}${signature};`;
+
+      // Earth basemap always renders (it's the base layer)
+      if (layer.id === 'earth') {
+        calls.push(`  ${call}`);
+      } else if (layer.isBuiltIn) {
+        const name = layer.id.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+        calls.push(`  if (getLayerOpacity(LAYER_${name}) > 0.0) { ${call} }`);
+      } else {
+        calls.push(`  if (getUserLayerOpacity(${layer.userLayerIndex!}u) > 0.0) { ${call} }`);
+      }
     }
 
     if (calls.length === 0) {

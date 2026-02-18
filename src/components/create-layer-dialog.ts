@@ -70,8 +70,6 @@ function toPaletteData(id: PaletteId): PaletteData {
 const SHADER_TEMPLATE = `// Custom blend function - palette visualization
 fn blend{BlendName}(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let opacity = getUserLayerOpacity({userLayerIndex}u);
-  if (opacity <= 0.0) { return color; }
-
   let cell = o1280LatLonToCell(lat, lon);
   let value = {samplerFn}(cell);
 

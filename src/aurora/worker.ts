@@ -15,6 +15,7 @@ import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
 import { LayerStore } from './layer-store';
 import type { ZeroOptions } from '../schemas/options.schema';
 import type { TLayer } from '../config/types';
+import { defaultConfig } from '../config/defaults';
 import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer, activeParamBindings, type ComposedShaders } from './shader-composer';
 import { LayerService, type LayerDeclaration } from '../services/layer/layer-service';
@@ -286,7 +287,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     // Graticule (animated opacity)
     graticuleOpacity: animatedOpacity.get('graticule')!,
     graticuleFontSize: opts.graticule.fontSize,
-    graticuleLabelMaxRadius: 280,
+    graticuleLabelMaxRadius: defaultConfig.graticule.labelMaxRadiusPx,
     graticuleLineWidth: opts.graticule.lineWidth,
     // Layers (animated opacities)
     earthOpacity: animatedOpacity.get('earth')!,
