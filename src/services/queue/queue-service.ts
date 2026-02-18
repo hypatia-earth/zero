@@ -334,18 +334,19 @@ export class QueueService implements IQueueService {
     );
 
     const windowSet = new Set(window);
+    const activeLayerSet = new Set(params.activeLayers);
 
-    // 2. Abort in-flight tasks OUTSIDE data window
+    // 2. Abort in-flight tasks outside data window OR for inactive layers
     for (const [key, inFlightTask] of this.inFlight) {
-      if (!windowSet.has(inFlightTask.task.timestep)) {
-        DEBUG && console.log(`[Queue] Aborting out-of-window: ${fmt(inFlightTask.task.timestep)}`);
+      if (!windowSet.has(inFlightTask.task.timestep) || !activeLayerSet.has(inFlightTask.task.param)) {
+        DEBUG && console.log(`[Queue] Aborting: ${fmt(inFlightTask.task.timestep)} (${inFlightTask.task.param})`);
         inFlightTask.abortController.abort();
         this.inFlight.delete(key);
       }
     }
 
-    // 3. Remove queued tasks outside data window
-    this.taskQueue = this.taskQueue.filter(t => windowSet.has(t.timestep));
+    // 3. Remove queued tasks outside data window OR for inactive layers
+    this.taskQueue = this.taskQueue.filter(t => windowSet.has(t.timestep) && activeLayerSet.has(t.param));
 
     // 4. Merge new tasks (avoid duplicates)
     let added = 0;

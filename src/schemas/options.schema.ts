@@ -1088,7 +1088,7 @@ export const defaultOptions: ZeroOptions = {
   sun: { enabled: true, opacity: 1 },
   graticule: { enabled: true, opacity: defaultConfig.graticule.opacity, fontSize: 12, lineWidth: 2 },
   temp: { enabled: true, opacity: 0.6, palette: 'temp-classic' },
-  rain: { enabled: false, opacity: 1.0 },
+  rain: { enabled: false, opacity: 0.6 },
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },
   wind: { enabled: false, seedCount: 8192, opacity: defaultConfig.wind.opacity, speed: 30 },
