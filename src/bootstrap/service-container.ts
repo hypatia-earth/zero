@@ -10,6 +10,7 @@ import { OptionsService } from '../services/options-service';
 import { StateService } from '../services/state-service';
 import { OmService } from '../services/queue/om-service';
 import { DialogService } from '../services/dialog-service';
+import { ModalService } from '../services/modal-service';
 import { AboutService } from '../services/about-service';
 import { ThemeService } from '../services/theme-service';
 import { CapabilitiesService } from '../services/capabilities-service';
@@ -27,6 +28,7 @@ export interface ServiceContainer {
   layerService: LayerService;
   configService: ConfigService;
   dialogService: DialogService;
+  modalService: ModalService;
   aboutService: AboutService;
   themeService: ThemeService;
   capabilitiesService: CapabilitiesService;
@@ -55,7 +57,7 @@ export interface ServiceContainer {
  */
 export function createFoundationServices(): Pick<
   ServiceContainer,
-  'layerService' | 'configService' | 'dialogService' | 'aboutService' | 'themeService' | 'capabilitiesService' |
+  'layerService' | 'configService' | 'dialogService' | 'modalService' | 'aboutService' | 'themeService' | 'capabilitiesService' |
   'optionsService' | 'stateService' | 'omService' | 'perfService'
 > {
   const layerService = new LayerService();
@@ -66,6 +68,7 @@ export function createFoundationServices(): Pick<
 
   const omService = new OmService(optionsService);
   const dialogService = new DialogService();
+  const modalService = new ModalService();
   const aboutService = new AboutService();
   const themeService = new ThemeService();
   const capabilitiesService = new CapabilitiesService();
@@ -84,6 +87,7 @@ export function createFoundationServices(): Pick<
     stateService,
     omService,
     dialogService,
+    modalService,
     aboutService,
     themeService,
     capabilitiesService,

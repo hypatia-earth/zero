@@ -19,12 +19,14 @@ import { PARAM_METADATA, getParamMeta, getPublishedParams, type ParamMeta } from
 import { PALETTES, PALETTE_IDS, type PaletteId } from '../config/palettes';
 import { PaletteComponent } from './palette-component';
 import type { PaletteData, LabelMode } from '../services/palette-service';
+import type { ModalService } from '../services/modal-service';
 import type { SlotService } from '../services/slot-service';
 
 interface CreateLayerDialogAttrs {
   layerRegistry: LayerService;
   auroraService: AuroraService;
   dialogService: DialogService;
+  modalService: ModalService;
   slotService: SlotService;
 }
 
@@ -302,7 +304,10 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     m.redraw();  // Update UI (enables Save button)
   }
 
-  function deleteLayer(registry: LayerService, aurora: AuroraService, onClose: () => void) {
+  async function deleteLayer(registry: LayerService, aurora: AuroraService, modalService: ModalService, onClose: () => void) {
+    const confirmed = await modalService.confirmDelete(state.id);
+    if (!confirmed) return;
+
     // Delete permanent layer if exists
     const layer = state.id ? registry.get(state.id) : null;
     if (layer && !layer.isBuiltIn) {
@@ -359,7 +364,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
   return {
     view({ attrs }) {
-      const { layerRegistry, auroraService, dialogService } = attrs;
+      const { layerRegistry, auroraService, dialogService, modalService } = attrs;
 
       if (!dialogService.isOpen('create-layer')) {
         // Clean up on close
@@ -583,7 +588,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
               exists && m('button.danger', {
                 'data-testid': 'layer-delete-btn',
                 disabled: state.tryPhase !== 'idle',
-                onclick: () => deleteLayer(layerRegistry, auroraService, close),
+                onclick: () => deleteLayer(layerRegistry, auroraService, modalService, close),
               }, 'Delete'),
             ]),
             m('.right', [

@@ -23,6 +23,7 @@ import { OptionsPanel } from './components/options-panel';
 import { FullscreenPanel } from './components/fullscreen-panel';
 import { PanelStack } from './components/panel-stack';
 import { CreateLayerDialog } from './components/create-layer-dialog';
+import { Modal } from './components/modal';
 
 export const App: m.ClosureComponent = () => {
   // Progress state for bootstrap modal (created early for subscription)
@@ -72,8 +73,10 @@ export const App: m.ClosureComponent = () => {
             layerRegistry: services.layerService!,
             auroraService: services.auroraService!,
             dialogService: services.dialogService!,
+            modalService: services.modalService!,
             slotService: services.slotService!,
           }),
+          m(Modal, { modalService: services.modalService! }),
           m('.ui-container', [
             m(PanelStack, { side: 'left' }, [
               m(LogoPanel),

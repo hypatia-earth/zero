@@ -183,6 +183,7 @@ export function exposeDebugServices(services: ServiceContainer): void {
     keyboardService: services.keyboardService,
     paletteService: services.paletteService,
     dialogService: services.dialogService,
+    modalService: services.modalService,
     aboutService: services.aboutService,
     themeService: services.themeService,
     perfService: services.perfService,
