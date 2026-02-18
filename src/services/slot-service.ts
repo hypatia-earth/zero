@@ -1,7 +1,7 @@
 /**
- * ParamSlotService - Param-centric GPU slot management
+ * SlotService - Param-centric GPU slot management
  *
- * Key difference from SlotService: slots are keyed by param name (e.g., 'temperature_2m')
+ * Slots are keyed by param name (e.g., 'temperature_2m'),
  * not layer name (e.g., 'temp'). Multiple layers can share the same param data.
  *
  * This enables:
@@ -28,7 +28,7 @@ const fmt = (ts: TTimestep) => ts.slice(5, 13);
 /** 4-letter uppercase param code for logs */
 const P = (param: string) => param.replace(/_/g, '').slice(0, 5).toUpperCase();
 
-export class ParamSlotService {
+export class SlotService {
   /** Slots keyed by param name (e.g., 'temperature_2m'), not layer name */
   private paramSlots: Map<string, ParamSlots> = new Map();
 

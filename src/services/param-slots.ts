@@ -3,7 +3,7 @@
  *
  * Factory function creates isolated state for each weather layer.
  * Manages: slot allocation, loading tracking, active pair state.
- * SlotService orchestrates multiple ParamSlots instances.
+ * SlotService orchestrates multiple ParamSlots instances (see slot-service.ts).
  */
 
 import { signal } from '@preact/signals-core';

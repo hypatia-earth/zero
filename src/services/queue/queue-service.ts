@@ -17,7 +17,7 @@ import type { ConfigService } from '../config-service';
 import type { StateService } from '../state-service';
 import type { TimestepService } from '../timestep/timestep-service';
 import type { LayerService } from '../layer/layer-service';
-import type { ParamSlotService } from '../param-slot-service';
+import type { SlotService } from '../slot-service';
 
 const DEBUG = false;
 
@@ -55,7 +55,7 @@ export class QueueService implements IQueueService {
   // Reactive queue (Phase 3)
   private taskQueue: QueueTask[] = [];
   private inFlight: Map<string, InFlightTask> = new Map(); // key: `${param}:${timestep}:${slabIndex}`
-  private slotService: ParamSlotService | null = null;
+  private slotService: SlotService | null = null;
   private disposeEffect: (() => void) | null = null;
 
   /** Reactive parameters for queue management */
@@ -90,7 +90,7 @@ export class QueueService implements IQueueService {
   ) {}
 
   /** Set SlotService reference (avoids circular dependency) */
-  setSlotService(ss: ParamSlotService): void {
+  setSlotService(ss: SlotService): void {
     this.slotService = ss;
   }
 

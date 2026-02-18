@@ -19,13 +19,13 @@ import { PARAM_METADATA, getParamMeta, getPublishedParams, type ParamMeta } from
 import { PALETTES, PALETTE_IDS, type PaletteId } from '../config/palettes';
 import { PaletteComponent } from './palette-component';
 import type { PaletteData, LabelMode } from '../services/palette-service';
-import type { ParamSlotService } from '../services/param-slot-service';
+import type { SlotService } from '../services/slot-service';
 
 interface CreateLayerDialogAttrs {
   layerRegistry: LayerService;
   auroraService: AuroraService;
   dialogService: DialogService;
-  slotService: ParamSlotService;
+  slotService: SlotService;
 }
 
 // Params available for custom layers (from metadata)

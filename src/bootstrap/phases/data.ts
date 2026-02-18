@@ -3,11 +3,11 @@
  */
 
 import type { QueueService } from '../../services/queue/queue-service';
-import type { ParamSlotService } from '../../services/param-slot-service';
+import type { SlotService } from '../../services/slot-service';
 import type { Progress } from '../progress';
 
 export async function runDataPhase(
-  slotService: ParamSlotService,
+  slotService: SlotService,
   queueService: QueueService,
   progress: Progress
 ): Promise<void> {

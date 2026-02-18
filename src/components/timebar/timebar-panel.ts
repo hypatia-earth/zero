@@ -10,7 +10,7 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import type { ParamSlotService } from '../../services/param-slot-service';
+import type { SlotService } from '../../services/slot-service';
 import type { TimestepService } from '../../services/timestep/timestep-service';
 import type { OptionsService } from '../../services/options-service';
 import type { ThemeService } from '../../services/theme-service';
@@ -22,7 +22,7 @@ import { renderTimebar, getTimebarHeight } from './timebar-renderer';
 interface TimeBarPanelAttrs {
   optionsService: OptionsService;
   stateService: StateService;
-  slotService: ParamSlotService;
+  slotService: SlotService;
   timestepService: TimestepService;
   themeService: ThemeService;
   layerService: LayerService;

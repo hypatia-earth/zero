@@ -216,8 +216,10 @@ function drawPalette(
       color = t < 0.5 ? stop1.color : stop2.color;
     }
 
-    const alpha = (t < 0.5 ? stop1.alpha : stop2.alpha) ?? 1; // QC-OK: alpha optional
-    ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
+    const a1 = stop1.alpha ?? 255;  // QC-OK: alpha optional, 0-255
+    const a2 = stop2.alpha ?? 255;
+    const alpha255 = interpolate ? a1 + (a2 - a1) * t : (t < 0.5 ? a1 : a2);
+    ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha255 / 255})`;
     ctx.fillRect(x, labelHeight, 1, height - labelHeight);
   }
 

@@ -12,7 +12,7 @@ import type { OmService } from '../../services/queue/om-service';
 import type { OptionsService } from '../../services/options-service';
 import type { ConfigService } from '../../services/config-service';
 import type { LayerService } from '../../services/layer/layer-service';
-import type { ParamSlotService } from '../../services/param-slot-service';
+import type { SlotService } from '../../services/slot-service';
 import type { Progress } from '../progress';
 import type { LoadedAssets } from './assets';
 import { getPublishedParams } from '../../config/param-metadata';
@@ -26,7 +26,7 @@ export async function runGpuInitPhase(
   optionsService: OptionsService,
   configService: ConfigService,
   layerService: LayerService,
-  slotService: ParamSlotService,
+  slotService: SlotService,
   assets: LoadedAssets,
   progress: Progress
 ): Promise<void> {

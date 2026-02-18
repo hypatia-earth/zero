@@ -16,7 +16,7 @@ import { CapabilitiesService } from '../services/capabilities-service';
 import { TimestepService } from '../services/timestep/timestep-service';
 import { QueueService } from '../services/queue/queue-service';
 import { createAuroraService, type AuroraService } from '../services/aurora-service';
-import { ParamSlotService } from '../services/param-slot-service';
+import { SlotService } from '../services/slot-service';
 import { PaletteService } from '../services/palette-service';
 import { KeyboardService } from '../services/keyboard-service';
 import { PerfService } from '../services/perf-service';
@@ -43,7 +43,7 @@ export interface ServiceContainer {
 
   // Rendering (worker-based)
   auroraService: AuroraService | null;
-  slotService: ParamSlotService | null;
+  slotService: SlotService | null;
   paletteService: PaletteService | null;
 
   // Input (created after rendering)
@@ -116,7 +116,7 @@ export function createQueueService(
 export { createAuroraService };
 
 /**
- * Create SlotService (or ParamSlotService) and wire circular dep with QueueService
+ * Create SlotService and wire circular dep with QueueService
  */
 export function createSlotService(
   timestepService: TimestepService,
@@ -126,8 +126,8 @@ export function createSlotService(
   stateService: StateService,
   configService: ConfigService,
   layerService: LayerService
-): ParamSlotService {
-  const slotService = new ParamSlotService(
+): SlotService {
+  const slotService = new SlotService(
     timestepService,
     auroraService,
     queueService,
