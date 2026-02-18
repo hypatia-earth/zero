@@ -199,7 +199,7 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
   const opts = currentOptions;
   if (!opts || !layerRegistry) return;
 
-  const animMs = 100;  // ~100ms transitions
+  const animMs = defaultConfig.render.opacityAnimationMs;
   const rate = 1000 / animMs;
   const factor = Math.min(1, dt * rate);
 
