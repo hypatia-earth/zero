@@ -1,30 +1,16 @@
 /**
- * CapabilitiesService - GPU capability detection
+ * CapabilitiesService - Early GPU probe on main thread
  *
- * Checks WebGPU features once during bootstrap, stores flags for later use.
- * Adapter is discarded after check - RenderService requests its own.
+ * Validates WebGPU availability and checks float32-filterable support
+ * (needed to decide LUT format before worker init). The worker requests
+ * its own adapter/device — this probe exists to break the chicken-and-egg:
+ * worker needs LUT assets at init, LUT format depends on float32 check.
  */
 
 const DEBUG = true;
 
 export class CapabilitiesService {
-  float32_filterable = false;
-  maxBufferSizeMB = 0;
-  hardwareConcurrency = 1;  // CPU cores for worker pool sizing
-
-  // For testing buffer allocation - set to small value (e.g., 50) to test without big downloads
-  private readonly DEBUG_MAX_BUFFER_SIZE_MB: number | null = null;  // null = use real GPU limit
-
-  constructor() {}
-
-  /** Get effective max buffer size (respects debug override) */
-  getEffectiveMaxBufferSize(): number {
-    if (this.DEBUG_MAX_BUFFER_SIZE_MB !== null) {
-      console.warn(`[Capabilities] DEBUG: maxBufferSize = ${this.DEBUG_MAX_BUFFER_SIZE_MB} MB`);
-      return this.DEBUG_MAX_BUFFER_SIZE_MB;
-    }
-    return this.maxBufferSizeMB;
-  }
+  float32Filterable = false;
 
   async init(): Promise<void> {
     if (!navigator.gpu) {
@@ -61,12 +47,7 @@ export class CapabilitiesService {
       );
     }
 
-    // Store for options UI to filter budget presets
-    this.maxBufferSizeMB = Math.floor(effectiveLimit / 1024 / 1024);
-
-    this.float32_filterable = adapter.features.has('float32-filterable');
-    this.hardwareConcurrency = navigator.hardwareConcurrency || 1;
-
+    this.float32Filterable = adapter.features.has('float32-filterable');
 
     const MB = (n: number) => `${Math.floor(n / 1024 / 1024)} MB`;
 
@@ -88,8 +69,8 @@ export class CapabilitiesService {
       `  buffer: ${MB(bufferLimit)}, storage: ${MB(storageLimit)}, ` +
       `storageBuffers: ${adapter.limits.maxStorageBuffersPerShaderStage}, ` +
       `textures: ${adapter.limits.maxTextureArrayLayers}\n` +
-      `  features: float32=${this.float32_filterable}, timestamp=${adapter.features.has('timestamp-query')}\n` +
-      `  cores: ${this.hardwareConcurrency}, screen: ${screen.width}x${screen.height} @${devicePixelRatio}x`
+      `  features: float32=${this.float32Filterable}, timestamp=${adapter.features.has('timestamp-query')}\n` +
+      `  cores: ${navigator.hardwareConcurrency}, screen: ${screen.width}x${screen.height} @${devicePixelRatio}x`
     );
   }
 }

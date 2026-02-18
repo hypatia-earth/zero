@@ -22,7 +22,7 @@ function swLog(...args) {
 const PAST_MAX_AGE = 30 * 24 * 3600 * 1000; // 30 days in ms
 const FUTURE_MAX_AGE = 7 * 24 * 3600 * 1000; // 7 days in ms (data immutable per model run)
 
-// Valid param names for caching
+// Valid param names for caching — must match published params in src/config/param-metadata.ts
 const VALID_PARAMS = [
   'temperature_2m',
   'precipitation_type',

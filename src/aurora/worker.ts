@@ -308,8 +308,25 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     tempDataReady: getLayerSlotState('temp')!.dataReady,
     rainDataReady: getLayerSlotState('rain')!.dataReady,
     tempPaletteRange,
-    logoOpacity: 0,
+    logoOpacity: defaultConfig.render.logoEnabled && !isAnyLayerEnabled()
+      ? 1 - Math.max(...animatedOpacity.values())
+      : 0,
   };
+}
+
+/** Check if any layer is enabled (for logo suppression) */
+function isAnyLayerEnabled(): boolean {
+  if (!currentOptions || !layerRegistry) return false;
+  for (const layer of layerRegistry.getAll()) {
+    if (layer.isBuiltIn) {
+      const layerOpts = currentOptions[layer.id as TLayer];
+      if (layerOpts && 'enabled' in layerOpts && layerOpts.enabled) return true;
+    } else {
+      const idx = layer.userLayerIndex!;
+      if (userLayerEnabled.get(idx)) return true;
+    }
+  }
+  return false;
 }
 
 // ============================================================

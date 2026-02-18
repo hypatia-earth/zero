@@ -21,7 +21,7 @@ export async function runAssetsPhase(
   capabilitiesService: CapabilitiesService,
   progress: Progress
 ): Promise<LoadedAssets> {
-  const f16 = !capabilitiesService.float32_filterable;
+  const f16 = !capabilitiesService.float32Filterable;
   const suffix = f16 ? '-16' : '';
 
   const lutBuffers: ArrayBuffer[] = [];

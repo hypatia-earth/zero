@@ -63,7 +63,6 @@ export const App: m.ClosureComponent = () => {
             paletteService: services.paletteService!,
             dialogService: services.dialogService!,
             configService: services.configService!,
-            capabilitiesService: services.capabilitiesService!,
           }),
           m(AboutDialog, {
             aboutService: services.aboutService!,
