@@ -142,7 +142,7 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
 
   // Animated limb for pressure/wind: push depth toward far plane near limb as layers fade
   // Uses same fadeAmount logic as back-side grid
-  let depthFadeAmount = smoothstep(0.3, 0.0, max(getLayerOpacity(LAYER_EARTH), getLayerOpacity(LAYER_TEMP)));
+  let depthFadeAmount = smoothstep(0.3, 0.0, max(max(getLayerOpacity(LAYER_EARTH), getLayerOpacity(LAYER_TEMP)), getLayerOpacity(LAYER_SUN)));
   if (depthFadeAmount > 0.01) {
     let viewAngle = dot(normalize(hit.point), -rayDir);  // 1=facing camera, 0=at limb
     let limbFactor = 1.0 - viewAngle;  // 0=center, 1=limb

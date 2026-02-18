@@ -111,6 +111,7 @@ export class GlobeRenderer {
   // Track layer opacities for depth test decision
   private currentEarthOpacity = 0;
   private currentTempOpacity = 0;
+  private currentSunOpacity = 0;
 
   // Animation timing (shared across grid, wind, etc.)
   private lastFrameTime = 0;
@@ -592,6 +593,7 @@ export class GlobeRenderer {
     // Track for depth test decision in render()
     this.currentEarthOpacity = uniforms.earthOpacity;
     this.currentTempOpacity = uniforms.tempOpacity;
+    this.currentSunOpacity = uniforms.sunOpacity;
 
     // Graticule settings
     view.setFloat32(O.graticuleFontSize, uniforms.graticuleFontSize, true);
@@ -725,7 +727,7 @@ export class GlobeRenderer {
     // Renders to same color/depth textures, depth-tested against globe
     // Always run pass for timestamp consistency (even if empty)
     const hasPressure = this.pressureLayer.isEnabled() && this.pressureLayer.getVertexCount() > 0;
-    const useGlobeDepth = this.currentEarthOpacity > 0.01 || this.currentTempOpacity > 0.01;
+    const useGlobeDepth = this.currentEarthOpacity > 0.01 || this.currentTempOpacity > 0.01 || this.currentSunOpacity > 0.01;
 
     const geometryPassDescriptor: GPURenderPassDescriptor = {
       colorAttachments: [{
