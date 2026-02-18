@@ -280,10 +280,10 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     // Sun (animated opacity)
     sunOpacity: animatedOpacity.get('sun')!,
     sunDirection: getSunDirection(time),
-    sunCoreRadius: 0.005,
-    sunGlowRadius: 0.02,
-    sunCoreColor: new Float32Array([1, 1, 0.9]),
-    sunGlowColor: new Float32Array([1, 0.8, 0.4]),
+    sunCoreRadius: defaultConfig.sun.coreRadius,
+    sunGlowRadius: defaultConfig.sun.glowRadius,
+    sunCoreColor: new Float32Array(defaultConfig.sun.coreColor),
+    sunGlowColor: new Float32Array(defaultConfig.sun.glowColor),
     // Graticule (animated opacity)
     graticuleOpacity: animatedOpacity.get('graticule')!,
     graticuleFontSize: opts.graticule.fontSize,
