@@ -1,11 +1,11 @@
 // Rain/precipitation type layer
 // Uses dynamic param bindings via sampleParam_precipitation_type()
-// Values: 0=none, 1=rain, 2=snow, 3=mix
-// Palette: rain-type (stepped, 4 categories mapped to 0.0, 0.33, 0.66, 1.0)
+// WMO codes: 0=none, 1=rain, 3=freezing rain, 5=snow, 6=wet snow, 7=rain+snow, 8=ice pellets, 12=freezing drizzle
+// Palette: rain-type (stepped, stops at normalized WMO code positions: value/12)
 
 fn colormapPrecipType(ptype: f32, opacity: f32) -> vec4f {
-  if (ptype < 0.5) { return vec4f(0.0); }  // none: transparent
-  let t = clamp((ptype - 0.5) / 2.5, 0.0, 1.0);
+  if (ptype < 0.5) { return vec4f(0.0); }  // code 0: no precipitation
+  let t = clamp(ptype / 12.0, 0.0, 1.0);
   let c = samplePalette(t, u.rainPaletteIndex);
   return vec4f(c.rgb, c.a * opacity);
 }

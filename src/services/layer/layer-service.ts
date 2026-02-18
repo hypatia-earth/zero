@@ -12,7 +12,7 @@ import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import type { TLayerCategory, SlabConfig } from '../../config/types';
 import type { OptionsService } from '../options-service';
 import { builtInLayers } from '../../layers';
-import { getPublishedParams } from '../../config/param-metadata';
+import { getPublishedParams } from '../../config/params-ecmwf_ifs';
 
 export type LayerType = 'decoration' | 'texture' | 'geometry' | 'solid';
 export type ComputeTrigger = 'data-ready' | 'time-change';

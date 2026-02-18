@@ -15,7 +15,7 @@ import type { LayerService } from '../../services/layer/layer-service';
 import type { SlotService } from '../../services/slot-service';
 import type { Progress } from '../progress';
 import type { LoadedAssets } from './assets';
-import { getPublishedParams } from '../../config/param-metadata';
+import { getPublishedParams } from '../../config/params-ecmwf_ifs';
 
 export async function runGpuInitPhase(
   canvas: HTMLCanvasElement,

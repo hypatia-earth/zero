@@ -1041,6 +1041,17 @@ export const optionsSchema = z.object({
         ],
       }
     ),
+    showLogo: opt(
+      z.boolean().default(true),
+      {
+        label: 'Show logo',
+        group: 'advanced',
+        filter: 'global',
+        order: 110,
+        control: 'toggle',
+        hidden: true,
+      }
+    ),
   }),
 });
 
@@ -1084,7 +1095,7 @@ export const defaultOptions: ZeroOptions = {
   pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
-  debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1' },
+  debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1', showLogo: true },
 };
 
 // ============================================================

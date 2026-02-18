@@ -308,7 +308,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     tempDataReady: getLayerSlotState('temp')!.dataReady,
     rainDataReady: getLayerSlotState('rain')!.dataReady,
     tempPaletteRange,
-    logoOpacity: defaultConfig.render.logoEnabled && !isAnyLayerEnabled()
+    logoOpacity: opts.debug.showLogo && !isAnyLayerEnabled()
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
   };

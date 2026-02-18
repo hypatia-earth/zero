@@ -128,10 +128,7 @@ export class SlotService {
         const wanted = this.computeWanted(time);
         this.activateIfReady(param, ps, wanted);
 
-        const prev = ps.wanted.value;
-        if (!prev || prev.priority.join() !== wanted.priority.join()) {
-          ps.wanted.value = wanted;
-        }
+        ps.wanted.value = wanted;
       }
     });
   }
@@ -514,6 +511,7 @@ export class SlotService {
     const points = slabs[0]!.length;
 
     // Upload each slab to corresponding param
+    const fakeTs = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '') as TTimestep;
     for (let i = 0; i < layerDecl.params.length && i < slabs.length; i++) {
       const param = layerDecl.params[i]!;
       // Mark as test mode - ignore real data from queue
@@ -521,7 +519,12 @@ export class SlotService {
       this.auroraService.uploadData(param, 0, slabs[i]!);
       const t = Date.now();
       this.auroraService.activateSlots(param, 0, 0, t, t, points);
+
+      // Update main-thread state so isParamReady() reflects the injection
+      this.ensureParamSlots(new Set([param]));
+      this.paramSlots.get(param)!.setActiveTimesteps([fakeTs]);
     }
+    this.slotsVersion.value++;
   }
 
   dispose(): void {

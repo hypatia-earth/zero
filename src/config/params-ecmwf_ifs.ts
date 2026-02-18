@@ -3,6 +3,9 @@
  *
  * Ranges are educated guesses based on typical Earth values.
  * Run scripts/analyze-param-ranges.py on actual data to verify.
+ * 
+ * https://openmeteo.s3.amazonaws.com/index.html
+ * https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs/latest.json
  */
 
 export interface ParamMeta {
@@ -14,6 +17,7 @@ export interface ParamMeta {
   description?: string;
   published?: boolean;      // tested and available for custom layers
   layers?: string[];        // built-in layers using this param (e.g., ['temp'], ['wind'])
+  categorical?: boolean;    // true = nearest-neighbor temporal sampling (no interpolation)
 }
 
 export const PARAM_METADATA: Record<string, ParamMeta> = {
@@ -407,12 +411,13 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
   // ============================================================
   'precipitation_type': {
     label: 'Precip Type',
-    unit: 'code',
-    range: [0, 3],  // categorical: none, rain, snow, mix
+    unit: 'WMO code',
+    range: [0, 12],  // WMO: 0=none, 1=rain, 3=freezing rain, 5=snow, 6-7=mix, 8=ice pellets, 12=freezing drizzle
     palette: 'categorical',
     sizeEstimate: 800_000,
     published: true,
     layers: ['rain'],
+    categorical: true,
   },
 };
 

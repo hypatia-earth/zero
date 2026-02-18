@@ -141,13 +141,17 @@
   "rain-type": {
     "id": "rain-type",
     "name": "Precipitation Type",
-    "description": "Categorical: rain, snow, mix",
+    "description": "WMO precipitation type codes (stepped)",
     "interpolate": false,
     "stops": [
-      { "value": 0.00, "color": [0, 0, 0], "alpha": 0 },
-      { "value": 0.33, "color": [77, 128, 255], "alpha": 255 },
-      { "value": 0.66, "color": [230, 242, 255], "alpha": 255 },
-      { "value": 1.00, "color": [153, 102, 204], "alpha": 255 }
+      { "value": 0.000, "color": [0, 0, 0],       "alpha": 0 },
+      { "value": 0.083, "color": [77, 128, 255],   "alpha": 255, "_wmo": "1  rain" },
+      { "value": 0.250, "color": [50, 160, 200],   "alpha": 255, "_wmo": "3  freezing rain" },
+      { "value": 0.417, "color": [230, 240, 255],  "alpha": 255, "_wmo": "5  snow" },
+      { "value": 0.500, "color": [180, 180, 230],  "alpha": 255, "_wmo": "6  wet snow" },
+      { "value": 0.583, "color": [153, 120, 210],  "alpha": 255, "_wmo": "7  rain + snow" },
+      { "value": 0.667, "color": [130, 90, 190],   "alpha": 255, "_wmo": "8  ice pellets" },
+      { "value": 1.000, "color": [100, 70, 170],   "alpha": 255, "_wmo": "12 freezing drizzle" }
     ]
   },
 

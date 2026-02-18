@@ -102,6 +102,7 @@ export class DialogService {
     } else {
       // Immediate close
       this.openDialogs.delete(id);
+      this.closingDialogs.delete(id);
       this.resetDragState(id);
       m.redraw();
     }

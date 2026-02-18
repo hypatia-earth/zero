@@ -7,6 +7,7 @@
 
 import type { LayerDeclaration } from '../services/layer/layer-service';
 import { getMainShaders, getPostShaders } from './shader-loader';
+import { PARAM_METADATA } from '../config/params-ecmwf_ifs';
 
 // Import shader modules
 import commonCode from './shaders/common.wgsl?raw';
@@ -36,6 +37,7 @@ export interface ParamBindingConfig {
   index: number;
   bindingSlot0: number;
   bindingSlot1: number;
+  categorical: boolean;  // true = nearest-neighbor temporal sampling
 }
 
 /** Active param registry - exported for globe-renderer to use */
@@ -186,6 +188,7 @@ export class ShaderComposer {
       index: idx,
       bindingSlot0: PARAM_BINDING_START + idx * 2,
       bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
+      categorical: PARAM_METADATA[param]?.categorical ?? false,
     }));
 
     // Export for globe-renderer to use
@@ -205,13 +208,16 @@ export class ShaderComposer {
     const samplers: string[] = ['// --- Param samplers (generated) ---'];
     for (const cfg of paramConfigs) {
       const safeName = cfg.param.replace(/[^a-zA-Z0-9]/g, '_');
+      const sample = cfg.categorical
+        ? `select(v0, v1, lerp >= 0.5)`   // nearest-neighbor in time
+        : `select(v0, mix(v0, v1, lerp), lerp >= 0.0)`;  // linear interpolation
       samplers.push(`
 fn sampleParam_${safeName}(cell: u32) -> f32 {
   if (!isParamReady(${cfg.index}u)) { return 0.0; }
   let v0 = param_${safeName}_0[cell];
   let v1 = param_${safeName}_1[cell];
   let lerp = getParamLerp(${cfg.index}u);
-  return select(v0, mix(v0, v1, lerp), lerp >= 0.0);
+  return ${sample};
 }`);
     }
 

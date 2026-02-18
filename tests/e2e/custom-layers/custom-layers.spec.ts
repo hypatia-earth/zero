@@ -28,6 +28,17 @@ test.describe('custom layer', () => {
     zero = createZeroAPI(page);
     await page.goto('https://localhost:5173/?layers=earth&lon=0&lat=0&alt=2000');
     await waitForAppReady(page);
+
+    // Clear stale user layers from previous test runs
+    await page.evaluate(() => {
+      const ls = (window as any).__hypatia.layerService;
+      const custom = ls.getAll().filter((l: any) => !l.isBuiltIn);
+      for (const l of custom) {
+        ls.unregisterUserLayer(l.id);
+        void ls.deleteUserLayer(l.id);
+      }
+    });
+
     await setupTestEnv(page);
 
     // Pre-inject temperature data — uploads to temperature_2m param buffer on GPU
@@ -53,9 +64,11 @@ test.describe('custom layer', () => {
     // Render order 50 (default), opacity 50% (default)
     await page.getByTestId('layer-order-input').fill('50');
 
-    // Click Try to preview the custom layer
+    // Click Try, re-inject data to bump slotsVersion signal, wait for Save to enable
     await page.getByTestId('layer-try-btn').click();
-    await page.waitForTimeout(1500);  // Wait for shader recompilation + render
+    await page.waitForTimeout(500);
+    await zero.SlotService.injectTestData('temp', FIXTURE_55);
+    await expect(page.getByTestId('layer-save-btn')).toBeEnabled({ timeout: 10000 });
 
     // Verify no shader error
     await expect(page.getByTestId('layer-error')).not.toBeVisible();
@@ -70,7 +83,7 @@ test.describe('custom layer', () => {
 
     // Restore UI and cancel
     await zero.UI.show();
-    await page.getByTestId('layer-cancel-btn').click();
+    await page.getByTestId('layer-close-btn').click();
     await page.waitForTimeout(300);
 
     // Dialog should be closed
@@ -85,20 +98,25 @@ test.describe('custom layer', () => {
     // Set layer ID
     await page.getByTestId('layer-id-input').fill('layersave');
 
-    // Click Try then Save
+    // Click Try, re-inject data to bump slotsVersion signal, wait for Save to enable
     await page.getByTestId('layer-try-btn').click();
-    await page.waitForTimeout(1500);
-
+    await page.waitForTimeout(500);
+    await zero.SlotService.injectTestData('temp', FIXTURE_55);
+    await expect(page.getByTestId('layer-save-btn')).toBeEnabled({ timeout: 10000 });
     await expect(page.getByTestId('layer-error')).not.toBeVisible();
 
     await page.getByTestId('layer-save-btn').click();
     await page.waitForTimeout(300);
 
-    // Dialog should be closed
-    await expect(page.locator('.dialog.create-layer')).not.toBeVisible();
+    // Dialog stays open after save
+    await expect(page.locator('.dialog.create-layer')).toBeVisible();
 
     // Layer button should appear in layers panel with correct name
     await expect(page.locator('.layer.widget button.toggle', { hasText: 'layersave' })).toBeVisible();
+
+    // Close manually
+    await page.getByTestId('layer-close-btn').click();
+    await page.waitForTimeout(300);
   });
 
   test('create, save, delete - button removed', async () => {
@@ -109,16 +127,22 @@ test.describe('custom layer', () => {
     // Set layer ID
     await page.getByTestId('layer-id-input').fill('layerdelete');
 
-    // Try and Save
+    // Try, re-inject data to bump slotsVersion signal, wait for Save to enable
     await page.getByTestId('layer-try-btn').click();
-    await page.waitForTimeout(1500);
-
+    await page.waitForTimeout(500);
+    await zero.SlotService.injectTestData('temp', FIXTURE_55);
+    await expect(page.getByTestId('layer-save-btn')).toBeEnabled({ timeout: 10000 });
     await expect(page.getByTestId('layer-error')).not.toBeVisible();
 
     await page.getByTestId('layer-save-btn').click();
     await page.waitForTimeout(300);
 
-    // Verify button exists
+    // Reload to test IDB persistence and get clean mithril state
+    await page.reload();
+    await waitForAppReady(page);
+    await setupTestEnv(page);
+
+    // Verify button persisted
     const layerButton = page.locator('.layer.widget button.toggle', { hasText: 'layerdelete' });
     await expect(layerButton).toBeVisible();
 
@@ -127,8 +151,9 @@ test.describe('custom layer', () => {
     await widget.locator('button.options').click();
     await page.waitForTimeout(300);
 
-    // Delete the layer
+    // Delete the layer — confirm modal
     await page.getByTestId('layer-delete-btn').click();
+    await page.locator('.modal-buttons button.danger').click();
     await page.waitForTimeout(300);
 
     // Button should be removed

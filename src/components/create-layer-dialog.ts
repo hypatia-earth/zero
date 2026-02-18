@@ -15,7 +15,7 @@ import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
 import { defineLayer, withType, withUI, withParams, withPalettes, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
 import { DialogHeader } from './dialog-header';
-import { PARAM_METADATA, getParamMeta, getPublishedParams, type ParamMeta } from '../config/param-metadata';
+import { PARAM_METADATA, getParamMeta, getPublishedParams, type ParamMeta } from '../config/params-ecmwf_ifs';
 import { PALETTES, PALETTE_IDS, type PaletteId } from '../config/palettes';
 import { PaletteComponent } from './palette-component';
 import type { PaletteData, LabelMode } from '../services/palette-service';
@@ -165,7 +165,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
-  function validateAndCreate(registry: LayerService, aurora: AuroraService, onClose: () => void) {
+  function validateAndCreate(registry: LayerService, aurora: AuroraService) {
     state.error = null;
 
     // Validate ID
@@ -248,7 +248,6 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     console.log(`[CreateLayer] Saved: ${state.id} (index ${index})`);
     suspendedLayer = null;  // Don't restore old layer - new one saved
     void registry.saveUserLayer(state.id);
-    onClose();
   }
 
   function tryLayer(registry: LayerService, aurora: AuroraService) {
@@ -595,7 +594,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
               m('button.primary', {
                 'data-testid': 'layer-save-btn',
                 disabled: state.tryPhase !== 'idle' || !layerRegistry.hasPreview(),
-                onclick: () => validateAndCreate(layerRegistry, auroraService, close),
+                onclick: () => validateAndCreate(layerRegistry, auroraService),
               }, 'Save'),
               m('button.btn.btn-secondary', { 'data-testid': 'layer-close-btn', onclick: close }, 'Close'),
             ]),

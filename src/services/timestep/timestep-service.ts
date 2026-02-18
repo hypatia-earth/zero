@@ -14,7 +14,7 @@ import type { ConfigService } from '../config-service';
 import type { LayerService } from '../layer/layer-service';
 import { parseTimestep, formatTimestep } from '../../utils/timestep';
 import { countBeforeTimestep, clearBeforeTimestep } from '../sw-registration';
-import { PARAM_METADATA } from '../../config/param-metadata';
+import { PARAM_METADATA } from '../../config/params-ecmwf_ifs';
 
 // Module imports
 import { discoverModel } from './discovery';

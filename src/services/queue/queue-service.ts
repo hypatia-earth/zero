@@ -434,8 +434,9 @@ export class QueueService implements IQueueService {
         // Preflight - update size estimate (not currently tracked in reactive mode)
       },
       async (slice) => {
-        // Only process when all data is received
-        if (slice.done && this.slotService) {
+        // Only process when all data is received and task is still active
+        // (clearTasks removes from inFlight before late worker messages arrive)
+        if (slice.done && this.slotService && this.inFlight.has(key)) {
           this.slotService.receiveData(task.omParam, task.timestep, task.slabIndex, slice.data);
         }
       },

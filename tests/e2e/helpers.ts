@@ -349,6 +349,7 @@ export async function setupTestEnv(page: Page): Promise<void> {
       d.humidity.enabled = false;
       d.wind.enabled = false;
       d.pressure.enabled = false;
+      d.debug.showLogo = false;
     });
   });
   await page.waitForTimeout(100);
