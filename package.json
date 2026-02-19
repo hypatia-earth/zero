@@ -1,6 +1,6 @@
 {
   "name": "hypatia-zero",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Browser-based weather visualization using WebGPU",
   "license": "MIT",
   "author": "Hypatia Earth",
