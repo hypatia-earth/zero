@@ -6,7 +6,7 @@
  */
 
 import type { AuroraService, AuroraConfig, AuroraAssets } from '../../services/aurora-service';
-import type { PaletteService, PaletteId } from '../../services/palette-service';
+import type { PaletteService } from '../../services/palette-service';
 import type { AboutService } from '../../services/about-service';
 import type { OmService } from '../../services/queue/om-service';
 import type { OptionsService } from '../../services/options-service';
@@ -61,9 +61,8 @@ export async function runGpuInitPhase(
     layers: layerService.getAll().filter(l => l.isBuiltIn),
   };
 
-  // Restore persisted palette selection
-  const persistedPalette = optionsService.options.value.temp.palette;
-  paletteService.setPalette('temp', persistedPalette as PaletteId);
+  // Restore persisted palette selections from options
+  paletteService.restoreFromOptions(optionsService.options.value);
 
   // Prepare assets for transfer to worker
   await progress.run('Processing textures...', 0.1, async () => {
