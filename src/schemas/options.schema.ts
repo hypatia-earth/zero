@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import type { TLayer } from '../config/types';
 import { defaultConfig } from '../config/defaults';
-import { getPaletteIdsByGroup } from '../services/palette-service';
+import { getPaletteIdsEnum } from '../services/palette-service';
 
 // ============================================================
 // UI Metadata Types
@@ -648,7 +648,7 @@ export const optionsSchema = z.object({
       }
     ),
     palette: opt(
-      z.enum(getPaletteIdsByGroup('temp') as [string, ...string[]]).default('temp-classic'),
+      z.enum(getPaletteIdsEnum('temp')).default('temp-classic'),
       {
         label: 'Color palette',
         description: 'Visual color scheme for temperature data',

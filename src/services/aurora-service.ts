@@ -17,6 +17,11 @@ import type { PerfService } from './perf-service';
 import { Camera } from '../aurora/camera';
 import { setupViewport } from './viewport/viewport';
 
+/** Type guard: value is an object with a string `palette` field */
+function hasPaletteField(val: unknown): val is { palette: string } {
+  return typeof val === 'object' && val !== null && 'palette' in val && typeof val.palette === 'string';
+}
+
 // Re-export types for consumers
 export type { AuroraConfig, AuroraAssets } from '../aurora/worker';
 export type { Camera } from '../aurora/camera';
@@ -208,8 +213,8 @@ export function createAuroraService(
       const lastPalettes = new Map<string, string>();
       // Seed last palettes from initial options
       for (const [group, layerOpts] of Object.entries(lastOptions)) {
-        if (typeof layerOpts === 'object' && layerOpts !== null && 'palette' in layerOpts) {
-          lastPalettes.set(group, (layerOpts as { palette: string }).palette);
+        if (hasPaletteField(layerOpts)) {
+          lastPalettes.set(group, layerOpts.palette);
         }
       }
       effect(() => {
@@ -217,12 +222,9 @@ export function createAuroraService(
         if (opts !== lastOptions) {
           // Check palette changes for any layer
           for (const [group, layerOpts] of Object.entries(opts)) {
-            if (typeof layerOpts === 'object' && layerOpts !== null && 'palette' in layerOpts) {
-              const paletteId = (layerOpts as { palette: string }).palette;
-              if (paletteId !== lastPalettes.get(group)) {
-                lastPalettes.set(group, paletteId);
-                send({ type: 'updatePalette', layer: group, paletteId });
-              }
+            if (hasPaletteField(layerOpts) && layerOpts.palette !== lastPalettes.get(group)) {
+              lastPalettes.set(group, layerOpts.palette);
+              send({ type: 'updatePalette', layer: group, paletteId: layerOpts.palette });
             }
           }
           lastOptions = opts;

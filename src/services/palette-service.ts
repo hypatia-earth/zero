@@ -83,9 +83,17 @@ export function getPalettesByGroup(group: string): Palette[] {
   return Object.values(PALETTES).filter(p => p.groups.includes(group));
 }
 
-/** Get palette IDs for a group (for Zod enums) */
+/** Get palette IDs for a group */
 export function getPaletteIdsByGroup(group: string): PaletteId[] {
   return getPalettesByGroup(group).map(p => p.id);
+}
+
+/** Get palette IDs as non-empty tuple (for Zod enums). Throws if group has no palettes. */
+export function getPaletteIdsEnum(group: string): [PaletteId, ...PaletteId[]] {
+  const ids = getPaletteIdsByGroup(group);
+  if (ids.length === 0) throw new Error(`No palettes for group '${group}'`);
+  const [first, ...rest] = ids;
+  return [first!, ...rest];
 }
 
 // ============================================================
@@ -127,11 +135,8 @@ export class PaletteService {
    */
   restoreFromOptions(options: ZeroOptions): void {
     for (const [group, layerOpts] of Object.entries(options)) {
-      if (typeof layerOpts === 'object' && layerOpts !== null && 'palette' in layerOpts) {
-        const paletteVal = (layerOpts as { palette: unknown }).palette;
-        if (isPaletteId(paletteVal)) {
-          this.setPalette(group, paletteVal);
-        }
+      if (typeof layerOpts === 'object' && layerOpts !== null && 'palette' in layerOpts && isPaletteId(layerOpts.palette)) {
+        this.setPalette(group, layerOpts.palette);
       }
     }
   }
