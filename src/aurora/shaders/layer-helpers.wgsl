@@ -46,114 +46,23 @@ struct Uniforms {
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
-// Helper to get user layer opacity by index
-fn getUserLayerOpacity(index: u32) -> f32 {
-  let vecIdx = index / 4u;
-  let compIdx = index % 4u;
-  let v = u.userLayerOpacity[vecIdx];
-  switch compIdx {
-    case 0u: { return v.x; }
-    case 1u: { return v.y; }
-    case 2u: { return v.z; }
-    default: { return v.w; }
-  }
-}
+// User layer accessors (32 slots)
+fn getUserLayerOpacity(index: u32) -> f32          { return u.userLayerOpacity[index / 4u][index % 4u]; }
+fn getUserLayerDataReady(index: u32) -> bool       { return u.userLayerDataReady[index / 4u][index % 4u] != 0u; }
+fn getUserLayerPaletteIndex(index: u32) -> u32     { return u.userLayerPaletteIndex[index / 4u][index % 4u]; }
 
-fn getUserLayerDataReady(index: u32) -> bool {
-  let vecIdx = index / 4u;
-  let compIdx = index % 4u;
-  let v = u.userLayerDataReady[vecIdx];
-  switch compIdx {
-    case 0u: { return v.x != 0u; }
-    case 1u: { return v.y != 0u; }
-    case 2u: { return v.z != 0u; }
-    default: { return v.w != 0u; }
-  }
-}
+// Built-in layer accessors (16 slots)
+fn getLayerOpacity(index: u32) -> f32              { return u.layerOpacity[index / 4u][index % 4u]; }
+fn isLayerDataReady(index: u32) -> bool            { return u.layerDataReady[index / 4u][index % 4u] != 0u; }
+fn getLayerPaletteIndex(index: u32) -> u32         { return u.layerPaletteIndex[index / 4u][index % 4u]; }
 
-// Get user layer palette index by index (0-31)
-fn getUserLayerPaletteIndex(index: u32) -> u32 {
-  let vecIdx = index / 4u;
-  let compIdx = index % 4u;
-  let v = u.userLayerPaletteIndex[vecIdx];
-  switch compIdx {
-    case 0u: { return v.x; }
-    case 1u: { return v.y; }
-    case 2u: { return v.z; }
-    default: { return v.w; }
-  }
-}
-
-// Get built-in layer opacity by index (0-15)
-fn getLayerOpacity(index: u32) -> f32 {
-  let vecIdx = index / 4u;
-  let compIdx = index % 4u;
-  let v = u.layerOpacity[vecIdx];
-  switch compIdx {
-    case 0u: { return v.x; }
-    case 1u: { return v.y; }
-    case 2u: { return v.z; }
-    default: { return v.w; }
-  }
-}
-
-// Check if built-in layer data is ready by index (0-15)
-fn isLayerDataReady(index: u32) -> bool {
-  let vecIdx = index / 4u;
-  let compIdx = index % 4u;
-  let v = u.layerDataReady[vecIdx];
-  switch compIdx {
-    case 0u: { return v.x != 0u; }
-    case 1u: { return v.y != 0u; }
-    case 2u: { return v.z != 0u; }
-    default: { return v.w != 0u; }
-  }
-}
-
-// Get built-in layer palette index by index (0-15)
-fn getLayerPaletteIndex(index: u32) -> u32 {
-  let vecIdx = index / 4u;
-  let compIdx = index % 4u;
-  let v = u.layerPaletteIndex[vecIdx];
-  switch compIdx {
-    case 0u: { return v.x; }
-    case 1u: { return v.y; }
-    case 2u: { return v.z; }
-    default: { return v.w; }
-  }
-}
-
-// Get built-in layer palette range (min/max) by index (0-7)
+// Palette range: min/max pair packed into vec4 (8 slots)
 fn getLayerPaletteRange(index: u32) -> vec2f {
-  let vecIdx = index / 2u;
-  let pairIdx = index % 2u;
-  let v = u.layerPaletteRange[vecIdx];
-  if (pairIdx == 0u) { return vec2f(v.x, v.y); }
-  return vec2f(v.z, v.w);
+  let v = u.layerPaletteRange[index / 2u];
+  if (index % 2u == 0u) { return v.xy; }
+  return v.zw;
 }
 
-// Get param lerp factor by index (0-15)
-fn getParamLerp(index: u32) -> f32 {
-  let vecIdx = index / 4u;
-  let compIdx = index % 4u;
-  let v = u.paramLerp[vecIdx];
-  switch compIdx {
-    case 0u: { return v.x; }
-    case 1u: { return v.y; }
-    case 2u: { return v.z; }
-    default: { return v.w; }
-  }
-}
-
-// Check if param data is ready by index (0-15)
-fn isParamReady(index: u32) -> bool {
-  let vecIdx = index / 4u;
-  let compIdx = index % 4u;
-  let v = u.paramReady[vecIdx];
-  switch compIdx {
-    case 0u: { return v.x != 0u; }
-    case 1u: { return v.y != 0u; }
-    case 2u: { return v.z != 0u; }
-    default: { return v.w != 0u; }
-  }
-}
+// Param accessors (16 slots)
+fn getParamLerp(index: u32) -> f32                 { return u.paramLerp[index / 4u][index % 4u]; }
+fn isParamReady(index: u32) -> bool                { return u.paramReady[index / 4u][index % 4u] != 0u; }

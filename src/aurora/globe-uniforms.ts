@@ -195,78 +195,27 @@ export const U = GLOBE_UNIFORMS.offsets as {
   paramReady3: number;
 };
 
-/** Get uniform buffer offset for user layer opacity by index (0-31) */
-export function getUserLayerOpacityOffset(index: number): number {
-  const vecIndex = Math.floor(index / 4);
-  const compIndex = index % 4;
-  const baseOffset = U.userLayerOpacity0 + vecIndex * 16;
-  return baseOffset + compIndex * 4;
+/** Byte offset of component `index` within a packed vec4 array starting at `base` */
+function packedVec4Offset(base: number, index: number): number {
+  return base + Math.floor(index / 4) * 16 + (index % 4) * 4;
 }
 
-/** Get uniform buffer offset for user layer dataReady by index (0-31) */
-export function getUserLayerDataReadyOffset(index: number): number {
-  const vecIndex = Math.floor(index / 4);
-  const compIndex = index % 4;
-  const baseOffset = U.userLayerDataReady0 + vecIndex * 16;
-  return baseOffset + compIndex * 4;
-}
+// Built-in layer offsets (16 slots, packed as 4 x vec4)
+export const getLayerOpacityOffset       = (index: number) => packedVec4Offset(U.layerOpacity0, index);
+export const getLayerDataReadyOffset     = (index: number) => packedVec4Offset(U.layerDataReady0, index);
+export const getLayerPaletteIndexOffset  = (index: number) => packedVec4Offset(U.layerPaletteIndex0, index);
 
-/** Get uniform buffer offset for user layer palette index by index (0-31) */
-export function getUserLayerPaletteIndexOffset(index: number): number {
-  const vecIndex = Math.floor(index / 4);
-  const compIndex = index % 4;
-  const baseOffset = U.userLayerPaletteIndex0 + vecIndex * 16;
-  return baseOffset + compIndex * 4;
-}
+/** Palette range: 2 x f32 pair per slot, packed into vec4s */
+export const getLayerPaletteRangeOffset  = (index: number) => packedVec4Offset(U.layerPaletteRange0, index * 2);
 
-/** Get uniform buffer offset for built-in layer palette index by index (0-15) */
-export function getLayerPaletteIndexOffset(index: number): number {
-  const vecIndex = Math.floor(index / 4);
-  const compIndex = index % 4;
-  const baseOffset = U.layerPaletteIndex0 + vecIndex * 16;
-  return baseOffset + compIndex * 4;
-}
+// User layer offsets (32 slots, packed as 8 x vec4)
+export const getUserLayerOpacityOffset      = (index: number) => packedVec4Offset(U.userLayerOpacity0, index);
+export const getUserLayerDataReadyOffset    = (index: number) => packedVec4Offset(U.userLayerDataReady0, index);
+export const getUserLayerPaletteIndexOffset = (index: number) => packedVec4Offset(U.userLayerPaletteIndex0, index);
 
-/** Get uniform buffer offset for built-in layer palette range by index (0-7)
- *  Returns offset to a min/max pair (2 x f32 = 8 bytes) */
-export function getLayerPaletteRangeOffset(index: number): number {
-  const vecIndex = Math.floor(index / 2);
-  const pairIndex = index % 2;
-  const baseOffset = U.layerPaletteRange0 + vecIndex * 16;
-  return baseOffset + pairIndex * 8;
-}
-
-/** Get uniform buffer offset for built-in layer opacity by index (0-15) */
-export function getLayerOpacityOffset(index: number): number {
-  const vecIndex = Math.floor(index / 4);
-  const compIndex = index % 4;
-  const baseOffset = U.layerOpacity0 + vecIndex * 16;
-  return baseOffset + compIndex * 4;
-}
-
-/** Get uniform buffer offset for built-in layer dataReady by index (0-15) */
-export function getLayerDataReadyOffset(index: number): number {
-  const vecIndex = Math.floor(index / 4);
-  const compIndex = index % 4;
-  const baseOffset = U.layerDataReady0 + vecIndex * 16;
-  return baseOffset + compIndex * 4;
-}
-
-/** Get uniform buffer offset for param lerp by index (0-15) */
-export function getParamLerpOffset(index: number): number {
-  const vecIndex = Math.floor(index / 4);
-  const compIndex = index % 4;
-  const baseOffset = U.paramLerp0 + vecIndex * 16;
-  return baseOffset + compIndex * 4;
-}
-
-/** Get uniform buffer offset for param ready by index (0-15) */
-export function getParamReadyOffset(index: number): number {
-  const vecIndex = Math.floor(index / 4);
-  const compIndex = index % 4;
-  const baseOffset = U.paramReady0 + vecIndex * 16;
-  return baseOffset + compIndex * 4;
-}
+// Param offsets (16 slots, packed as 4 x vec4)
+export const getParamLerpOffset  = (index: number) => packedVec4Offset(U.paramLerp0, index);
+export const getParamReadyOffset = (index: number) => packedVec4Offset(U.paramReady0, index);
 
 // Expected size - can be used for buffer allocation
 export const UNIFORM_BUFFER_SIZE = GLOBE_UNIFORMS.size;
