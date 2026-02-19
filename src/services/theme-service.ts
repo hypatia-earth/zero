@@ -166,22 +166,29 @@ export class ThemeService {
       sheet => sheet.href === null || sheet.href.startsWith(location.origin)
     );
 
+    // Extract custom property names from :root rules.
+    // Safari's CSSStyleDeclaration iterator skips --* properties,
+    // so we parse them from cssText instead.
+    const customProps = new Set<string>();
     for (const sheet of sameOrigin) {
       for (const rule of sheet.cssRules) {
         if (rule instanceof CSSStyleRule && rule.selectorText === ':root') {
-          for (const prop of rule.style) {
-            const cssValue = style.getPropertyValue(prop).trim();
-            if (!cssValue) continue;
-
-            if (prop.startsWith('--color')) {
-              const name = prop.slice(2); // Remove '--' prefix
-              this.colors.set(name, parseColor(cssValue));
-            } else if (prop.startsWith('--size')) {
-              const name = prop.slice(2); // Remove '--' prefix
-              this.sizes.set(name, parseFloat(cssValue));
-            }
-          }
+          const matches = rule.cssText.matchAll(/(--(?:color|size)[a-zA-Z0-9-]*)/g);
+          for (const m of matches) customProps.add(m[1]!);
         }
+      }
+    }
+
+    for (const prop of customProps) {
+      const cssValue = style.getPropertyValue(prop).trim();
+      if (!cssValue) continue;
+
+      if (prop.startsWith('--color')) {
+        const name = prop.slice(2);
+        this.colors.set(name, parseColor(cssValue));
+      } else if (prop.startsWith('--size')) {
+        const name = prop.slice(2);
+        this.sizes.set(name, parseFloat(cssValue));
       }
     }
 
