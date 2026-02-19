@@ -68,7 +68,7 @@ export type AuroraRequest =
   | { type: 'registerUserLayer'; layer: LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'setUserLayerOptions'; layerIndex: number; enabled?: boolean; opacity?: number; paletteIndex?: number }
-  | { type: 'updatePalette'; layer: string; paletteId: string; range: [number, number] }
+  | { type: 'updatePalette'; layer: string; paletteId: string; range?: [number, number] }
   | { type: 'cleanup' };
 
 export type AuroraResponse =
@@ -711,7 +711,9 @@ function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette
   const layerIndex = layerRegistry.getLayerIndex(layer);
   if (isNaN(layerIndex)) return;
   renderer.setLayerPalette(layerIndex, paletteId);
-  renderer.setLayerPaletteRange(layerIndex, range[0], range[1]);
+  if (range) {
+    renderer.setLayerPaletteRange(layerIndex, range[0], range[1]);
+  }
 }
 
 function handleCleanup(): void {

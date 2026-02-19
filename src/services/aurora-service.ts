@@ -52,7 +52,7 @@ export interface AuroraService {
   uploadData(param: string, slotIndex: number, data: Float32Array): void;
   activateSlots(param: string, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
   deactivateSlots(param: string): void;
-  updatePalette(layer: string, paletteId: string, range: [number, number]): void;
+  updatePalette(layer: string, paletteId: string): void;
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
@@ -205,15 +205,25 @@ export function createAuroraService(
 
       // Forward options updates to worker
       let lastOptions = optionsService.options.value;
-      let lastTempPalette = lastOptions.temp.palette;
+      const lastPalettes = new Map<string, string>();
+      // Seed last palettes from initial options
+      for (const [group, layerOpts] of Object.entries(lastOptions)) {
+        if (typeof layerOpts === 'object' && layerOpts !== null && 'palette' in layerOpts) {
+          lastPalettes.set(group, (layerOpts as { palette: string }).palette);
+        }
+      }
       effect(() => {
         const opts = optionsService.options.value;
         if (opts !== lastOptions) {
-          // Check if temp palette changed
-          if (opts.temp.palette !== lastTempPalette) {
-            lastTempPalette = opts.temp.palette;
-            // Palette ID directly, range from param metadata
-            send({ type: 'updatePalette', layer: 'temp', paletteId: opts.temp.palette, range: [-40, 50] });
+          // Check palette changes for any layer
+          for (const [group, layerOpts] of Object.entries(opts)) {
+            if (typeof layerOpts === 'object' && layerOpts !== null && 'palette' in layerOpts) {
+              const paletteId = (layerOpts as { palette: string }).palette;
+              if (paletteId !== lastPalettes.get(group)) {
+                lastPalettes.set(group, paletteId);
+                send({ type: 'updatePalette', layer: group, paletteId });
+              }
+            }
           }
           lastOptions = opts;
           send({ type: 'options', value: opts });
@@ -279,8 +289,8 @@ export function createAuroraService(
       send({ type: 'deactivateSlots', param });
     },
 
-    updatePalette(layer: string, paletteId: string, range: [number, number]): void {
-      send({ type: 'updatePalette', layer, paletteId, range });
+    updatePalette(layer: string, paletteId: string): void {
+      send({ type: 'updatePalette', layer, paletteId });
     },
 
     start(): void {
