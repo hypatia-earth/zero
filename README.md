@@ -12,16 +12,16 @@ Browser-based weather visualization rendering ECMWF forecast data directly on a 
 **Zero** backend. **Zero** servers. **Zero** cost.
 
 Zero visualizes professional weather hazards for climate adaptation:
-- **Wet-bulb temperature** — actual heat survivability limits in humid conditions (planned)
-- **Wind** — animated flow lines showing speed and direction
-- **Pressure** — isobar contours revealing storm systems
-- **Precipitation** — rainfall intensity (planned)
+- **Wet-bulb temperature** - actual heat survivability limits in humid conditions (planned)
+- **Wind** - animated flow lines showing speed and direction
+- **Pressure** - isobar contours revealing storm systems
+- **Precipitation** - rainfall intensity (planned)
 
 Runs entirely in your browser. No backend, no login, no tracking.
 
 ## Why It Exists
 
-As climate extremes become more frequent, understanding forecast hazards becomes survival literacy. Zero makes professional ECMWF IFS data accessible without commercial infrastructure — forkable, self-hostable, resilient.
+As climate extremes become more frequent, understanding forecast hazards becomes survival literacy. Zero makes professional ECMWF IFS data accessible without commercial infrastructure - forkable, self-hostable, resilient.
 
 This is architectural independence: the tool works offline once loaded, can be hosted by communities, and doesn't depend on commercial service viability.
 
@@ -64,19 +64,19 @@ npm run test:e2e:ui           # Playwright UI with time-travel debugging
 
 ## Credits
 
-- **ECMWF** — IFS forecast data via [Open Data initiative](https://www.ecmwf.int/en/forecasts/datasets/open-data)
-- **Open-Meteo** — [S3 data mirror](https://open-meteo.com/)
-- **AWI/PANGAEA** — [RTopo-2](https://doi.pangaea.de/10.1594/PANGAEA.856844) basemap topography
-- **Cameron Beccario** — [earth.nullschool.net](https://earth.nullschool.net) pioneered browser atmospheric visualization
-- **AWS Open Data** — hosting infrastructure
+- **ECMWF** - IFS forecast data via [Open Data initiative](https://www.ecmwf.int/en/forecasts/datasets/open-data)
+- **Open-Meteo** - [S3 data mirror](https://open-meteo.com/)
+- **AWI/PANGAEA** - [RTopo-2](https://doi.pangaea.de/10.1594/PANGAEA.856844) basemap topography
+- **Cameron Beccario** - [earth.nullschool.net](https://earth.nullschool.net) pioneered browser atmospheric visualization
+- **AWS Open Data** - hosting infrastructure
 
 ## Known Limitations
 
-- **Alpha software** — expect rough edges
-- **WebGPU only** — won't work on older browsers
-- **Chrome reload bug** — repeated F5 can cause adapter loss; restart browser if screen goes blank ([Chrome bug #469455157](https://issues.chromium.org/issues/469455157))
-- **Bandwidth** — first load ~100-500MB depending on exploration; Service Worker caches for instant subsequent visits
-- **Forecast accuracy** — displays ECMWF data but cannot guarantee correctness; consult official weather services for critical decisions
+- **Alpha software** - expect rough edges
+- **WebGPU only** - won't work on older browsers
+- **Chrome reload bug** - repeated F5 can cause adapter loss; restart browser if screen goes blank ([Chrome bug #469455157](https://issues.chromium.org/issues/469455157))
+- **Bandwidth** - first load ~100-500MB depending on exploration; Service Worker caches for instant subsequent visits
+- **Forecast accuracy** - displays ECMWF data but cannot guarantee correctness; consult official weather services for critical decisions
 
 ## Not Competing With
 
@@ -86,15 +86,21 @@ Different missions, both valuable.
 
 ## Changelog
 
+### 2026-02-21
+- **Aurora render engine** - declarative layers with runtime shader composition
+- **Custom layers** - user-defined layers with additional ECMWF parameters: clouds, precipitation
+- **Unified palette system** - shared palette texture with JSON configuration
+- **Render downscale** - option to improve mobile performance
+
 ### 2026-02-08
-- **E2E test suite** — 44 Playwright tests covering all active layers (earth, sun, grid, temp, wind, pressure). Screenshot tests with 0% tolerance for visual regression, pixel tests for color accuracy.
+- **E2E test suite** - 44 Playwright tests covering all active layers (earth, sun, grid, temp, wind, pressure). Screenshot tests with 0% tolerance for visual regression, pixel tests for color accuracy.
 
 ### 2026-02-04
-- **Worker-based renderer** — GPU operations moved to dedicated Web Worker via OffscreenCanvas. Eliminates main thread blocking during data loading, improving touch responsiveness on older mobile devices.
+- **Worker-based renderer** - GPU operations moved to dedicated Web Worker via OffscreenCanvas. Eliminates main thread blocking during data loading, improving touch responsiveness on older mobile devices.
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT - see [LICENSE](LICENSE)
 
 ## Contributing
 
