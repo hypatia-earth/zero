@@ -18,7 +18,6 @@ import { DialogHeader } from './dialog-header';
 import { PARAM_METADATA, getParamMeta, getPublishedParams, type ParamMeta } from '../config/params-ecmwf_ifs';
 import { PALETTES, PALETTE_IDS, type PaletteId } from '../services/palette-service';
 import { PaletteComponent } from './palette-component';
-import type { PaletteData, LabelMode } from '../services/palette-service';
 import type { ModalService } from '../services/modal-service';
 import type { SlotService } from '../services/slot-service';
 
@@ -53,19 +52,6 @@ const PALETTE_OPTIONS = PALETTE_IDS.map(id => ({
   value: id,
   label: PALETTES[id]!.name,
 }));
-
-/** Convert registry palette to PaletteData for PaletteComponent */
-function toPaletteData(id: PaletteId): PaletteData {
-  const p = PALETTES[id]!;
-  return {
-    id: p.id,
-    name: p.name,
-    description: p.description,
-    interpolate: p.interpolate,
-    labelMode: (p.interpolate ? 'value-centered' : 'band-edge') as LabelMode,
-    stops: p.stops,
-  };
-}
 
 // Template shader for new layers
 // Placeholders: {BlendName}, {userLayerIndex}, {paletteMin}, {paletteMax}, {samplerFn}
@@ -532,7 +518,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
               ]),
             ]),
             m(PaletteComponent, {
-              palette: toPaletteData(state.paletteId),
+              palette: PALETTES[state.paletteId],
               height: 30,
               fontSize: 10,
               color: '#888888',

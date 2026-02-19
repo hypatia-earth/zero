@@ -36,41 +36,45 @@ export interface Palette {
 
 export type LabelMode = 'value-centered' | 'band-edge' | 'band-range';
 
-export interface PaletteData {
-  id: PaletteId;
-  name: string;
-  description?: string;
-  interpolate: boolean;
-  labelMode: LabelMode;
-  stops: PaletteStop[];
-}
-
 // ============================================================
 // Registry (static exports for worker + main thread)
 // ============================================================
 
-// JSON arrays are number[] — cast via unknown to typed tuples
-const raw = palettesJson as unknown as Record<string, Palette>;
-
-// Validate palette IDs match keys
-for (const [key, palette] of Object.entries(raw)) {
-  if (palette.id !== key) throw new Error(`Palette key "${key}" does not match id "${palette.id}"`);
-}
-
-/** All palettes keyed by ID */
-export const PALETTES: Record<string, Palette> = raw;
-
-/** All palette IDs in JSON order */
-export const PALETTE_IDS = Object.keys(PALETTES);
-
 /** Typed palette ID — derived from JSON keys */
 export type PaletteId = keyof typeof palettesJson;
 
+// Build typed registry from JSON — only cast is color tuple (inherent to JSON imports)
+const PALETTES: Record<PaletteId, Palette> = Object.fromEntries(
+  Object.entries(palettesJson).map(([key, raw]) => {
+    if (raw.id !== key) throw new Error(`Palette key "${key}" does not match id "${raw.id}"`);
+    return [key, {
+      id: key as PaletteId,
+      name: raw.name,
+      description: raw.description,
+      groups: raw.groups,
+      interpolate: raw.interpolate,
+      stops: raw.stops.map(s => ({
+        value: s.value,
+        color: s.color as [number, number, number],
+        alpha: s.alpha,
+      })),
+    }];
+  })
+) as Record<PaletteId, Palette>;
+
+export { PALETTES };
+
+/** All palette IDs in JSON order */
+export const PALETTE_IDS: PaletteId[] = Object.keys(PALETTES) as PaletteId[];
+
 /** Get palette by ID (throws if unknown) */
-export function getPalette(id: string): Palette {
-  const palette = PALETTES[id];
-  if (!palette) throw new Error(`Unknown palette: ${id}`);
-  return palette;
+export function getPalette(id: PaletteId): Palette {
+  return PALETTES[id];
+}
+
+/** Derive label mode from palette interpolation setting */
+export function getLabelMode(palette: Palette): LabelMode {
+  return palette.interpolate ? 'value-centered' : 'band-edge';
 }
 
 /** Type guard for palette IDs */
@@ -95,28 +99,6 @@ export function getPaletteIdsEnum(group: string): [PaletteId, ...PaletteId[]] {
   const [first, ...rest] = ids;
   return [first!, ...rest];
 }
-
-// ============================================================
-// Registry → PaletteData conversion
-// ============================================================
-
-function toPaletteData(palette: Palette): PaletteData {
-  return {
-    id: palette.id,
-    name: palette.name,
-    description: palette.description,
-    interpolate: palette.interpolate,
-    labelMode: palette.interpolate ? 'value-centered' : 'band-edge',
-    stops: palette.stops.map(s => ({
-      value: s.value,
-      color: s.color,
-      alpha: s.alpha,
-    })),
-  };
-}
-
-/** All palettes as PaletteData, cached once */
-const ALL_PALETTE_DATA: PaletteData[] = Object.values(PALETTES).map(toPaletteData);
 
 // ============================================================
 // PaletteService
@@ -144,28 +126,20 @@ export class PaletteService {
   /**
    * Get available palettes for a layer (by group)
    */
-  getPalettes(group: string): PaletteData[] {
-    return ALL_PALETTE_DATA.filter(p => {
-      const reg = PALETTES[p.id];
-      return reg && reg.groups.includes(group);
-    });
+  getPalettes(group: string): Palette[] {
+    return getPalettesByGroup(group);
   }
 
   /**
    * Get active palette for a layer
    */
-  getPalette(group: string): PaletteData {
+  getActivePalette(group: string): Palette {
     const activeId = this.activePalettes.value.get(group);
-    if (activeId) {
-      const palette = PALETTES[activeId];
-      if (palette) return toPaletteData(palette);
-    }
+    if (activeId) return PALETTES[activeId];
 
     // Fallback to first palette in group
     const groupPalettes = getPalettesByGroup(group);
-    if (groupPalettes.length > 0) {
-      return toPaletteData(groupPalettes[0]!);
-    }
+    if (groupPalettes.length > 0) return groupPalettes[0]!;
     throw new Error(`[Palette] No palettes found for group '${group}'`);
   }
 
@@ -185,10 +159,9 @@ export class PaletteService {
   }
 
   /**
-   * Get palette by ID from registry
+   * Get palette by ID from registry (accepts string for boundary use)
    */
-  getPaletteById(id: string): PaletteData | undefined {
-    const palette = PALETTES[id];
-    return palette ? toPaletteData(palette) : undefined;
+  getPaletteById(id: string): Palette | undefined {
+    return PALETTES[id as PaletteId];
   }
 }

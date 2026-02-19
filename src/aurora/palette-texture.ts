@@ -5,7 +5,7 @@
  * Layers sample using their assigned palette index.
  */
 
-import { PALETTES, PALETTE_IDS, type Palette } from '../services/palette-service';
+import { PALETTES, PALETTE_IDS, type Palette, type PaletteId } from '../services/palette-service';
 
 const PALETTE_WIDTH = 256;  // 256 colors per palette
 
@@ -15,7 +15,7 @@ export class PaletteTexture {
   readonly paletteCount: number;
 
   // Map palette ID → row index
-  private paletteIndexMap = new Map<string, number>();
+  private paletteIndexMap = new Map<PaletteId, number>();
 
   constructor(device: GPUDevice) {
     this.paletteCount = PALETTE_IDS.length;
@@ -53,7 +53,7 @@ export class PaletteTexture {
   /**
    * Get texture row index for a palette ID
    */
-  getPaletteIndex(id: string): number {
+  getPaletteIndex(id: PaletteId): number {
     const index = this.paletteIndexMap.get(id);
     if (index === undefined) {
       console.warn(`[PaletteTexture] Unknown palette: ${id}, using 0`);
@@ -65,7 +65,7 @@ export class PaletteTexture {
   /**
    * Check if a palette uses stepped (discrete) colors
    */
-  isStepped(id: string): boolean {
+  isStepped(id: PaletteId): boolean {
     const palette = PALETTES[id];
     return palette ? !palette.interpolate : false;
   }

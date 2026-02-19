@@ -17,7 +17,7 @@ export type { PassTimings } from './gpu-timestamp';
 import type { LayerState } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import type { PressureColorOption } from '../schemas/options.schema';
-import { PALETTE_IDS, PALETTES } from '../services/palette-service';
+import { PALETTE_IDS, PALETTES, type PaletteId } from '../services/palette-service';
 
 // Layer indices for uniform array access (must match registration order)
 export const LAYER_EARTH = 0;
@@ -973,7 +973,7 @@ export class GlobeRenderer {
   /**
    * Set palette for a built-in layer by layer index
    */
-  setLayerPalette(layerIndex: number, paletteId: string): void {
+  setLayerPalette(layerIndex: number, paletteId: PaletteId): void {
     const paletteIdx = this.paletteTexture.getPaletteIndex(paletteId);
     const offset = getLayerPaletteIndexOffset(layerIndex);
     this.uniformView.setUint32(offset, paletteIdx, true);

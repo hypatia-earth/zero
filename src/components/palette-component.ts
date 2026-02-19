@@ -3,18 +3,11 @@
  */
 
 import m from 'mithril';
-
-export interface PaletteStop {
-  value: number | null;
-  color: [number, number, number];
-  alpha?: number;
-}
-
-import type { PaletteData, LabelMode } from '../services/palette-service';
-export type { PaletteData, LabelMode };
+import type { Palette, PaletteStop, LabelMode } from '../services/palette-service';
+import { getLabelMode } from '../services/palette-service';
 
 interface PaletteComponentAttrs {
-  palette: PaletteData;
+  palette: Palette;
   width?: number | '100%';
   height?: number;
   font?: string;
@@ -23,14 +16,9 @@ interface PaletteComponentAttrs {
 }
 
 /** Format a value as label string */
-function formatLabel(value: number | null): string {
-  if (value === null) return 'max';
-  if (typeof value === 'number' && Math.abs(value) < 0.01 && value !== 0) {
-    return value.toFixed(4);
-  }
-  if (typeof value === 'number' && !Number.isInteger(value)) {
-    return value.toFixed(1);
-  }
+function formatLabel(value: number): string {
+  if (Math.abs(value) < 0.01 && value !== 0) return value.toFixed(4);
+  if (!Number.isInteger(value)) return value.toFixed(1);
   return String(value);
 }
 
@@ -49,10 +37,9 @@ function calculateLabels(
   labelMode: LabelMode,
   unit: string
 ): LabelInfo[] {
-  if (stops.length === 0) return [];
+  if (stops.length < 2) return [];
 
-  const values = stops.map(s => s.value).filter((v): v is number => v !== null);
-  if (values.length < 2) return [];
+  const values = stops.map(s => s.value);
 
   const minVal = values[0]!;
   const maxVal = values[values.length - 1]!;
@@ -66,7 +53,7 @@ function calculateLabels(
     // Labels centered at exact value positions
     const labels: LabelInfo[] = stops.map((stop, i) => {
       const text = formatLabel(stop.value);
-      const x = stop.value !== null ? valueToX(stop.value) : (i === 0 ? 0 : width);
+      const x = valueToX(stop.value);
       const align: 'left' | 'center' | 'right' = i === 0 ? 'left' : i === stops.length - 1 ? 'right' : 'center';
       return { text, x, width: ctx.measureText(text).width, align };
     });
@@ -80,11 +67,10 @@ function calculateLabels(
 
   if (labelMode === 'band-edge') {
     // Labels at left edge of each band
-    const labels: LabelInfo[] = stops.map((stop, i) => {
+    const labels: LabelInfo[] = stops.map((stop) => {
       const text = formatLabel(stop.value);
-      const x = stop.value !== null ? valueToX(stop.value) : (i === 0 ? 0 : width);
-      // First label: left-aligned at x=0, others: just right of value position
-      const align: 'left' | 'center' | 'right' = i === 0 ? 'left' : 'left';
+      const x = valueToX(stop.value);
+      const align: 'left' | 'center' | 'right' = 'left';
       return { text, x, width: ctx.measureText(text).width, align };
     });
 
@@ -101,7 +87,6 @@ function calculateLabels(
     for (let i = 0; i < stops.length - 1; i++) {
       const v1 = stops[i]!.value;
       const v2 = stops[i + 1]!.value;
-      if (v1 === null || v2 === null) continue;
 
       const text = `${formatLabel(v1)}-${formatLabel(v2)}`;
       const x1 = valueToX(v1);
@@ -154,7 +139,7 @@ function filterOverlapping(labels: LabelInfo[], _width: number, minSpacing: numb
 /** Draw palette on canvas */
 function drawPalette(
   canvas: HTMLCanvasElement,
-  palette: PaletteData,
+  palette: Palette,
   font: string,
   fontSize: number,
   labelColor: string
@@ -179,9 +164,8 @@ function drawPalette(
   const labelHeight = height / 2;
 
   // Get value range for position mapping
-  const values = stops.map(s => s.value).filter((v): v is number => v !== null);
-  const minVal = values[0] ?? 0;  // QC-OK: fallback if all nulls
-  const maxVal = values[values.length - 1] ?? 1;  // QC-OK: fallback if all nulls
+  const minVal = stops[0]!.value;
+  const maxVal = stops[stops.length - 1]!.value;
   const range = maxVal - minVal;
 
   // Draw color bar (full width) - map pixel position to value
@@ -192,19 +176,19 @@ function drawPalette(
     // Find surrounding stops by value
     let idx = 0;
     for (let i = 0; i < stops.length - 1; i++) {
-      if (stops[i + 1]!.value !== null && value <= stops[i + 1]!.value!) {
+      if (value <= stops[i + 1]!.value) {
         idx = i;
         break;
       }
       idx = i;
     }
 
-    let color: [number, number, number];
     const stop1 = stops[idx]!;
     const stop2 = stops[idx + 1]!;
-    const v1 = stop1.value ?? minVal; // QC-OK: palette format
-    const v2 = stop2.value ?? maxVal; // QC-OK: palette format
-    const t = v2 !== v1 ? (value - v1) / (v2 - v1) : 0;
+    const t = stop2.value !== stop1.value ? (value - stop1.value) / (stop2.value - stop1.value) : 0;
+
+    let color: [number, number, number];
+    let alpha255: number;
 
     if (interpolate) {
       color = [
@@ -212,13 +196,12 @@ function drawPalette(
         Math.round(stop1.color[1] + (stop2.color[1] - stop1.color[1]) * t),
         Math.round(stop1.color[2] + (stop2.color[2] - stop1.color[2]) * t),
       ];
+      alpha255 = stop1.alpha + (stop2.alpha - stop1.alpha) * t;
     } else {
-      color = t < 0.5 ? stop1.color : stop2.color;
+      // Stepped: use lower stop (matches GPU texture behavior)
+      color = stop1.color;
+      alpha255 = stop1.alpha;
     }
-
-    const a1 = stop1.alpha ?? 255;  // QC-OK: alpha optional, 0-255
-    const a2 = stop2.alpha ?? 255;
-    const alpha255 = interpolate ? a1 + (a2 - a1) * t : (t < 0.5 ? a1 : a2);
     ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha255 / 255})`;
     ctx.fillRect(x, labelHeight, 1, height - labelHeight);
   }
@@ -228,7 +211,7 @@ function drawPalette(
   ctx.fillStyle = labelColor;
   ctx.textBaseline = 'top';
 
-  const labels = calculateLabels(stops, width, ctx, palette.labelMode, unit);
+  const labels = calculateLabels(stops, width, ctx, getLabelMode(palette), unit);
 
   labels.forEach(label => {
     let textX: number;

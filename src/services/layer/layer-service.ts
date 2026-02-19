@@ -13,6 +13,7 @@ import type { TLayerCategory, SlabConfig } from '../../config/types';
 import type { OptionsService } from '../options-service';
 import { builtInLayers } from '../../layers';
 import { getPublishedParams } from '../../config/params-ecmwf_ifs';
+import type { PaletteId } from '../palette-service';
 
 export type LayerType = 'decoration' | 'texture' | 'geometry' | 'solid';
 export type ComputeTrigger = 'data-ready' | 'time-change';
@@ -36,7 +37,7 @@ export interface LayerDeclaration {
   params?: string[];           // Data params to fetch (e.g., ['temperature_2m'])
   slabs?: SlabConfig[];        // GPU buffer slabs (e.g., [{ name: 'data', sizeMB: 26 }])
   options?: string[];          // Option paths to watch (e.g., ['temp.enabled'])
-  palettes?: string[];         // Available palette IDs (first is default)
+  palettes?: PaletteId[];      // Available palette IDs (first is default)
   blendFn?: string;            // Fragment shader blend function name
   postFn?: string;             // Post-process function name
   shaders?: LayerShaders;      // Inline shader code

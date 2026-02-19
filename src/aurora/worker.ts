@@ -19,6 +19,7 @@ import { defaultConfig } from '../config/defaults';
 import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer, activeParamBindings, type ComposedShaders } from './shader-composer';
 import { LayerService, type LayerDeclaration } from '../services/layer/layer-service';
+import type { PaletteId } from '../services/palette-service';
 
 // ============================================================
 // Asset types for worker transfer
@@ -39,7 +40,7 @@ export interface AuroraAssets {
   fontAtlas: ImageBitmap;
   logo: ImageBitmap;
   // Initial palette configs per built-in layer: { layerIndex, paletteId, range }
-  layerPalettes: Array<{ layerIndex: number; paletteId: string; range: [number, number] }>;
+  layerPalettes: Array<{ layerIndex: number; paletteId: PaletteId; range: [number, number] }>;
 }
 
 export interface AuroraConfig {
@@ -68,7 +69,7 @@ export type AuroraRequest =
   | { type: 'registerUserLayer'; layer: LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'setUserLayerOptions'; layerIndex: number; enabled?: boolean; opacity?: number; paletteIndex?: number }
-  | { type: 'updatePalette'; layer: string; paletteId: string; range?: [number, number] }
+  | { type: 'updatePalette'; layer: string; paletteId: PaletteId; range?: [number, number] }
   | { type: 'cleanup' };
 
 export type AuroraResponse =

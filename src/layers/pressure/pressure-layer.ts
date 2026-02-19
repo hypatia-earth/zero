@@ -19,6 +19,7 @@ import pressPrefixSumCode from './prefix-sum.wgsl?raw';
 import pressChaikinCode from './chaikin.wgsl?raw';
 import type { PressureColorOption } from '../../schemas/options.schema';
 import type { PaletteTexture } from '../../aurora/palette-texture';
+import type { PaletteId } from '../../services/palette-service';
 
 
 /** Isobar configuration */
@@ -890,7 +891,7 @@ export class PressureLayer {
 
     // Palette fields - offset 40
     if (colorOption.mode === 'palette') {
-      uintView[40] = this.paletteTexture.getPaletteIndex(colorOption.paletteId);
+      uintView[40] = this.paletteTexture.getPaletteIndex(colorOption.paletteId as PaletteId);
     } else {
       uintView[40] = this.paletteTexture.getPaletteIndex('pressure-gradient');
     }

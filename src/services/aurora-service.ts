@@ -16,9 +16,10 @@ import type { OptionsService } from './options-service';
 import type { PerfService } from './perf-service';
 import { Camera } from '../aurora/camera';
 import { setupViewport } from './viewport/viewport';
+import type { PaletteId } from './palette-service';
 
-/** Type guard: value is an object with a string `palette` field */
-function hasPaletteField(val: unknown): val is { palette: string } {
+/** Type guard: value is an object with a palette ID field */
+function hasPaletteField(val: unknown): val is { palette: PaletteId } {
   return typeof val === 'object' && val !== null && 'palette' in val && typeof val.palette === 'string';
 }
 
@@ -57,7 +58,7 @@ export interface AuroraService {
   uploadData(param: string, slotIndex: number, data: Float32Array): void;
   activateSlots(param: string, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
   deactivateSlots(param: string): void;
-  updatePalette(layer: string, paletteId: string): void;
+  updatePalette(layer: string, paletteId: PaletteId): void;
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
@@ -291,7 +292,7 @@ export function createAuroraService(
       send({ type: 'deactivateSlots', param });
     },
 
-    updatePalette(layer: string, paletteId: string): void {
+    updatePalette(layer: string, paletteId: PaletteId): void {
       send({ type: 'updatePalette', layer, paletteId });
     },
 
