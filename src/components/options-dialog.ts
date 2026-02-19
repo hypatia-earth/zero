@@ -56,6 +56,11 @@ const isLocalhost = location.hostname === 'localhost';
 // Prefetch size calculation
 // ============================================================
 
+// OUTDATED: Prefetch size estimation hardcodes layer names and sizes.
+// Should derive from published params (params-ecmwf_ifs.ts sizeEstimate).
+// Per-layer toggles should be removed — prefetch downloads all published params.
+// See also: options.schema.ts prefetch section, sw-registration.ts PrefetchConfig.
+
 /** Timesteps per forecast day range (ECMWF: 1h to 90h, 3h to 144h, 6h after) */
 const TIMESTEPS_BY_DAYS: Record<string, number> = {
   '1': 24,   // 0-24h: hourly

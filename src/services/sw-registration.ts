@@ -7,6 +7,9 @@
 
 import { sendSWMessage } from '../utils/sw-message';
 
+// OUTDATED: PrefetchConfig uses layer names. Should use published params
+// from params-ecmwf_ifs.ts instead. Layers field should become params list.
+
 /** Prefetch configuration passed to SW */
 export interface PrefetchConfig {
   enabled: boolean;

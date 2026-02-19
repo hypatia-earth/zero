@@ -927,6 +927,9 @@ export const optionsSchema = z.object({
 
   // ----------------------------------------------------------
   // Background Prefetch
+  // OUTDATED: Per-layer toggles (temp/pressure/wind) should be removed.
+  // Prefetch should download all published params — no user choice per param.
+  // Size estimate should derive from params-ecmwf_ifs.ts sizeEstimate field.
   // ----------------------------------------------------------
   prefetch: z.object({
     enabled: opt(
