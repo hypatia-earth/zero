@@ -659,7 +659,7 @@ export const optionsSchema = z.object({
         options: [
           { value: 'temp-classic', label: 'Classic' },
           { value: 'temp-hypatia', label: 'Hypatia' },
-          { value: 'temp-gradient', label: 'Gradient' },
+          { value: 'simple-gradient', label: 'Gradient' },
         ],
       }
     ),

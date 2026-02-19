@@ -8,11 +8,13 @@
  * https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs/latest.json
  */
 
+import type { PaletteId } from './palettes';
+
 export interface ParamMeta {
   label: string;
   unit: string;
   range: [number, number];  // [min, max] for palette mapping
-  palette: string;          // suggested palette name
+  palette: PaletteId;       // palette for visualization
   sizeEstimate: number;     // compressed bytes per timestep (0 = unknown, learned at runtime)
   description?: string;
   published?: boolean;      // tested and available for custom layers
@@ -28,8 +30,8 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Temperature (2m)',
     unit: '°C',
     range: [-40, 50],  // Data stored in Celsius
-    palette: 'thermal',
-    sizeEstimate: 8_000_000,
+    palette: 'simple-gradient',
+    sizeEstimate: 3_600_000,
     published: true,
     layers: ['temp'],
   },
@@ -37,28 +39,28 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Max Temperature (2m)',
     unit: 'K',
     range: [233, 333],  // -40°C to 60°C
-    palette: 'thermal',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'temperature_2m_min': {
     label: 'Min Temperature (2m)',
     unit: 'K',
     range: [213, 313],  // -60°C to 40°C
-    palette: 'thermal',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'surface_temperature': {
     label: 'Surface Temperature',
     unit: 'K',
     range: [213, 343],  // -60°C to 70°C (deserts get hot)
-    palette: 'thermal',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'dew_point_2m': {
     label: 'Dew Point (2m)',
     unit: 'K',
     range: [233, 303],  // -40°C to 30°C
-    palette: 'thermal',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
 
@@ -69,28 +71,28 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Soil Temp (0-7cm)',
     unit: 'K',
     range: [253, 323],  // -20°C to 50°C
-    palette: 'thermal',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'soil_temperature_7_to_28cm': {
     label: 'Soil Temp (7-28cm)',
     unit: 'K',
     range: [263, 308],  // -10°C to 35°C (more stable)
-    palette: 'thermal',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'soil_temperature_28_to_100cm': {
     label: 'Soil Temp (28-100cm)',
     unit: 'K',
     range: [273, 303],  // 0°C to 30°C (even more stable)
-    palette: 'thermal',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'soil_temperature_100_to_255cm': {
     label: 'Soil Temp (100-255cm)',
     unit: 'K',
     range: [278, 298],  // 5°C to 25°C (very stable)
-    palette: 'thermal',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
 
@@ -101,49 +103,49 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Precipitation',
     unit: 'mm',
     range: [0, 50],  // 0-50mm/hr (heavy rain)
-    palette: 'rain',
+    palette: 'rain-intensity',
     sizeEstimate: 8_000_000,
   },
   'showers': {
     label: 'Showers',
     unit: 'mm',
     range: [0, 30],
-    palette: 'rain',
+    palette: 'rain-intensity',
     sizeEstimate: 0,
   },
   'snowfall_water_equivalent': {
     label: 'Snowfall',
     unit: 'mm',
     range: [0, 30],
-    palette: 'snow',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'snow_depth': {
     label: 'Snow Depth',
     unit: 'm',
     range: [0, 5],  // 0-5m
-    palette: 'snow',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'snow_density': {
     label: 'Snow Density',
     unit: 'kg/m³',
     range: [50, 500],  // fresh snow to packed
-    palette: 'density',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'runoff': {
     label: 'Runoff',
     unit: 'mm',
     range: [0, 50],
-    palette: 'water',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'potential_evapotranspiration': {
     label: 'Evapotranspiration',
     unit: 'mm',
     range: [0, 15],
-    palette: 'water',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
 
@@ -154,28 +156,28 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Soil Moisture (0-7cm)',
     unit: 'm³/m³',
     range: [0, 0.6],
-    palette: 'moisture',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'soil_moisture_7_to_28cm': {
     label: 'Soil Moisture (7-28cm)',
     unit: 'm³/m³',
     range: [0, 0.5],
-    palette: 'moisture',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'soil_moisture_28_to_100cm': {
     label: 'Soil Moisture (28-100cm)',
     unit: 'm³/m³',
     range: [0, 0.45],
-    palette: 'moisture',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'soil_moisture_100_to_255cm': {
     label: 'Soil Moisture (100-255cm)',
     unit: 'm³/m³',
     range: [0, 0.4],
-    palette: 'moisture',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
 
@@ -186,8 +188,8 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Cloud Cover',
     unit: '%',
     range: [0, 100],
-    palette: 'clouds',
-    sizeEstimate: 8_000_000,
+    palette: 'cloud-cover',
+    sizeEstimate: 3_500_000,
     published: true,
     layers: ['clouds'],
   },
@@ -195,28 +197,28 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Low Clouds',
     unit: '%',
     range: [0, 100],
-    palette: 'clouds',
+    palette: 'cloud-cover',
     sizeEstimate: 0,
   },
   'cloud_cover_mid': {
     label: 'Mid Clouds',
     unit: '%',
     range: [0, 100],
-    palette: 'clouds',
+    palette: 'cloud-cover',
     sizeEstimate: 0,
   },
   'cloud_cover_high': {
     label: 'High Clouds',
     unit: '%',
     range: [0, 100],
-    palette: 'clouds',
+    palette: 'cloud-cover',
     sizeEstimate: 0,
   },
   'total_column_integrated_water_vapour': {
     label: 'Water Vapour Column',
     unit: 'kg/m²',
     range: [0, 70],  // tropical max ~70
-    palette: 'moisture',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
 
@@ -227,7 +229,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Wind U (10m)',
     unit: 'm/s',
     range: [-50, 50],
-    palette: 'diverging',
+    palette: 'wind-magnitude',
     sizeEstimate: 4_100_000,  // ~half of 8.2MB combined
     published: true,
     layers: ['wind'],
@@ -236,7 +238,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Wind V (10m)',
     unit: 'm/s',
     range: [-50, 50],
-    palette: 'diverging',
+    palette: 'wind-magnitude',
     sizeEstimate: 4_100_000,
     published: true,
     layers: ['wind'],
@@ -245,35 +247,35 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Wind U (100m)',
     unit: 'm/s',
     range: [-60, 60],
-    palette: 'diverging',
+    palette: 'wind-magnitude',
     sizeEstimate: 0,
   },
   'wind_v_component_100m': {
     label: 'Wind V (100m)',
     unit: 'm/s',
     range: [-60, 60],
-    palette: 'diverging',
+    palette: 'wind-magnitude',
     sizeEstimate: 0,
   },
   'wind_u_component_200m': {
     label: 'Wind U (200m)',
     unit: 'm/s',
     range: [-70, 70],
-    palette: 'diverging',
+    palette: 'wind-magnitude',
     sizeEstimate: 0,
   },
   'wind_v_component_200m': {
     label: 'Wind V (200m)',
     unit: 'm/s',
     range: [-70, 70],
-    palette: 'diverging',
+    palette: 'wind-magnitude',
     sizeEstimate: 0,
   },
   'wind_gusts_10m': {
     label: 'Wind Gusts (10m)',
     unit: 'm/s',
     range: [0, 80],  // hurricane-force gusts
-    palette: 'wind',
+    palette: 'wind-speed',
     sizeEstimate: 0,
   },
 
@@ -284,8 +286,8 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Pressure (MSL)',
     unit: 'Pa',
     range: [97000, 105000],  // 970-1050 hPa
-    palette: 'pressure',
-    sizeEstimate: 2_000_000,
+    palette: 'pressure-gradient',
+    sizeEstimate: 2_100_000,
     published: true,
     layers: ['pressure'],
   },
@@ -297,14 +299,14 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Solar Radiation',
     unit: 'W/m²',
     range: [0, 1200],  // max solar constant at surface
-    palette: 'solar',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'direct_radiation': {
     label: 'Direct Radiation',
     unit: 'W/m²',
     range: [0, 1000],
-    palette: 'solar',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
 
@@ -315,7 +317,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'CAPE',
     unit: 'J/kg',
     range: [0, 5000],  // >2500 = severe storms
-    palette: 'convective',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
     description: 'Convective Available Potential Energy',
   },
@@ -323,21 +325,21 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'CIN',
     unit: 'J/kg',
     range: [-500, 0],  // negative values
-    palette: 'convective',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'k_index': {
     label: 'K-Index',
     unit: 'K',
     range: [0, 40],  // >30 = high thunderstorm potential
-    palette: 'convective',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'lightning_density': {
     label: 'Lightning',
     unit: 'fl/km²',
     range: [0, 10],
-    palette: 'lightning',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
 
@@ -348,7 +350,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Albedo',
     unit: '',
     range: [0, 1],  // 0=black, 1=white
-    palette: 'grayscale',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
     description: 'Surface reflectivity',
   },
@@ -356,21 +358,21 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Roughness',
     unit: 'm',
     range: [0, 2],  // ocean=0.001, forest=1-2
-    palette: 'terrain',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'boundary_layer_height': {
     label: 'Boundary Layer',
     unit: 'm',
     range: [0, 4000],  // daytime convective max
-    palette: 'height',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
   'visibility': {
     label: 'Visibility',
     unit: 'm',
     range: [0, 50000],  // 0=fog, 50km=clear
-    palette: 'visibility',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
 
@@ -381,28 +383,28 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Ocean Current U',
     unit: 'm/s',
     range: [-3, 3],  // Gulf Stream ~2 m/s
-    palette: 'diverging',
+    palette: 'wind-magnitude',
     sizeEstimate: 0,
   },
   'ocean_v_current': {
     label: 'Ocean Current V',
     unit: 'm/s',
     range: [-3, 3],
-    palette: 'diverging',
+    palette: 'wind-magnitude',
     sizeEstimate: 0,
   },
   'sea_level_height_msl': {
     label: 'Sea Level Height',
     unit: 'm',
     range: [-2, 2],  // dynamic topography
-    palette: 'diverging',
+    palette: 'wind-magnitude',
     sizeEstimate: 0,
   },
   'sea_ice_thickness': {
     label: 'Sea Ice Thickness',
     unit: 'm',
     range: [0, 5],
-    palette: 'ice',
+    palette: 'simple-gradient',
     sizeEstimate: 0,
   },
 
@@ -413,7 +415,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Precip Type',
     unit: 'WMO code',
     range: [0, 12],  // WMO: 0=none, 1=rain, 3=freezing rain, 5=snow, 6-7=mix, 8=ice pellets, 12=freezing drizzle
-    palette: 'categorical',
+    palette: 'rain-type',
     sizeEstimate: 800_000,
     published: true,
     layers: ['rain'],

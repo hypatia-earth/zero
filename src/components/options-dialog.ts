@@ -593,13 +593,13 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
               m('button.btn.btn-danger', {
                 onclick: () => {
                   optionsService.reset();
-                  location.reload();
+                  location.href = '/';
                 }
               }, 'Reset All'),
               m('button.btn.btn-danger', {
                 onclick: async () => {
                   await clearCache();
-                  location.reload();
+                  location.href = '/';
                 }
               }, 'Clear Cache'),
               m('button.btn.btn-danger', {
@@ -620,7 +620,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
               onclick: () => optionsService.reset(filter)
             }, layerLabels[filter] ? 'Reset Layer' : 'Reset') : null,
             optionsService.needsReload.value ? m('button.btn.btn-secondary', {
-              onclick: () => location.reload()
+              onclick: () => { location.href = '/'; }
             }, 'Reload') : null,
             m('button.btn.btn-secondary', { onclick: close }, 'Close')
           ])

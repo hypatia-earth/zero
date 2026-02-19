@@ -168,6 +168,19 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
   function validateAndCreate(registry: LayerService, aurora: AuroraService) {
     state.error = null;
 
+    // Quick-save path: editing without Try — just update palette/opacity and persist
+    if (!suspendedLayer && !registry.hasPreview()) {
+      const layer = registry.get(state.id);
+      if (layer && !layer.isBuiltIn) {
+        layer.palettes = [state.paletteId];
+        registry.setUserLayerOpacity(state.id, state.opacity);
+        console.log(`[CreateLayer] Quick-save: ${state.id} palette=${state.paletteId}`);
+        void registry.saveUserLayer(state.id);
+        m.redraw();
+        return;
+      }
+    }
+
     // Validate ID
     if (!state.id || !/^[a-z][a-z0-9_]*$/.test(state.id)) {
       state.error = 'ID must start with lowercase letter, contain only a-z, 0-9, _';
@@ -568,12 +581,16 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                 value: state.shaderCode,
                 oninput: (e: Event) => {
                   state.shaderCode = (e.target as HTMLTextAreaElement).value;
+                  state.error = null;
                 },
               }),
             ]),
 
             // Error message
-            state.error && m('.error', { 'data-testid': 'layer-error' }, state.error),
+            state.error && m('.error', {
+              'data-testid': 'layer-error',
+              oncreate: (vnode: m.VnodeDOM) => (vnode.dom as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'nearest' }),
+            }, state.error),
           ]),
 
           // Footer
@@ -593,7 +610,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
             m('.right', [
               m('button.primary', {
                 'data-testid': 'layer-save-btn',
-                disabled: state.tryPhase !== 'idle' || !layerRegistry.hasPreview(),
+                disabled: state.tryPhase !== 'idle' || (!isEditing && !layerRegistry.hasPreview()),
                 onclick: () => validateAndCreate(layerRegistry, auroraService),
               }, 'Save'),
               m('button.btn.btn-secondary', { 'data-testid': 'layer-close-btn', onclick: close }, 'Close'),

@@ -99,7 +99,8 @@ const paramStores = new Map<string, LayerStore>();
 let pipelineQueue: Promise<void> = Promise.resolve();
 
 function queuePipelineRecreation(composedShaders: ComposedShaders): Promise<void> {
-  pipelineQueue = pipelineQueue.then(() => renderer!.recreatePipeline(composedShaders));
+  // Recover from previous failures so the chain doesn't stay broken
+  pipelineQueue = pipelineQueue.catch(() => {}).then(() => renderer!.recreatePipeline(composedShaders));
   return pipelineQueue;
 }
 

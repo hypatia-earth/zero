@@ -63,8 +63,8 @@
     ]
   },
 
-  "temp-gradient": {
-    "id": "temp-gradient",
+  "simple-gradient": {
+    "id": "simple-gradient",
     "name": "Simple Gradient",
     "description": "Simple blue to red linear gradient",
     "interpolate": true,
