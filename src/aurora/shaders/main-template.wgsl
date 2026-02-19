@@ -9,7 +9,7 @@
 @group(0) @binding(2) var basemapSampler: sampler;
 @group(0) @binding(3) var<storage, read> gaussianLats: array<f32>;
 @group(0) @binding(4) var<storage, read> ringOffsets: array<u32>;
-// Bindings 5-6 removed (legacy tempData0/1 - now using dynamic param bindings)
+// Bindings 5-6 reserved
 // Atmosphere LUTs (Bruneton precomputed scattering)
 @group(0) @binding(7) var atm_transmittance: texture_2d<f32>;
 @group(0) @binding(8) var atm_scattering: texture_3d<f32>;

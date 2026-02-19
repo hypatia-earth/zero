@@ -20,13 +20,13 @@ import type { PressureColorOption } from '../schemas/options.schema';
 import { PALETTE_IDS, PALETTES } from '../services/palette-service';
 
 // Layer indices for uniform array access (must match registration order)
-const LAYER_EARTH = 0;
-const LAYER_SUN = 1;
-const LAYER_GRATICULE = 2;
-const LAYER_TEMP = 3;
-const LAYER_RAIN = 4;
-const LAYER_PRESSURE = 5;
-const LAYER_WIND = 6;
+export const LAYER_EARTH = 0;
+export const LAYER_SUN = 1;
+export const LAYER_GRATICULE = 2;
+export const LAYER_TEMP = 3;
+export const LAYER_RAIN = 4;
+export const LAYER_PRESSURE = 5;
+export const LAYER_WIND = 6;
 
 export interface GlobeUniforms {
   viewProj: Float32Array;
@@ -35,28 +35,22 @@ export interface GlobeUniforms {
   resolution: Float32Array;
   time: number;
   tanFov: number;
-  sunOpacity: number;
   sunDirection: Float32Array;
   sunCoreRadius: number;
   sunGlowRadius: number;
   sunCoreColor: Float32Array;
   sunGlowColor: Float32Array;
-  graticuleOpacity: number;      // written to layer array, not direct uniform
   graticuleFontSize: number;
   graticuleLabelMaxRadius: number;
   graticuleLineWidth: number;
-  earthOpacity: number;
-  tempOpacity: number;
-  rainOpacity: number;
-  windOpacity: number;    // not in uniform buffer, used for wind layer control
-  windDataReady: boolean; // not in uniform buffer, used for wind layer control
+  // Per-layer state indexed by LAYER_* constants
+  layerOpacities: Float32Array;   // indexed by LAYER_EARTH, LAYER_SUN, etc.
+  layerDataReady: boolean[];      // indexed by LAYER_TEMP, LAYER_RAIN, etc.
+  // Wind/pressure have separate render passes with special state
   windLerp: number;
   windAnimSpeed: number;  // updates per second
   windState: LayerState;  // full state for compute caching
-  pressureOpacity: number;
   pressureColors: PressureColorOption;
-  tempDataReady: boolean;
-  rainDataReady: boolean;
   logoOpacity: number;       // computed from all layer opacities
 }
 
@@ -108,9 +102,7 @@ export class GlobeRenderer {
   private uniformView = new DataView(this.uniformData);
 
   // Track layer opacities for depth test decision
-  private currentEarthOpacity = 0;
-  private currentTempOpacity = 0;
-  private currentSunOpacity = 0;
+  private currentLayerOpacities = new Float32Array(16);
 
   // Animation timing (shared across grid, wind, etc.)
   private lastFrameTime = 0;
@@ -573,24 +565,16 @@ export class GlobeRenderer {
     view.setFloat32(O.sunGlowColor + 4, uniforms.sunGlowColor[1]!, true);
     view.setFloat32(O.sunGlowColor + 8, uniforms.sunGlowColor[2]!, true);
 
-    // Built-in layer opacities (indexed array)
-    view.setFloat32(getLayerOpacityOffset(LAYER_EARTH), uniforms.earthOpacity, true);
-    view.setFloat32(getLayerOpacityOffset(LAYER_SUN), uniforms.sunOpacity, true);
-    view.setFloat32(getLayerOpacityOffset(LAYER_GRATICULE), uniforms.graticuleOpacity, true);
-    view.setFloat32(getLayerOpacityOffset(LAYER_TEMP), uniforms.tempOpacity, true);
-    view.setFloat32(getLayerOpacityOffset(LAYER_RAIN), uniforms.rainOpacity, true);
-    view.setFloat32(getLayerOpacityOffset(LAYER_PRESSURE), uniforms.pressureOpacity, true);
-    view.setFloat32(getLayerOpacityOffset(LAYER_WIND), uniforms.windOpacity, true);
-
-    // Built-in layer data ready flags (indexed array)
-    view.setUint32(getLayerDataReadyOffset(LAYER_TEMP), uniforms.tempDataReady ? 1 : 0, true);
-    view.setUint32(getLayerDataReadyOffset(LAYER_RAIN), uniforms.rainDataReady ? 1 : 0, true);
-    view.setUint32(getLayerDataReadyOffset(LAYER_WIND), uniforms.windDataReady ? 1 : 0, true);
+    // Built-in layer opacities and data ready flags (indexed arrays)
+    for (let i = 0; i < uniforms.layerOpacities.length; i++) {
+      view.setFloat32(getLayerOpacityOffset(i), uniforms.layerOpacities[i]!, true);
+    }
+    for (let i = 0; i < uniforms.layerDataReady.length; i++) {
+      view.setUint32(getLayerDataReadyOffset(i), uniforms.layerDataReady[i] ? 1 : 0, true);
+    }
 
     // Track for depth test decision in render()
-    this.currentEarthOpacity = uniforms.earthOpacity;
-    this.currentTempOpacity = uniforms.tempOpacity;
-    this.currentSunOpacity = uniforms.sunOpacity;
+    this.currentLayerOpacities.set(uniforms.layerOpacities);
 
     // Graticule settings
     view.setFloat32(O.graticuleFontSize, uniforms.graticuleFontSize, true);
@@ -617,7 +601,7 @@ export class GlobeRenderer {
     this.device.queue.writeBuffer(this.graticuleLinesBuffer, 0, graticuleBuffer);
 
     // Update pressure layer based on opacity
-    const pressureVisible = uniforms.pressureOpacity > 0.01;
+    const pressureVisible = uniforms.layerOpacities[LAYER_PRESSURE]! > 0.01;
     this.pressureLayer.setEnabled(pressureVisible);
 
     if (pressureVisible) {
@@ -633,13 +617,13 @@ export class GlobeRenderer {
           uniforms.sunDirection[1]!,
           uniforms.sunDirection[2]!,
         ],
-        opacity: uniforms.pressureOpacity,
+        opacity: uniforms.layerOpacities[LAYER_PRESSURE]!,
       }, uniforms.pressureColors);
     }
 
     // Update wind layer based on opacity AND data readiness
     // Don't run compute/render if buffers might be invalid
-    const windVisible = uniforms.windOpacity > 0.01 && uniforms.windDataReady;
+    const windVisible = uniforms.layerOpacities[LAYER_WIND]! > 0.01 && uniforms.layerDataReady[LAYER_WIND]!;
     this.windLayer.setEnabled(windVisible);
 
     if (windVisible) {
@@ -654,7 +638,7 @@ export class GlobeRenderer {
 
       // Animated backface: fade in from limb as texture layers fade out
       // Uses same logic as grid/depth: smoothstep(0.3, 0.0, maxOpacity)
-      const maxOpacity = Math.max(uniforms.earthOpacity, uniforms.tempOpacity);
+      const maxOpacity = Math.max(uniforms.layerOpacities[LAYER_EARTH]!, uniforms.layerOpacities[LAYER_TEMP]!);
       const t = Math.max(0, Math.min(1, (0.3 - maxOpacity) / 0.3));
       const showBackface = t * t * (3 - 2 * t);  // smoothstep
 
@@ -665,7 +649,7 @@ export class GlobeRenderer {
           uniforms.eyePosition[1]!,
           uniforms.eyePosition[2]!,
         ],
-        opacity: uniforms.windOpacity,
+        opacity: uniforms.layerOpacities[LAYER_WIND]!,
         animPhase: this.windAnimPhase,
         snakeLength: this.windSnakeLength,
         lineWidth: this.windLineWidth,
@@ -720,7 +704,7 @@ export class GlobeRenderer {
     // Renders to same color/depth textures, depth-tested against globe
     // Always run pass for timestamp consistency (even if empty)
     const hasPressure = this.pressureLayer.isEnabled() && this.pressureLayer.getVertexCount() > 0;
-    const useGlobeDepth = this.currentEarthOpacity > 0.01 || this.currentTempOpacity > 0.01 || this.currentSunOpacity > 0.01;
+    const useGlobeDepth = this.currentLayerOpacities[LAYER_EARTH]! > 0.01 || this.currentLayerOpacities[LAYER_TEMP]! > 0.01 || this.currentLayerOpacities[LAYER_SUN]! > 0.01;
 
     const geometryPassDescriptor: GPURenderPassDescriptor = {
       colorAttachments: [{
@@ -856,7 +840,7 @@ export class GlobeRenderer {
       { binding: 2, resource: this.basemapSampler },
       { binding: 3, resource: { buffer: this.gaussianLatsBuffer } },
       { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
-      // Bindings 5-6 removed (legacy tempData0/1)
+      // Bindings 5-6 reserved
       { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
       { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
       { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
@@ -922,7 +906,7 @@ export class GlobeRenderer {
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
       { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-      // Bindings 5-6 removed (legacy tempData0/1)
+      // Bindings 5-6 reserved
       { binding: 7, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // transmittance
       { binding: 8, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } },  // scattering
       { binding: 9, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // irradiance

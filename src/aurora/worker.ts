@@ -262,6 +262,31 @@ interface CameraState {
   tanFov: number;
 }
 
+/** Build per-layer opacity array from registry and animated values */
+function buildLayerOpacities(): Float32Array {
+  const layers = layerRegistry!.getAll().filter(l => l.isBuiltIn);
+  const maxIndex = layers.reduce((max, l) => Math.max(max, l.index!), 0);
+  const arr = new Float32Array(maxIndex + 1);
+  for (const layer of layers) {
+    arr[layer.index!] = animatedOpacity.get(layer.id) ?? 0;
+  }
+  return arr;
+}
+
+/** Build per-layer data ready array from registry and slot states */
+function buildLayerDataReady(): boolean[] {
+  const layers = layerRegistry!.getAll().filter(l => l.isBuiltIn);
+  const maxIndex = layers.reduce((max, l) => Math.max(max, l.index!), 0);
+  const arr = new Array<boolean>(maxIndex + 1).fill(false);
+  for (const layer of layers) {
+    if (layer.params?.length) {
+      const state = paramSlotStates.get(layer.params[0]!);
+      if (state) arr[layer.index!] = state.dataReady;
+    }
+  }
+  return arr;
+}
+
 /**
  * Build uniforms from render message state
  */
@@ -276,24 +301,18 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     resolution: new Float32Array([canvas!.width, canvas!.height]),
     time: performance.now() / 1000,
     tanFov: camera.tanFov,
-    // Sun (animated opacity)
-    sunOpacity: animatedOpacity.get('sun')!,
     sunDirection: getSunDirection(time),
     sunCoreRadius: defaultConfig.sun.coreRadius,
     sunGlowRadius: defaultConfig.sun.glowRadius,
     sunCoreColor: new Float32Array(defaultConfig.sun.coreColor),
     sunGlowColor: new Float32Array(defaultConfig.sun.glowColor),
-    // Graticule (animated opacity)
-    graticuleOpacity: animatedOpacity.get('graticule')!,
     graticuleFontSize: opts.graticule.fontSize,
     graticuleLabelMaxRadius: defaultConfig.graticule.labelMaxRadiusPx,
     graticuleLineWidth: opts.graticule.lineWidth,
-    // Layers (animated opacities)
-    earthOpacity: animatedOpacity.get('earth')!,
-    tempOpacity: animatedOpacity.get('temp')!,
-    rainOpacity: animatedOpacity.get('rain')!,
-    windOpacity: animatedOpacity.get('wind')!,
-    windDataReady: getLayerSlotState('wind')!.dataReady,
+    // Per-layer state built from registry (indexed by layer.index)
+    layerOpacities: buildLayerOpacities(),
+    layerDataReady: buildLayerDataReady(),
+    // Wind/pressure have separate render passes with special state
     windLerp: computeLerp(getLayerSlotState('wind')!, time.getTime()),
     windAnimSpeed: opts.wind.speed,
     windState: {
@@ -301,11 +320,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
       lerp: computeLerp(getLayerSlotState('wind')!, time.getTime()),
       time,
     },
-    pressureOpacity: animatedOpacity.get('pressure')!,
     pressureColors: opts.pressure.colors,
-    // Data state (from slot activation messages)
-    tempDataReady: getLayerSlotState('temp')!.dataReady,
-    rainDataReady: getLayerSlotState('rain')!.dataReady,
     logoOpacity: opts.debug.showLogo && !isAnyLayerEnabled()
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
