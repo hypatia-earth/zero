@@ -48,6 +48,7 @@ jobs:
             }
           }
           EOF
+          echo "{\"version\": \"$VERSION\", \"commit\": \"$HASH\", \"date\": \"$TIMESTAMP\"}" > dist/version.json
 
       - uses: actions/upload-pages-artifact@v3
         with:
