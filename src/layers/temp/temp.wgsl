@@ -4,11 +4,12 @@
 // Texture-based colormap using shared palette array
 fn colormapTemp(tempC: f32) -> vec4f {
   // Normalize data value using palette range
+  let range = getLayerPaletteRange(LAYER_TEMP);
   let t = clamp(
-    (tempC - u.tempPaletteRange.x) / (u.tempPaletteRange.y - u.tempPaletteRange.x),
+    (tempC - range.x) / (range.y - range.x),
     0.0, 1.0
   );
-  return samplePalette(t, u.tempPaletteIndex);
+  return samplePalette(t, getLayerPaletteIndex(LAYER_TEMP));
 }
 
 fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {

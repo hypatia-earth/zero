@@ -80,9 +80,6 @@ export async function runGpuInitPhase(
       new Blob([assets.logoBuffer], { type: 'image/png' })
     );
 
-    // Get initial palette ID and range for temp layer
-    const tempPaletteId = optionsService.options.value.temp.palette;
-
     const auroraAssets: AuroraAssets = {
       atmosphereLUTs: {
         transmittance: assets.lutBuffers[0]!,
@@ -94,8 +91,10 @@ export async function runGpuInitPhase(
       basemapFaces,
       fontAtlas,
       logo,
-      tempPaletteId,
-      tempPaletteRange: [-40, 50],  // From param metadata for temperature_2m
+      layerPalettes: [
+        { layerIndex: layerService.getLayerIndex('temp'), paletteId: optionsService.options.value.temp.palette, range: [-40, 50] },
+        { layerIndex: layerService.getLayerIndex('rain'), paletteId: 'rain-type', range: [0, 12] },
+      ],
     };
 
     // Initialize worker (transfers assets)

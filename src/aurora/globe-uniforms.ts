@@ -51,14 +51,23 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['graticuleFontSize', 'f32'],         // 320
   ['graticuleLabelMaxRadius', 'f32'],   // 340
   ['graticuleLineWidth', 'f32'],        // 344
-  ['tempPaletteRange', 'vec2f'],   // 352 (vec2f needs 8-byte align)
-  ['tempPaletteIndex', 'u32'],     // 360: row index in palette texture
-  ['paletteCount', 'u32'],         // 364: total palettes in texture
-  ['rainPaletteIndex', 'u32'],     // 368: row index for rain palette
-  ['paletteStepped', 'u32'],       // 372: bitmask — bit i = 1 means palette i is stepped
+  ['paletteCount', 'u32'],         // total palettes in texture
+  ['paletteStepped', 'u32'],       // bitmask — bit i = 1 means palette i is stepped
+  ['logoOpacity', 'f32'],
+  ['logoPad', 'vec2f'],            // pad for vec4 alignment
 
-  ['logoOpacity', 'f32'],          // 372
-  ['logoPad', 'f32'],              // 376
+  // Built-in layer palette index array (16 slots = 4 x vec4u)
+  ['layerPaletteIndex0', 'vec4u'],
+  ['layerPaletteIndex1', 'vec4u'],
+  ['layerPaletteIndex2', 'vec4u'],
+  ['layerPaletteIndex3', 'vec4u'],
+
+  // Built-in layer palette range array (8 slots x 2 floats = 4 x vec4f)
+  // Packed as (layer0_min, layer0_max, layer1_min, layer1_max) per vec4f
+  ['layerPaletteRange0', 'vec4f'],
+  ['layerPaletteRange1', 'vec4f'],
+  ['layerPaletteRange2', 'vec4f'],
+  ['layerPaletteRange3', 'vec4f'],
 
   // User layer slots (32 max) - packed as vec4s for alignment
   // userLayerOpacity: 8 x vec4f = 128 bytes (indices 0-31)
@@ -136,13 +145,19 @@ export const U = GLOBE_UNIFORMS.offsets as {
   graticuleFontSize: number;
   graticuleLabelMaxRadius: number;
   graticuleLineWidth: number;
-  tempPaletteRange: number;
-  tempPaletteIndex: number;
   paletteCount: number;
-  rainPaletteIndex: number;
   paletteStepped: number;
   logoOpacity: number;
   logoPad: number;
+  // Built-in layer palette arrays
+  layerPaletteIndex0: number;
+  layerPaletteIndex1: number;
+  layerPaletteIndex2: number;
+  layerPaletteIndex3: number;
+  layerPaletteRange0: number;
+  layerPaletteRange1: number;
+  layerPaletteRange2: number;
+  layerPaletteRange3: number;
   // User layer arrays (8 vec4s each = 32 slots)
   userLayerOpacity0: number;
   userLayerOpacity1: number;
@@ -202,6 +217,23 @@ export function getUserLayerPaletteIndexOffset(index: number): number {
   const compIndex = index % 4;
   const baseOffset = U.userLayerPaletteIndex0 + vecIndex * 16;
   return baseOffset + compIndex * 4;
+}
+
+/** Get uniform buffer offset for built-in layer palette index by index (0-15) */
+export function getLayerPaletteIndexOffset(index: number): number {
+  const vecIndex = Math.floor(index / 4);
+  const compIndex = index % 4;
+  const baseOffset = U.layerPaletteIndex0 + vecIndex * 16;
+  return baseOffset + compIndex * 4;
+}
+
+/** Get uniform buffer offset for built-in layer palette range by index (0-7)
+ *  Returns offset to a min/max pair (2 x f32 = 8 bytes) */
+export function getLayerPaletteRangeOffset(index: number): number {
+  const vecIndex = Math.floor(index / 2);
+  const pairIndex = index % 2;
+  const baseOffset = U.layerPaletteRange0 + vecIndex * 16;
+  return baseOffset + pairIndex * 8;
 }
 
 /** Get uniform buffer offset for built-in layer opacity by index (0-15) */

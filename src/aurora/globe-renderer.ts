@@ -8,7 +8,7 @@ import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } fro
 import { PressureLayer } from '../layers/pressure';
 import { WindLayer } from '../layers/wind';
 import { GraticuleAnimator, GRATICULE_BUFFER_SIZE } from '../layers/graticule/graticule-animator';
-import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getParamLerpOffset, getParamReadyOffset } from './globe-uniforms';
+import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
 
@@ -57,7 +57,6 @@ export interface GlobeUniforms {
   pressureColors: PressureColorOption;
   tempDataReady: boolean;
   rainDataReady: boolean;
-  tempPaletteRange: Float32Array; // min/max temperature values for palette mapping
   logoOpacity: number;       // computed from all layer opacities
 }
 
@@ -263,8 +262,6 @@ export class GlobeRenderer {
 
     // Initialize palette uniforms
     this.uniformView.setUint32(U.paletteCount, this.paletteTexture.paletteCount, true);
-    this.uniformView.setUint32(U.tempPaletteIndex, 0, true);  // Default to first palette
-    this.uniformView.setUint32(U.rainPaletteIndex, this.paletteTexture.getPaletteIndex('rain-type'), true);
 
     // Compute paletteStepped bitmask — bit i = 1 means palette i is stepped
     let steppedBitmask = 0;
@@ -599,10 +596,6 @@ export class GlobeRenderer {
     view.setFloat32(O.graticuleFontSize, uniforms.graticuleFontSize, true);
     view.setFloat32(O.graticuleLabelMaxRadius, uniforms.graticuleLabelMaxRadius, true);
     view.setFloat32(O.graticuleLineWidth, uniforms.graticuleLineWidth, true);
-
-    // vec2 tempPaletteRange (alignment handled by layout)
-    view.setFloat32(O.tempPaletteRange, uniforms.tempPaletteRange[0]!, true);
-    view.setFloat32(O.tempPaletteRange + 4, uniforms.tempPaletteRange[1]!, true);
 
     // Logo
     view.setFloat32(O.logoOpacity, uniforms.logoOpacity, true);
@@ -994,21 +987,21 @@ export class GlobeRenderer {
   }
 
   /**
-   * Set temperature palette by ID
-   * @param paletteId Palette ID from registry (e.g., 'temp-classic')
+   * Set palette for a built-in layer by layer index
    */
-  setTempPalette(paletteId: string): void {
-    const index = this.paletteTexture.getPaletteIndex(paletteId);
-    this.uniformView.setUint32(U.tempPaletteIndex, index, true);
+  setLayerPalette(layerIndex: number, paletteId: string): void {
+    const paletteIdx = this.paletteTexture.getPaletteIndex(paletteId);
+    const offset = getLayerPaletteIndexOffset(layerIndex);
+    this.uniformView.setUint32(offset, paletteIdx, true);
   }
 
   /**
-   * Set rain palette by ID
-   * @param paletteId Palette ID from registry (e.g., 'rain-type')
+   * Set palette data range for a built-in layer by layer index
    */
-  setRainPalette(paletteId: string): void {
-    const index = this.paletteTexture.getPaletteIndex(paletteId);
-    this.uniformView.setUint32(U.rainPaletteIndex, index, true);
+  setLayerPaletteRange(layerIndex: number, min: number, max: number): void {
+    const offset = getLayerPaletteRangeOffset(layerIndex);
+    this.uniformView.setFloat32(offset, min, true);
+    this.uniformView.setFloat32(offset + 4, max, true);
   }
 
   /**

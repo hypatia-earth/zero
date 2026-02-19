@@ -5,8 +5,9 @@
 
 fn colormapPrecipType(ptype: f32, opacity: f32) -> vec4f {
   if (ptype < 0.5) { return vec4f(0.0); }  // code 0: no precipitation
-  let t = clamp(ptype / 12.0, 0.0, 1.0);
-  let c = samplePalette(t, u.rainPaletteIndex);
+  let range = getLayerPaletteRange(LAYER_RAIN);
+  let t = clamp((ptype - range.x) / (range.y - range.x), 0.0, 1.0);
+  let c = samplePalette(t, getLayerPaletteIndex(LAYER_RAIN));
   return vec4f(c.rgb, c.a * opacity);
 }
 

@@ -26,13 +26,14 @@ struct Uniforms {
   graticuleFontSize: f32,      // font size in screen pixels for graticule labels
   graticuleLabelMaxRadius: f32, // max globe radius (px) before labels shrink
   graticuleLineWidth: f32,     // line width in screen pixels
-  tempPaletteRange: vec2f, // min/max temperature values for palette mapping (Celsius)
-  tempPaletteIndex: u32,  // row index in palette texture array
   paletteCount: u32,      // total number of palettes in array
-  rainPaletteIndex: u32,  // row index for rain palette
   paletteStepped: u32, // bitmask — bit i = 1 means palette i is stepped
   logoOpacity: f32,       // computed from all layer opacities
-  logoPad: f32,           // padding for alignment
+  logoPad: vec2f,         // padding for vec4 alignment
+  // Built-in layer palette indices (16 slots)
+  layerPaletteIndex: array<vec4<u32>, 4>,
+  // Built-in layer palette ranges (8 slots x 2 floats packed as min/max pairs)
+  layerPaletteRange: array<vec4<f32>, 4>,
   // User layer slots (32 max) - packed as vec4s for alignment
   userLayerOpacity: array<vec4<f32>, 8>,   // 32 opacity values
   userLayerDataReady: array<vec4<u32>, 8>, // 32 data ready flags
@@ -107,6 +108,28 @@ fn isLayerDataReady(index: u32) -> bool {
     case 2u: { return v.z != 0u; }
     default: { return v.w != 0u; }
   }
+}
+
+// Get built-in layer palette index by index (0-15)
+fn getLayerPaletteIndex(index: u32) -> u32 {
+  let vecIdx = index / 4u;
+  let compIdx = index % 4u;
+  let v = u.layerPaletteIndex[vecIdx];
+  switch compIdx {
+    case 0u: { return v.x; }
+    case 1u: { return v.y; }
+    case 2u: { return v.z; }
+    default: { return v.w; }
+  }
+}
+
+// Get built-in layer palette range (min/max) by index (0-7)
+fn getLayerPaletteRange(index: u32) -> vec2f {
+  let vecIdx = index / 2u;
+  let pairIdx = index % 2u;
+  let v = u.layerPaletteRange[vecIdx];
+  if (pairIdx == 0u) { return vec2f(v.x, v.y); }
+  return vec2f(v.z, v.w);
 }
 
 // Get param lerp factor by index (0-15)

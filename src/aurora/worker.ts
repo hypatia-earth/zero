@@ -38,9 +38,8 @@ export interface AuroraAssets {
   basemapFaces: ImageBitmap[];
   fontAtlas: ImageBitmap;
   logo: ImageBitmap;
-  // Initial palette for temp layer (textures are built in PaletteTexture)
-  tempPaletteId: string;
-  tempPaletteRange: [number, number];  // [min, max] in Celsius (from param metadata)
+  // Initial palette configs per built-in layer: { layerIndex, paletteId, range }
+  layerPalettes: Array<{ layerIndex: number; paletteId: string; range: [number, number] }>;
 }
 
 export interface AuroraConfig {
@@ -174,7 +173,6 @@ function rebindAllParamBuffers(): void {
 
 // Pressure contour state
 let isobarLevels: number[] = generateIsobarLevels(4);  // Default 4 hPa spacing
-const tempPaletteRange = new Float32Array([-40, 50]);  // Updated by updatePalette message
 let lastPressureMinute = -1;
 let lastPressureSpacing = 4;
 let lastSmoothing = 'light';
@@ -308,7 +306,6 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     // Data state (from slot activation messages)
     tempDataReady: getLayerSlotState('temp')!.dataReady,
     rainDataReady: getLayerSlotState('rain')!.dataReady,
-    tempPaletteRange,
     logoOpacity: opts.debug.showLogo && !isAnyLayerEnabled()
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
@@ -400,10 +397,11 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
     }
   });
 
-  // Apply initial palette and range for temp layer
-  renderer.setTempPalette(assets.tempPaletteId);
-  tempPaletteRange[0] = assets.tempPaletteRange[0];
-  tempPaletteRange[1] = assets.tempPaletteRange[1];
+  // Apply initial palette config for built-in layers
+  for (const lp of assets.layerPalettes) {
+    renderer.setLayerPalette(lp.layerIndex, lp.paletteId);
+    renderer.setLayerPaletteRange(lp.layerIndex, lp.range[0], lp.range[1]);
+  }
 
   // Recreate pipeline with composed shaders (includes dynamic param bindings)
   const initLayers = layerRegistry.getAll();
@@ -694,14 +692,11 @@ function handleSetUserLayerOptions(data: Extract<AuroraRequest, { type: 'setUser
 
 function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette' }>): void {
   const { layer, paletteId, range } = data;
-  if (!renderer) return;
-  if (layer === 'temp') {
-    renderer.setTempPalette(paletteId);
-    tempPaletteRange[0] = range[0];
-    tempPaletteRange[1] = range[1];
-  } else if (layer === 'rain') {
-    renderer.setRainPalette(paletteId);
-  }
+  if (!renderer || !layerRegistry) return;
+  const layerIndex = layerRegistry.getLayerIndex(layer);
+  if (isNaN(layerIndex)) return;
+  renderer.setLayerPalette(layerIndex, paletteId);
+  renderer.setLayerPaletteRange(layerIndex, range[0], range[1]);
 }
 
 function handleCleanup(): void {
