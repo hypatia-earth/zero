@@ -17,7 +17,7 @@ import {
   type ServiceContainer,
 } from './service-container';
 import { extractOptionsMeta, defaultOptions } from '../schemas/options.schema';
-import { PALETTE_IDS } from '../config/palettes';
+import { PALETTE_IDS } from '../services/palette-service';
 import {
   runCapabilitiesPhase,
   runConfigPhase,

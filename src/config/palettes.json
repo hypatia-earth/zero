@@ -1,6 +1,7 @@
 {
   "temp-classic": {
     "id": "temp-classic",
+    "groups": ["temp"],
     "name": "Classic Temperature",
     "description": "Meaningful palette with dark freezing wall at 32°F",
     "interpolate": false,
@@ -48,6 +49,7 @@
 
   "temp-hypatia": {
     "id": "temp-hypatia",
+    "groups": ["temp"],
     "name": "Hypatia Temperature",
     "description": "Original Hypatia gradient from purple to red",
     "interpolate": false,
@@ -65,6 +67,7 @@
 
   "simple-gradient": {
     "id": "simple-gradient",
+    "groups": ["temp"],
     "name": "Simple Gradient",
     "description": "Simple blue to red linear gradient",
     "interpolate": true,
@@ -81,6 +84,7 @@
 
   "wind-speed": {
     "id": "wind-speed",
+    "groups": ["wind"],
     "name": "Wind Speed",
     "description": "White below 17 m/s, increasingly red above (Beaufort scale)",
     "interpolate": true,
@@ -100,6 +104,7 @@
 
   "wind-magnitude": {
     "id": "wind-magnitude",
+    "groups": ["wind"],
     "name": "Wind Magnitude",
     "description": "Diverging: transparent at 0 m/s, white for moderate, red beyond ±17 m/s",
     "interpolate": true,
@@ -124,6 +129,7 @@
 
   "rain-intensity": {
     "id": "rain-intensity",
+    "groups": ["rain"],
     "name": "Rain Intensity",
     "description": "Blue gradient for precipitation intensity",
     "interpolate": true,
@@ -140,6 +146,7 @@
 
   "rain-type": {
     "id": "rain-type",
+    "groups": ["rain"],
     "name": "Precipitation Type",
     "description": "WMO precipitation type codes (stepped)",
     "interpolate": false,
@@ -157,6 +164,7 @@
 
   "cloud-cover": {
     "id": "cloud-cover",
+    "groups": ["cloud"],
     "name": "Cloud Cover",
     "description": "Transparent to white for cloud coverage",
     "interpolate": true,
@@ -169,6 +177,7 @@
 
   "pressure-gradient": {
     "id": "pressure-gradient",
+    "groups": ["pressure"],
     "name": "Pressure Gradient",
     "description": "Blue (low) to white (1012) to red (high)",
     "interpolate": true,

@@ -16,7 +16,7 @@ import type { DialogService } from '../services/dialog-service';
 import { defineLayer, withType, withUI, withParams, withPalettes, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
 import { DialogHeader } from './dialog-header';
 import { PARAM_METADATA, getParamMeta, getPublishedParams, type ParamMeta } from '../config/params-ecmwf_ifs';
-import { PALETTES, PALETTE_IDS, type PaletteId } from '../config/palettes';
+import { PALETTES, PALETTE_IDS, type PaletteId } from '../services/palette-service';
 import { PaletteComponent } from './palette-component';
 import type { PaletteData, LabelMode } from '../services/palette-service';
 import type { ModalService } from '../services/modal-service';

@@ -8,7 +8,7 @@
  * https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs/latest.json
  */
 
-import type { PaletteId } from './palettes';
+import type { PaletteId } from '../services/palette-service';
 
 export interface ParamMeta {
   label: string;

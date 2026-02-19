@@ -25,7 +25,7 @@ import type { ConfigService } from '../services/config-service';
 import type { DialogService } from '../services/dialog-service';
 import { clearCache, nuke } from '../services/sw-registration';
 import { RadioPaletteControl } from './radio-palette-control';
-import { isPaletteId } from '../config/palettes';
+import { isPaletteId } from '../services/palette-service';
 import { PressureColorControl } from './pressure-color-control';
 import { DialogHeader } from './dialog-header';
 

@@ -5,7 +5,7 @@
  * Layers sample using their assigned palette index.
  */
 
-import { PALETTES, PALETTE_IDS, type Palette } from '../config/palettes';
+import { PALETTES, PALETTE_IDS, type Palette } from '../services/palette-service';
 
 const PALETTE_WIDTH = 256;  // 256 colors per palette
 

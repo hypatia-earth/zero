@@ -7,7 +7,7 @@
 import m from 'mithril';
 import { PaletteComponent } from './palette-component';
 import type { PaletteData } from '../services/palette-service';
-import type { PaletteId } from '../config/palettes';
+import type { PaletteId } from '../services/palette-service';
 
 export interface RadioPaletteControlAttrs {
   palettes: PaletteData[];

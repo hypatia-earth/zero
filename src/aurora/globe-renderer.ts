@@ -17,7 +17,7 @@ export type { PassTimings } from './gpu-timestamp';
 import type { LayerState } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import type { PressureColorOption } from '../schemas/options.schema';
-import { PALETTE_IDS, PALETTES } from '../config/palettes';
+import { PALETTE_IDS, PALETTES } from '../services/palette-service';
 
 // Layer indices for uniform array access (must match registration order)
 const LAYER_EARTH = 0;

@@ -13,7 +13,7 @@
 
 import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders } from './layer-service';
 import type { TLayerCategory, SlabConfig } from '../../config/types';
-import { PALETTES } from '../../config/palettes';
+import { PALETTES } from '../palette-service';
 
 export interface LayerFeature {
   apply(declaration: Partial<LayerDeclaration>): Partial<LayerDeclaration>;
