@@ -22,6 +22,9 @@ export const defaultConfig: ZeroConfig = {
     environment: 'development',
   },
 
+  beacon: false,
+  beaconUrl: '/api/beacon',
+
   bootstrap: {
     progressSleep: 100,
   },

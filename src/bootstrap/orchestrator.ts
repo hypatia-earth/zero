@@ -27,6 +27,7 @@ import {
   runDataPhase,
   runActivatePhase,
 } from './phases';
+import type { ConfigService } from '../services/config-service';
 
 /**
  * Run the full bootstrap sequence
@@ -53,6 +54,9 @@ export async function runBootstrap(
 
     progress.setError(message);
     console.error('[ZERO] Bootstrap failed:', err);
+
+    const errorSnippet = (err instanceof Error ? err.message : String(err)).slice(0, 120);
+    sendBeacon(services.configService, 'error', undefined, errorSnippet);
   }
 }
 
@@ -155,13 +159,39 @@ async function runBootstrapInner(
   // Complete
   progress.complete();
   canvas.classList.add('ready');
+
+  const bootSeconds = (performance.now() / 1000).toFixed(2);
   console.log(
-    `%c[ZERO] Bootstrap complete (${(performance.now() / 1000).toFixed(2)}s)`,
+    `%c[ZERO] Bootstrap complete (${bootSeconds}s)`,
     'color: darkgreen; font-weight: bold'
   );
 
+  sendBeacon(services.configService!, 'ok', bootSeconds);
+
   // Expose for debugging
   exposeDebugServices(services as ServiceContainer);
+}
+
+/**
+ * Fire-and-forget beacon after bootstrap (success or error)
+ */
+function sendBeacon(
+  configService: ConfigService | undefined,
+  status: 'ok' | 'error',
+  bootTime?: string,
+  error?: string
+): void {
+  const config = configService?.getConfig();
+  if (!config?.beacon) return;
+
+  const params = new URLSearchParams({
+    s: status,
+    v: __APP_VERSION__,
+  });
+  if (bootTime) params.set('t', bootTime);
+  if (error) params.set('e', error);
+
+  navigator.sendBeacon(`${config.beaconUrl}?${params}`);
 }
 
 /**

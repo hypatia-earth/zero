@@ -5,5 +5,7 @@
     "hash": "local",
     "timestamp": "",
     "environment": "development"
-  }
+  },
+  "beacon": true,
+  "beaconUrl": "https://zero.hypatia.earth/api/beacon"
 }

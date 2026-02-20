@@ -266,6 +266,12 @@ export interface ZeroConfig {
   /** App metadata (injected at build) */
   app: AppConfig;
 
+  /** Send beacon request after bootstrap (success/error) */
+  beacon: boolean;
+
+  /** Beacon endpoint URL (default: /api/beacon) */
+  beaconUrl: string;
+
   /** Bootstrap progress settings */
   bootstrap: BootstrapConfig;
 
