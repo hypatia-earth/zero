@@ -1,12 +1,9 @@
 // Rain/precipitation layer — procedural SDF particle animation
 //
-// Two params (both from ecmwf_ifs, advected when wind available):
-//   precipitation_type — WMO code: 0=none, 1=rain, 3=freezing rain, 5=snow, 6=wet snow, 7=rain+snow, 8=ice pellets
-//   precipitation      — rate in mm/h (continuous 0–50)
-//
-// Type selects shape+color, rate controls particle density, animation is a deterministic loop.
+// Single param: precipitation_type (WMO code, advected by wind)
+// Type selects shape+color, density is uniform from config.
 
-// ─── Hash functions ──────────────────────────────────────────────────────────
+// ─── Hash ───────────────────────────────────────────────────────────────────
 
 fn rainHash1(p: vec2f) -> f32 {
   return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
@@ -19,91 +16,68 @@ fn rainHash2(p: vec2f) -> vec2f {
   );
 }
 
-// ─── SDF shapes ──────────────────────────────────────────────────────────────
+// ─── SDF (unit radius, < 0 = inside) ───────────────────────────────────────
 
-// Raindrop: vertically stretched ellipse
-fn sdfDrop(p: vec2f) -> f32 {
-  let q = vec2f(p.x * 2.5, p.y);
-  return length(q) - 0.12;
+fn sdfDiamond(p: vec2f) -> f32 {
+  let q = abs(p);
+  return (q.x + q.y) - 1.0;
 }
 
-// Snowflake: 6-fold symmetric star
-fn sdfStar6(p: vec2f) -> f32 {
-  let angle = atan2(p.y, p.x);
-  let r = length(p);
-  let petal = cos(angle * 3.0) * 0.04 + 0.09;
-  return r - petal;
-}
-
-// ─── Type classification ─────────────────────────────────────────────────────
-
-fn isSnowType(ptype: f32) -> bool {
-  // WMO 5=snow, 6=wet snow, 7=rain+snow
-  return ptype > 4.5 && ptype < 7.5;
-}
-
-// ─── Type → color from palette ───────────────────────────────────────────────
+// ─── Color per WMO code ─────────────────────────────────────────────────────
 
 fn precipTypeColor(ptype: f32) -> vec3f {
-  let range = getLayerPaletteRange(LAYER_RAIN);
-  let t = clamp((ptype - range.x) / (range.y - range.x), 0.0, 1.0);
-  return samplePalette(t, getLayerPaletteIndex(LAYER_RAIN)).rgb;
+  let code = u32(ptype + 0.5);
+  switch code {
+    case 1u: { return vec3f(0.7, 0.85, 1.0); }    // rain
+    case 3u: { return vec3f(0.6, 0.8, 0.95); }     // freezing rain
+    case 5u: { return vec3f(1.0, 1.0, 1.0); }      // snow
+    case 6u: { return vec3f(0.9, 0.92, 0.95); }    // wet snow
+    case 7u: { return vec3f(0.85, 0.9, 0.95); }    // sleet
+    case 8u: { return vec3f(0.8, 0.85, 0.95); }    // ice pellets
+    default: { return vec3f(1.0, 0.0, 0.0); }      // unknown → red
+  }
 }
 
-// ─── Particle system ─────────────────────────────────────────────────────────
-
-// Returns vec2f(sdf, fadeAlpha). sdf > 0 = outside shape, fadeAlpha = brightness.
-fn rainParticle(lat: f32, lon: f32, ptype: f32, rate: f32) -> vec2f {
-  // Zoom: derive from camera distance (default 3.2 earth radii)
-  let camDist = length(u.eyePosition);
-  let zoom = 3.2 / camDist;
-  let gridSize = u.rainGridSize * zoom;
-
-  // Reduced-longitude grid (pole-safe, same principle as O1280)
-  let latIdx = floor(lat * gridSize / COMMON_PI);
-  let lonCells = max(floor(gridSize * cos(lat)), 1.0);
-  let lonIdx = floor(lon * lonCells / COMMON_TAU);
-  let cellId = vec2f(lonIdx, latIdx);
-  let cellUV = vec2f(fract(lon * lonCells / COMMON_TAU), fract(lat * gridSize / COMMON_PI));
-
-  // Density: fixed per cell, rate threshold
-  let maxRate = 50.0;
-  let normalizedRate = sqrt(clamp(rate / maxRate, 0.0, 1.0));
-  let cellActive = rainHash1(cellId * 271.0) < normalizedRate;
-  if (!cellActive) { return vec2f(1.0, 0.0); }
-
-  // Fade duration per type: snow slower, rain faster
-  let snow = isSnowType(ptype);
-  let fadeDuration = select(u.rainFadeDuration, u.rainFadeDuration * 2.0, snow);
-
-  // Deterministic loop: fixed phase offset, fixed position
-  let phase = fract(u.time / fadeDuration + rainHash1(cellId));
-  let fadeAlpha = 1.0 - phase;
-
-  // Fixed position within cell (stable across cycles)
-  let particlePos = rainHash2(cellId);
-  let p = cellUV - particlePos;
-
-  // SDF shape by type
-  let sdf = select(sdfDrop(p), sdfStar6(p), snow);
-  return vec2f(sdf, fadeAlpha);
-}
-
-// ─── Blend ───────────────────────────────────────────────────────────────────
+// ─── Blend ──────────────────────────────────────────────────────────────────
 
 fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let opacity = getLayerOpacity(LAYER_RAIN);
-  // Advected samplers: wind-displaced O1280 lookup via (lat, lon)
-  let ptype = sampleParam_precipitation_type(lat, lon);
-  let rate = sampleParam_precipitation(lat, lon);
 
-  if (ptype < 0.5 || rate < 0.01) { return color; }
+  // Globe screen size (same formula as TS: asin(1/d) * height / fov)
+  let camDist = length(u.eyePosition);
+  let fov = 2.0 * atan(u.tanFov);
+  let globeRadiusPx = asin(1.0 / camDist) * u.resolution.y / fov;
 
-  let particle = rainParticle(lat, lon, ptype, rate);
-  if (particle.x > 0.0) { return color; }  // outside shape
+  // Grid: square cells on sphere surface
+  let cellSidePx = 1.0 / sqrt(u.rainDensity);
+  let gridSize = 2.0 * globeRadiusPx / cellSidePx;
+  let latIdx = floor(lat * gridSize / COMMON_PI);
+  let lonCells = max(floor(2.0 * gridSize * cos(lat)), 1.0);
+  let lonIdx = floor(lon * lonCells / COMMON_TAU);
+  let cellId = vec2f(lonIdx, latIdx);
+  let cellUV = vec2f(
+    fract(lon * lonCells / COMMON_TAU),
+    fract(lat * gridSize / COMMON_PI),
+  );
+
+  // Particle SDF — constrain position so diamond fits within cell
+  let r = u.rainSizePx / cellSidePx;
+  let particlePos = rainHash2(cellId) * (1.0 - 2.0 * r) + r;
+  let p = cellUV - particlePos;
+  let sdf = sdfDiamond(p / r);
+  if (sdf > 0.0) { return color; }
+
+  // Sample ptype at cell center (not per pixel) to avoid O1280 grid clipping
+  let cellCenterLat = (latIdx + particlePos.y) * COMMON_PI / gridSize;
+  let cellCenterLon = (lonIdx + particlePos.x) * COMMON_TAU / lonCells;
+  let ptype = sampleParam_precipitation_type(cellCenterLat, cellCenterLon);
+  if (ptype < 0.5) { return color; }
+
+  // Fade loop
+  let phase = fract(u.time / u.rainFadeDuration + rainHash1(cellId));
+  let fadeAlpha = 1.0 - phase;
 
   let typeColor = precipTypeColor(ptype);
-  let alpha = particle.y * opacity;
-
+  let alpha = fadeAlpha * opacity;
   return vec4f(mix(color.rgb, typeColor, alpha), color.a);
 }

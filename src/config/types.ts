@@ -240,6 +240,24 @@ export interface GraticuleConfig {
   lodLevels: GraticuleLodLevel[];
 }
 
+export interface RainConfig {
+  /** Particle density in items per px² (0.01 = 1 per 10×10 area) */
+  density: number;
+  /** Particle radius in screen pixels */
+  sizePx: number;
+  /** Particle fade cycle duration in seconds */
+  fadeDuration: number;
+  /** Per-type colors (RGB 0-1), keyed by WMO precipitation_type name */
+  colors: {
+    rain: [number, number, number];           // WMO 1
+    freezingRain: [number, number, number];   // WMO 3
+    snow: [number, number, number];           // WMO 5
+    wetSnow: [number, number, number];        // WMO 6
+    sleet: [number, number, number];          // WMO 7
+    icePellets: [number, number, number];     // WMO 8
+  };
+}
+
 export interface WindConfig {
   /** Default opacity 0-1 */
   opacity: number;
@@ -309,6 +327,9 @@ export interface ZeroConfig {
 
   /** Graticule layer settings */
   graticule: GraticuleConfig;
+
+  /** Rain/precipitation layer settings */
+  rain: RainConfig;
 
   /** Wind layer settings */
   wind: WindConfig;

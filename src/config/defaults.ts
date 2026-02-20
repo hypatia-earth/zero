@@ -63,6 +63,20 @@ export const defaultConfig: ZeroConfig = {
     ],
   },
 
+  rain: {
+    density: 0.005,       // items per px²
+    sizePx: 3,            // radius in screen pixels
+    fadeDuration: 1.0,    // fade cycle in seconds
+    colors: {
+      rain:         [0.7, 0.85, 1.0],    // WMO 1
+      freezingRain: [0.6, 0.8, 0.95],    // WMO 3
+      snow:         [1.0, 1.0, 1.0],     // WMO 5
+      wetSnow:      [0.9, 0.92, 0.95],   // WMO 6
+      sleet:        [0.85, 0.9, 0.95],   // WMO 7
+      icePellets:   [0.8, 0.85, 0.95],   // WMO 8
+    },
+  },
+
   wind: {
     opacity: 0.8,
     snakeLength: 0.25,

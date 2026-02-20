@@ -45,8 +45,8 @@ struct Uniforms {
   // Advection / rain particle uniforms
   advectionDt: f32,        // seconds between adjacent timesteps
   rainFadeDuration: f32,   // particle fade cycle in seconds
-  rainGridSize: f32,       // base particle grid density
-  advectionPad: f32,       // alignment padding
+  rainDensity: f32,        // items per px² (0.01 = 1 per 10×10)
+  rainSizePx: f32,         // particle radius in screen pixels
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

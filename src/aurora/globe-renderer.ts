@@ -55,7 +55,8 @@ export interface GlobeUniforms {
   // Advection / rain particle uniforms
   advectionDt: number;
   rainFadeDuration: number;
-  rainGridSize: number;
+  rainDensity: number;
+  rainSizePx: number;
 }
 
 const POINTS_PER_TIMESTEP = 6_599_680;
@@ -591,7 +592,8 @@ export class GlobeRenderer {
     // Advection / rain particles
     view.setFloat32(O.advectionDt, uniforms.advectionDt, true);
     view.setFloat32(O.rainFadeDuration, uniforms.rainFadeDuration, true);
-    view.setFloat32(O.rainGridSize, uniforms.rainGridSize, true);
+    view.setFloat32(O.rainDensity, uniforms.rainDensity, true);
+    view.setFloat32(O.rainSizePx, uniforms.rainSizePx, true);
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 

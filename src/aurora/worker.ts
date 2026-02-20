@@ -327,8 +327,9 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
       : 0,
     // Advection / rain particles
     advectionDt: 3600,          // TODO: compute from adjacent valid_times
-    rainFadeDuration: 1.0,
-    rainGridSize: 800,
+    rainFadeDuration: defaultConfig.rain.fadeDuration,
+    rainDensity: defaultConfig.rain.density,
+    rainSizePx: defaultConfig.rain.sizePx,
   };
 }
 
