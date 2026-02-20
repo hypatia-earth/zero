@@ -45,7 +45,9 @@ jobs:
               "hash": "$HASH",
               "timestamp": "$TIMESTAMP",
               "environment": "production"
-            }
+            },
+            "beacon": true,
+            "beaconUrl": "https://zero.hypatia.earth/api/beacon"
           }
           EOF
           echo "{\"version\": \"$VERSION\", \"commit\": \"$HASH\", \"date\": \"$TIMESTAMP\"}" > dist/version.json
