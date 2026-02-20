@@ -15,7 +15,15 @@ import type { LayerService } from '../../services/layer/layer-service';
 import type { SlotService } from '../../services/slot-service';
 import type { Progress } from '../progress';
 import type { LoadedAssets } from './assets';
+import type { TModel } from '../../config/types';
 import { getPublishedParams } from '../../config/params-ecmwf_ifs';
+
+/** GPU buffer size per model grid */
+const MODEL_BUFFER_MB: Record<TModel, number> = {
+  ecmwf_ifs: 26,       // O1280: 6,599,680 × 4 bytes
+  ecmwf_ifs025: 4,     // 721 × 1440 × 4 bytes
+  ncep_gfs025: 4,      // 721 × 1440 × 4 bytes
+};
 
 export async function runGpuInitPhase(
   canvas: HTMLCanvasElement,
@@ -42,16 +50,22 @@ export async function runGpuInitPhase(
   const windLineCount = optionsService.options.value.wind.seedCount;
   // Build param configs for worker buffer creation
   // Include all published params so custom layers can use any param at runtime
-  const paramSet = new Set<string>(getPublishedParams());
+  const paramModels = new Map<string, TModel>();
+  for (const p of getPublishedParams()) {
+    paramModels.set(p, 'ecmwf_ifs');
+  }
   for (const layer of layerService.getAll()) {
     if (layer.params) {
       for (const ref of layer.params) {
-        paramSet.add(ref.param);
+        paramModels.set(ref.param, ref.model as TModel);
       }
     }
   }
-  // Each param gets 26MB buffer (standard weather data size)
-  const paramConfigs = [...paramSet].map(param => ({ param, sizeMB: 26 }));
+  // Buffer size from model grid
+  const paramConfigs = [...paramModels].map(([param, model]) => ({
+    param,
+    sizeMB: MODEL_BUFFER_MB[model],
+  }));
 
   const config: AuroraConfig = {
     cameraConfig: configService.getCameraConfig(),
