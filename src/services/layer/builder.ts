@@ -12,7 +12,7 @@
  */
 
 import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders, AdvectionConfig } from './layer-service';
-import type { TLayerCategory, TModel, SlabConfig } from '../../config/types';
+import type { TLayerCategory, TIfsParam, TGfsParam, TModelParam, SlabConfig } from '../../config/types';
 import type { PaletteId } from '../palette-service';
 
 export interface LayerFeature {
@@ -35,11 +35,13 @@ export function withType(type: LayerType): LayerFeature {
   };
 }
 
-export function withParams(params: string[], model: TModel): LayerFeature {
+export function withParams(params: TIfsParam[], model: 'ecmwf_ifs'): LayerFeature;
+export function withParams(params: TGfsParam[], model: 'ncep_gfs025'): LayerFeature;
+export function withParams(params: string[], model: string): LayerFeature {
   return {
     apply: (d) => ({
       ...d,
-      params: [...(d.params ?? []), ...params.map(p => ({ param: p, model }))],
+      params: [...(d.params ?? []), ...params.map(p => ({ param: p, model })) as TModelParam[]],
     }),
   };
 }

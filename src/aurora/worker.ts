@@ -325,6 +325,10 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     logoOpacity: opts.debug.showLogo && !isAnyLayerEnabled()
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
+    // Advection / rain particles
+    advectionDt: 3600,          // TODO: compute from adjacent valid_times
+    rainFadeDuration: 1.0,
+    rainGridSize: 800,
   };
 }
 

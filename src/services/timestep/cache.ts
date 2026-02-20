@@ -6,7 +6,7 @@
  */
 
 import type { Signal } from '@preact/signals-core';
-import type { TTimestep, Timestep } from '../../config/types';
+import type { TTimestep, TParameter, Timestep } from '../../config/types';
 import { sendSWMessage } from '../../utils/sw-message';
 import type { TimestepState } from './timestep-service';
 
@@ -108,7 +108,7 @@ export async function querySWCache(
 /** Mark timestep as cached (called after successful fetch) */
 export function setCached(
   state: Signal<TimestepState>,
-  param: string,
+  param: TParameter,
   timestep: TTimestep,
   sizeBytes: number
 ): void {
@@ -126,7 +126,7 @@ export function setCached(
 /** Refresh cache state for a param from SW */
 export async function refreshCacheState(
   state: Signal<TimestepState>,
-  param: string,
+  param: TParameter,
   timestepsData: Timestep[]
 ): Promise<void> {
   const { cache, sizes } = await querySWCache(param, timestepsData);

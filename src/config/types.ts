@@ -45,16 +45,6 @@ export const LAYER_CATEGORY_LABELS: Record<TLayerCategory, string> = {
   custom: 'Custom',
 };
 
-/** ECMWF data parameters */
-export const ECMWF_PARAMS = [
-  'temperature_2m',
-  'precipitation', 'rain', 'total_precipitation',
-  'cloud_cover', 'total_cloud_cover',
-  'relative_humidity_2m',
-  'wind_u_component_10m', 'wind_v_component_10m',
-  'pressure_msl', 'mean_sea_level_pressure',
-] as const;
-export type TParam = typeof ECMWF_PARAMS[number];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Type guards
@@ -76,6 +66,29 @@ export const isWeatherTextureLayer = (layer: TWeatherLayer): layer is TWeatherTe
 export const SW_CACHED_WEATHER_LAYERS: TWeatherLayer[] = [...WEATHER_LAYERS];
 
 export type TModel = 'ecmwf_ifs' | 'ecmwf_ifs025' | 'ncep_gfs025';
+
+/** ECMWF IFS published parameters */
+export type TIfsParam =
+  | 'temperature_2m'
+  | 'precipitation'
+  | 'precipitation_type'
+  | 'cloud_cover'
+  | 'wind_u_component_10m'
+  | 'wind_v_component_10m'
+  | 'pressure_msl';
+
+/** NCEP GFS 0.25° published parameters */
+export type TGfsParam =
+  | 'wind_u_component_1000hPa'
+  | 'wind_v_component_1000hPa';
+
+/** All published parameter names */
+export type TParameter = TIfsParam | TGfsParam;
+
+/** Parameter with its source model — discriminated union enforces valid combinations */
+export type TModelParam =
+  | { model: 'ecmwf_ifs'; param: TIfsParam }
+  | { model: 'ncep_gfs025'; param: TGfsParam };
 
 /** Branded timestep string, format: "YYYY-MM-DDTHHMM" (e.g., "2025-12-13T0600") */
 export type TTimestep = string & { readonly __brand: 'timestep' };
@@ -100,10 +113,10 @@ export interface LayerState {
 /** Task for QueueService to execute */
 export interface QueueTask {
   url: string;
-  param: string;  // layer ID (built-in or custom)
+  param: string;       // layer ID (built-in or custom)
   timestep: TTimestep;
   sizeEstimate: number;
-  omParam: string;
+  modelParam: TModelParam;
   slabIndex: number;
   isFast: boolean;
 }
@@ -136,11 +149,11 @@ export interface IQueueService {
 /** Timestep download order for QueueService */
 export interface TimestepOrder {
   url: string;
-  param: string;  // layer ID (built-in or custom)
+  param: string;       // layer ID (built-in or custom)
   timestep: TTimestep;
   sizeEstimate: number;  // Estimated bytes (NaN = use default)
   slabIndex: number;     // Which slab to upload to (0 for single-slab layers)
-  omParam: string;       // Open-Meteo parameter name to fetch
+  modelParam: TModelParam;
 }
 
 /** OmService preflight result */
@@ -186,7 +199,7 @@ export interface LayerConfig {
   category: TLayerCategory;
   description?: string;          // One-sentence description for options dialog
   links?: ParamLink[];           // Links to ECMWF parameter database (weather layers)
-  params?: TParam[];             // ECMWF param names (weather layers)
+  params?: TParameter[];          // Published param names (weather layers)
   defaultSizeEstimate?: number;  // bytes per timestep (weather layers)
   slabs?: SlabConfig[];          // GPU buffer slabs (weather layers only)
   useSynthData?: boolean;        // Use synthetic test data instead of real data

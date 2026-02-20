@@ -340,6 +340,16 @@ export async function streamOmVariable(
     return { data: new Float32Array(0), dims: targetDims, totalBytes: totalCompressed };
   }
 
+  // Guard: no data
+  if (numChunks === 0) {
+    throw new Error(`No data chunks for '${param}' (dims ${targetDims.join('×')})`);
+  }
+
+  // Optimize slice count: small files don't need many round-trips
+  // ~500KB per slice balances parallelism vs HTTP overhead
+  const optimalSlices = Math.max(1, Math.ceil(totalCompressed / 500_000));
+  slices = Math.min(slices, numChunks, optimalSlices);
+
   // Calculate chunk-aligned slices: first slice gets remainder, rest get equal chunks
   const chunksPerSlice = Math.floor(numChunks / slices);
   const firstSliceChunks = numChunks - chunksPerSlice * (slices - 1);

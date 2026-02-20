@@ -13,6 +13,7 @@ import { effect } from '@preact/signals-core';
 import type { LayerService, LayerDeclaration } from '../services/layer/layer-service';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
+import type { TIfsParam } from '../config/types';
 import { defineLayer, withType, withUI, withParams, withPalettes, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
 import { DialogHeader } from './dialog-header';
 import { PARAM_METADATA, getParamMeta, getPublishedParams, type ParamMeta } from '../config/params-ecmwf_ifs';
@@ -32,7 +33,7 @@ interface CreateLayerDialogAttrs {
 // Params available for custom layers (from metadata)
 const ALLOWED_PARAMS = getPublishedParams();
 
-const DEFAULT_PARAM = 'temperature_2m' satisfies keyof typeof PARAM_METADATA;
+const DEFAULT_PARAM: TIfsParam = 'temperature_2m';
 const DEFAULT_PALETTE: PaletteId = PALETTE_IDS[0] as PaletteId;  // temp-classic
 
 // Generate sampler function name from param (e.g., 'temperature_2m' -> 'sampleParam_temperature_2m')
@@ -71,7 +72,7 @@ type TryPhase = 'idle' | 'compiling' | 'loading';
 
 interface FormState {
   id: string;
-  param: string;
+  param: TIfsParam;
   paramMeta: ParamMeta;
   paletteId: PaletteId;
   shaderCode: string;
@@ -119,7 +120,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     }
 
     state.id = layer.id;
-    state.param = paramRef.param;
+    state.param = paramRef.param as TIfsParam;  // user layers are IFS-only
     state.paramMeta = getParamMeta(paramRef.param);
     state.paletteId = (layer.palettes?.[0] ?? DEFAULT_PALETTE) as PaletteId;
     state.shaderCode = shaderCode;
@@ -489,7 +490,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                   'data-testid': 'layer-param-select',
                   value: state.param,
                   onchange: (e: Event) => {
-                    state.param = (e.target as HTMLSelectElement).value;
+                    state.param = (e.target as HTMLSelectElement).value as TIfsParam;
                     state.paramMeta = getParamMeta(state.param);
                     updateShaderTemplate();
                   },

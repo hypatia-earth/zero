@@ -9,6 +9,7 @@
  */
 
 import type { PaletteId } from '../services/palette-service';
+import type { TParameter, TIfsParam } from './types';
 
 export interface ParamMeta {
   label: string;
@@ -425,30 +426,40 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
   },
 };
 
+/** Additional param registries (populated by model-specific modules) */
+const EXTRA_REGISTRIES: Record<string, ParamMeta>[] = [];
+
+/** Register an additional param metadata registry (e.g., from params-ncep_gfs025.ts) */
+export function registerParamRegistry(registry: Record<string, ParamMeta>): void {
+  EXTRA_REGISTRIES.push(registry);
+}
+
 /**
- * Get metadata for a parameter
+ * Get metadata for a parameter (searches all registered model registries)
  */
-export function getParamMeta(param: string): ParamMeta {
+export function getParamMeta(param: TParameter): ParamMeta {
   const meta = PARAM_METADATA[param];
-  if (!meta) {
-    throw new Error(`Unknown param: ${param}`);
+  if (meta) return meta;
+  for (const reg of EXTRA_REGISTRIES) {
+    const m = reg[param];
+    if (m) return m;
   }
-  return meta;
+  throw new Error(`Unknown param: ${param}`);
 }
 
 /**
  * Get all known parameter IDs
  */
-export function getKnownParams(): string[] {
-  return Object.keys(PARAM_METADATA);
+export function getKnownParams(): TIfsParam[] {
+  return Object.keys(PARAM_METADATA) as TIfsParam[];
 }
 
 /**
  * Get published params — tested and available for custom layers
  */
-export function getPublishedParams(): string[] {
+export function getPublishedParams(): TIfsParam[] {
   return Object.entries(PARAM_METADATA)
     .filter(([, meta]) => meta.published)
-    .map(([param]) => param);
+    .map(([param]) => param) as TIfsParam[];
 }
 

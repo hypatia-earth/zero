@@ -6,7 +6,7 @@
  */
 
 import type { Signal } from '@preact/signals-core';
-import type { TTimestep } from '../../config/types';
+import type { TTimestep, TParameter } from '../../config/types';
 import type { TimestepState } from './timestep-service';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -15,7 +15,7 @@ import type { TimestepState } from './timestep-service';
 
 export function setGpuLoaded(
   state: Signal<TimestepState>,
-  param: string,
+  param: TParameter,
   timestep: TTimestep
 ): void {
   const current = state.value;
@@ -28,7 +28,7 @@ export function setGpuLoaded(
 
 export function setGpuUnloaded(
   state: Signal<TimestepState>,
-  param: string,
+  param: TParameter,
   timestep: TTimestep
 ): void {
   const current = state.value;
@@ -42,7 +42,7 @@ export function setGpuUnloaded(
 /** Clear all GPU state for a param (used when shrinking slots) */
 export function clearGpuState(
   state: Signal<TimestepState>,
-  param: string
+  param: TParameter
 ): void {
   const current = state.value;
   const paramState = current.params.get(param);
@@ -55,7 +55,7 @@ export function clearGpuState(
 /** Set GPU state for a param (used after smart shrink) */
 export function setGpuState(
   state: Signal<TimestepState>,
-  param: string,
+  param: TParameter,
   timesteps: Set<TTimestep>
 ): void {
   const current = state.value;

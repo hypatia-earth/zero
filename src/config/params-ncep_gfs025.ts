@@ -7,7 +7,7 @@
  * https://openmeteo.s3.amazonaws.com/data_spatial/ncep_gfs025/latest.json
  */
 
-import type { ParamMeta } from './params-ecmwf_ifs';
+import { type ParamMeta, registerParamRegistry } from './params-ecmwf_ifs';
 
 export const PARAM_METADATA_GFS: Record<string, ParamMeta> = {
   'wind_u_component_1000hPa': {
@@ -27,3 +27,6 @@ export const PARAM_METADATA_GFS: Record<string, ParamMeta> = {
     layers: ['rain'],
   },
 };
+
+// Self-register so getParamMeta() finds GFS params
+registerParamRegistry(PARAM_METADATA_GFS);

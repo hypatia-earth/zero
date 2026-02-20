@@ -237,8 +237,7 @@ export class QueueService implements IQueueService {
       this.currentlyFetching = next.order;
       this.currentAbortController = new AbortController();
 
-      // Use the omParam from the order (already mapped during order creation)
-      const omParam = next.order.omParam;
+      const omParam = next.order.modelParam.param;
 
       try {
         await this.omService.fetch(
@@ -430,7 +429,7 @@ export class QueueService implements IQueueService {
     // Start fetch
     this.omService.fetch(
       task.url,
-      task.omParam,
+      task.modelParam.param,
       () => {
         // Preflight - update size estimate (not currently tracked in reactive mode)
       },
@@ -438,7 +437,7 @@ export class QueueService implements IQueueService {
         // Only process when all data is received and task is still active
         // (clearTasks removes from inFlight before late worker messages arrive)
         if (slice.done && this.slotService && this.inFlight.has(key)) {
-          this.slotService.receiveData(task.omParam, task.timestep, task.slabIndex, slice.data);
+          this.slotService.receiveData(task.modelParam.param, task.timestep, task.slabIndex, slice.data);
         }
       },
       (bytes) => {
@@ -500,8 +499,8 @@ export class QueueService implements IQueueService {
 
   /** Refresh cache state for all weather layers from SW */
   private refreshAllCacheStates(): void {
-    for (const param of this.layerService.getAllParams()) {
-      this.timestepService.refreshCacheState(param);
+    for (const mp of this.layerService.getAllModelParams()) {
+      this.timestepService.refreshCacheState(mp);
     }
   }
 

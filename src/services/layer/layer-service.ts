@@ -9,7 +9,7 @@
  */
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
-import type { TLayerCategory, TModel, SlabConfig } from '../../config/types';
+import type { TLayerCategory, TModel, TModelParam, TParameter, TIfsParam, SlabConfig } from '../../config/types';
 import type { OptionsService } from '../options-service';
 import { builtInLayers } from '../../layers';
 import { getPublishedParams } from '../../config/params-ecmwf_ifs';
@@ -26,17 +26,11 @@ export interface LayerShaders {
   render?: string;             // Geometry pass render shader
 }
 
-/** A parameter reference with its source model */
-export interface ParamRef {
-  param: string;
-  model: TModel;
-}
-
 /** Advection configuration: which wind params advect which data params */
 export interface AdvectionConfig {
-  uParam: string;
-  vParam: string;
-  targets: string[];  // param names to advect
+  uParam: TModelParam;
+  vParam: TModelParam;
+  targets: TModelParam[];
 }
 
 export interface LayerDeclaration {
@@ -47,7 +41,7 @@ export interface LayerDeclaration {
   buttonLabel: string;         // Short name for UI buttons (e.g., "Temp")
   category: TLayerCategory;    // celestial, weather, reference, custom
   // Runtime config
-  params?: ParamRef[];         // Data params to fetch, each with source model
+  params?: TModelParam[];         // Data params to fetch, each with source model
   advection?: AdvectionConfig; // Wind-advected temporal interpolation
   slabs?: SlabConfig[];        // GPU buffer slabs (e.g., [{ name: 'data', sizeMB: 26 }])
   options?: string[];          // Option paths to watch (e.g., ['temp.enabled'])
@@ -154,6 +148,11 @@ export class LayerService {
         if (index === null) {
           console.warn(`[LayerService] No slot for user layer: ${declaration.id}`);
           continue;
+        }
+
+        // Migrate old params format (string[] → TModelParam[])
+        if (declaration.params?.length && typeof declaration.params[0] === 'string') {
+          declaration.params = (declaration.params as unknown as string[]).map(p => ({ param: p as TIfsParam, model: 'ecmwf_ifs' as const }));
         }
 
         // Register with fresh index (don't trust stored index)
@@ -274,7 +273,7 @@ export class LayerService {
   }
 
   /** Get layers that use a specific data param */
-  getLayersForParam(param: string): LayerDeclaration[] {
+  getLayersForParam(param: TParameter): LayerDeclaration[] {
     return this.getAll().filter(l => l.params?.some(p => p.param === param));
   }
 
@@ -307,16 +306,48 @@ export class LayerService {
     });
   }
 
-  /** Get all unique params: registered layers + published params from metadata */
-  getAllParams(): string[] {
-    const params = new Set<string>();
+  /** Get all unique params from a specific model + published params (IFS only) */
+  getParamsForModel(model: TModel): TModelParam[] {
+    const seen = new Set<string>();
+    const result: TModelParam[] = [];
     for (const layer of this.layers.values()) {
-      layer.params?.forEach(p => params.add(p.param));
+      layer.params?.forEach(p => {
+        if (p.model === model && !seen.has(p.param)) {
+          seen.add(p.param);
+          result.push(p);
+        }
+      });
     }
-    for (const p of getPublishedParams()) {
-      params.add(p);
+    if (model === 'ecmwf_ifs') {
+      for (const param of getPublishedParams()) {
+        if (!seen.has(param)) {
+          seen.add(param);
+          result.push({ model: 'ecmwf_ifs', param });
+        }
+      }
     }
-    return Array.from(params);
+    return result;
+  }
+
+  /** Get all unique model-params across all models + published IFS params */
+  getAllModelParams(): TModelParam[] {
+    const seen = new Set<string>();
+    const result: TModelParam[] = [];
+    for (const layer of this.layers.values()) {
+      layer.params?.forEach(p => {
+        if (!seen.has(p.param)) {
+          seen.add(p.param);
+          result.push(p);
+        }
+      });
+    }
+    for (const param of getPublishedParams()) {
+      if (!seen.has(param)) {
+        seen.add(param);
+        result.push({ model: 'ecmwf_ifs', param });
+      }
+    }
+    return result;
   }
 
   /** Allocate next available user layer index (0-31) */

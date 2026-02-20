@@ -10,13 +10,13 @@
  */
 
 import { effect, signal } from '@preact/signals-core';
-import { type TTimestep, type TimestepOrder, type LayerState } from '../config/types';
+import { type TTimestep, type TParameter, type TModelParam, type TimestepOrder, type LayerState } from '../config/types';
 import type { TimestepService } from './timestep/timestep-service';
 import type { AuroraService } from './aurora-service';
 import type { QueueService } from './queue/queue-service';
 import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
-import type { ConfigService } from './config-service';
+import type { ConfigService } from './config-service';  // kept for constructor signature compatibility
 import type { LayerService } from './layer/layer-service';
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
 
@@ -26,11 +26,11 @@ const DEBUG = false;
 const fmt = (ts: TTimestep) => ts.slice(5, 13);
 
 /** 4-letter uppercase param code for logs */
-const P = (param: string) => param.replace(/_/g, '').slice(0, 5).toUpperCase();
+const P = (param: TParameter) => param.replace(/_/g, '').slice(0, 5).toUpperCase();
 
 export class SlotService {
   /** Slots keyed by param name (e.g., 'temperature_2m'), not layer name */
-  private paramSlots: Map<string, ParamSlots> = new Map();
+  private paramSlots: Map<TParameter, ParamSlots> = new Map();
 
   /** Params in test mode - ignore real data from queue */
   private testModeParams: Set<string> = new Set();
@@ -38,11 +38,6 @@ export class SlotService {
   private timeslotsPerLayer: number = 8;
   private disposeEffect: (() => void) | null = null;
   private initialized = false;
-
-
-  // Data window boundaries
-  private dataWindowStart!: TTimestep;
-  private dataWindowEnd!: TTimestep;
 
   /** Signal for UI reactivity */
   readonly slotsVersion = signal(0);
@@ -53,7 +48,7 @@ export class SlotService {
     private queueService: QueueService,
     private optionsService: OptionsService,
     private stateService: StateService,
-    _configService: ConfigService,  // TODO: use for getLayerParams
+    _configService: ConfigService,
     private layerService: LayerService,
   ) {
     this.timeslotsPerLayer = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
@@ -71,8 +66,8 @@ export class SlotService {
       if (!this.initialized) return;
 
       const newTimeslots = parseInt(opts.gpu.timeslotsPerLayer, 10);
-      const newActiveParams = this.collectActiveParams();
-      const newActiveParamsStr = [...newActiveParams].sort().join(',');
+      const newActiveParamMap = this.collectActiveParams();
+      const newActiveParamsStr = [...newActiveParamMap.keys()].sort().join(',');
       const currTime = time.toISOString().slice(11, 16);
 
       // Diff
@@ -120,12 +115,12 @@ export class SlotService {
       }
 
       // Ensure ParamSlots exist for all active params
-      this.ensureParamSlots(newActiveParams);
+      this.ensureParamSlots(newActiveParamMap.keys());
 
       // Update wanted state and activate for each param
-      for (const param of newActiveParams) {
+      for (const [param, mp] of newActiveParamMap) {
         const ps = this.paramSlots.get(param)!;
-        const wanted = this.computeWanted(time);
+        const wanted = this.computeWanted(time, mp);
         this.activateIfReady(param, ps, wanted);
 
         ps.wanted.value = wanted;
@@ -135,14 +130,15 @@ export class SlotService {
 
   /**
    * Collect all unique params from enabled layers (built-in + custom)
+   * Returns Map: TParameter key (internal indexing) → TModelParam (model coupling)
    */
-  private collectActiveParams(): Set<string> {
-    const params = new Set<string>();
+  private collectActiveParams(): Map<TParameter, TModelParam> {
+    const params = new Map<TParameter, TModelParam>();
 
     for (const layer of this.layerService.getAll()) {
       if (this.layerService.isLayerEnabled(layer.id) && layer.params) {
-        for (const ref of layer.params) {
-          params.add(ref.param);
+        for (const mp of layer.params) {
+          if (!params.has(mp.param)) params.set(mp.param, mp);
         }
       }
     }
@@ -153,7 +149,7 @@ export class SlotService {
   /**
    * Ensure ParamSlots instances exist for all needed params
    */
-  private ensureParamSlots(params: Set<string>): void {
+  private ensureParamSlots(params: Iterable<TParameter>): void {
     for (const param of params) {
       if (!this.paramSlots.has(param)) {
         // Determine slab count (e.g., wind has u+v = 2 slabs, but in param-centric each is separate)
@@ -164,58 +160,25 @@ export class SlotService {
     }
   }
 
-  /** Pure computation: what timesteps does current time need? */
-  private computeWanted(time: Date): WantedState {
-    const exactTs = this.timestepService.getExactTimestep(time);
-    const window = this.calculateLoadWindow(time);
+  /** Pure computation: what timesteps does current time need for a given model? */
+  private computeWanted(time: Date, mp: TModelParam): WantedState {
+    const numSlots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
+    const window = this.timestepService.getWindowFor(time, numSlots, mp);
+    const [t0, t1] = this.timestepService.adjacentFor(time, mp);
 
-    if (exactTs) {
+    const exactTs = this.timestepService.getExactTimestep(time);
+    if (exactTs && this.timestepService.adjacentFor(time, mp)[0] === exactTs) {
       return { mode: 'single', priority: [exactTs], window };
     } else {
-      const [t0, t1] = this.timestepService.adjacent(time);
       return { mode: 'pair', priority: [t0, t1], window };
     }
-  }
-
-  /** Calculate ideal load window around time */
-  private calculateLoadWindow(time: Date): TTimestep[] {
-    const [t0, t1] = this.timestepService.adjacent(time);
-    const window: TTimestep[] = [t0, t1];
-
-    let pastCursor = t0;
-    let futureCursor = t1;
-
-    const numSlots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
-
-    while (window.length < numSlots) {
-      const canAddFuture = futureCursor !== this.dataWindowEnd;
-      const canAddPast = pastCursor !== this.dataWindowStart;
-
-      if (!canAddFuture && !canAddPast) break;
-
-      const futureCount = window.filter(ts => ts > t0).length;
-      const pastCount = window.filter(ts => ts < t0).length;
-
-      if (futureCount <= pastCount && canAddFuture) {
-        futureCursor = this.timestepService.next(futureCursor);
-        window.push(futureCursor);
-      } else if (canAddPast) {
-        pastCursor = this.timestepService.prev(pastCursor);
-        window.push(pastCursor);
-      } else if (canAddFuture) {
-        futureCursor = this.timestepService.next(futureCursor);
-        window.push(futureCursor);
-      }
-    }
-
-    return window;
   }
 
   /**
    * Activate shader if required slots are loaded.
    * Sends activateSlots to worker with param name directly (param-centric API).
    */
-  private activateIfReady(param: string, ps: ParamSlots, wanted: WantedState): void {
+  private activateIfReady(param: TParameter, ps: ParamSlots, wanted: WantedState): void {
     const current = ps.getActiveTimesteps();
     const pcode = P(param);
 
@@ -263,7 +226,7 @@ export class SlotService {
   }
 
   /** Deactivate param by signaling to worker that data is not ready */
-  private deactivateParam(param: string): void {
+  private deactivateParam(param: TParameter): void {
     this.auroraService.deactivateSlots(param);
   }
 
@@ -271,7 +234,7 @@ export class SlotService {
    * Receive and process downloaded data for a param/timestep.
    * Called by QueueService when data download completes.
    */
-  receiveData(param: string, timestep: TTimestep, slabIndex: number, data: Float32Array): boolean {
+  receiveData(param: TParameter, timestep: TTimestep, slabIndex: number, data: Float32Array): boolean {
     DEBUG && console.log(`[ParamSlot] receiveData: ${param} ${timestep} slab=${slabIndex}`);
 
     const ps = this.paramSlots.get(param);
@@ -331,14 +294,14 @@ export class SlotService {
   }
 
   /** Update shader when a slot finishes loading */
-  private updateShaderIfReady(param: string, ps: ParamSlots): void {
+  private updateShaderIfReady(param: TParameter, ps: ParamSlots): void {
     const wanted = ps.wanted.value;
     if (!wanted) return;
     this.activateIfReady(param, ps, wanted);
   }
 
   /** Calculate layer state for shader interpolation */
-  getState(param: string, currentTime: Date): LayerState {
+  getState(param: TParameter, currentTime: Date): LayerState {
     const ps = this.paramSlots.get(param);
     const active = ps?.getActiveTimesteps();
 
@@ -366,31 +329,27 @@ export class SlotService {
   }
 
   /** Initialize with priority timesteps for all active params */
-  async initialize(onProgress?: (param: string, index: number, total: number) => Promise<void>): Promise<void> {
-    this.dataWindowStart = this.timestepService.first();
-    this.dataWindowEnd = this.timestepService.last();
-
+  async initialize(onProgress?: (label: string, index: number, total: number) => Promise<void>): Promise<void> {
     const time = this.stateService.viewState.value.time;
 
-    // Collect active params
-    const activeParams = this.collectActiveParams();
-    if (activeParams.size === 0) {
+    // Collect active params (Map: param name → TModelParam)
+    const activeParamMap = this.collectActiveParams();
+    if (activeParamMap.size === 0) {
       this.initialized = true;
       DEBUG && console.log('[ParamSlot] Initialized (no params active)');
       return;
     }
 
     // Ensure slots exist
-    this.ensureParamSlots(activeParams);
-    // Track active params:activeParams;
+    this.ensureParamSlots(activeParamMap.keys());
 
     // Build orders for all active params
     const allOrders: TimestepOrder[] = [];
     const wantedByParam = new Map<string, WantedState>();
 
-    for (const param of activeParams) {
+    for (const [param, mp] of activeParamMap) {
       const ps = this.paramSlots.get(param)!;
-      const wanted = this.computeWanted(time);
+      const wanted = this.computeWanted(time, mp);
       wantedByParam.set(param, wanted);
 
       DEBUG && console.log(`[ParamSlot] ${P(param)} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
@@ -403,12 +362,12 @@ export class SlotService {
       for (const ts of wanted.priority) {
         ps.setLoading([ts]);
         allOrders.push({
-          url: this.timestepService.url(ts),
-          param: layer,  // Legacy: QueueTask expects layer name
+          url: this.timestepService.url(ts, mp),
+          param: layer,
           timestep: ts,
-          sizeEstimate: this.timestepService.getSize(param, ts),  // Use param directly
+          sizeEstimate: this.timestepService.getSize(param, ts),
           slabIndex: 0,
-          omParam: param,
+          modelParam: mp,
         });
       }
     }
@@ -424,8 +383,8 @@ export class SlotService {
       allOrders,
       async (order, slice) => {
         if (slice.done) {
-          const param = order.omParam!;
-          const ps = this.paramSlots.get(param)!;
+          const { param: omParam } = order.modelParam;
+          const ps = this.paramSlots.get(omParam)!;
           const result = ps.allocateSlot(
             order.timestep,
             time,
@@ -433,9 +392,8 @@ export class SlotService {
           );
 
           if (result) {
-            // Capture length BEFORE upload (buffer is transferred and detached)
             const dataLength = slice.data.length;
-            this.auroraService.uploadData(param, result.slotIndex, slice.data);
+            this.auroraService.uploadData(omParam, result.slotIndex, slice.data);
             ps.markLoaded(order.timestep, result.slotIndex, dataLength);
           }
 
@@ -447,12 +405,12 @@ export class SlotService {
         }
       },
       (order, actualBytes) => {
-        this.timestepService.setSize(order.param, order.timestep, actualBytes);
+        this.timestepService.setSize(order.modelParam.param, order.timestep, actualBytes);
       }
     );
 
     // Activate for all params
-    for (const param of activeParams) {
+    for (const [param] of activeParamMap) {
       const ps = this.paramSlots.get(param)!;
       const wanted = wantedByParam.get(param)!;
       ps.wanted.value = wanted;
@@ -465,12 +423,12 @@ export class SlotService {
   }
 
   /** Get active timesteps for a param */
-  getActiveTimesteps(param: string): TTimestep[] {
+  getActiveTimesteps(param: TParameter): TTimestep[] {
     return this.paramSlots.get(param)!.getActiveTimesteps();
   }
 
   /** Check if a param has data activated in the shader */
-  isParamReady(param: string): boolean {
+  isParamReady(param: TParameter): boolean {
     const ps = this.paramSlots.get(param);
     return ps ? ps.getActiveTimesteps().length > 0 : false;
   }

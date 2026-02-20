@@ -6,8 +6,10 @@
  */
 
 import type { LayerDeclaration } from '../services/layer/layer-service';
+import type { TParameter } from '../config/types';
 import { getMainShaders, getPostShaders } from './shader-loader';
-import { PARAM_METADATA } from '../config/params-ecmwf_ifs';
+import { getParamMeta } from '../config/params-ecmwf_ifs';
+import '../config/params-ncep_gfs025';
 
 // Import shader modules
 import commonCode from './shaders/common.wgsl?raw';
@@ -171,7 +173,7 @@ export class ShaderComposer {
   /** Generate dynamic param bindings and sampler functions */
   private generateParamBindings(layers: LayerDeclaration[]): GeneratedParamShader {
     // 1. Collect unique params from all layers
-    const allParams = new Set<string>();
+    const allParams = new Set<TParameter>();
     for (const layer of layers) {
       layer.params?.forEach(ref => allParams.add(ref.param));
     }
@@ -188,7 +190,7 @@ export class ShaderComposer {
       index: idx,
       bindingSlot0: PARAM_BINDING_START + idx * 2,
       bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
-      categorical: PARAM_METADATA[param]?.categorical ?? false,
+      categorical: getParamMeta(param).categorical ?? false,
     }));
 
     // Export for globe-renderer to use

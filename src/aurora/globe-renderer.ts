@@ -52,6 +52,10 @@ export interface GlobeUniforms {
   windState: LayerState;  // full state for compute caching
   pressureColors: PressureColorOption;
   logoOpacity: number;       // computed from all layer opacities
+  // Advection / rain particle uniforms
+  advectionDt: number;
+  rainFadeDuration: number;
+  rainGridSize: number;
 }
 
 const POINTS_PER_TIMESTEP = 6_599_680;
@@ -583,6 +587,11 @@ export class GlobeRenderer {
 
     // Logo
     view.setFloat32(O.logoOpacity, uniforms.logoOpacity, true);
+
+    // Advection / rain particles
+    view.setFloat32(O.advectionDt, uniforms.advectionDt, true);
+    view.setFloat32(O.rainFadeDuration, uniforms.rainFadeDuration, true);
+    view.setFloat32(O.rainGridSize, uniforms.rainGridSize, true);
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 
