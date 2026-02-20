@@ -6,7 +6,7 @@
  */
 
 import type { LayerDeclaration } from '../services/layer/layer-service';
-import type { TParameter } from '../config/types';
+import type { TParameter, TModel } from '../config/types';
 import { getMainShaders, getPostShaders } from './shader-loader';
 import { getParamMeta } from '../config/params-ecmwf_ifs';
 import '../config/params-ncep_gfs025';
@@ -36,6 +36,7 @@ interface GeneratedParamShader {
 /** Param binding configuration */
 export interface ParamBindingConfig {
   param: string;
+  model: TModel;
   index: number;
   bindingSlot0: number;
   bindingSlot1: number;
@@ -172,10 +173,14 @@ export class ShaderComposer {
 
   /** Generate dynamic param bindings and sampler functions */
   private generateParamBindings(layers: LayerDeclaration[]): GeneratedParamShader {
-    // 1. Collect unique params from all layers
-    const allParams = new Set<TParameter>();
+    // 1. Collect unique params from all layers (with model)
+    const allParams = new Map<TParameter, TModel>();
     for (const layer of layers) {
-      layer.params?.forEach(ref => allParams.add(ref.param));
+      layer.params?.forEach(ref => {
+        if (!allParams.has(ref.param)) {
+          allParams.set(ref.param, ref.model);
+        }
+      });
     }
 
     if (allParams.size === 0) {
@@ -183,10 +188,11 @@ export class ShaderComposer {
       return { bindings: '// No dynamic params', samplers: '// No param samplers' };
     }
 
-    // 2. Assign indices (stable ordering)
-    const paramList = [...allParams].sort();
-    const paramConfigs: ParamBindingConfig[] = paramList.map((param, idx) => ({
+    // 2. Assign indices (stable ordering by param name)
+    const paramList = [...allParams.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const paramConfigs: ParamBindingConfig[] = paramList.map(([param, model], idx) => ({
       param,
+      model,
       index: idx,
       bindingSlot0: PARAM_BINDING_START + idx * 2,
       bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
@@ -206,14 +212,33 @@ export class ShaderComposer {
       );
     }
 
-    // 4. Generate sampler functions
+    // 4. Generate sampler functions (model-aware)
     const samplers: string[] = ['// --- Param samplers (generated) ---'];
     for (const cfg of paramConfigs) {
       const safeName = cfg.param.replace(/[^a-zA-Z0-9]/g, '_');
       const sample = cfg.categorical
         ? `select(v0, v1, lerp >= 0.5)`   // nearest-neighbor in time
         : `select(v0, mix(v0, v1, lerp), lerp >= 0.0)`;  // linear interpolation
-      samplers.push(`
+
+      if (cfg.model === 'ncep_gfs025') {
+        // Regular 0.25° grid (721 lat × 1440 lon) — sampler takes (lat, lon)
+        samplers.push(`
+fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
+  if (!isParamReady(${cfg.index}u)) { return 0.0; }
+  let latF = (COMMON_PI * 0.5 - lat) * (720.0 / COMMON_PI);
+  let lonWrap = lon - floor(lon / COMMON_TAU) * COMMON_TAU;
+  let lonF = lonWrap * (1440.0 / COMMON_TAU);
+  let latIdx = clamp(u32(latF), 0u, 720u);
+  let lonIdx = u32(lonF) % 1440u;
+  let cell = latIdx * 1440u + lonIdx;
+  let v0 = param_${safeName}_0[cell];
+  let v1 = param_${safeName}_1[cell];
+  let lerp = getParamLerp(${cfg.index}u);
+  return ${sample};
+}`);
+      } else {
+        // O1280 grid — sampler takes cell index
+        samplers.push(`
 fn sampleParam_${safeName}(cell: u32) -> f32 {
   if (!isParamReady(${cfg.index}u)) { return 0.0; }
   let v0 = param_${safeName}_0[cell];
@@ -221,6 +246,7 @@ fn sampleParam_${safeName}(cell: u32) -> f32 {
   let lerp = getParamLerp(${cfg.index}u);
   return ${sample};
 }`);
+      }
     }
 
     return {
