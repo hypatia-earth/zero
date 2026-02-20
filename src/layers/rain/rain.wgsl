@@ -93,9 +93,9 @@ fn rainParticle(lat: f32, lon: f32, ptype: f32, rate: f32) -> vec2f {
 
 fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let opacity = getLayerOpacity(LAYER_RAIN);
-  let cell = o1280LatLonToCell(lat, lon);
-  let ptype = sampleParam_precipitation_type(cell);
-  let rate = sampleParam_precipitation(cell);
+  // Advected samplers: wind-displaced O1280 lookup via (lat, lon)
+  let ptype = sampleParam_precipitation_type(lat, lon);
+  let rate = sampleParam_precipitation(lat, lon);
 
   if (ptype < 0.5 || rate < 0.01) { return color; }
 

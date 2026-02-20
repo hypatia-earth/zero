@@ -5,7 +5,7 @@
  * Uses main-template.wgsl as base and injects layer blend calls.
  */
 
-import type { LayerDeclaration } from '../services/layer/layer-service';
+import type { LayerDeclaration, AdvectionConfig } from '../services/layer/layer-service';
 import type { TParameter, TModel } from '../config/types';
 import { getMainShaders, getPostShaders } from './shader-loader';
 import { getParamMeta } from '../config/params-ecmwf_ifs';
@@ -212,16 +212,58 @@ export class ShaderComposer {
       );
     }
 
-    // 4. Generate sampler functions (model-aware)
+    // 4. Collect advection targets (params that get wind-displaced sampling)
+    const advectionTargets = new Map<string, AdvectionConfig>();
+    for (const layer of layers) {
+      if (layer.advection) {
+        for (const target of layer.advection.targets) {
+          advectionTargets.set(target.param, layer.advection);
+        }
+      }
+    }
+
+    // 5. Generate sampler functions (model-aware, advection-aware)
+    //    Wind samplers first (advected samplers call them)
     const samplers: string[] = ['// --- Param samplers (generated) ---'];
+    const advectedSamplers: string[] = [];
+
     for (const cfg of paramConfigs) {
       const safeName = cfg.param.replace(/[^a-zA-Z0-9]/g, '_');
-      const sample = cfg.categorical
-        ? `select(v0, v1, lerp >= 0.5)`   // nearest-neighbor in time
-        : `select(v0, mix(v0, v1, lerp), lerp >= 0.0)`;  // linear interpolation
+      const advection = advectionTargets.get(cfg.param);
 
-      if (cfg.model === 'ncep_gfs025') {
+      if (advection) {
+        // Advected O1280 param — sampler takes (lat, lon), displaces by wind
+        const uSafe = advection.uParam.param.replace(/[^a-zA-Z0-9]/g, '_');
+        const vSafe = advection.vParam.param.replace(/[^a-zA-Z0-9]/g, '_');
+        const sample = cfg.categorical
+          ? `select(v0, v1, lerp >= 0.5)`
+          : `mix(v0, v1, lerp)`;
+        advectedSamplers.push(`
+fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
+  if (!isParamReady(${cfg.index}u)) { return 0.0; }
+  let lerp = getParamLerp(${cfg.index}u);
+  // Advection wind at current position (time-interpolated)
+  let windU = sampleParam_${uSafe}(lat, lon);
+  let windV = sampleParam_${vSafe}(lat, lon);
+  // Displacement in radians
+  let dt = u.advectionDt;
+  let R = 6371000.0;
+  let cosLat = max(cos(lat), 0.01);
+  let dlat = (windV * dt) / R;
+  let dlon = (windU * dt) / (R * cosLat);
+  // Backward trajectory: where was t0 air?
+  let cell0 = o1280LatLonToCell(lat - dlat * lerp, lon - dlon * lerp);
+  let v0 = param_${safeName}_0[cell0];
+  // Forward trajectory: where will t1 air be?
+  let cell1 = o1280LatLonToCell(lat + dlat * (1.0 - lerp), lon + dlon * (1.0 - lerp));
+  let v1 = param_${safeName}_1[cell1];
+  return ${sample};
+}`);
+      } else if (cfg.model === 'ncep_gfs025') {
         // Regular 0.25° grid (721 lat × 1440 lon) — sampler takes (lat, lon)
+        const sample = cfg.categorical
+          ? `select(v0, v1, lerp >= 0.5)`
+          : `select(v0, mix(v0, v1, lerp), lerp >= 0.0)`;
         samplers.push(`
 fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
   if (!isParamReady(${cfg.index}u)) { return 0.0; }
@@ -238,6 +280,9 @@ fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
 }`);
       } else {
         // O1280 grid — sampler takes cell index
+        const sample = cfg.categorical
+          ? `select(v0, v1, lerp >= 0.5)`
+          : `select(v0, mix(v0, v1, lerp), lerp >= 0.0)`;
         samplers.push(`
 fn sampleParam_${safeName}(cell: u32) -> f32 {
   if (!isParamReady(${cfg.index}u)) { return 0.0; }
@@ -248,6 +293,9 @@ fn sampleParam_${safeName}(cell: u32) -> f32 {
 }`);
       }
     }
+
+    // Advected samplers after wind samplers (dependency order)
+    samplers.push(...advectedSamplers);
 
     return {
       bindings: bindings.join('\n'),
