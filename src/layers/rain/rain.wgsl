@@ -93,22 +93,17 @@ fn rainParticle(lat: f32, lon: f32, ptype: f32, rate: f32) -> vec2f {
 
 fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let opacity = getLayerOpacity(LAYER_RAIN);
-
-  // ECMWF params via O1280 cell
   let cell = o1280LatLonToCell(lat, lon);
   let ptype = sampleParam_precipitation_type(cell);
   let rate = sampleParam_precipitation(cell);
 
-  // GFS params via lat/lon (regular 0.25° grid)
-  let windU = sampleParam_wind_u_component_1000hPa(lat, lon);
-  let windV = sampleParam_wind_v_component_1000hPa(lat, lon);
+  if (ptype < 0.5 || rate < 0.01) { return color; }
 
-  // DEBUG: RGBA = 4 params scaled to [0,1]
-  let r = clamp(ptype / 8.0, 0.0, 1.0);                // WMO type 0-8
-  let g = clamp(sqrt(rate / 10.0), 0.0, 1.0);           // mm/h, sqrt for visibility
-  let b = clamp((windU + 30.0) / 60.0, 0.0, 1.0);      // m/s [-30,+30] → [0,1]
-  let v = clamp((windV + 30.0) / 60.0, 0.0, 1.0);      // m/s [-30,+30] → [0,1]
+  let particle = rainParticle(lat, lon, ptype, rate);
+  if (particle.x > 0.0) { return color; }  // outside shape
 
-  let debug = vec3f(max(r, v * 0.4), g, b);
-  return vec4f(mix(color.rgb, debug, opacity), color.a);
+  let typeColor = precipTypeColor(ptype);
+  let alpha = particle.y * opacity;
+
+  return vec4f(mix(color.rgb, typeColor, alpha), color.a);
 }
