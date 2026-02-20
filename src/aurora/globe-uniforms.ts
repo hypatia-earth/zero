@@ -112,6 +112,12 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['paramReady1', 'vec4u'],  // 608: params 4-7
   ['paramReady2', 'vec4u'],  // 624: params 8-11
   ['paramReady3', 'vec4u'],  // 640: params 12-15
+
+  // Advection / rain particle uniforms
+  ['advectionDt', 'f32'],        // seconds between adjacent timesteps (from valid_times)
+  ['rainFadeDuration', 'f32'],   // particle fade cycle in seconds (~1.0)
+  ['rainGridSize', 'f32'],       // base particle grid density (~800)
+  ['advectionPad', 'f32'],       // pad for vec4 alignment
 ]);
 
 // Strongly typed offsets - TypeScript knows all field names exist
@@ -193,6 +199,11 @@ export const U = GLOBE_UNIFORMS.offsets as {
   paramReady1: number;
   paramReady2: number;
   paramReady3: number;
+  // Advection / rain particle uniforms
+  advectionDt: number;
+  rainFadeDuration: number;
+  rainGridSize: number;
+  advectionPad: number;
 };
 
 /** Byte offset of component `index` within a packed vec4 array starting at `base` */

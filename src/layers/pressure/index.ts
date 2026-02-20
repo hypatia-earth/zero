@@ -4,7 +4,7 @@ import { defineLayer, withUI, withParams, withSlabs, withOptions, withPalettes, 
 
 export const layer = defineLayer('pressure',
   withUI('Pressure', 'Pressure', 'weather'),
-  withParams(['pressure_msl']),
+  withParams(['pressure_msl'], 'ecmwf_ifs'),
   withSlabs([{ name: 'raw', sizeMB: 26 }]),  // grid buffer created internally by PressureLayer
   withPalettes('pressure-gradient'),
   withOptions(['pressure.enabled', 'pressure.opacity', 'pressure.spacing', 'pressure.smoothing']),

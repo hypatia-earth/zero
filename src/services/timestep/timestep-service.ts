@@ -331,11 +331,12 @@ export class TimestepService {
 
     for (const layer of activeLayers) {
       const layerDecl = this.layerService.get(layer)!;
-      const omParams = layerDecl.params!;
+      const paramRefs = layerDecl.params!;
 
       for (const timestep of window) {
-        for (let slabIndex = 0; slabIndex < omParams.length; slabIndex++) {
-          const omParam = omParams[slabIndex]!;
+        for (let slabIndex = 0; slabIndex < paramRefs.length; slabIndex++) {
+          const ref = paramRefs[slabIndex]!;
+          const omParam = ref.param;
 
           const paramState = this.state.value.params.get(omParam)!;
           if (paramState.gpu.has(timestep)) continue;

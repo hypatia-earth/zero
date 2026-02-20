@@ -122,11 +122,12 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       const activeMap = new Map<string, Set<string>>();  // param → timesteps
 
       for (const layer of enabledLayers) {
-        const params = layer.params!;  // getEnabledLayers filters by params
+        const paramRefs = layer.params!;  // getEnabledLayers filters by params
         const readyParams: string[] = [];
 
         // Build per-param state maps (only for params with state)
-        for (const param of params) {
+        for (const ref of paramRefs) {
+          const param = ref.param;
           const paramState = tsState.params.get(param);
           if (!paramState) continue;  // no state = nothing to render
 

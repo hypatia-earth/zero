@@ -9,7 +9,7 @@
  */
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
-import type { TLayerCategory, SlabConfig } from '../../config/types';
+import type { TLayerCategory, TModel, SlabConfig } from '../../config/types';
 import type { OptionsService } from '../options-service';
 import { builtInLayers } from '../../layers';
 import { getPublishedParams } from '../../config/params-ecmwf_ifs';
@@ -26,6 +26,19 @@ export interface LayerShaders {
   render?: string;             // Geometry pass render shader
 }
 
+/** A parameter reference with its source model */
+export interface ParamRef {
+  param: string;
+  model: TModel;
+}
+
+/** Advection configuration: which wind params advect which data params */
+export interface AdvectionConfig {
+  uParam: string;
+  vParam: string;
+  targets: string[];  // param names to advect
+}
+
 export interface LayerDeclaration {
   id: string;
   type: LayerType;
@@ -34,7 +47,8 @@ export interface LayerDeclaration {
   buttonLabel: string;         // Short name for UI buttons (e.g., "Temp")
   category: TLayerCategory;    // celestial, weather, reference, custom
   // Runtime config
-  params?: string[];           // Data params to fetch (e.g., ['temperature_2m'])
+  params?: ParamRef[];         // Data params to fetch, each with source model
+  advection?: AdvectionConfig; // Wind-advected temporal interpolation
   slabs?: SlabConfig[];        // GPU buffer slabs (e.g., [{ name: 'data', sizeMB: 26 }])
   options?: string[];          // Option paths to watch (e.g., ['temp.enabled'])
   palettes?: PaletteId[];      // Available palette IDs (first is default)
@@ -261,7 +275,7 @@ export class LayerService {
 
   /** Get layers that use a specific data param */
   getLayersForParam(param: string): LayerDeclaration[] {
-    return this.getAll().filter(l => l.params?.includes(param));
+    return this.getAll().filter(l => l.params?.some(p => p.param === param));
   }
 
   /** Get layers watching a specific options path */
@@ -297,7 +311,7 @@ export class LayerService {
   getAllParams(): string[] {
     const params = new Set<string>();
     for (const layer of this.layers.values()) {
-      layer.params?.forEach(p => params.add(p));
+      layer.params?.forEach(p => params.add(p.param));
     }
     for (const p of getPublishedParams()) {
       params.add(p);

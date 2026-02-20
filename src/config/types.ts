@@ -75,7 +75,7 @@ export const isWeatherTextureLayer = (layer: TWeatherLayer): layer is TWeatherTe
 /** Weather layers cached by Service Worker */
 export const SW_CACHED_WEATHER_LAYERS: TWeatherLayer[] = [...WEATHER_LAYERS];
 
-export type TModel = 'ecmwf_ifs' | 'ecmwf_ifs025';
+export type TModel = 'ecmwf_ifs' | 'ecmwf_ifs025' | 'ncep_gfs025';
 
 /** Branded timestep string, format: "YYYY-MM-DDTHHMM" (e.g., "2025-12-13T0600") */
 export type TTimestep = string & { readonly __brand: 'timestep' };

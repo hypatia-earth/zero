@@ -173,7 +173,7 @@ export class ShaderComposer {
     // 1. Collect unique params from all layers
     const allParams = new Set<string>();
     for (const layer of layers) {
-      layer.params?.forEach(p => allParams.add(p));
+      layer.params?.forEach(ref => allParams.add(ref.param));
     }
 
     if (allParams.size === 0) {

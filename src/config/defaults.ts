@@ -31,7 +31,7 @@ export const defaultConfig: ZeroConfig = {
 
   discovery: {
     root: 'https://openmeteo.s3.amazonaws.com/data_spatial/',
-    models: ['ecmwf_ifs'],
+    models: ['ecmwf_ifs', 'ncep_gfs025'],
     default: 'ecmwf_ifs',
   },
 

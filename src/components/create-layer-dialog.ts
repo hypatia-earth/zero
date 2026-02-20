@@ -108,19 +108,19 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     }
 
     // Extract required fields - user layers must have all of these
-    const param = layer.params?.[0];
+    const paramRef = layer.params?.[0];
     const shaderCode = layer.shaders?.main;
     const order = layer.order;
     const userLayerIndex = layer.userLayerIndex;
 
-    if (!param || !shaderCode || order === undefined || userLayerIndex === undefined) {
+    if (!paramRef || !shaderCode || order === undefined || userLayerIndex === undefined) {
       console.warn(`[CreateLayer] Layer ${layerId} missing required fields, using template`);
       return;
     }
 
     state.id = layer.id;
-    state.param = param;
-    state.paramMeta = getParamMeta(param);
+    state.param = paramRef.param;
+    state.paramMeta = getParamMeta(paramRef.param);
     state.paletteId = (layer.palettes?.[0] ?? DEFAULT_PALETTE) as PaletteId;
     state.shaderCode = shaderCode;
     state.order = order;
@@ -222,7 +222,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const declaration = defineLayer(state.id,
       withType('texture'),
       withUI(state.id, state.id, 'custom'),
-      withParams([state.param]),
+      withParams([state.param], 'ecmwf_ifs'),
       withPalettes(state.paletteId),
       withOptions([`${state.id}.enabled`, `${state.id}.opacity`]),
       withBlend(blendFn),
@@ -282,7 +282,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const declaration = defineLayer('_preview',
       withType('texture'),
       withUI('_preview', '_preview', 'custom'),
-      withParams([state.param]),
+      withParams([state.param], 'ecmwf_ifs'),
       withOptions([]),  // Preview has no options
       withBlend(blendFn),
       withShader('main', finalizedCode),

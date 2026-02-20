@@ -45,8 +45,8 @@ export async function runGpuInitPhase(
   const paramSet = new Set<string>(getPublishedParams());
   for (const layer of layerService.getAll()) {
     if (layer.params) {
-      for (const param of layer.params) {
-        paramSet.add(param);
+      for (const ref of layer.params) {
+        paramSet.add(ref.param);
       }
     }
   }

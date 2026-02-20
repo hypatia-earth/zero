@@ -3,7 +3,7 @@
  *
  * Usage:
  *   const tempLayer = defineLayer('temp',
- *     withParams(['temperature_2m']),
+ *     withParams(['temperature_2m'], 'ecmwf_ifs'),
  *     withOptions(['temp.enabled', 'temp.opacity', 'temp.palette']),
  *     withPalette({ source: 'temp.palette', range: [-40, 50] }),
  *     withInterpolation('lerp'),
@@ -11,8 +11,8 @@
  *   );
  */
 
-import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders } from './layer-service';
-import type { TLayerCategory, SlabConfig } from '../../config/types';
+import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders, AdvectionConfig } from './layer-service';
+import type { TLayerCategory, TModel, SlabConfig } from '../../config/types';
 import type { PaletteId } from '../palette-service';
 
 export interface LayerFeature {
@@ -35,9 +35,18 @@ export function withType(type: LayerType): LayerFeature {
   };
 }
 
-export function withParams(params: string[]): LayerFeature {
+export function withParams(params: string[], model: TModel): LayerFeature {
   return {
-    apply: (d) => ({ ...d, params }),
+    apply: (d) => ({
+      ...d,
+      params: [...(d.params ?? []), ...params.map(p => ({ param: p, model }))],
+    }),
+  };
+}
+
+export function withAdvection(config: AdvectionConfig): LayerFeature {
+  return {
+    apply: (d) => ({ ...d, advection: config }),
   };
 }
 

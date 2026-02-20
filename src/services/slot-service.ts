@@ -141,8 +141,8 @@ export class SlotService {
 
     for (const layer of this.layerService.getAll()) {
       if (this.layerService.isLayerEnabled(layer.id) && layer.params) {
-        for (const param of layer.params) {
-          params.add(param);
+        for (const ref of layer.params) {
+          params.add(ref.param);
         }
       }
     }
@@ -513,7 +513,7 @@ export class SlotService {
     // Upload each slab to corresponding param
     const fakeTs = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '') as TTimestep;
     for (let i = 0; i < layerDecl.params.length && i < slabs.length; i++) {
-      const param = layerDecl.params[i]!;
+      const param = layerDecl.params[i]!.param;
       // Mark as test mode - ignore real data from queue
       this.testModeParams.add(param);
       this.auroraService.uploadData(param, 0, slabs[i]!);

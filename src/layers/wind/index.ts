@@ -4,7 +4,7 @@ import { defineLayer, withUI, withParams, withSlabs, withOptions, withPalettes, 
 
 export const layer = defineLayer('wind',
   withUI('Wind', 'Wind', 'weather'),
-  withParams(['wind_u_component_10m', 'wind_v_component_10m']),
+  withParams(['wind_u_component_10m', 'wind_v_component_10m'], 'ecmwf_ifs'),
   withSlabs([{ name: 'u', sizeMB: 26 }, { name: 'v', sizeMB: 26 }]),
   withPalettes('wind-speed'),
   withOptions(['wind.enabled', 'wind.opacity', 'wind.speed']),

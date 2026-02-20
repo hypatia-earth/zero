@@ -105,6 +105,8 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     range: [0, 50],  // 0-50mm/hr (heavy rain)
     palette: 'rain-intensity',
     sizeEstimate: 8_000_000,
+    published: true,
+    layers: ['rain'],
   },
   'showers': {
     label: 'Showers',

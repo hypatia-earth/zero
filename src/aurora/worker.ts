@@ -131,7 +131,7 @@ const paramBindings = new Map<string, ParamBinding>();
 function findLayerForParam(param: string): string | undefined {
   if (!layerRegistry) return undefined;
   for (const layer of layerRegistry.getAll()) {
-    if (layer.params?.includes(param)) {
+    if (layer.params?.some(ref => ref.param === param)) {
       return layer.id;
     }
   }
@@ -141,7 +141,7 @@ function findLayerForParam(param: string): string | undefined {
 // Get slot state for a layer (looks up first param's state)
 function getLayerSlotState(layerId: string): SlotState {
   const params = layerRegistry!.get(layerId)!.params!;
-  return paramSlotStates.get(params[0]!)!;
+  return paramSlotStates.get(params[0]!.param)!;
 }
 
 // Rebuild paramBindings from ShaderComposer's activeParamBindings (set during compose())
@@ -281,7 +281,7 @@ function buildLayerDataReady(): boolean[] {
   const arr = new Array<boolean>(maxIndex + 1).fill(false);
   for (const layer of layers) {
     if (layer.params?.length) {
-      const state = paramSlotStates.get(layer.params[0]!);
+      const state = paramSlotStates.get(layer.params[0]!.param);
       if (state) arr[layer.index!] = state.dataReady;
     }
   }

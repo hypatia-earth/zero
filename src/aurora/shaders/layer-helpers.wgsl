@@ -42,6 +42,11 @@ struct Uniforms {
   // Dynamic param state (16 params max) - for per-param interpolation
   paramLerp: array<vec4<f32>, 4>,          // 16 lerp factors (0.0-1.0)
   paramReady: array<vec4<u32>, 4>,         // 16 data ready flags
+  // Advection / rain particle uniforms
+  advectionDt: f32,        // seconds between adjacent timesteps
+  rainFadeDuration: f32,   // particle fade cycle in seconds
+  rainGridSize: f32,       // base particle grid density
+  advectionPad: f32,       // alignment padding
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
