@@ -1,39 +1,15 @@
 /**
  * Configuration types for Hypatia Zero
- *
- * Layer hierarchy:
- *   TLayer (all layers, have button in Layer panel)
- *   ├── TDecorationLayer (earth, sun, graticule)
- *   └── TWeatherLayer (need store, request data from ECMWF)
- *       ├── TWeatherTextureLayer (simple: temp, rain, clouds, humidity)
- *       └── TWeatherGeometryLayer (complex: pressure, wind)
  */
 
 import type { Signal } from '@preact/signals-core';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Layer definitions (arrays as const, types derived)
+// Layer definitions
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Decoration layers (no weather data) */
-export const DECORATION_LAYERS = ['earth', 'sun', 'graticule'] as const;
-export type TDecorationLayer = typeof DECORATION_LAYERS[number];
-
-/** Weather texture layers (buffer rebind + interpolation) */
-export const WEATHER_TEXTURE_LAYERS = ['temp', 'rain', 'clouds', 'humidity'] as const;
-export type TWeatherTextureLayer = typeof WEATHER_TEXTURE_LAYERS[number];
-
-/** Weather geometry layers (compute shader pipeline) */
-export const WEATHER_GEOMETRY_LAYERS = ['pressure', 'wind'] as const;
-export type TWeatherGeometryLayer = typeof WEATHER_GEOMETRY_LAYERS[number];
-
-/** All weather layers */
-export const WEATHER_LAYERS = [...WEATHER_TEXTURE_LAYERS, ...WEATHER_GEOMETRY_LAYERS] as const;
-export type TWeatherLayer = TWeatherTextureLayer | TWeatherGeometryLayer;
-
-/** All layers */
-export const ALL_LAYERS = [...DECORATION_LAYERS, ...WEATHER_LAYERS] as const;
-export type TLayer = TDecorationLayer | TWeatherLayer;
+export const ALL_LAYERS = ['earth', 'sun', 'graticule', 'temp', 'rain', 'clouds', 'humidity', 'pressure', 'wind'] as const;
+export type TLayer = typeof ALL_LAYERS[number];
 
 /** Layer categories */
 export const LAYER_CATEGORIES = ['celestial', 'weather', 'reference', 'custom'] as const;
@@ -45,27 +21,11 @@ export const LAYER_CATEGORY_LABELS: Record<TLayerCategory, string> = {
   custom: 'Custom',
 };
 
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Type guards
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Type guard: is this a weather layer? */
-export const isWeatherLayer = (id: string): id is TWeatherLayer =>
-  (WEATHER_LAYERS as readonly string[]).includes(id);
-
-/** Type guard: is this a weather texture layer? */
-export const isWeatherTextureLayer = (layer: TWeatherLayer): layer is TWeatherTextureLayer =>
-  (WEATHER_TEXTURE_LAYERS as readonly string[]).includes(layer);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Runtime layer subsets
+// Model / Param types (will move to models.ts in step 4)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Weather layers cached by Service Worker */
-export const SW_CACHED_WEATHER_LAYERS: TWeatherLayer[] = [...WEATHER_LAYERS];
-
-export type TModel = 'ecmwf_ifs' | 'ecmwf_ifs025' | 'ncep_gfs025';
+export type TModel = 'ecmwf_ifs' | 'ncep_gfs025';
 
 /** ECMWF IFS published parameters */
 export type TIfsParam =

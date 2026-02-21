@@ -21,7 +21,6 @@ import { getPublishedParams } from '../../config/params-ecmwf_ifs';
 /** GPU buffer size per model grid */
 const MODEL_BUFFER_MB: Record<TModel, number> = {
   ecmwf_ifs: 26,       // O1280: 6,599,680 × 4 bytes
-  ecmwf_ifs025: 4,     // 721 × 1440 × 4 bytes
   ncep_gfs025: 4,      // 721 × 1440 × 4 bytes
 };
 
