@@ -47,6 +47,7 @@ struct Uniforms {
   rainFadeDuration: f32,   // particle fade cycle in seconds
   rainDensity: f32,        // items per px² (0.01 = 1 per 10×10)
   rainSizePx: f32,         // particle radius in screen pixels
+  rainMinMm: f32,          // minimum precipitation (mm) to render
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

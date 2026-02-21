@@ -96,6 +96,8 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let cellCenterLon = (lonIdx + particlePos.x) * COMMON_TAU / lonCells;
   let ptype = sampleParam_precipitation_type(cellCenterLat, cellCenterLon);
   if (ptype < 0.5) { return color; }
+  let precip = sampleParam_precipitation(cellCenterLat, cellCenterLon);
+  if (precip < u.rainMinMm) { return color; }
 
   // Shape by type
   let code = u32(ptype + 0.5);

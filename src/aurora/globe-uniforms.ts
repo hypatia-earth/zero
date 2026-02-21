@@ -118,6 +118,7 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['rainFadeDuration', 'f32'],   // particle fade cycle in seconds (~1.0)
   ['rainDensity', 'f32'],        // items per px² (0.01 = 1 per 10×10)
   ['rainSizePx', 'f32'],         // particle radius in screen pixels
+  ['rainMinMm', 'f32'],          // minimum precipitation (mm) to render
 ]);
 
 // Strongly typed offsets - TypeScript knows all field names exist
@@ -204,6 +205,7 @@ export const U = GLOBE_UNIFORMS.offsets as {
   rainFadeDuration: number;
   rainDensity: number;
   rainSizePx: number;
+  rainMinMm: number;
 };
 
 /** Byte offset of component `index` within a packed vec4 array starting at `base` */

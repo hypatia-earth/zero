@@ -251,6 +251,8 @@ export interface RainConfig {
   sizePx: number;
   /** Particle fade cycle duration in seconds */
   fadeDuration: number;
+  /** Minimum precipitation rate in mm to render a particle */
+  minMm: number;
   /** Per-type colors (RGB 0-1), keyed by WMO precipitation_type name */
   colors: {
     rain: [number, number, number];           // WMO 1

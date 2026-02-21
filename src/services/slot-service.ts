@@ -10,7 +10,7 @@
  */
 
 import { effect, signal } from '@preact/signals-core';
-import { type TTimestep, type TParameter, type TModelParam, type TimestepOrder, type LayerState } from '../config/types';
+import { type TTimestep, type TParameter, type TModelParam, type LayerState } from '../config/types';
 import type { TimestepService } from './timestep/timestep-service';
 import type { AuroraService } from './aurora-service';
 import type { QueueService } from './queue/queue-service';
@@ -332,7 +332,7 @@ export class SlotService {
   async initialize(onProgress?: (label: string, index: number, total: number) => Promise<void>): Promise<void> {
     const time = this.stateService.viewState.value.time;
 
-    // Collect active params (Map: param name → TModelParam)
+    // Collect active params and enabled layer IDs
     const activeParamMap = this.collectActiveParams();
     if (activeParamMap.size === 0) {
       this.initialized = true;
@@ -343,33 +343,22 @@ export class SlotService {
     // Ensure slots exist
     this.ensureParamSlots(activeParamMap.keys());
 
-    // Build orders for all active params
-    const allOrders: TimestepOrder[] = [];
-    const wantedByParam = new Map<string, WantedState>();
+    // Get enabled layer IDs for getUrlTimeTasks
+    const activeLayers = this.layerService.getAll()
+      .filter(l => this.layerService.isLayerEnabled(l.id) && l.params)
+      .map(l => l.id);
 
+    // TimestepService resolves URLs (including backward-sum fallback) for minimum timesteps
+    const allOrders = this.timestepService.getUrlTimeTasks(time, activeLayers);
+
+    // Mark loading and compute wanted state for activation after download
+    const wantedByParam = new Map<string, WantedState>();
     for (const [param, mp] of activeParamMap) {
       const ps = this.paramSlots.get(param)!;
       const wanted = this.computeWanted(time, mp);
       wantedByParam.set(param, wanted);
-
       DEBUG && console.log(`[ParamSlot] ${P(param)} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
-
-      // Get layer ID for QueueTask.param (built-in or first user layer using this param)
-      const layers = this.layerService.getLayersForParam(param);
-      const layer = layers[0]?.id;
-      if (!layer) continue;
-
-      for (const ts of wanted.priority) {
-        ps.setLoading([ts]);
-        allOrders.push({
-          url: this.timestepService.url(ts, mp),
-          param: layer,
-          timestep: ts,
-          sizeEstimate: this.timestepService.getSize(param, ts),
-          slabIndex: 0,
-          modelParam: mp,
-        });
-      }
+      ps.setLoading(wanted.priority);
     }
 
     const total = allOrders.length;

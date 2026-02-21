@@ -336,6 +336,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     rainFadeDuration: defaultConfig.rain.fadeDuration,
     rainDensity: defaultConfig.rain.density,
     rainSizePx: defaultConfig.rain.sizePx,
+    rainMinMm: defaultConfig.rain.minMm,
   };
 }
 

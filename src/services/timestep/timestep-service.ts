@@ -9,7 +9,7 @@
  */
 
 import { signal } from '@preact/signals-core';
-import { type TTimestep, type TModel, type TParameter, type TModelParam, type Timestep, type QueueTask } from '../../config/types';
+import { type TTimestep, type TModel, type TParameter, type TModelParam, type Timestep, type QueueTask, type TimestepOrder } from '../../config/types';
 import type { ConfigService } from '../config-service';
 import type { LayerService } from '../layer/layer-service';
 import { parseTimestep, formatTimestep } from '../../utils/timestep';
@@ -276,6 +276,23 @@ export class TimestepService {
   }
 
   /**
+   * Resolve the correct URL for a (timestep, param) pair.
+   * Backward-sum params (e.g. precipitation) are undefined at analysis (T+0)
+   * timesteps — uses fallbackUrl from previous run where this time is T+6.
+   */
+  resolveUrl(ts: TTimestep, mp: TModelParam): string {
+    const idx = this.timestepIndex[mp.model].get(ts);
+    if (idx === undefined) throw new Error(`Unknown timestep: ${ts} for model ${mp.model}`);
+    const entry = this.timestepsData[mp.model][idx]!;
+    const meta = getParamMeta(mp.param);
+    if (meta.backwardSum && entry.isAnalysis && entry.fallbackUrl) {
+      console.log(`[Timestep] ${P(mp.param)} at ${ts}: using previous run (analysis, backward sum)`);
+      return entry.fallbackUrl;
+    }
+    return entry.url;
+  }
+
+  /**
    * First visible timestep — trimmed 6h past the raw data start.
    *
    * Precipitation (and other backward-sum params) is undefined at analysis
@@ -436,6 +453,45 @@ export class TimestepService {
     return window;
   }
 
+  /**
+   * Minimum tasks for a given time — 1 timestep (exact match) or 2 (interpolation pair).
+   * Resolves backward-sum fallback URLs. Used by bootstrap for first render.
+   */
+  getUrlTimeTasks(time: Date, activeLayers: string[]): TimestepOrder[] {
+    const orders: TimestepOrder[] = [];
+
+    for (const layerId of activeLayers) {
+      const layerDecl = this.layerService.get(layerId)!;
+      if (!layerDecl.params) continue;
+
+      for (let slabIndex = 0; slabIndex < layerDecl.params.length; slabIndex++) {
+        const mp = layerDecl.params[slabIndex]!;
+        const [t0, t1] = this.adjacentFor(time, mp);
+
+        // Exact match → single timestep, otherwise interpolation pair
+        const exactTs = this.getExactTimestep(time);
+        const timesteps = (exactTs && this.adjacentFor(time, mp)[0] === exactTs)
+          ? [exactTs]
+          : [t0, t1];
+
+        for (const ts of timesteps) {
+          const meta = getParamMeta(mp.param);
+          const paramState = this.state.value.params.get(mp.param);
+          orders.push({
+            url: this.resolveUrl(ts, mp),
+            param: layerId,
+            timestep: ts,
+            sizeEstimate: paramState?.sizes.get(ts) ?? meta.sizeEstimate,
+            slabIndex,
+            modelParam: mp,
+          });
+        }
+      }
+    }
+
+    return orders;
+  }
+
   getWindowTasks(time: Date, numSlots: number, activeLayers: string[]): {
     window: TTimestep[];
     tasks: QueueTask[];
@@ -477,19 +533,7 @@ export class TimestepService {
           const paramState = this.state.value.params.get(mp.param)!;
           if (paramState.gpu.has(timestep)) continue;
 
-          // Backward-sum params (e.g. precipitation) are undefined at analysis (T+0)
-          // timesteps — the accumulation has no prior step to subtract from.
-          // Use fallbackUrl: previous run's file where this time is T+6 (data exists).
-          let url = this.url(timestep, mp);
-          if (meta.backwardSum) {
-            const tsIdx = this.timestepIndex[mp.model].get(timestep);
-            const tsEntry = tsIdx !== undefined ? this.timestepsData[mp.model][tsIdx] : undefined;
-            if (tsEntry?.isAnalysis && tsEntry.fallbackUrl) {
-              url = tsEntry.fallbackUrl;
-              console.log(`[Timestep] ${P(mp.param)} at ${timestep}: using previous run (analysis, backward sum)`);
-            }
-          }
-
+          const url = this.resolveUrl(timestep, mp);
           const isFast = paramState.cache.has(timestep);
           const sizeEstimate = paramState.sizes.get(timestep) ?? meta.sizeEstimate;
 

@@ -57,6 +57,7 @@ export interface GlobeUniforms {
   rainFadeDuration: number;
   rainDensity: number;
   rainSizePx: number;
+  rainMinMm: number;
 }
 
 const POINTS_PER_TIMESTEP = 6_599_680;
@@ -594,6 +595,7 @@ export class GlobeRenderer {
     view.setFloat32(O.rainFadeDuration, uniforms.rainFadeDuration, true);
     view.setFloat32(O.rainDensity, uniforms.rainDensity, true);
     view.setFloat32(O.rainSizePx, uniforms.rainSizePx, true);
+    view.setFloat32(O.rainMinMm, uniforms.rainMinMm, true);
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 
