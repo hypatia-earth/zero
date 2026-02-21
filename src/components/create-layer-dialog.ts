@@ -33,7 +33,7 @@ interface CreateLayerDialogAttrs {
 const PUBLISHED_PARAMS = getPublishedModelParams();
 
 const DEFAULT_MODEL_PARAM: TModelParam = { model: 'ecmwf_ifs', param: 'temperature_2m' };
-const DEFAULT_PALETTE: PaletteId = PALETTE_IDS[0] as PaletteId;  // temp-classic
+const DEFAULT_PALETTE: PaletteId = PALETTE_IDS[0]!;
 
 // Generate sampler function name from param (e.g., 'temperature_2m' -> 'sampleParam_temperature_2m')
 function getSamplerName(param: string): string {
@@ -103,7 +103,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     order: 50,
     opacity: 0.5,
     userLayerIndex: null,
-    tryPhase: 'idle' as TryPhase,
+    tryPhase: 'idle' satisfies TryPhase,
     error: null,
   };
 

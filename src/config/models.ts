@@ -69,9 +69,13 @@ export function getModel(name: TModel) {
 
 /** Get published params (available for custom layers) — IFS only, returns param names */
 export function getPublishedParams(): TIfsParam[] {
-  return (Object.entries(ECMWF_IFS.params) as [TIfsParam, { published?: boolean }][])
-    .filter(([, meta]) => meta.published)
-    .map(([param]) => param);
+  const result: TIfsParam[] = [];
+  for (const [param, meta] of Object.entries(ECMWF_IFS.params)) {
+    if ('published' in meta && meta.published) {
+      result.push(param as TIfsParam);  // QC-OK: Object.entries loses key type
+    }
+  }
+  return result;
 }
 
 /** Get all published params across all models as TModelParam[] (for create-layer dialog) */
@@ -79,7 +83,7 @@ export function getPublishedModelParams(): TModelParam[] {
   const result: TModelParam[] = [];
   for (const model of MODELS) {
     for (const [param, meta] of Object.entries(model.params)) {
-      if ((meta as { published?: boolean }).published) {
+      if ('published' in meta && meta.published) {
         result.push({ model: model.name, param } as TModelParam);  // QC-OK: param validated from model.params keys
       }
     }

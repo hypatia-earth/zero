@@ -311,7 +311,7 @@ export class QueueService implements IQueueService {
   private sortQueueByStrategy(): void {
     if (!this.stateService) return;
     const currentTime = this.stateService.viewState.value.time;
-    const strategy = this.optionsService.options.value.dataCache.cacheStrategy as 'alternate' | 'future-first';
+    const strategy = this.optionsService.options.value.dataCache.cacheStrategy;
     sortByTimestep(this.timestepQueue, q => q.order.timestep, currentTime, strategy);
   }
 
@@ -321,7 +321,7 @@ export class QueueService implements IQueueService {
     poolSize: number;
     numSlots: number;
     activeLayers: string[];  // layer IDs (built-in + custom)
-    strategy: string;
+    strategy: 'alternate' | 'future-first';
   }): void {
     // 1. Get window and tasks from TimestepService
     const { window, tasks } = this.timestepService.getWindowTasks(
@@ -375,8 +375,8 @@ export class QueueService implements IQueueService {
   }
 
   /** Sort task queue by loading strategy */
-  private sortTaskQueue(currentTime: Date, strategy: string): void {
-    sortByTimestep(this.taskQueue, t => t.timestep, currentTime, strategy as 'alternate' | 'future-first');
+  private sortTaskQueue(currentTime: Date, strategy: 'alternate' | 'future-first'): void {
+    sortByTimestep(this.taskQueue, t => t.timestep, currentTime, strategy);
   }
 
   /** Process task queue with fast/slow logic */
