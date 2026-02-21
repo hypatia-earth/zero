@@ -22,6 +22,7 @@ export interface ParamMeta {
 
 export const ECMWF_IFS = {
   name: 'ecmwf_ifs',
+  shortName: 'IFS',
   root: 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs',
   bufferMB: 26,             // O1280: 6,599,680 × 4 bytes ≈ 26 MB
   gridPoints: 6_599_680,
@@ -69,6 +70,6 @@ export const ECMWF_IFS = {
       published: true, layers: ['pressure'],
     },
   },
-} as const satisfies { name: string; root: string; bufferMB: number; gridPoints: number; params: Record<string, ParamMeta> };
+} as const satisfies { name: string; shortName: string; root: string; bufferMB: number; gridPoints: number; params: Record<string, ParamMeta> };
 
 export type TEcmwfIfsParam = keyof typeof ECMWF_IFS.params;

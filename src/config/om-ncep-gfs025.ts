@@ -11,6 +11,7 @@ import type { PaletteId } from '../services/palette-service';
 
 export const NCEP_GFS025 = {
   name: 'ncep_gfs025',
+  shortName: 'GFS',
   root: 'https://openmeteo.s3.amazonaws.com/data_spatial/ncep_gfs025',
   bufferMB: 4,              // 721 × 1440 × 4 bytes ≈ 4 MB
   gridPoints: 1_038_240,
@@ -28,6 +29,6 @@ export const NCEP_GFS025 = {
       published: false, layers: ['rain'],
     },
   },
-} as const satisfies { name: string; root: string; bufferMB: number; gridPoints: number; params: Record<string, ParamMeta> };
+} as const satisfies { name: string; shortName: string; root: string; bufferMB: number; gridPoints: number; params: Record<string, ParamMeta> };
 
 export type TNcepGfs025Param = keyof typeof NCEP_GFS025.params;
