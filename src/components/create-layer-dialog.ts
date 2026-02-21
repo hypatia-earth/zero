@@ -15,7 +15,7 @@ import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
 import { defineLayer, withType, withUI, withParams, withPalettes, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
 import { DialogHeader } from './dialog-header';
-import { getParamMeta, getPublishedParams, type ParamMeta, type TModelParam } from '../config/models';
+import { getParamMeta, getPublishedModelParams, getModel, type ParamMeta, type TModelParam } from '../config/models';
 import { PALETTES, PALETTE_IDS, type PaletteId } from '../services/palette-service';
 import { PaletteComponent } from './palette-component';
 import type { ModalService } from '../services/modal-service';
@@ -29,10 +29,10 @@ interface CreateLayerDialogAttrs {
   slotService: SlotService;
 }
 
-// Params available for custom layers (from metadata)
-const ALLOWED_PARAMS = getPublishedParams();
+// Params available for custom layers (all published, across all models)
+const PUBLISHED_PARAMS = getPublishedModelParams();
 
-const DEFAULT_PARAM: TModelParam['param'] = 'temperature_2m';
+const DEFAULT_MODEL_PARAM: TModelParam = { model: 'ecmwf_ifs', param: 'temperature_2m' };
 const DEFAULT_PALETTE: PaletteId = PALETTE_IDS[0] as PaletteId;  // temp-classic
 
 // Generate sampler function name from param (e.g., 'temperature_2m' -> 'sampleParam_temperature_2m')
@@ -41,10 +41,21 @@ function getSamplerName(param: string): string {
   return `sampleParam_${safeName}`;
 }
 
-// Build DATA_PARAMS from metadata
-const DATA_PARAMS = ALLOWED_PARAMS.map(p => ({
-  value: p,
-  label: getParamMeta(p).label,
+/** Encode TModelParam as a single string for <select> value */
+function encodeModelParam(mp: TModelParam): string {
+  return `${mp.model}::${mp.param}`;
+}
+
+/** Decode <select> value back to TModelParam */
+function decodeModelParam(encoded: string): TModelParam {
+  const [model, param] = encoded.split('::');
+  return { model, param } as TModelParam;  // QC-OK: values come from PUBLISHED_PARAMS
+}
+
+// Build DATA_PARAMS from all published model params
+const DATA_PARAMS = PUBLISHED_PARAMS.map(mp => ({
+  value: encodeModelParam(mp),
+  label: `[${getModel(mp.model).shortName}] ${getParamMeta(mp.param).label}`,
 }));
 
 // Build palette options for combobox
@@ -71,7 +82,7 @@ type TryPhase = 'idle' | 'compiling' | 'loading';
 
 interface FormState {
   id: string;
-  param: TModelParam['param'];
+  modelParam: TModelParam;
   paramMeta: ParamMeta;
   paletteId: PaletteId;
   shaderCode: string;
@@ -85,8 +96,8 @@ interface FormState {
 export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () => {
   const state: FormState = {
     id: '',
-    param: DEFAULT_PARAM,
-    paramMeta: getParamMeta(DEFAULT_PARAM),
+    modelParam: DEFAULT_MODEL_PARAM,
+    paramMeta: getParamMeta(DEFAULT_MODEL_PARAM.param),
     paletteId: DEFAULT_PALETTE,
     shaderCode: SHADER_TEMPLATE,
     order: 50,
@@ -119,7 +130,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     }
 
     state.id = layer.id;
-    state.param = paramRef.param;
+    state.modelParam = paramRef;
     state.paramMeta = getParamMeta(paramRef.param);
     state.paletteId = (layer.palettes?.[0] ?? DEFAULT_PALETTE) as PaletteId;
     state.shaderCode = shaderCode;
@@ -131,7 +142,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
   function updateShaderTemplate() {
     const blendName = capitalize(state.id || 'Custom');
     const [min, max] = state.paramMeta.range;
-    const samplerFn = getSamplerName(state.param);
+    const samplerFn = getSamplerName(state.modelParam.param);
 
     // Keep {userLayerIndex} placeholder - replaced when index is assigned
     // Palette index is set via uniform, not baked into shader
@@ -222,7 +233,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const declaration = defineLayer(state.id,
       withType('texture'),
       withUI(state.id, state.id, 'custom'),
-      withParams({ model: 'ecmwf_ifs', param: state.param } as TModelParam),
+      withParams(state.modelParam),
       withPalettes(state.paletteId),
       withOptions([`${state.id}.enabled`, `${state.id}.opacity`]),
       withBlend(blendFn),
@@ -282,7 +293,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const declaration = defineLayer('_preview',
       withType('texture'),
       withUI('_preview', '_preview', 'custom'),
-      withParams({ model: 'ecmwf_ifs', param: state.param } as TModelParam),
+      withParams(state.modelParam),
       withOptions([]),  // Preview has no options
       withBlend(blendFn),
       withShader('main', finalizedCode),
@@ -298,7 +309,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
     aurora.send({ type: 'setUserLayerOptions', layerIndex: 31, enabled: true, opacity: state.opacity, paletteIndex });
 
-    console.log(`[CreateLayer] Preview: ${state.id} param=${state.param} palette=${state.paletteId} (index 31)`);
+    console.log(`[CreateLayer] Preview: ${state.id} param=${state.modelParam.model}/${state.modelParam.param} palette=${state.paletteId} (index 31)`);
     m.redraw();  // Update UI (enables Save button)
   }
 
@@ -343,8 +354,8 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
   function resetState() {
     state.id = '';
-    state.param = DEFAULT_PARAM;
-    state.paramMeta = getParamMeta(DEFAULT_PARAM);
+    state.modelParam = DEFAULT_MODEL_PARAM;
+    state.paramMeta = getParamMeta(DEFAULT_MODEL_PARAM.param);
     state.paletteId = DEFAULT_PALETTE;
     state.order = 50;
     state.opacity = 0.5;
@@ -408,7 +419,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
             m.redraw();
           }
 
-          if (state.tryPhase === 'loading' && attrs.slotService.isParamReady(state.param)) {
+          if (state.tryPhase === 'loading' && attrs.slotService.isParamReady(state.modelParam.param)) {
             state.tryPhase = 'idle';
             m.redraw();
           }
@@ -487,10 +498,10 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                 m('label', 'Data Parameter'),
                 m('select', {
                   'data-testid': 'layer-param-select',
-                  value: state.param,
+                  value: encodeModelParam(state.modelParam),
                   onchange: (e: Event) => {
-                    state.param = (e.target as HTMLSelectElement).value as TModelParam['param'];
-                    state.paramMeta = getParamMeta(state.param);
+                    state.modelParam = decodeModelParam((e.target as HTMLSelectElement).value);
+                    state.paramMeta = getParamMeta(state.modelParam.param);
                     updateShaderTemplate();
                   },
                 }, DATA_PARAMS.map(p =>

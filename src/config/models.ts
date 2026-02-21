@@ -67,9 +67,22 @@ export function getModel(name: TModel) {
 // Param utilities
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Get published params (available for custom layers) */
+/** Get published params (available for custom layers) — IFS only, returns param names */
 export function getPublishedParams(): TIfsParam[] {
   return (Object.entries(ECMWF_IFS.params) as [TIfsParam, { published?: boolean }][])
     .filter(([, meta]) => meta.published)
     .map(([param]) => param);
+}
+
+/** Get all published params across all models as TModelParam[] (for create-layer dialog) */
+export function getPublishedModelParams(): TModelParam[] {
+  const result: TModelParam[] = [];
+  for (const model of MODELS) {
+    for (const [param, meta] of Object.entries(model.params)) {
+      if ((meta as { published?: boolean }).published) {
+        result.push({ model: model.name, param } as TModelParam);  // QC-OK: param validated from model.params keys
+      }
+    }
+  }
+  return result;
 }
