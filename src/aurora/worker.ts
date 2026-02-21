@@ -204,13 +204,19 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
   const factor = Math.min(1, dt * rate);
 
   // Check if data is ready AND current time is within data window
+  // All params of the layer must be ready (not just the first) — prevents e.g.
+  // rain rendering without wind data for advection
   const isDataReady = (layerId: string): boolean => {
-    const state = getLayerSlotState(layerId);
-    if (!state?.dataReady) return false;
-    // Check if current time is within slot time range (with some margin)
+    const params = layerRegistry!.get(layerId)!.params;
+    if (!params) return false;
     const margin = 30 * 60 * 1000;  // 30 minutes
-    if (state.t0 === 0 && state.t1 === 0) return false;
-    return currentTimeMs >= state.t0 - margin && currentTimeMs <= state.t1 + margin;
+    for (const ref of params) {
+      const state = paramSlotStates.get(ref.param);
+      if (!state?.dataReady) return false;
+      if (state.t0 === 0 && state.t1 === 0) return false;
+      if (currentTimeMs < state.t0 - margin || currentTimeMs > state.t1 + margin) return false;
+    }
+    return true;
   };
 
   // Iterate all registered layers
@@ -274,15 +280,15 @@ function buildLayerOpacities(): Float32Array {
   return arr;
 }
 
-/** Build per-layer data ready array from registry and slot states */
+/** Build per-layer data ready array from registry and slot states.
+ *  All params of a layer must be ready (e.g. rain needs wind + ptype + precip). */
 function buildLayerDataReady(): boolean[] {
   const layers = layerRegistry!.getAll().filter(l => l.isBuiltIn);
   const maxIndex = layers.reduce((max, l) => Math.max(max, l.index!), 0);
   const arr = new Array<boolean>(maxIndex + 1).fill(false);
   for (const layer of layers) {
     if (layer.params?.length) {
-      const state = paramSlotStates.get(layer.params[0]!.param);
-      if (state) arr[layer.index!] = state.dataReady;
+      arr[layer.index!] = layer.params.every(ref => paramSlotStates.get(ref.param)?.dataReady);
     }
   }
   return arr;

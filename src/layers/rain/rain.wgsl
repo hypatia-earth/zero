@@ -47,7 +47,7 @@ fn sdfStar6(p: vec2f) -> f32 {
 
 // ─── Color per WMO code ─────────────────────────────────────────────────────
 
-const RAIN_COLOR_WET = vec3f(0.4, 0.6, 1.0);      // blue — liquid
+const RAIN_COLOR_WET = vec3f(0.7, 0.85, 1.0);     // bright blue — liquid
 const RAIN_COLOR_FROZEN = vec3f(1.0, 1.0, 1.0);   // white — frozen
 
 fn precipTypeColor(ptype: f32, cellId: vec2f) -> vec3f {
@@ -67,6 +67,7 @@ fn precipTypeColor(ptype: f32, cellId: vec2f) -> vec3f {
 // ─── Blend ──────────────────────────────────────────────────────────────────
 
 fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
+  if (!isLayerDataReady(LAYER_RAIN)) { return color; }
   let opacity = getLayerOpacity(LAYER_RAIN);
 
   // Fixed grid from default zoom (particles anchored to globe surface)
@@ -111,9 +112,9 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   }
   if (sdf > 0.0) { return color; }
 
-  // Fade loop
+  // Fade loop — reduced range so particles never vanish (avoids pop-in flicker on time scrub)
   let phase = fract(u.time / u.rainFadeDuration + rainHash1(cellId));
-  let fadeAlpha = 1.0 - phase;
+  let fadeAlpha = 0.5 + 0.5 * (1.0 - phase);
 
   // DEBUG: encode raw ptype value as brightness for unknown codes
   let typeColor = precipTypeColor(ptype, cellId);

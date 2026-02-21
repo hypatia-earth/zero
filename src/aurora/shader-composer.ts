@@ -336,7 +336,15 @@ fn sampleParam_${safeName}(cell: u32) -> f32 {
         calls.push(`  ${call}`);
       } else if (layer.isBuiltIn) {
         const name = layer.id.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-        calls.push(`  if (getLayerOpacity(LAYER_${name}) > 0.0) { ${call} }`);
+        let guard = `getLayerOpacity(LAYER_${name}) > 0.0`;
+        // Advected layers: gate on wind param readiness (avoid rendering without displacement)
+        if (layer.advection) {
+          const uIdx = activeParamBindings.findIndex(p => p.param === layer.advection!.uParam.param);
+          const vIdx = activeParamBindings.findIndex(p => p.param === layer.advection!.vParam.param);
+          if (uIdx >= 0) guard += ` && isParamReady(${uIdx}u)`;
+          if (vIdx >= 0) guard += ` && isParamReady(${vIdx}u)`;
+        }
+        calls.push(`  if (${guard}) { ${call} }`);
       } else {
         calls.push(`  if (getUserLayerOpacity(${layer.userLayerIndex!}u) > 0.0) { ${call} }`);
       }
