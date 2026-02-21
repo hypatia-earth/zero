@@ -113,12 +113,12 @@ export class GlobeRenderer {
   private lastFrameTime = 0;
   private frameDeltaMs = 0;  // milliseconds since last frame (0 on first frame)
 
-  // Wind animation state
+  // Wind animation state (set in initialize() from windConfig)
   private windAnimPhase = 0;
-  private windSnakeLength = 0;
-  private windLineWidth = 0;
-  private windSegments = 1;
-  private windRadius = 1;
+  private windSnakeLength!: number;
+  private windLineWidth!: number;
+  private windSegments!: number;
+  private windRadius!: number;
 
   // GPU timing
   private gpuTimestamp: GpuTimestamp | null = null;
