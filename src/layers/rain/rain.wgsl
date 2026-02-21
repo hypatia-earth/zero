@@ -25,7 +25,7 @@ fn sdfDisk(p: vec2f) -> f32 {
 fn sdfDrop(p: vec2f) -> f32 {
   // Round bottom, pointy top: squeeze x progressively above center
   let squeeze = 1.0 + max(p.y, 0.0) * 1.5;
-  return length(vec2f(p.x * squeeze, p.y)) - 1.0;
+  return length(vec2f(p.x * squeeze / 0.75, p.y)) - 1.0;
 }
 
 fn sdfDiamond(p: vec2f) -> f32 {
