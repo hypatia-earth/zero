@@ -336,6 +336,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     rainDensity: defaultConfig.rain.density,
     rainSizePx: defaultConfig.rain.sizePx,
     rainMinMm: defaultConfig.rain.minMm,
+    rainBackFace: opts.rain.enabled && !opts.earth.enabled && !opts.temp.enabled ? 1 : 0,
   };
 }
 

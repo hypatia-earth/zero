@@ -104,6 +104,16 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
 
   // {{SURFACE_BLEND_CALLS}} - replaced by ShaderComposer
 
+  // Back-side rain (when no opaque surface layers are enabled)
+  if (u.rainBackFace > 0.0 && getLayerOpacity(LAYER_RAIN) > 0.0) {
+    let rainFarHit = raySphereIntersectFar(u.eyePosition, rayDir, EARTH_RADIUS);
+    if (rainFarHit.valid) {
+      let backLat = asin(rainFarHit.point.y);
+      let backLon = atan2(rainFarHit.point.x, rainFarHit.point.z);
+      color = blendRain(color, backLat, backLon);
+    }
+  }
+
   // Animated back-side grid: fades in from limb as surface layers fade out
   // Only activates when both layers are nearly invisible (below 0.3 opacity)
   let maxOpacity = max(getLayerOpacity(LAYER_EARTH), getLayerOpacity(LAYER_TEMP));
