@@ -1,13 +1,10 @@
 export { PressureLayer } from './pressure-layer';
 
-import { defineLayer, withUI, withParams, withSlabs, withOptions, withPalettes, withCompute, withRender, asBuiltIn } from '../../services/layer/builder';
+import { defineLayer, withUI, withParams, withOptions, withPalettes, withCompute, withRender, asBuiltIn } from '../../services/layer/builder';
 
 export const layer = defineLayer('pressure',
   withUI('Pressure', 'Pressure', 'weather'),
   withParams({ model: 'ecmwf_ifs', param: 'pressure_msl' }),
-  withSlabs([
-    { name: 'raw', sizeMB: 26 },  // grid buffer created internally by PressureLayer
-  ]),
   withPalettes('pressure-gradient'),
   withOptions([
     'pressure.enabled',

@@ -1,4 +1,4 @@
-import { defineLayer, withType, withUI, withParams, withAdvection, withSlabs, withOptions, withPalettes, withBlend, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
+import { defineLayer, withType, withUI, withParams, withAdvection, withOptions, withPalettes, withBlend, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
 import { U } from '../../aurora/globe-uniforms';
 
 export const layer = defineLayer('rain',
@@ -20,9 +20,6 @@ export const layer = defineLayer('rain',
       { model: 'ecmwf_ifs', param: 'precipitation' },
     ],
   }),
-  withSlabs([
-    { name: 'data', sizeMB: 26 },
-  ]),
   withPalettes(
     'rain-wet-intensity',
     'rain-frozen-intensity',

@@ -12,7 +12,7 @@
  */
 
 import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders, AdvectionConfig } from './layer-service';
-import type { TLayerCategory, SlabConfig } from '../../config/types';
+import type { TLayerCategory } from '../../config/types';
 import type { TModelParam } from '../../config/models';
 import type { PaletteId } from '../palette-service';
 
@@ -54,12 +54,6 @@ export function withAdvection(config: AdvectionConfig): LayerFeature {
 export function withPalettes(...paletteIds: PaletteId[]): LayerFeature {
   return {
     apply: (d) => ({ ...d, palettes: paletteIds }),
-  };
-}
-
-export function withSlabs(slabs: SlabConfig[]): LayerFeature {
-  return {
-    apply: (d) => ({ ...d, slabs }),
   };
 }
 

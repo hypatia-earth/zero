@@ -9,7 +9,7 @@
  */
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
-import type { TLayerCategory, SlabConfig } from '../../config/types';
+import type { TLayerCategory } from '../../config/types';
 import type { OptionsService } from '../options-service';
 import { builtInLayers } from '../../layers';
 import { getPublishedParams, type TModel, type TModelParam } from '../../config/models';
@@ -39,7 +39,6 @@ export interface LayerDeclaration {
   // Runtime config
   params?: TModelParam[];         // Data params to fetch, each with source model
   advection?: AdvectionConfig; // Wind-advected temporal interpolation
-  slabs?: SlabConfig[];        // GPU buffer slabs (e.g., [{ name: 'data', sizeMB: 26 }])
   options?: string[];          // Option paths to watch (e.g., ['temp.enabled'])
   palettes?: PaletteId[];      // Available palette IDs (first is default)
   blendFn?: string;            // Fragment shader blend function name

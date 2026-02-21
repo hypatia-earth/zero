@@ -1,6 +1,6 @@
 export { WindLayer } from './wind-layer';
 
-import { defineLayer, withUI, withParams, withSlabs, withOptions, withPalettes, withCompute, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
+import { defineLayer, withUI, withParams, withOptions, withPalettes, withCompute, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
 
 export const layer = defineLayer('wind',
   withUI('Wind', 'Wind', 'weather'),
@@ -8,10 +8,6 @@ export const layer = defineLayer('wind',
     { model: 'ecmwf_ifs', param: 'wind_u_component_10m' },
     { model: 'ecmwf_ifs', param: 'wind_v_component_10m' },
   ),
-  withSlabs([
-    { name: 'u', sizeMB: 26 },
-    { name: 'v', sizeMB: 26 },
-  ]),
   withPalettes('wind-speed'),
   withConfig({
     snakeLength:     { value: 0.25 },
