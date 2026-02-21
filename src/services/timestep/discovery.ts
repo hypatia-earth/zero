@@ -5,7 +5,8 @@
  * by querying S3 bucket listings and latest.json manifests.
  */
 
-import type { TModel, Timestep, TTimestep } from '../../config/types';
+import type { Timestep, TTimestep } from '../../config/types';
+import type { TModel } from '../../config/models';
 import { formatTimestep } from '../../utils/timestep';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,12 +24,6 @@ export interface DiscoveryResult {
   variables: string[];
 }
 
-interface DiscoveryConfig {
-  root: string;
-  models: TModel[];
-  default: TModel;
-}
-
 type ProgressCallback = (step: 'manifest' | 'runs', detail?: string) => Promise<void>;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,15 +32,17 @@ type ProgressCallback = (step: 'manifest' | 'runs', detail?: string) => Promise<
 
 export async function discoverModel(
   model: TModel,
-  config: DiscoveryConfig,
-  bucketRoot: string,
+  modelRoot: string,
   onProgress?: ProgressCallback
 ): Promise<DiscoveryResult> {
-  const basePrefix = `data_spatial/${model}/`;
+  // modelRoot: e.g. "https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs"
+  const rootUrl = new URL(modelRoot);
+  const bucketRoot = rootUrl.origin;
+  const basePrefix = rootUrl.pathname.replace(/^\//, '').replace(/\/$/, '') + '/';
 
   // 1. Fetch latest.json → completed run info
   await onProgress?.('manifest', model);
-  const response = await fetch(`${config.root}${model}/latest.json`);
+  const response = await fetch(`${modelRoot}/latest.json`);
   if (!response.ok) {
     throw new Error(`[Discovery] Failed to fetch latest.json for ${model}`);
   }

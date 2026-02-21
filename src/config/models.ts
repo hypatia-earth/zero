@@ -7,6 +7,7 @@
 
 import { ECMWF_IFS, type TEcmwfIfsParam } from './om-ecmwf-ifs';
 import { NCEP_GFS025, type TNcepGfs025Param } from './om-ncep-gfs025';
+import { PARAM_METADATA as EXTENDED_CATALOG } from './params-ecmwf_ifs.old';
 
 export { ECMWF_IFS } from './om-ecmwf-ifs';
 export { NCEP_GFS025 } from './om-ncep-gfs025';
@@ -44,14 +45,27 @@ export const MODEL_BUFFER_MB: Record<TModel, number> = {
   [NCEP_GFS025.name]: NCEP_GFS025.bufferMB,
 };
 
-/** Get param metadata across all models */
+/** Get param metadata across all models (falls back to extended catalog) */
 export function getParamMeta(param: TParameter) {
   for (const model of MODELS) {
     const meta = model.params[param as keyof typeof model.params];
     if (meta) return meta;
   }
+  const extended = EXTENDED_CATALOG[param];
+  if (extended) return extended;
   throw new Error(`Unknown param: ${param}`);
 }
+
+/** Get model definition by name */
+export function getModel(name: TModel) {
+  const model = MODELS.find(m => m.name === name);
+  if (!model) throw new Error(`Unknown model: ${name}`);
+  return model;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Param utilities
+// ─────────────────────────────────────────────────────────────────────────────
 
 /** Get published params (available for custom layers) */
 export function getPublishedParams(): TIfsParam[] {

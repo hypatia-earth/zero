@@ -5,8 +5,7 @@
  * LoD level changes based on altitude with hysteresis.
  */
 
-import { defaultConfig } from '../../config/defaults';
-import type { GraticuleLodLevel } from '../../config/types';
+import type { GraticuleLodLevel } from './index';
 
 const DEBUG = false;
 
@@ -25,8 +24,7 @@ const MAX_LINES = 80;  // max lines per axis (72 lon + margin)
 const ANIMATION_DURATION = 1000;  // ms per birth/death cycle
 export const GRATICULE_BUFFER_SIZE = 1328;  // bytes for GPU buffer (aligned to 16)
 
-// LoD levels from config (includes spacing and pixel thresholds)
-const LOD_LEVELS: GraticuleLodLevel[] = defaultConfig.graticule.lodLevels;
+// LoD levels — set via constructor from layer config
 
 // Generate line positions for a given spacing
 function generateLonLines(spacing: number): number[] {
@@ -53,8 +51,10 @@ export class GraticuleAnimator {
   private latLines: LineState[] = [];
   private animating = false;
   private animationProgress = 0;
+  private readonly lodLevels: GraticuleLodLevel[];
 
-  constructor(initialGlobeRadiusPx: number) {
+  constructor(initialGlobeRadiusPx: number, lodLevels: GraticuleLodLevel[]) {
+    this.lodLevels = lodLevels;
     // Find correct LoD for starting globe radius
     this.lodLevel = this.getLodForGlobeRadius(initialGlobeRadiusPx);
     this.initializeLines();
@@ -62,8 +62,8 @@ export class GraticuleAnimator {
 
   private getLodForGlobeRadius(globeRadiusPx: number): number {
     // Find highest LoD level where globe radius is at or above zoomInPx threshold
-    for (let i = LOD_LEVELS.length - 1; i >= 0; i--) {
-      if (globeRadiusPx >= LOD_LEVELS[i]!.zoomInPx) {
+    for (let i = this.lodLevels.length - 1; i >= 0; i--) {
+      if (globeRadiusPx >= this.lodLevels[i]!.zoomInPx) {
         return i;
       }
     }
@@ -71,7 +71,7 @@ export class GraticuleAnimator {
   }
 
   private initializeLines(): void {
-    const level = LOD_LEVELS[this.lodLevel]!;
+    const level = this.lodLevels[this.lodLevel]!;
 
     // Initialize longitude lines
     this.lonLines = generateLonLines(level.spacing).map(deg => ({
@@ -104,7 +104,7 @@ export class GraticuleAnimator {
   }
 
   private startTransition(newLevel: number): void {
-    const targetLevel = LOD_LEVELS[newLevel]!;
+    const targetLevel = this.lodLevels[newLevel]!;
 
     this.lodLevel = newLevel;
     this.animating = true;
@@ -402,7 +402,7 @@ export class GraticuleAnimator {
     view.setUint32(offset, this.lonLines.length, true);
     view.setUint32(offset + 4, this.latLines.length, true);
     view.setUint32(offset + 8, this.animating ? 1 : 0, true);
-    const level = LOD_LEVELS[this.lodLevel]!;
+    const level = this.lodLevels[this.lodLevel]!;
     view.setFloat32(offset + 12, level.spacing, true);
     // offset + 16..31 = padding
 

@@ -29,12 +29,6 @@ export const defaultConfig: ZeroConfig = {
     progressSleep: 100,
   },
 
-  discovery: {
-    root: 'https://openmeteo.s3.amazonaws.com/data_spatial/',
-    models: ['ecmwf_ifs', 'ncep_gfs025'],
-    default: 'ecmwf_ifs',
-  },
-
   camera: {
     ...CAMERA_DEFAULTS,
     minDistance: 1.047,
@@ -43,50 +37,6 @@ export const defaultConfig: ZeroConfig = {
   },
 
   defaultLayers: ['earth', 'sun', 'temp'],
-
-  sun: {
-    coreRadius: 0.015,
-    glowRadius: 0.12,
-    coreColor: [1.0, 0.7, 0.3],
-    glowColor: [1.0, 0.6, 0.2],
-  },
-
-  graticule: {
-    opacity: 0.8,
-    labelMaxRadiusPx: 500,
-    lodLevels: [
-      { spacing: 30, zoomInPx: 0, zoomOutPx: 0 },
-      { spacing: 20, zoomInPx: 200, zoomOutPx: 170 },
-      { spacing: 15, zoomInPx: 350, zoomOutPx: 300 },
-      { spacing: 10, zoomInPx: 500, zoomOutPx: 450 },
-      { spacing: 5, zoomInPx: 650, zoomOutPx: 600 },
-    ],
-  },
-
-  rain: {
-    density: 0.16,        // items per px² (1 per 2.5×2.5 area)
-    sizePx: 0.5625,       // radius in screen pixels
-    fadeDuration: 3.0,    // fade cycle in seconds
-    minMm: 0.1,           // minimum precipitation rate (mm) to show particle
-    colors: {
-      rain:         [0.7, 0.85, 1.0],    // WMO 1
-      freezingRain: [0.6, 0.8, 0.95],    // WMO 3
-      snow:         [1.0, 1.0, 1.0],     // WMO 5
-      wetSnow:      [0.9, 0.92, 0.95],   // WMO 6
-      sleet:        [0.85, 0.9, 0.95],   // WMO 7
-      icePellets:      [0.8, 0.85, 0.95],   // WMO 8
-      freezingDrizzle: [0.75, 0.85, 0.9],   // WMO 12
-    },
-  },
-
-  wind: {
-    opacity: 0.8,
-    snakeLength: 0.25,
-    lineWidth: 0.002,
-    segmentsPerLine: 32,
-    stepFactor: 0.005,
-    radius: 1.0,
-  },
 
   // revisit these, ASAP
   render: {

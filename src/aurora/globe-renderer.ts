@@ -15,7 +15,6 @@ import { PaletteTexture } from './palette-texture';
 // Re-export for consumers
 export type { PassTimings } from './gpu-timestamp';
 import type { LayerState } from '../config/types';
-import { defaultConfig } from '../config/defaults';
 import type { PressureColorOption } from '../schemas/options.schema';
 import { PALETTE_IDS, PALETTES, type PaletteId } from '../services/palette-service';
 
@@ -116,10 +115,10 @@ export class GlobeRenderer {
 
   // Wind animation state
   private windAnimPhase = 0;
-  private windSnakeLength = defaultConfig.wind.snakeLength;
-  private windLineWidth = defaultConfig.wind.lineWidth;
-  private windSegments = defaultConfig.wind.segmentsPerLine;
-  private windRadius = defaultConfig.wind.radius;
+  private windSnakeLength = 0;
+  private windLineWidth = 0;
+  private windSegments = 1;
+  private windRadius = 1;
 
   // GPU timing
   private gpuTimestamp: GpuTimestamp | null = null;
@@ -134,8 +133,16 @@ export class GlobeRenderer {
   async initialize(
     requestedSlots: number,
     windLineCount: number,
-    composedShaders: ComposedShaders
+    composedShaders: ComposedShaders,
+    graticuleLodLevels: Array<{ spacing: number; zoomInPx: number; zoomOutPx: number }>,
+    windConfig: { snakeLength: number; lineWidth: number; segmentsPerLine: number; stepFactor: number; radius: number }
   ): Promise<void> {
+    // Apply wind config before creating WindLayer
+    this.windSnakeLength = windConfig.snakeLength;
+    this.windLineWidth = windConfig.lineWidth;
+    this.windSegments = windConfig.segmentsPerLine;
+    this.windRadius = windConfig.radius;
+
     const shaderCode = composedShaders.main;
     const postprocessShaderCode = composedShaders.post;
     const adapter = await navigator.gpu.requestAdapter();
@@ -242,7 +249,7 @@ export class GlobeRenderer {
     // Use canvas height (already device pixels in worker, CSS pixels on main thread)
     const heightPx = 'clientHeight' in this.canvas ? (this.canvas.clientHeight || 800) : this.canvas.height;
     const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightPx / fov);
-    this.graticuleAnimator = new GraticuleAnimator(initialGlobeRadiusPx);
+    this.graticuleAnimator = new GraticuleAnimator(initialGlobeRadiusPx, graticuleLodLevels);
 
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
     this.fontAtlasTexture = this.device.createTexture({
@@ -354,7 +361,7 @@ export class GlobeRenderer {
     this.pressureLayer = new PressureLayer(this.device, this.format, this.paletteTexture);
 
     // Initialize wind layer
-    this.windLayer = new WindLayer(this.device, this.format, this.paletteTexture, windLineCount);
+    this.windLayer = new WindLayer(this.device, this.format, this.paletteTexture, windLineCount, { segmentsPerLine: windConfig.segmentsPerLine, stepFactor: windConfig.stepFactor });
 
     this.resize();
   }

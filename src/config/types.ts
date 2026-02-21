@@ -3,6 +3,7 @@
  */
 
 import type { Signal } from '@preact/signals-core';
+import type { TModelParam } from './models';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Layer definitions
@@ -21,34 +22,6 @@ export const LAYER_CATEGORY_LABELS: Record<TLayerCategory, string> = {
   custom: 'Custom',
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Model / Param types (will move to models.ts in step 4)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export type TModel = 'ecmwf_ifs' | 'ncep_gfs025';
-
-/** ECMWF IFS published parameters */
-export type TIfsParam =
-  | 'temperature_2m'
-  | 'precipitation'
-  | 'precipitation_type'
-  | 'cloud_cover'
-  | 'wind_u_component_10m'
-  | 'wind_v_component_10m'
-  | 'pressure_msl';
-
-/** NCEP GFS 0.25° published parameters */
-export type TGfsParam =
-  | 'wind_u_component_1000hPa'
-  | 'wind_v_component_1000hPa';
-
-/** All published parameter names */
-export type TParameter = TIfsParam | TGfsParam;
-
-/** Parameter with its source model — discriminated union enforces valid combinations */
-export type TModelParam =
-  | { model: 'ecmwf_ifs'; param: TIfsParam }
-  | { model: 'ncep_gfs025'; param: TGfsParam };
 
 /** Branded timestep string, format: "YYYY-MM-DDTHHMM" (e.g., "2025-12-13T0600") */
 export type TTimestep = string & { readonly __brand: 'timestep' };
@@ -156,91 +129,8 @@ export interface ParamLink {
   url: string;    // URL to ECMWF parameter database
 }
 
-export interface LayerConfig {
-  id: TLayer;
-  label: string;              // Full name (e.g., "Temperature")
-  buttonLabel: string;        // Short name for UI buttons (e.g., "Temp")
-  category: TLayerCategory;
-  description?: string;          // One-sentence description for options dialog
-  links?: ParamLink[];           // Links to ECMWF parameter database (weather layers)
-  params?: TParameter[];          // Published param names (weather layers)
-  defaultSizeEstimate?: number;  // bytes per timestep (weather layers)
-  slabs?: SlabConfig[];          // GPU buffer slabs (weather layers only)
-  useSynthData?: boolean;        // Use synthetic test data instead of real data
-}
 
-export interface DiscoveryConfig {
-  /** S3 bucket root URL for data_spatial */
-  root: string;
-  /** Models to discover */
-  models: TModel[];
-  /** Default model to use */
-  default: TModel;
-}
 
-export interface SunConfig {
-  /** Core disc radius in NDC units */
-  coreRadius: number;
-  /** Glow radius in NDC units */
-  glowRadius: number;
-  /** Core color RGB (0-1) */
-  coreColor: [number, number, number];
-  /** Glow color RGB (0-1) */
-  glowColor: [number, number, number];
-}
-
-export interface GraticuleLodLevel {
-  spacing: number;     // degrees between graticule lines (same for lon/lat)
-  zoomInPx: number;    // enter this LoD when globeRadiusPx >= this
-  zoomOutPx: number;   // leave this LoD when globeRadiusPx <= this
-}
-
-export interface GraticuleConfig {
-  /** Default opacity 0-1 */
-  opacity: number;
-  /** Max globe radius in CSS pixels before label font starts shrinking */
-  labelMaxRadiusPx: number;
-  /** LoD levels indexed by level number */
-  lodLevels: GraticuleLodLevel[];
-}
-
-export interface RainConfig {
-  /** Particle density in items per px² (0.01 = 1 per 10×10 area) */
-  density: number;
-  /** Particle radius in screen pixels */
-  sizePx: number;
-  /** Particle fade cycle duration in seconds */
-  fadeDuration: number;
-  /** Minimum precipitation rate in mm to render a particle */
-  minMm: number;
-  /** Per-type colors (RGB 0-1), keyed by WMO precipitation_type name */
-  colors: {
-    rain: [number, number, number];           // WMO 1
-    freezingRain: [number, number, number];   // WMO 3
-    snow: [number, number, number];           // WMO 5
-    wetSnow: [number, number, number];        // WMO 6
-    sleet: [number, number, number];          // WMO 7
-    icePellets: [number, number, number];     // WMO 8
-    freezingDrizzle: [number, number, number]; // WMO 12
-  };
-}
-
-export interface WindConfig {
-  /** Default opacity 0-1 */
-  opacity: number;
-
-  /** Fraction of line visible (0-1) */
-  snakeLength: number;
-  /** Screen-space line width factor */
-  lineWidth: number;
-  /** Trace steps per wind line */
-  segmentsPerLine: number;
-  /** Wind speed to arc distance scale */
-  stepFactor: number;
-
-  /** Sphere radius for wind particles (earth = 1.0) */
-  radius: number;
-}
 
 export interface AppConfig {
   /** Application name */
@@ -273,9 +163,6 @@ export interface ZeroConfig {
   /** Bootstrap progress settings */
   bootstrap: BootstrapConfig;
 
-  /** Discovery configuration */
-  discovery: DiscoveryConfig;
-
   /** Camera settings */
   camera: {
     fov: number;           // Field of view in degrees
@@ -288,18 +175,6 @@ export interface ZeroConfig {
 
   /** Default active layers */
   defaultLayers: TLayer[];
-
-  /** Sun rendering settings */
-  sun: SunConfig;
-
-  /** Graticule layer settings */
-  graticule: GraticuleConfig;
-
-  /** Rain/precipitation layer settings */
-  rain: RainConfig;
-
-  /** Wind layer settings */
-  wind: WindConfig;
 
   /** Render settings */
   render: {

@@ -9,13 +9,11 @@
  */
 
 import { signal } from '@preact/signals-core';
-import { type TTimestep, type TModel, type TParameter, type TModelParam, type Timestep, type QueueTask, type TimestepOrder } from '../../config/types';
-import type { ConfigService } from '../config-service';
+import { type TTimestep, type Timestep, type QueueTask, type TimestepOrder } from '../../config/types';
 import type { LayerService } from '../layer/layer-service';
 import { parseTimestep, formatTimestep } from '../../utils/timestep';
 import { countBeforeTimestep, clearBeforeTimestep } from '../sw-registration';
-import { getParamMeta } from '../../config/params-ecmwf_ifs';
-import '../../config/params-ncep_gfs025';
+import { MODELS, getParamMeta, type TModel, type TModelParam } from '../../config/models';
 
 // Module imports
 import { discoverModel } from './discovery';
@@ -37,7 +35,7 @@ export interface ParamState {
 /** TimestepService state exposed via signal */
 export interface TimestepState {
   ecmwf: Set<TTimestep>;
-  params: Map<TParameter, ParamState>;  // Keyed by param name (e.g., 'temperature_2m')
+  params: Map<TModelParam['param'], ParamState>;  // Keyed by param name (e.g., 'temperature_2m')
 }
 
 /** 4-letter uppercase param code for logs */
@@ -53,8 +51,8 @@ export class TimestepService {
   private timestepsData = {} as Record<TModel, Timestep[]>;
   private timestepIndex = {} as Record<TModel, Map<TTimestep, number>>;
   private variablesData = {} as Record<TModel, string[]>;
-  private readonly bucketRoot: string;
-  private defaultModel: TModel;
+  /** Primary model — drives timebar navigation */
+  private readonly primaryModel: TModel;
 
   /** Reverse lookup: param name → TModelParam (built during initialize from layer declarations) */
   private paramModelMap = new Map<string, TModelParam>();
@@ -66,17 +64,14 @@ export class TimestepService {
   });
 
   constructor(
-    private configService: ConfigService,
     private layerService: LayerService,
   ) {
-    const config = this.configService.getDiscovery();
-    this.bucketRoot = config.root.replace(/\/data_spatial\/?$/, '');
-    this.defaultModel = config.default;
+    this.primaryModel = MODELS[0].name as TModel;
 
-    for (const model of config.models) {
-      this.timestepsData[model] = [];
-      this.timestepIndex[model] = new Map();
-      this.variablesData[model] = [];
+    for (const m of MODELS) {
+      this.timestepsData[m.name as TModel] = [];
+      this.timestepIndex[m.name as TModel] = new Map();
+      this.variablesData[m.name as TModel] = [];
     }
   }
 
@@ -85,11 +80,11 @@ export class TimestepService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async initialize(onProgress?: (step: 'manifest' | 'runs' | 'cache' | 'cleanup', detail?: string) => Promise<void>): Promise<void> {
-    const config = this.configService.getDiscovery();
 
     // Discover timesteps for each model
-    for (const model of config.models) {
-      const result = await discoverModel(model, config, this.bucketRoot, onProgress);
+    for (const modelDef of MODELS) {
+      const model = modelDef.name as TModel;
+      const result = await discoverModel(model, modelDef.root, onProgress);
       this.timestepsData[model] = result.timesteps;
       this.variablesData[model] = result.variables;
 
@@ -103,14 +98,15 @@ export class TimestepService {
 
     // Build ECMWF set from discovered timesteps
     const ecmwf = new Set<TTimestep>();
-    for (const ts of this.timestepsData[config.default]) {
+    for (const ts of this.timestepsData[this.primaryModel]) {
       ecmwf.add(ts.timestep);
     }
 
     // Query SW cache per param (each param against its own model's timesteps)
-    const params = new Map<TParameter, ParamState>();
+    const params = new Map<TModelParam['param'], ParamState>();
 
-    for (const model of config.models) {
+    for (const modelDef of MODELS) {
+      const model = modelDef.name as TModel;
       for (const mp of this.layerService.getParamsForModel(model)) {
         if (params.has(mp.param)) continue;
         this.paramModelMap.set(mp.param, mp);
@@ -129,7 +125,8 @@ export class TimestepService {
 
     // Log summary per model
     const fmt = (t: TTimestep) => t.slice(5, 13);
-    for (const model of config.models) {
+    for (const modelDef of MODELS) {
+      const model = modelDef.name as TModel;
       const modelTs = this.timestepsData[model];
       const vars = this.variablesData[model];
       if (modelTs.length > 0) {
@@ -137,10 +134,10 @@ export class TimestepService {
       }
     }
 
-    // Clean up cache entries older than earliest available timestep (default model)
+    // Clean up cache entries older than earliest available timestep (primary model)
     try {
-      const defaultTs = this.timestepsData[config.default];
-      const earliest = defaultTs[0]!.timestep;
+      const primaryTs = this.timestepsData[this.primaryModel];
+      const earliest = primaryTs[0]!.timestep;
       const outdatedCount = await countBeforeTimestep(earliest);
       if (outdatedCount > 0) {
         await onProgress?.('cleanup', `Deleting ${outdatedCount} outdated cache entries...`);
@@ -157,7 +154,7 @@ export class TimestepService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   /** Ensure param exists in state (for custom layers added after init) */
-  ensureParam(param: TParameter): void {
+  ensureParam(param: TModelParam['param']): void {
     if (this.state.value.params.has(param)) return;
 
     // Create new ParamState
@@ -179,7 +176,7 @@ export class TimestepService {
   // Cache State (delegates to cache.ts)
   // ─────────────────────────────────────────────────────────────────────────────
 
-  setCached(param: TParameter, timestep: TTimestep, sizeBytes: number): void {
+  setCached(param: TModelParam['param'], timestep: TTimestep, sizeBytes: number): void {
     this.ensureParam(param);  // Auto-create if needed
     cache.setCached(this.state, param, timestep, sizeBytes);
   }
@@ -192,20 +189,20 @@ export class TimestepService {
   // GPU State (delegates to gpu.ts)
   // ─────────────────────────────────────────────────────────────────────────────
 
-  setGpuLoaded(param: TParameter, timestep: TTimestep): void {
+  setGpuLoaded(param: TModelParam['param'], timestep: TTimestep): void {
     this.ensureParam(param);  // Auto-create if needed
     gpu.setGpuLoaded(this.state, param, timestep);
   }
 
-  setGpuUnloaded(param: TParameter, timestep: TTimestep): void {
+  setGpuUnloaded(param: TModelParam['param'], timestep: TTimestep): void {
     gpu.setGpuUnloaded(this.state, param, timestep);
   }
 
-  clearGpuState(param: TParameter): void {
+  clearGpuState(param: TModelParam['param']): void {
     gpu.clearGpuState(this.state, param);
   }
 
-  setGpuState(param: TParameter, timesteps: Set<TTimestep>): void {
+  setGpuState(param: TModelParam['param'], timesteps: Set<TTimestep>): void {
     gpu.setGpuState(this.state, param, timesteps);
   }
 
@@ -213,11 +210,11 @@ export class TimestepService {
   // Size Management
   // ─────────────────────────────────────────────────────────────────────────────
 
-  getSize(param: TParameter, timestep: TTimestep): number {
+  getSize(param: TModelParam['param'], timestep: TTimestep): number {
     return this.state.value.params.get(param)?.sizes.get(timestep) ?? NaN; // QC-OK: NaN = unknown size
   }
 
-  setSize(param: TParameter, timestep: TTimestep, bytes: number): void {
+  setSize(param: TModelParam['param'], timestep: TTimestep, bytes: number): void {
     const paramState = this.state.value.params.get(param);
     if (!paramState) return;
     paramState.sizes.set(timestep, bytes);
@@ -232,17 +229,17 @@ export class TimestepService {
   }
 
   next(ts: TTimestep): TTimestep {
-    const idx = this.timestepIndex[this.defaultModel].get(ts)!;
-    return this.timestepsData[this.defaultModel][idx + 1]!.timestep;
+    const idx = this.timestepIndex[this.primaryModel].get(ts)!;
+    return this.timestepsData[this.primaryModel][idx + 1]!.timestep;
   }
 
   prev(ts: TTimestep): TTimestep {
-    const idx = this.timestepIndex[this.defaultModel].get(ts)!;
-    return this.timestepsData[this.defaultModel][idx - 1]!.timestep;
+    const idx = this.timestepIndex[this.primaryModel].get(ts)!;
+    return this.timestepsData[this.primaryModel][idx - 1]!.timestep;
   }
 
   adjacent(time: Date): [TTimestep, TTimestep] {
-    const data = this.timestepsData[this.defaultModel];
+    const data = this.timestepsData[this.primaryModel];
     const targetMs = time.getTime();
 
     // Binary search for the right bracket
@@ -302,7 +299,7 @@ export class TimestepService {
    * never starts on an analysis timestep with missing backward-sum data.
    */
   first(): TTimestep {
-    const data = this.timestepsData[this.defaultModel];
+    const data = this.timestepsData[this.primaryModel];
     const firstMs = parseTimestep(data[0]!.timestep).getTime();
     const cutoffMs = firstMs + 6 * 60 * 60 * 1000;
     for (const entry of data) {
@@ -312,7 +309,7 @@ export class TimestepService {
   }
 
   last(): TTimestep {
-    const data = this.timestepsData[this.defaultModel];
+    const data = this.timestepsData[this.primaryModel];
     return data[data.length - 1]!.timestep;
   }
 
@@ -371,7 +368,7 @@ export class TimestepService {
 
   getExactTimestep(time: Date): TTimestep | null {
     const ts = formatTimestep(time);
-    return this.timestepIndex[this.defaultModel].has(ts) ? ts : null;
+    return this.timestepIndex[this.primaryModel].has(ts) ? ts : null;
   }
 
   getClosestTimestep(time: Date): Date {

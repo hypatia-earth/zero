@@ -11,7 +11,6 @@ import windRenderCode from './render.wgsl?raw';
 import windComputeCode from './compute.wgsl?raw';
 import { generateFibonacciSphere } from '../../utils/fibonacci-sphere';
 import { generateGaussianLUTs } from '../../utils/gaussian-grid';
-import { defaultConfig } from '../../config/defaults';
 import type { LayerState } from '../../config/types';
 import type { PaletteTexture } from '../../aurora/palette-texture';
 
@@ -67,7 +66,8 @@ export class WindLayer {
 
   // Line points buffer (compute output, render input)
   private linePointsBuffer!: GPUBuffer;
-  private segmentsPerLine = defaultConfig.wind.segmentsPerLine;
+  private segmentsPerLine: number;
+  private stepFactor: number;
 
   // State
   private enabled = false;
@@ -77,11 +77,13 @@ export class WindLayer {
   private lastState: LayerState | null = null;
   private needsCompute = true;
 
-  constructor(device: GPUDevice, format: GPUTextureFormat, paletteTexture: PaletteTexture, lineCount = 8192) {
+  constructor(device: GPUDevice, format: GPUTextureFormat, paletteTexture: PaletteTexture, lineCount: number, windConfig: { segmentsPerLine: number; stepFactor: number }) {
     this.device = device;
     this.format = format;
     this.paletteTexture = paletteTexture;
     this.seedCount = lineCount;
+    this.segmentsPerLine = windConfig.segmentsPerLine;
+    this.stepFactor = windConfig.stepFactor;
 
     this.createComputePipeline();
     this.createComputeBuffers();
@@ -176,7 +178,7 @@ export class WindLayer {
     this.device.queue.writeBuffer(this.ringOffsetsBuffer, 0, luts.offsets.buffer, luts.offsets.byteOffset, luts.offsets.byteLength);
 
     // Initialize compute uniforms (smaller stepFactor = smoother lines)
-    this.updateComputeUniforms(defaultConfig.wind.stepFactor);
+    this.updateComputeUniforms(this.stepFactor);
 
     // Create compute bind group
     this.computeBindGroup = this.device.createBindGroup({
@@ -383,7 +385,7 @@ export class WindLayer {
     }
 
     // Update uniforms with current interpolation factor
-    this.updateComputeUniforms(defaultConfig.wind.stepFactor);
+    this.updateComputeUniforms(this.stepFactor);
 
     const computePass = commandEncoder.beginComputePass();
     computePass.setPipeline(this.computePipeline);
@@ -456,7 +458,7 @@ export class WindLayer {
     });
 
     // Update compute uniforms with new line count
-    this.updateComputeUniforms(defaultConfig.wind.stepFactor);
+    this.updateComputeUniforms(this.stepFactor);
 
     // Recreate compute bind group
     this.computeBindGroup = this.device.createBindGroup({

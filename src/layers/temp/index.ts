@@ -4,7 +4,7 @@ import shaderCode from './temp.wgsl?raw';
 export const layer = defineLayer('temp',
   withType('texture'),
   withUI('Temperature', 'Temperature', 'weather'),
-  withParams(['temperature_2m'], 'ecmwf_ifs'),
+  withParams({ model: 'ecmwf_ifs', param: 'temperature_2m' }),
   withSlabs([{ name: 'data', sizeMB: 26 }]),
   withPalettes('temp-classic', 'temp-hypatia', 'simple-gradient'),
   withOptions(['temp.enabled', 'temp.opacity', 'temp.palette']),

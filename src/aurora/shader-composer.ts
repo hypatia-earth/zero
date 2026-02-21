@@ -6,10 +6,8 @@
  */
 
 import type { LayerDeclaration, AdvectionConfig } from '../services/layer/layer-service';
-import type { TParameter, TModel } from '../config/types';
 import { getMainShaders, getPostShaders } from './shader-loader';
-import { getParamMeta } from '../config/params-ecmwf_ifs';
-import '../config/params-ncep_gfs025';
+import { getParamMeta, type TModel, type TModelParam } from '../config/models';
 
 // Import shader modules
 import commonCode from './shaders/common.wgsl?raw';
@@ -173,30 +171,32 @@ export class ShaderComposer {
 
   /** Generate dynamic param bindings and sampler functions */
   private generateParamBindings(layers: LayerDeclaration[]): GeneratedParamShader {
-    // 1. Collect unique params from all layers (with model)
-    const allParams = new Map<TParameter, TModel>();
+    // 1. Collect unique params from all layers
+    const allParams: TModelParam[] = [];
+    const seen = new Set<string>();
     for (const layer of layers) {
       layer.params?.forEach(ref => {
-        if (!allParams.has(ref.param)) {
-          allParams.set(ref.param, ref.model);
+        if (!seen.has(ref.param)) {
+          seen.add(ref.param);
+          allParams.push(ref);
         }
       });
     }
 
-    if (allParams.size === 0) {
+    if (allParams.length === 0) {
       activeParamBindings = [];
       return { bindings: '// No dynamic params', samplers: '// No param samplers' };
     }
 
     // 2. Assign indices (stable ordering by param name)
-    const paramList = [...allParams.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    const paramConfigs: ParamBindingConfig[] = paramList.map(([param, model], idx) => ({
-      param,
-      model,
+    const paramList = [...allParams].sort((a, b) => a.param.localeCompare(b.param));
+    const paramConfigs: ParamBindingConfig[] = paramList.map((mp, idx) => ({
+      param: mp.param,
+      model: mp.model,
       index: idx,
       bindingSlot0: PARAM_BINDING_START + idx * 2,
       bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
-      categorical: getParamMeta(param).categorical ?? false,
+      categorical: getParamMeta(mp.param).categorical ?? false,
     }));
 
     // Export for globe-renderer to use

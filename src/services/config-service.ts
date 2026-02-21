@@ -9,7 +9,7 @@
  */
 
 import { defaultConfig, EARTH_RADIUS } from '../config/defaults';
-import type { ZeroConfig, TLayer, AppConfig, DiscoveryConfig } from '../config/types';
+import type { ZeroConfig, TLayer, AppConfig } from '../config/types';
 import { deepMerge } from '../utils/object';
 
 export class ConfigService {
@@ -56,10 +56,6 @@ export class ConfigService {
     return this.config.defaultLayers;
   }
 
-
-  getDiscovery(): DiscoveryConfig {
-    return this.config.discovery;
-  }
 
   getEarthRadius(): number {
     return EARTH_RADIUS;

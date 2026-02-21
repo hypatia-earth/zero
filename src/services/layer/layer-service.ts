@@ -9,10 +9,10 @@
  */
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
-import type { TLayerCategory, TModel, TModelParam, TParameter, TIfsParam, SlabConfig } from '../../config/types';
+import type { TLayerCategory, SlabConfig } from '../../config/types';
 import type { OptionsService } from '../options-service';
 import { builtInLayers } from '../../layers';
-import { getPublishedParams } from '../../config/params-ecmwf_ifs';
+import { getPublishedParams, type TModel, type TModelParam } from '../../config/models';
 import type { PaletteId } from '../palette-service';
 
 export type LayerType = 'decoration' | 'texture' | 'geometry' | 'solid';
@@ -51,6 +51,7 @@ export interface LayerDeclaration {
   shaders?: LayerShaders;      // Inline shader code
   triggers?: Record<string, ComputeTrigger>;  // Compute stage triggers
   topology?: 'triangle-list' | 'line-list';
+  config?: Record<string, unknown>;  // Layer-specific constants (serializable, transferred to worker)
   pass: RenderPass;            // Which render pass (surface, geometry, post)
   order: number;               // Render order within pass
   // Runtime fields (assigned at registration)
@@ -152,7 +153,7 @@ export class LayerService {
 
         // Migrate old params format (string[] → TModelParam[])
         if (declaration.params?.length && typeof declaration.params[0] === 'string') {
-          declaration.params = (declaration.params as unknown as string[]).map(p => ({ param: p as TIfsParam, model: 'ecmwf_ifs' as const }));
+          declaration.params = (declaration.params as unknown as string[]).map(p => ({ param: p, model: 'ecmwf_ifs' }) as TModelParam);
         }
 
         // Register with fresh index (don't trust stored index)
@@ -273,7 +274,7 @@ export class LayerService {
   }
 
   /** Get layers that use a specific data param */
-  getLayersForParam(param: TParameter): LayerDeclaration[] {
+  getLayersForParam(param: TModelParam['param']): LayerDeclaration[] {
     return this.getAll().filter(l => l.params?.some(p => p.param === param));
   }
 

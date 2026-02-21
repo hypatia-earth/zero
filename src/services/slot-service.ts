@@ -10,7 +10,8 @@
  */
 
 import { effect, signal } from '@preact/signals-core';
-import { type TTimestep, type TParameter, type TModelParam, type LayerState } from '../config/types';
+import { type TTimestep, type LayerState } from '../config/types';
+import type { TModelParam } from '../config/models';
 import type { TimestepService } from './timestep/timestep-service';
 import type { AuroraService } from './aurora-service';
 import type { QueueService } from './queue/queue-service';
@@ -26,11 +27,11 @@ const DEBUG = false;
 const fmt = (ts: TTimestep) => ts.slice(5, 13);
 
 /** 4-letter uppercase param code for logs */
-const P = (param: TParameter) => param.replace(/_/g, '').slice(0, 5).toUpperCase();
+const P = (param: TModelParam['param']) => param.replace(/_/g, '').slice(0, 5).toUpperCase();
 
 export class SlotService {
   /** Slots keyed by param name (e.g., 'temperature_2m'), not layer name */
-  private paramSlots: Map<TParameter, ParamSlots> = new Map();
+  private paramSlots: Map<TModelParam['param'], ParamSlots> = new Map();
 
   /** Params in test mode - ignore real data from queue */
   private testModeParams: Set<string> = new Set();
@@ -150,7 +151,7 @@ export class SlotService {
   /**
    * Ensure ParamSlots instances exist for all needed params
    */
-  private ensureParamSlots(params: Iterable<TParameter>): void {
+  private ensureParamSlots(params: Iterable<TModelParam['param']>): void {
     for (const param of params) {
       if (!this.paramSlots.has(param)) {
         // Determine slab count (e.g., wind has u+v = 2 slabs, but in param-centric each is separate)
@@ -179,7 +180,7 @@ export class SlotService {
    * Activate shader if required slots are loaded.
    * Sends activateSlots to worker with param name directly (param-centric API).
    */
-  private activateIfReady(param: TParameter, ps: ParamSlots, wanted: WantedState): void {
+  private activateIfReady(param: TModelParam['param'], ps: ParamSlots, wanted: WantedState): void {
     const current = ps.getActiveTimesteps();
     const pcode = P(param);
 
@@ -227,7 +228,7 @@ export class SlotService {
   }
 
   /** Deactivate param by signaling to worker that data is not ready */
-  private deactivateParam(param: TParameter): void {
+  private deactivateParam(param: TModelParam['param']): void {
     this.auroraService.deactivateSlots(param);
   }
 
@@ -235,7 +236,7 @@ export class SlotService {
    * Receive and process downloaded data for a param/timestep.
    * Called by QueueService when data download completes.
    */
-  receiveData(param: TParameter, timestep: TTimestep, slabIndex: number, data: Float32Array): boolean {
+  receiveData(param: TModelParam['param'], timestep: TTimestep, slabIndex: number, data: Float32Array): boolean {
     DEBUG && console.log(`[ParamSlot] receiveData: ${param} ${timestep} slab=${slabIndex}`);
 
     const ps = this.paramSlots.get(param);
@@ -295,14 +296,14 @@ export class SlotService {
   }
 
   /** Update shader when a slot finishes loading */
-  private updateShaderIfReady(param: TParameter, ps: ParamSlots): void {
+  private updateShaderIfReady(param: TModelParam['param'], ps: ParamSlots): void {
     const wanted = ps.wanted.value;
     if (!wanted) return;
     this.activateIfReady(param, ps, wanted);
   }
 
   /** Calculate layer state for shader interpolation */
-  getState(param: TParameter, currentTime: Date): LayerState {
+  getState(param: TModelParam['param'], currentTime: Date): LayerState {
     const ps = this.paramSlots.get(param);
     const active = ps?.getActiveTimesteps();
 
@@ -413,12 +414,12 @@ export class SlotService {
   }
 
   /** Get active timesteps for a param */
-  getActiveTimesteps(param: TParameter): TTimestep[] {
+  getActiveTimesteps(param: TModelParam['param']): TTimestep[] {
     return this.paramSlots.get(param)!.getActiveTimesteps();
   }
 
   /** Check if a param has data activated in the shader */
-  isParamReady(param: TParameter): boolean {
+  isParamReady(param: TModelParam['param']): boolean {
     const ps = this.paramSlots.get(param);
     return ps ? ps.getActiveTimesteps().length > 0 : false;
   }

@@ -1,28 +1,15 @@
 /**
- * Parameter Metadata - Data ranges and palette hints for ECMWF IFS parameters
+ * Extended Parameter Catalog — ECMWF IFS
  *
- * Ranges are educated guesses based on typical Earth values.
- * Run scripts/analyze-param-ranges.py on actual data to verify.
- * 
+ * Contains metadata for ~40 parameters (including unpublished ones).
+ * Published params are in om-ecmwf-ifs.ts; this file serves as fallback
+ * for custom layers that might use unpublished params.
+ *
  * https://openmeteo.s3.amazonaws.com/index.html
  * https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs/latest.json
  */
 
-import type { PaletteId } from '../services/palette-service';
-import type { TParameter, TIfsParam } from './types';
-
-export interface ParamMeta {
-  label: string;
-  unit: string;
-  range: [number, number];  // [min, max] for palette mapping
-  palette: PaletteId;       // palette for visualization
-  sizeEstimate: number;     // compressed bytes per timestep (0 = unknown, learned at runtime)
-  description?: string;
-  published?: boolean;      // tested and available for custom layers
-  layers?: string[];        // built-in layers using this param (e.g., ['temp'], ['wind'])
-  categorical?: boolean;    // true = nearest-neighbor temporal sampling (no interpolation)
-  backwardSum?: boolean;    // true = backward accumulation sum, undefined at analysis (T+0) timesteps
-}
+import type { ParamMeta } from './om-ecmwf-ifs';
 
 export const PARAM_METADATA: Record<string, ParamMeta> = {
   // ============================================================
@@ -427,41 +414,4 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     categorical: true,
   },
 };
-
-/** Additional param registries (populated by model-specific modules) */
-const EXTRA_REGISTRIES: Record<string, ParamMeta>[] = [];
-
-/** Register an additional param metadata registry (e.g., from params-ncep_gfs025.ts) */
-export function registerParamRegistry(registry: Record<string, ParamMeta>): void {
-  EXTRA_REGISTRIES.push(registry);
-}
-
-/**
- * Get metadata for a parameter (searches all registered model registries)
- */
-export function getParamMeta(param: TParameter): ParamMeta {
-  const meta = PARAM_METADATA[param];
-  if (meta) return meta;
-  for (const reg of EXTRA_REGISTRIES) {
-    const m = reg[param];
-    if (m) return m;
-  }
-  throw new Error(`Unknown param: ${param}`);
-}
-
-/**
- * Get all known parameter IDs
- */
-export function getKnownParams(): TIfsParam[] {
-  return Object.keys(PARAM_METADATA) as TIfsParam[];
-}
-
-/**
- * Get published params — tested and available for custom layers
- */
-export function getPublishedParams(): TIfsParam[] {
-  return Object.entries(PARAM_METADATA)
-    .filter(([, meta]) => meta.published)
-    .map(([param]) => param) as TIfsParam[];
-}
 

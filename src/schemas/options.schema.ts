@@ -7,7 +7,6 @@
 
 import { z } from 'zod';
 import type { TLayer } from '../config/types';
-import { defaultConfig } from '../config/defaults';
 import { getPaletteIdsEnum } from '../services/palette-service';
 
 // ============================================================
@@ -796,7 +795,7 @@ export const optionsSchema = z.object({
       }
     ),
     opacity: opt(
-      z.number().min(0.05).max(1).default(defaultConfig.wind.opacity),
+      z.number().min(0.05).max(1).default(0.8),
       {
         label: 'Wind opacity',
         description: 'Transparency of wind lines',
@@ -1089,12 +1088,12 @@ export const defaultOptions: ZeroOptions = {
   },
   earth: { enabled: true, opacity: 1 },
   sun: { enabled: true, opacity: 1 },
-  graticule: { enabled: true, opacity: defaultConfig.graticule.opacity, fontSize: 12, lineWidth: 2 },
+  graticule: { enabled: true, opacity: 0.3, fontSize: 12, lineWidth: 2 },
   temp: { enabled: true, opacity: 0.6, palette: 'temp-classic' },
   rain: { enabled: false, opacity: 0.6 },
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },
-  wind: { enabled: false, seedCount: 8192, opacity: defaultConfig.wind.opacity, speed: 30 },
+  wind: { enabled: false, seedCount: 8192, opacity: 0.8, speed: 30 },
   pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },

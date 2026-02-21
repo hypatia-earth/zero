@@ -15,14 +15,7 @@ import type { LayerService } from '../../services/layer/layer-service';
 import type { SlotService } from '../../services/slot-service';
 import type { Progress } from '../progress';
 import type { LoadedAssets } from './assets';
-import type { TModel } from '../../config/types';
-import { getPublishedParams } from '../../config/params-ecmwf_ifs';
-
-/** GPU buffer size per model grid */
-const MODEL_BUFFER_MB: Record<TModel, number> = {
-  ecmwf_ifs: 26,       // O1280: 6,599,680 × 4 bytes
-  ncep_gfs025: 4,      // 721 × 1440 × 4 bytes
-};
+import { getPublishedParams, MODEL_BUFFER_MB, type TModel } from '../../config/models';
 
 export async function runGpuInitPhase(
   canvas: HTMLCanvasElement,

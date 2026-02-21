@@ -13,15 +13,16 @@ export interface ParamMeta {
   range: [number, number];
   palette: PaletteId;
   sizeEstimate: number;     // compressed bytes per timestep (0 = unknown)
-  description: string;
-  published: boolean;       // available for custom layers
-  layers: string[];         // built-in layers using this param
+  description?: string;
+  published?: boolean;      // available for custom layers
+  layers?: string[];        // built-in layers using this param
   categorical?: boolean;    // nearest-neighbor temporal sampling
   backwardSum?: boolean;    // backward accumulation sum, undefined at T+0
 }
 
 export const ECMWF_IFS = {
   name: 'ecmwf_ifs',
+  root: 'https://openmeteo.s3.amazonaws.com/data_spatial/ecmwf_ifs',
   bufferMB: 26,             // O1280: 6,599,680 × 4 bytes ≈ 26 MB
   gridPoints: 6_599_680,
   params: {
@@ -68,6 +69,6 @@ export const ECMWF_IFS = {
       published: true, layers: ['pressure'],
     },
   },
-} as const satisfies { name: string; bufferMB: number; gridPoints: number; params: Record<string, ParamMeta> };
+} as const satisfies { name: string; root: string; bufferMB: number; gridPoints: number; params: Record<string, ParamMeta> };
 
 export type TEcmwfIfsParam = keyof typeof ECMWF_IFS.params;

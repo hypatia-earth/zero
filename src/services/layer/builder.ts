@@ -12,7 +12,8 @@
  */
 
 import type { LayerDeclaration, LayerType, ComputeTrigger, RenderPass, LayerShaders, AdvectionConfig } from './layer-service';
-import type { TLayerCategory, TIfsParam, TGfsParam, TModelParam, SlabConfig } from '../../config/types';
+import type { TLayerCategory, SlabConfig } from '../../config/types';
+import type { TModelParam } from '../../config/models';
 import type { PaletteId } from '../palette-service';
 
 export interface LayerFeature {
@@ -35,13 +36,11 @@ export function withType(type: LayerType): LayerFeature {
   };
 }
 
-export function withParams(params: TIfsParam[], model: 'ecmwf_ifs'): LayerFeature;
-export function withParams(params: TGfsParam[], model: 'ncep_gfs025'): LayerFeature;
-export function withParams(params: string[], model: string): LayerFeature {
+export function withParams(...mps: TModelParam[]): LayerFeature {
   return {
     apply: (d) => ({
       ...d,
-      params: [...(d.params ?? []), ...params.map(p => ({ param: p, model })) as TModelParam[]],
+      params: [...(d.params ?? []), ...mps],
     }),
   };
 }
@@ -103,6 +102,12 @@ export function withRender(config: { pass?: RenderPass; order?: number; topology
       if (config.topology) result.topology = config.topology;
       return result;
     },
+  };
+}
+
+export function withConfig(config: Record<string, unknown>): LayerFeature {
+  return {
+    apply: (d) => ({ ...d, config }),
   };
 }
 

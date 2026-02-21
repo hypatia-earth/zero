@@ -13,10 +13,9 @@ import { effect } from '@preact/signals-core';
 import type { LayerService, LayerDeclaration } from '../services/layer/layer-service';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
-import type { TIfsParam } from '../config/types';
 import { defineLayer, withType, withUI, withParams, withPalettes, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
 import { DialogHeader } from './dialog-header';
-import { PARAM_METADATA, getParamMeta, getPublishedParams, type ParamMeta } from '../config/params-ecmwf_ifs';
+import { getParamMeta, getPublishedParams, type ParamMeta, type TModelParam } from '../config/models';
 import { PALETTES, PALETTE_IDS, type PaletteId } from '../services/palette-service';
 import { PaletteComponent } from './palette-component';
 import type { ModalService } from '../services/modal-service';
@@ -33,7 +32,7 @@ interface CreateLayerDialogAttrs {
 // Params available for custom layers (from metadata)
 const ALLOWED_PARAMS = getPublishedParams();
 
-const DEFAULT_PARAM: TIfsParam = 'temperature_2m';
+const DEFAULT_PARAM: TModelParam['param'] = 'temperature_2m';
 const DEFAULT_PALETTE: PaletteId = PALETTE_IDS[0] as PaletteId;  // temp-classic
 
 // Generate sampler function name from param (e.g., 'temperature_2m' -> 'sampleParam_temperature_2m')
@@ -45,7 +44,7 @@ function getSamplerName(param: string): string {
 // Build DATA_PARAMS from metadata
 const DATA_PARAMS = ALLOWED_PARAMS.map(p => ({
   value: p,
-  label: PARAM_METADATA[p]!.label
+  label: getParamMeta(p).label,
 }));
 
 // Build palette options for combobox
@@ -72,7 +71,7 @@ type TryPhase = 'idle' | 'compiling' | 'loading';
 
 interface FormState {
   id: string;
-  param: TIfsParam;
+  param: TModelParam['param'];
   paramMeta: ParamMeta;
   paletteId: PaletteId;
   shaderCode: string;
@@ -120,7 +119,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     }
 
     state.id = layer.id;
-    state.param = paramRef.param as TIfsParam;  // user layers are IFS-only
+    state.param = paramRef.param;
     state.paramMeta = getParamMeta(paramRef.param);
     state.paletteId = (layer.palettes?.[0] ?? DEFAULT_PALETTE) as PaletteId;
     state.shaderCode = shaderCode;
@@ -223,7 +222,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const declaration = defineLayer(state.id,
       withType('texture'),
       withUI(state.id, state.id, 'custom'),
-      withParams([state.param], 'ecmwf_ifs'),
+      withParams({ model: 'ecmwf_ifs', param: state.param } as TModelParam),
       withPalettes(state.paletteId),
       withOptions([`${state.id}.enabled`, `${state.id}.opacity`]),
       withBlend(blendFn),
@@ -283,7 +282,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const declaration = defineLayer('_preview',
       withType('texture'),
       withUI('_preview', '_preview', 'custom'),
-      withParams([state.param], 'ecmwf_ifs'),
+      withParams({ model: 'ecmwf_ifs', param: state.param } as TModelParam),
       withOptions([]),  // Preview has no options
       withBlend(blendFn),
       withShader('main', finalizedCode),
@@ -490,7 +489,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                   'data-testid': 'layer-param-select',
                   value: state.param,
                   onchange: (e: Event) => {
-                    state.param = (e.target as HTMLSelectElement).value as TIfsParam;
+                    state.param = (e.target as HTMLSelectElement).value as TModelParam['param'];
                     state.paramMeta = getParamMeta(state.param);
                     updateShaderTemplate();
                   },
