@@ -93,8 +93,14 @@ export async function discoverModel(
     completedValidTimes,
     incompleteRunPrefix,
     incompleteRunTimesteps,
-    bucketRoot
+    bucketRoot,
+    basePrefix
   );
+
+  const analysisCount = timesteps.filter(t => t.isAnalysis).length;
+  if (analysisCount > 0) {
+    console.log(`[Discovery] ${model}: ${analysisCount} analysis (T+0) timesteps flagged — backward sum params use previous run`);
+  }
 
   return { timesteps, variables };
 }
@@ -192,6 +198,16 @@ async function listS3Files(prefix: string, bucketRoot: string): Promise<string[]
 // Run & Timestep Generation
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Build run prefix for a given datetime (e.g. data_spatial/ecmwf_ifs/2026/02/21/0600Z/) */
+function runPrefixForDate(basePrefix: string, datetime: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const y = datetime.getUTCFullYear();
+  const m = pad(datetime.getUTCMonth() + 1);
+  const d = pad(datetime.getUTCDate());
+  const h = pad(datetime.getUTCHours());
+  return `${basePrefix}${y}/${m}/${d}/${h}00Z/`;
+}
+
 function generateRuns(basePrefix: string, firstRun: Date, lastRun: Date): ModelRun[] {
   const pad = (n: number) => n.toString().padStart(2, '0');
   const runs: ModelRun[] = [];
@@ -222,29 +238,38 @@ function generateTimesteps(
   completedValidTimes: string[],
   incompleteRunPrefix: string | null,
   incompleteRunTimesteps: string[] | null,
-  bucketRoot: string
+  bucketRoot: string,
+  basePrefix: string
 ): Timestep[] {
   const timesteps: Timestep[] = [];
   const seen = new Set<TTimestep>();
   const GAP_FILL_HOURS = [0, 1, 2, 3, 4, 5]; // First 6 hours from older runs
 
   // 1. Add incomplete run timesteps first (highest priority)
+  //    isAnalysis: true for T+0 (timestep matches run start) — backward sum params undefined there
   if (incompleteRunPrefix && incompleteRunTimesteps) {
-    const runMatch = /\/(\d{4}Z)\/$/.exec(incompleteRunPrefix);
+    const runMatch = /\/(\d{4})\/(\d{2})\/(\d{2})\/(\d{2})00Z\/$/.exec(incompleteRunPrefix);
     if (!runMatch) {
       console.error(`[Discovery] Invalid run prefix format: ${incompleteRunPrefix}`);
       throw new Error('Weather data server returned unexpected format');
     }
-    const runTime = runMatch[1]!;
+    const runTime = `${runMatch[4]}00Z`;
+    const incompleteRunDate = new Date(`${runMatch[1]}-${runMatch[2]}-${runMatch[3]}T${runMatch[4]}:00:00Z`);
+    const incompleteRunStart = formatTimestep(incompleteRunDate);
+    // Previous run's prefix — backward sum params use this at T+0 (where this time is T+6)
+    const incompletePrevPrefix = runPrefixForDate(basePrefix, new Date(incompleteRunDate.getTime() - 6 * 3600000));
 
     for (const tsStr of incompleteRunTimesteps) {
       const ts = tsStr as TTimestep;
       if (!seen.has(ts)) {
+        const isT0 = ts === incompleteRunStart;
         timesteps.push({
           index: 0,
           timestep: ts,
           run: runTime,
           url: `${bucketRoot}/${incompleteRunPrefix}${ts}.om`,
+          isAnalysis: isT0,
+          ...(isT0 && { fallbackUrl: `${bucketRoot}/${incompletePrevPrefix}${ts}.om` }),
         });
         seen.add(ts);
       }
@@ -259,20 +284,30 @@ function generateTimesteps(
 
     if (isCompletedRun) {
       // Completed run: use valid_times from latest.json
+      // isAnalysis: true for T+0 (first valid_time matching reference_time)
+      // fallbackUrl: previous run's file where this time is T+6 (backward sums defined)
+      const completedRunTs = formatTimestep(completedRunTime);
+      const completedPrevPrefix = runPrefixForDate(basePrefix, new Date(completedRunTime.getTime() - 6 * 3600000));
       for (const isoTime of completedValidTimes) {
         const ts = formatTimestep(new Date(isoTime));
         if (!seen.has(ts)) {
+          const isT0 = ts === completedRunTs;
           timesteps.push({
             index: 0,
             timestep: ts,
             run: run.run,
             url: `${bucketRoot}/${run.prefix}${ts}.om`,
+            isAnalysis: isT0,
+            ...(isT0 && { fallbackUrl: `${bucketRoot}/${completedPrevPrefix}${ts}.om` }),
           });
           seen.add(ts);
         }
       }
     } else {
       // Older runs: compute gap-fill timesteps (first 6 hours)
+      // isAnalysis: true for hours===0 (T+0) — backward sum params undefined there
+      // fallbackUrl: previous run's file where this time is T+6
+      const gapFillPrevPrefix = runPrefixForDate(basePrefix, new Date(run.datetime.getTime() - 6 * 3600000));
       for (const hours of GAP_FILL_HOURS) {
         const tsDate = new Date(run.datetime.getTime() + hours * 60 * 60 * 1000);
         const ts = formatTimestep(tsDate);
@@ -282,6 +317,8 @@ function generateTimesteps(
             timestep: ts,
             run: run.run,
             url: `${bucketRoot}/${run.prefix}${ts}.om`,
+            isAnalysis: hours === 0,
+            ...(hours === 0 && { fallbackUrl: `${bucketRoot}/${gapFillPrevPrefix}${ts}.om` }),
           });
           seen.add(ts);
         }

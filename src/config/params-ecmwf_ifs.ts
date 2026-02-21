@@ -21,6 +21,7 @@ export interface ParamMeta {
   published?: boolean;      // tested and available for custom layers
   layers?: string[];        // built-in layers using this param (e.g., ['temp'], ['wind'])
   categorical?: boolean;    // true = nearest-neighbor temporal sampling (no interpolation)
+  backwardSum?: boolean;    // true = backward accumulation sum, undefined at analysis (T+0) timesteps
 }
 
 export const PARAM_METADATA: Record<string, ParamMeta> = {
@@ -108,6 +109,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     sizeEstimate: 8_000_000,
     published: true,
     layers: ['rain'],
+    backwardSum: true,  // backward accumulation — value undefined at analysis (T+0) timesteps
   },
   'showers': {
     label: 'Showers',

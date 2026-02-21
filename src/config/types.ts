@@ -99,6 +99,10 @@ export interface Timestep {
   timestep: TTimestep;
   run: string;
   url: string;
+  /** T+0 of its model run — backward sum params (e.g. precipitation) are undefined here */
+  isAnalysis: boolean;
+  /** For analysis timesteps: URL to previous run's file where this time is T+6 (backward sums defined) */
+  fallbackUrl?: string;
 }
 
 /** Layer data state for interpolation */

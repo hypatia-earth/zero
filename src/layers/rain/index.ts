@@ -2,13 +2,14 @@ import { defineLayer, withType, withUI, withParams, withAdvection, withSlabs, wi
 export const layer = defineLayer('rain',
   withType('texture'),
   withUI('Precipitation', 'Precipitation', 'weather'),
-  withParams(['precipitation_type'], 'ecmwf_ifs'),
+  withParams(['precipitation_type', 'precipitation'], 'ecmwf_ifs'),
   withParams(['wind_u_component_1000hPa', 'wind_v_component_1000hPa'], 'ncep_gfs025'),
   withAdvection({
     uParam: { model: 'ncep_gfs025', param: 'wind_u_component_1000hPa' },
     vParam: { model: 'ncep_gfs025', param: 'wind_v_component_1000hPa' },
     targets: [
       { model: 'ecmwf_ifs', param: 'precipitation_type' },
+      { model: 'ecmwf_ifs', param: 'precipitation' },
     ],
   }),
   withSlabs([{ name: 'data', sizeMB: 26 }]),
