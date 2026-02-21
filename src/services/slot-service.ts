@@ -66,8 +66,8 @@ export class SlotService {
       if (!this.initialized) return;
 
       const newTimeslots = parseInt(opts.gpu.timeslotsPerLayer, 10);
-      const newActiveParamMap = this.collectActiveParams();
-      const newActiveParamsStr = [...newActiveParamMap.keys()].sort().join(',');
+      const activeParams = this.collectActiveParams();
+      const newActiveParamsStr = activeParams.map(mp => mp.param).sort().join(',');
       const currTime = time.toISOString().slice(11, 16);
 
       // Diff
@@ -115,35 +115,36 @@ export class SlotService {
       }
 
       // Ensure ParamSlots exist for all active params
-      this.ensureParamSlots(newActiveParamMap.keys());
+      this.ensureParamSlots(activeParams.map(mp => mp.param));
 
       // Update wanted state and activate for each param
-      for (const [param, mp] of newActiveParamMap) {
-        const ps = this.paramSlots.get(param)!;
+      for (const mp of activeParams) {
+        const ps = this.paramSlots.get(mp.param)!;
         const wanted = this.computeWanted(time, mp);
-        this.activateIfReady(param, ps, wanted);
+        this.activateIfReady(mp.param, ps, wanted);
 
         ps.wanted.value = wanted;
       }
     });
   }
 
-  /**
-   * Collect all unique params from enabled layers (built-in + custom)
-   * Returns Map: TParameter key (internal indexing) → TModelParam (model coupling)
-   */
-  private collectActiveParams(): Map<TParameter, TModelParam> {
-    const params = new Map<TParameter, TModelParam>();
+  /** Collect unique params from enabled layers (deduped by param name) */
+  private collectActiveParams(): TModelParam[] {
+    const seen = new Set<string>();
+    const result: TModelParam[] = [];
 
     for (const layer of this.layerService.getAll()) {
       if (this.layerService.isLayerEnabled(layer.id) && layer.params) {
         for (const mp of layer.params) {
-          if (!params.has(mp.param)) params.set(mp.param, mp);
+          if (!seen.has(mp.param)) {
+            seen.add(mp.param);
+            result.push(mp);
+          }
         }
       }
     }
 
-    return params;
+    return result;
   }
 
   /**
@@ -333,15 +334,15 @@ export class SlotService {
     const time = this.stateService.viewState.value.time;
 
     // Collect active params and enabled layer IDs
-    const activeParamMap = this.collectActiveParams();
-    if (activeParamMap.size === 0) {
+    const activeParams = this.collectActiveParams();
+    if (activeParams.length === 0) {
       this.initialized = true;
       DEBUG && console.log('[ParamSlot] Initialized (no params active)');
       return;
     }
 
     // Ensure slots exist
-    this.ensureParamSlots(activeParamMap.keys());
+    this.ensureParamSlots(activeParams.map(mp => mp.param));
 
     // Get enabled layer IDs for getUrlTimeTasks
     const activeLayers = this.layerService.getAll()
@@ -353,11 +354,11 @@ export class SlotService {
 
     // Mark loading and compute wanted state for activation after download
     const wantedByParam = new Map<string, WantedState>();
-    for (const [param, mp] of activeParamMap) {
-      const ps = this.paramSlots.get(param)!;
+    for (const mp of activeParams) {
+      const ps = this.paramSlots.get(mp.param)!;
       const wanted = this.computeWanted(time, mp);
-      wantedByParam.set(param, wanted);
-      DEBUG && console.log(`[ParamSlot] ${P(param)} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
+      wantedByParam.set(mp.param, wanted);
+      DEBUG && console.log(`[ParamSlot] ${P(mp.param)} init ${wanted.mode}: ${wanted.priority.map(fmt).join(', ')}`);
       ps.setLoading(wanted.priority);
     }
 
@@ -399,11 +400,11 @@ export class SlotService {
     );
 
     // Activate for all params
-    for (const [param] of activeParamMap) {
-      const ps = this.paramSlots.get(param)!;
-      const wanted = wantedByParam.get(param)!;
+    for (const mp of activeParams) {
+      const ps = this.paramSlots.get(mp.param)!;
+      const wanted = wantedByParam.get(mp.param)!;
       ps.wanted.value = wanted;
-      this.activateIfReady(param, ps, wanted);
+      this.activateIfReady(mp.param, ps, wanted);
     }
 
     this.initialized = true;
