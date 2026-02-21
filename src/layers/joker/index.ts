@@ -14,8 +14,15 @@ import { defineLayer, withUI, withOptions, withSolidColor, withRender } from '..
 export const jokerLayer = defineLayer('joker',
   withSolidColor(),
   withUI('Joker', 'Joker', 'reference'),
-  withOptions(['joker.enabled', 'joker.opacity', 'joker.color']),
-  withRender({ pass: 'surface', order: 5 }),
+  withOptions([
+    'joker.enabled',
+    'joker.opacity',
+    'joker.color',
+  ]),
+  withRender({
+    pass: 'surface',
+    order: 5,
+  }),
 );
 
 /** Default Joker options for testing */

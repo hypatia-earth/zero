@@ -3,8 +3,14 @@ import { defineLayer, withType, withUI, withOptions, withBlend, withRender, asBu
 export const layer = defineLayer('earth',
   withType('decoration'),
   withUI('Earth', 'Earth', 'celestial'),
-  withOptions(['earth.enabled', 'earth.opacity']),
+  withOptions([
+    'earth.enabled',
+    'earth.opacity',
+  ]),
   withBlend('blendBasemap'),
-  withRender({ pass: 'surface', order: 0 }),
+  withRender({
+    pass: 'surface',
+    order: 0,
+  }),
   asBuiltIn(),
 );

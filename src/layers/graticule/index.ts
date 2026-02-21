@@ -9,7 +9,12 @@ export interface GraticuleLodLevel {
 export const layer = defineLayer('graticule',
   withType('decoration'),
   withUI('Grid', 'Grid', 'reference'),
-  withOptions(['graticule.enabled', 'graticule.opacity', 'graticule.fontSize', 'graticule.lineWidth']),
+  withOptions([
+    'graticule.enabled',
+    'graticule.opacity',
+    'graticule.fontSize',
+    'graticule.lineWidth',
+  ]),
   withBlend('blendGraticule'),
   withConfig({
     labelMaxRadiusPx: 500,
@@ -21,6 +26,9 @@ export const layer = defineLayer('graticule',
       { spacing: 5, zoomInPx: 650, zoomOutPx: 600 },
     ],
   }),
-  withRender({ pass: 'surface', order: 90 }),
+  withRender({
+    pass: 'surface',
+    order: 90,
+  }),
   asBuiltIn(),
 );

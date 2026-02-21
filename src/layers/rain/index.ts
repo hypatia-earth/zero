@@ -18,8 +18,13 @@ export const layer = defineLayer('rain',
       { model: 'ecmwf_ifs', param: 'precipitation' },
     ],
   }),
-  withSlabs([{ name: 'data', sizeMB: 26 }]),
-  withPalettes('rain-wet-intensity', 'rain-frozen-intensity'),
+  withSlabs([
+    { name: 'data', sizeMB: 26 },
+  ]),
+  withPalettes(
+    'rain-wet-intensity',
+    'rain-frozen-intensity',
+  ),
   withConfig({
     density: 0.16,
     sizePx: 0.5625,
@@ -35,8 +40,14 @@ export const layer = defineLayer('rain',
       freezingDrizzle: [0.75, 0.85, 0.9],
     },
   }),
-  withOptions(['rain.enabled', 'rain.opacity']),
+  withOptions([
+    'rain.enabled',
+    'rain.opacity',
+  ]),
   withBlend('blendRain'),
-  withRender({ pass: 'surface', order: 20 }),
+  withRender({
+    pass: 'surface',
+    order: 20,
+  }),
   asBuiltIn(),
 );

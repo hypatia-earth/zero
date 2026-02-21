@@ -20,8 +20,18 @@ export const layer = defineLayer('wind',
     stepFactor: 0.005,
     radius: 1.0,
   }),
-  withOptions(['wind.enabled', 'wind.opacity', 'wind.speed']),
-  withCompute({ trace: 'time-change' }),
-  withRender({ pass: 'geometry', order: 20, topology: 'line-list' }),
+  withOptions([
+    'wind.enabled',
+    'wind.opacity',
+    'wind.speed',
+  ]),
+  withCompute({
+    trace: 'time-change',
+  }),
+  withRender({
+    pass: 'geometry',
+    order: 20,
+    topology: 'line-list',
+  }),
   asBuiltIn(),
 );

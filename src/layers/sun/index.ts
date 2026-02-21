@@ -3,7 +3,10 @@ import { defineLayer, withType, withUI, withOptions, withBlend, withPost, withRe
 export const layer = defineLayer('sun',
   withType('decoration'),
   withUI('Sun', 'Sun', 'celestial'),
-  withOptions(['sun.enabled', 'sun.opacity']),
+  withOptions([
+    'sun.enabled',
+    'sun.opacity',
+  ]),
   withBlend('blendSun'),
   withPost('postSun'),
   withConfig({
@@ -12,6 +15,9 @@ export const layer = defineLayer('sun',
     coreColor: [1.0, 0.7, 0.3],
     glowColor: [1.0, 0.6, 0.2],
   }),
-  withRender({ pass: 'surface', order: 100 }),
+  withRender({
+    pass: 'surface',
+    order: 100,
+  }),
   asBuiltIn(),
 );
