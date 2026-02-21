@@ -11,6 +11,7 @@ const DEBUG = true;
 
 export class CapabilitiesService {
   float32Filterable = false;
+  maxStorageBuffers = 0;
 
   async init(): Promise<void> {
     if (!navigator.gpu) {
@@ -48,6 +49,7 @@ export class CapabilitiesService {
     }
 
     this.float32Filterable = adapter.features.has('float32-filterable');
+    this.maxStorageBuffers = adapter.limits.maxStorageBuffersPerShaderStage;
 
     const MB = (n: number) => `${Math.floor(n / 1024 / 1024)} MB`;
 

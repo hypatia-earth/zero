@@ -131,6 +131,12 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['paramDt2', 'vec4f'],    // params 8-11
   ['paramDt3', 'vec4f'],    // params 12-15
 
+  // paramSize: 4 x vec4u = 64 bytes (grid point count per param = t1 offset in combined buffer)
+  ['paramSize0', 'vec4u'],  // params 0-3
+  ['paramSize1', 'vec4u'],  // params 4-7
+  ['paramSize2', 'vec4u'],  // params 8-11
+  ['paramSize3', 'vec4u'],  // params 12-15
+
   // Rain particle uniforms
   ['rainFadeDuration', 'f32'],   // particle fade cycle in seconds (~1.0)
   ['rainDensity', 'f32'],        // items per px² (0.01 = 1 per 10×10)
@@ -235,6 +241,11 @@ export const U = GLOBE_UNIFORMS.offsets as {
   paramDt1: number;
   paramDt2: number;
   paramDt3: number;
+  // Per-param grid point count (t1 offset in combined buffer)
+  paramSize0: number;
+  paramSize1: number;
+  paramSize2: number;
+  paramSize3: number;
   // Rain particle uniforms
   rainFadeDuration: number;
   rainDensity: number;
@@ -267,6 +278,7 @@ export const getUserLayerPaletteIndexOffset = (index: number) => packedVec4Offse
 export const getParamLerpOffset  = (index: number) => packedVec4Offset(U.paramLerp0, index);
 export const getParamReadyOffset = (index: number) => packedVec4Offset(U.paramReady0, index);
 export const getParamDtOffset    = (index: number) => packedVec4Offset(U.paramDt0, index);
+export const getParamSizeOffset  = (index: number) => packedVec4Offset(U.paramSize0, index);
 
 // Expected size - can be used for buffer allocation
 export const UNIFORM_BUFFER_SIZE = GLOBE_UNIFORMS.size;

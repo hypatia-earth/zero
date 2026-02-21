@@ -6,14 +6,15 @@
 // ─── Hash ───────────────────────────────────────────────────────────────────
 
 fn rainHash1(p: vec2f) -> f32 {
-  return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
+  var p3 = fract(vec3f(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
 }
 
 fn rainHash2(p: vec2f) -> vec2f {
-  return vec2f(
-    fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453),
-    fract(sin(dot(p, vec2f(269.5, 183.3))) * 43758.5453),
-  );
+  var p3 = fract(vec3f(p.xyx) * vec3f(0.1031, 0.1030, 0.0973));
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.xx + p3.yz) * p3.zy);
 }
 
 // ─── SDF (unit radius, < 0 = inside) ───────────────────────────────────────

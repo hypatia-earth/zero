@@ -8,7 +8,7 @@ import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } fro
 import { PressureLayer } from '../layers/pressure';
 import { WindLayer } from '../layers/wind';
 import { GraticuleAnimator, GRATICULE_BUFFER_SIZE } from '../layers/graticule/graticule-animator';
-import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset, getParamDtOffset } from './globe-uniforms';
+import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset, getParamDtOffset, getParamSizeOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
 
@@ -78,8 +78,8 @@ export class GlobeRenderer {
   private pressureLayer!: PressureLayer;
   // Wind layer
   private windLayer!: WindLayer;
-  // Dynamic param buffers (keyed by param name)
-  private paramBuffers = new Map<string, { slot0: GPUBuffer; slot1: GPUBuffer }>();
+  // Dynamic param buffers (keyed by param name) — combined t0+t1 buffers
+  private paramBuffers = new Map<string, GPUBuffer>();
   // Current param binding config (set by recreatePipeline)
   private currentParamBindings: ParamBindingConfig[] = [];
   // Graticule animation
@@ -826,12 +826,9 @@ export class GlobeRenderer {
 
     // Add dynamic param buffer entries (placeholder until data loads)
     for (const cfg of this.currentParamBindings) {
-      const buffers = this.paramBuffers.get(cfg.param);
-      const slot0 = buffers?.slot0 ?? this.placeholderBuffer;  // QC-OK: GPU needs valid buffer
-      const slot1 = buffers?.slot1 ?? this.placeholderBuffer;  // QC-OK: GPU needs valid buffer
+      const buffer = this.paramBuffers.get(cfg.param) ?? this.placeholderBuffer;  // QC-OK: GPU needs valid buffer
       entries.push(
-        { binding: cfg.bindingSlot0, resource: { buffer: slot0 } },
-        { binding: cfg.bindingSlot1, resource: { buffer: slot1 } }
+        { binding: cfg.bindingSlot, resource: { buffer } }
       );
     }
 
@@ -847,11 +844,11 @@ export class GlobeRenderer {
   }
 
   /**
-   * Set dynamic param buffers for bind group creation
+   * Set combined param buffer (t0+t1 packed) for bind group creation
    * Called when active slots change for a param
    */
-  setParamBuffers(param: string, slot0: GPUBuffer, slot1: GPUBuffer): void {
-    this.paramBuffers.set(param, { slot0, slot1 });
+  setParamBuffer(param: string, buffer: GPUBuffer): void {
+    this.paramBuffers.set(param, buffer);
     this.recreateBindGroup();
   }
 
@@ -871,6 +868,14 @@ export class GlobeRenderer {
   setParamDt(paramIndex: number, dtSeconds: number): void {
     const offset = getParamDtOffset(paramIndex);
     this.uniformView.setFloat32(offset, dtSeconds, true);
+  }
+
+  /**
+   * Set param grid point count (t1 offset in combined buffer)
+   */
+  setParamSize(paramIndex: number, gridPoints: number): void {
+    const offset = getParamSizeOffset(paramIndex);
+    this.uniformView.setUint32(offset, gridPoints, true);
   }
 
   /**
@@ -898,11 +903,10 @@ export class GlobeRenderer {
       { binding: 21, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },  // graticule lines
     ];
 
-    // Add dynamic param entries from activeParamBindings
+    // Add dynamic param entries from activeParamBindings (single combined buffer per param)
     for (const cfg of this.currentParamBindings) {
       entries.push(
-        { binding: cfg.bindingSlot0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-        { binding: cfg.bindingSlot1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }
+        { binding: cfg.bindingSlot, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }
       );
     }
 

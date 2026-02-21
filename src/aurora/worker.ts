@@ -124,10 +124,12 @@ const paramSlotStates = new Map<string, SlotState>();
 // Dynamic param binding registry (built during init, matches ShaderComposer)
 interface ParamBinding {
   index: number;          // 0, 1, 2, ...
-  bindingSlot0: number;   // 50, 52, 54, ...
-  bindingSlot1: number;   // 51, 53, 55, ...
+  gridPoints: number;     // grid point count for combined buffer offset
 }
 const paramBindings = new Map<string, ParamBinding>();
+
+// Combined param buffers (t0+t1 packed into single GPU buffer per param)
+const paramCombinedBuffers = new Map<string, GPUBuffer>();
 
 // Find which layer uses a given param (from layerRegistry)
 function findLayerForParam(param: string): string | undefined {
@@ -153,24 +155,62 @@ function rebuildParamBindings(): void {
   for (const cfg of activeParamBindings) {
     paramBindings.set(cfg.param, {
       index: cfg.index,
-      bindingSlot0: cfg.bindingSlot0,
-      bindingSlot1: cfg.bindingSlot1,
+      gridPoints: cfg.gridPoints,
     });
   }
 }
 
-// Rebind all active param buffers to renderer
+/** Write paramSize uniforms for all active param bindings */
+function writeParamSizes(): void {
+  if (!renderer) return;
+  for (const [, binding] of paramBindings) {
+    renderer.setParamSize(binding.index, binding.gridPoints);
+  }
+}
+
+/** Create/update combined buffer for a param and bind to renderer via GPU copy */
+function updateCombinedBuffer(param: string, slot0: number, slot1: number): void {
+  if (!renderer) return;
+  const binding = paramBindings.get(param);
+  if (!binding) return;
+  const store = paramStores.get(param);
+  if (!store) return;
+
+  const buffer0 = store.getSlotBuffer(slot0, 0);
+  const buffer1 = store.getSlotBuffer(slot1, 0);
+  if (!buffer0 || !buffer1) return;
+
+  const dataBytes = binding.gridPoints * 4;
+  const combinedSize = dataBytes * 2;
+  const device = renderer.getDevice();
+
+  // Create or reuse combined buffer
+  let combined = paramCombinedBuffers.get(param);
+  if (!combined || combined.size !== combinedSize) {
+    combined?.destroy();
+    combined = device.createBuffer({
+      size: combinedSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      label: `combined-${param}`,
+    });
+    paramCombinedBuffers.set(param, combined);
+  }
+
+  // GPU copy: t0 at offset 0, t1 at offset dataBytes
+  const encoder = device.createCommandEncoder();
+  encoder.copyBufferToBuffer(buffer0, 0, combined, 0, dataBytes);
+  encoder.copyBufferToBuffer(buffer1, 0, combined, dataBytes, dataBytes);
+  device.queue.submit([encoder.finish()]);
+
+  renderer.setParamBuffer(param, combined);
+}
+
+// Rebind all active param buffers to renderer (after pipeline recreation)
 function rebindAllParamBuffers(): void {
   if (!renderer) return;
   for (const [param, state] of paramSlotStates) {
     if (!state.dataReady) continue;
-    const store = paramStores.get(param);
-    if (!store) continue;
-    const buffer0 = store.getSlotBuffer(state.slot0, 0);
-    const buffer1 = store.getSlotBuffer(state.slot1, 0);
-    if (buffer0 && buffer1) {
-      renderer.setParamBuffers(param, buffer0, buffer1);
-    }
+    updateCombinedBuffer(param, state.slot0, state.slot1);
   }
 }
 
@@ -449,6 +489,7 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 
   // Build param binding registry from ShaderComposer (must be after compose())
   rebuildParamBindings();
+  writeParamSizes();
   if (initLayers.length === 0) {
     console.error('[Aurora] No layers registered for shader composition');
   }
@@ -647,14 +688,8 @@ function handleActivateSlots(data: Extract<AuroraRequest, { type: 'activateSlots
     }
   }
 
-  // Always bind to generic param bindings if this param is used by any custom layer
-  if (paramBindings.has(param)) {
-    const buffer0 = store.getSlotBuffer(slot0, 0);
-    const buffer1 = store.getSlotBuffer(slot1, 0);
-    if (buffer0 && buffer1) {
-      renderer!.setParamBuffers(param, buffer0, buffer1);
-    }
-  }
+  // Combined buffer for fragment shader param bindings
+  updateCombinedBuffer(param, slot0, slot1);
 }
 
 function handleDeactivateSlots(data: Extract<AuroraRequest, { type: 'deactivateSlots' }>): void {
@@ -686,6 +721,7 @@ function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerU
   queuePipelineRecreation(composedShaders)
     .then(() => {
       rebuildParamBindings();
+      writeParamSizes();
       rebindAllParamBuffers();
       console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
       self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: true });
@@ -726,6 +762,7 @@ function handleUnregisterUserLayer(data: Extract<AuroraRequest, { type: 'unregis
   queuePipelineRecreation(composedShaders)
     .then(() => {
       rebuildParamBindings();
+      writeParamSizes();
       rebindAllParamBuffers();
       console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
     })
@@ -756,6 +793,11 @@ function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette
 }
 
 function handleCleanup(): void {
+  for (const buffer of paramCombinedBuffers.values()) {
+    buffer.destroy();
+  }
+  paramCombinedBuffers.clear();
+
   for (const store of paramStores.values()) {
     store.dispose();
   }

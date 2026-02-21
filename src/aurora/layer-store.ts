@@ -67,7 +67,7 @@ export class LayerStore {
     const buffers = this.slabs.map(slab =>
       this.device.createBuffer({
         size: slab.sizeMB * 1024 * 1024,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
         label: `${this.layerId}-${slab.name}-slot${slotIndex}`,
       })
     );
@@ -118,7 +118,7 @@ export class LayerStore {
     const buffers = this.slabs.map(slab =>
       this.device.createBuffer({
         size: slab.sizeMB * 1024 * 1024,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
         label: `${this.layerId}-${slab.name}-slot${slotIndex}`,
       })
     );

@@ -43,6 +43,7 @@ struct Uniforms {
   paramLerp: array<vec4<f32>, 4>,          // 16 lerp factors (0.0-1.0)
   paramReady: array<vec4<u32>, 4>,         // 16 data ready flags
   paramDt: array<vec4<f32>, 4>,            // 16 slot spacings (seconds)
+  paramSize: array<vec4<u32>, 4>,          // 16 grid point counts (t1 offset)
   // Rain particle uniforms
   rainFadeDuration: f32,   // particle fade cycle in seconds
   rainDensity: f32,        // items per px² (0.01 = 1 per 10×10)
@@ -74,3 +75,4 @@ fn getLayerPaletteRange(index: u32) -> vec2f {
 fn getParamLerp(index: u32) -> f32                 { return u.paramLerp[index / 4u][index % 4u]; }
 fn isParamReady(index: u32) -> bool                { return u.paramReady[index / 4u][index % 4u] != 0u; }
 fn getParamDt(index: u32) -> f32                   { return u.paramDt[index / 4u][index % 4u]; }
+fn getParamSize(index: u32) -> u32                 { return u.paramSize[index / 4u][index % 4u]; }

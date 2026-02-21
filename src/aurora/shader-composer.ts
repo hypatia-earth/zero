@@ -7,7 +7,7 @@
 
 import type { LayerDeclaration, AdvectionConfig } from '../services/layer/layer-service';
 import { getMainShaders, getPostShaders } from './shader-loader';
-import { getParamMeta, type TModel, type TModelParam } from '../config/models';
+import { getParamMeta, getModel, type TModel, type TModelParam } from '../config/models';
 
 // Import shader modules
 import commonCode from './shaders/common.wgsl?raw';
@@ -36,8 +36,8 @@ export interface ParamBindingConfig {
   param: string;
   model: TModel;
   index: number;
-  bindingSlot0: number;
-  bindingSlot1: number;
+  bindingSlot: number;
+  gridPoints: number;
   categorical: boolean;  // true = nearest-neighbor temporal sampling
 }
 
@@ -194,8 +194,8 @@ export class ShaderComposer {
       param: mp.param,
       model: mp.model,
       index: idx,
-      bindingSlot0: PARAM_BINDING_START + idx * 2,
-      bindingSlot1: PARAM_BINDING_START + idx * 2 + 1,
+      bindingSlot: PARAM_BINDING_START + idx,
+      gridPoints: getModel(mp.model).gridPoints,
       categorical: getParamMeta(mp.param).categorical ?? false,
     }));
 
@@ -207,8 +207,7 @@ export class ShaderComposer {
     for (const cfg of paramConfigs) {
       const safeName = cfg.param.replace(/[^a-zA-Z0-9]/g, '_');
       bindings.push(
-        `@group(0) @binding(${cfg.bindingSlot0}) var<storage, read> param_${safeName}_0: array<f32>;`,
-        `@group(0) @binding(${cfg.bindingSlot1}) var<storage, read> param_${safeName}_1: array<f32>;`
+        `@group(0) @binding(${cfg.bindingSlot}) var<storage, read> param_${safeName}: array<f32>;`
       );
     }
 
@@ -242,6 +241,7 @@ export class ShaderComposer {
 fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
   if (!isParamReady(${cfg.index}u)) { return 0.0; }
   let lerp = getParamLerp(${cfg.index}u);
+  let size = getParamSize(${cfg.index}u);
   // Advection wind at current position (time-interpolated)
   let windU = sampleParam_${uSafe}(lat, lon);
   let windV = sampleParam_${vSafe}(lat, lon);
@@ -253,10 +253,10 @@ fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
   let dlon = (windU * dt) / (R * cosLat);
   // Backward trajectory: where was t0 air?
   let cell0 = o1280LatLonToCell(lat - dlat * lerp, lon - dlon * lerp);
-  let v0 = param_${safeName}_0[cell0];
+  let v0 = param_${safeName}[cell0];
   // Forward trajectory: where will t1 air be?
   let cell1 = o1280LatLonToCell(lat + dlat * (1.0 - lerp), lon + dlon * (1.0 - lerp));
-  let v1 = param_${safeName}_1[cell1];
+  let v1 = param_${safeName}[cell1 + size];
   return ${sample};
 }`);
       } else if (cfg.model === 'ncep_gfs025') {
@@ -273,8 +273,8 @@ fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
   let latIdx = clamp(u32(latF), 0u, 720u);
   let lonIdx = u32(lonF) % 1440u;
   let cell = latIdx * 1440u + lonIdx;
-  let v0 = param_${safeName}_0[cell];
-  let v1 = param_${safeName}_1[cell];
+  let v0 = param_${safeName}[cell];
+  let v1 = param_${safeName}[cell + getParamSize(${cfg.index}u)];
   let lerp = getParamLerp(${cfg.index}u);
   return ${sample};
 }`);
@@ -286,8 +286,8 @@ fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
         samplers.push(`
 fn sampleParam_${safeName}(cell: u32) -> f32 {
   if (!isParamReady(${cfg.index}u)) { return 0.0; }
-  let v0 = param_${safeName}_0[cell];
-  let v1 = param_${safeName}_1[cell];
+  let v0 = param_${safeName}[cell];
+  let v1 = param_${safeName}[cell + getParamSize(${cfg.index}u)];
   let lerp = getParamLerp(${cfg.index}u);
   return ${sample};
 }`);
