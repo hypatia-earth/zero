@@ -795,10 +795,15 @@ const handlers: { [K in AuroraRequest['type']]: MessageHandler<K> } = {
   cleanup: handleCleanup,
 };
 
+/** Type-safe dispatch: narrows handler+data by discriminant */
+function dispatch<K extends AuroraRequest['type']>(msg: Extract<AuroraRequest, { type: K }>): void | Promise<void> {
+  const handler = handlers[msg.type] as MessageHandler<K>;
+  return handler(msg);
+}
+
 self.onmessage = async (e: MessageEvent<AuroraRequest>) => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await handlers[e.data.type](e.data as any);
+    await dispatch(e.data);
   } catch (err) {
     self.postMessage({
       type: 'error',

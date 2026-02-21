@@ -148,8 +148,17 @@ export class LayerService {
         }
 
         // Migrate old params format (string[] → TModelParam[])
+        // Pre-GFS layers only stored param names; all were IFS
         if (declaration.params?.length && typeof declaration.params[0] === 'string') {
-          declaration.params = (declaration.params as unknown as string[]).map(p => ({ param: p, model: 'ecmwf_ifs' }) as TModelParam);
+          const oldParams = declaration.params as unknown as string[];
+          const published: string[] = getPublishedParams();
+          declaration.params = oldParams
+            .filter(p => {
+              if (published.includes(p)) return true;
+              console.warn(`[LayerService] Dropping unknown param from IDB migration: ${p}`);
+              return false;
+            })
+            .map(p => ({ model: 'ecmwf_ifs', param: p }) as TModelParam);  // QC-OK: validated against published params above
         }
 
         // Register with fresh index (don't trust stored index)
