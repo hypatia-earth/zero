@@ -4,8 +4,14 @@ import { defineLayer, withUI, withParams, withSlabs, withOptions, withPalettes, 
 
 export const layer = defineLayer('wind',
   withUI('Wind', 'Wind', 'weather'),
-  withParams({ model: 'ecmwf_ifs', param: 'wind_u_component_10m' }, { model: 'ecmwf_ifs', param: 'wind_v_component_10m' }),
-  withSlabs([{ name: 'u', sizeMB: 26 }, { name: 'v', sizeMB: 26 }]),
+  withParams(
+    { model: 'ecmwf_ifs', param: 'wind_u_component_10m' },
+    { model: 'ecmwf_ifs', param: 'wind_v_component_10m' },
+  ),
+  withSlabs([
+    { name: 'u', sizeMB: 26 },
+    { name: 'v', sizeMB: 26 },
+  ]),
   withPalettes('wind-speed'),
   withConfig({
     snakeLength: 0.25,
