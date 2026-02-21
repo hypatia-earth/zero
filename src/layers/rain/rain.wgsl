@@ -43,16 +43,14 @@ fn precipTypeColor(ptype: f32) -> vec3f {
 fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let opacity = getLayerOpacity(LAYER_RAIN);
 
-  // Globe screen size (same formula as TS: asin(1/d) * height / fov)
-  let camDist = length(u.eyePosition);
+  // Fixed grid from default zoom (particles anchored to globe surface)
   let fov = 2.0 * atan(u.tanFov);
-  let globeRadiusPx = asin(1.0 / camDist) * u.resolution.y / fov;
-
-  // Grid: square cells on sphere surface
+  let refRadiusPx = asin(1.0 / 3.2) * u.resolution.y / fov;
   let cellSidePx = 1.0 / sqrt(u.rainDensity);
-  let gridSize = 2.0 * globeRadiusPx / cellSidePx;
+  let gridSize = max(floor(2.0 * refRadiusPx / cellSidePx), 1.0);
   let latIdx = floor(lat * gridSize / COMMON_PI);
-  let lonCells = max(floor(2.0 * gridSize * cos(lat)), 1.0);
+  let latCenter = (latIdx + 0.5) * COMMON_PI / gridSize;
+  let lonCells = max(floor(2.0 * gridSize * cos(latCenter)), 1.0);
   let lonIdx = floor(lon * lonCells / COMMON_TAU);
   let cellId = vec2f(lonIdx, latIdx);
   let cellUV = vec2f(
@@ -73,9 +71,10 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let ptype = sampleParam_precipitation_type(cellCenterLat, cellCenterLon);
   if (ptype < 0.5) { return color; }
 
-  // Fade loop
-  let phase = fract(u.time / u.rainFadeDuration + rainHash1(cellId));
-  let fadeAlpha = 1.0 - phase;
+  // Fade loop (disabled — tuning shapes)
+  // let phase = fract(u.time / u.rainFadeDuration + rainHash1(cellId));
+  // let fadeAlpha = 1.0 - phase;
+  let fadeAlpha = 1.0;
 
   let typeColor = precipTypeColor(ptype);
   let alpha = fadeAlpha * opacity;
