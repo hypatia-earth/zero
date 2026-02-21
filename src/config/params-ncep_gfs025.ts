@@ -15,7 +15,7 @@ export const PARAM_METADATA_GFS: Record<string, ParamMeta> = {
     unit: 'm/s',
     range: [-50, 50],
     palette: 'wind-magnitude',
-    sizeEstimate: 1_500_000,
+    sizeEstimate: 3_000_000,
     layers: ['rain'],
   },
   'wind_v_component_1000hPa': {
@@ -23,7 +23,7 @@ export const PARAM_METADATA_GFS: Record<string, ParamMeta> = {
     unit: 'm/s',
     range: [-50, 50],
     palette: 'wind-magnitude',
-    sizeEstimate: 1_500_000,
+    sizeEstimate: 3_000_000,
     layers: ['rain'],
   },
 };

@@ -41,7 +41,8 @@ export interface TimestepState {
 }
 
 /** 4-letter uppercase param code for logs */
-const P = (param: string) => param.replace(/_/g, '').slice(0, 5).toUpperCase();
+const P = (mp: { param: string; model?: string }) =>
+  mp.param.replace(/_/g, '').slice(0, 5).toUpperCase() + (mp.model ? mp.model[0]!.toUpperCase() : '');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TimestepService
@@ -119,7 +120,7 @@ export class TimestepService {
 
         if (sizes.size > 0) {
           const avgMB = ([...sizes.values()].reduce((a, b) => a + b, 0) / sizes.size / 1024 / 1024).toFixed(1);
-          console.log(`[Timestep] ${P(mp.param)}: ${sizes.size} cached, avg ${avgMB}MB`);
+          console.log(`[Timestep] ${P(mp)}: ${sizes.size} cached, avg ${avgMB}MB`);
         }
       }
     }
@@ -171,7 +172,7 @@ export class TimestepService {
     newParams.set(param, paramState);
     this.state.value = { ...this.state.value, params: newParams };
 
-    console.log(`[Timestep] Added param: ${P(param)}`);
+    console.log(`[Timestep] Added param: ${P({ param })}`);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -286,7 +287,7 @@ export class TimestepService {
     const entry = this.timestepsData[mp.model][idx]!;
     const meta = getParamMeta(mp.param);
     if (meta.backwardSum && entry.isAnalysis && entry.fallbackUrl) {
-      console.log(`[Timestep] ${P(mp.param)} at ${ts}: using previous run (analysis, backward sum)`);
+      console.log(`[Timestep] ${P(mp)} at ${ts}: using previous run (analysis, backward sum)`);
       return entry.fallbackUrl;
     }
     return entry.url;

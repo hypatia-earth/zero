@@ -431,6 +431,9 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
     renderer.setLayerPaletteRange(lp.layerIndex, lp.range[0], lp.range[1]);
   }
 
+  // Set frozen precipitation palette (second palette for rain layer)
+  renderer.setRainFrozenPalette(renderer.getPaletteTexture().getPaletteIndex('rain-frozen-intensity'));
+
   // Recreate pipeline with composed shaders (includes dynamic param bindings)
   const initLayers = layerRegistry.getAll();
   const initShaders = shaderComposer.compose(initLayers);

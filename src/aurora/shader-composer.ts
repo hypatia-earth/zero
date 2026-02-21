@@ -297,9 +297,16 @@ fn sampleParam_${safeName}(cell: u32) -> f32 {
     // Advected samplers after wind samplers (dependency order)
     samplers.push(...advectedSamplers);
 
+    // 6. Generate param index constants (for layer shaders that need getParamDt)
+    const paramConstants: string[] = ['// --- Param index constants (generated) ---'];
+    for (const cfg of paramConfigs) {
+      const name = cfg.param.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+      paramConstants.push(`const PARAM_${name}: u32 = ${cfg.index}u;`);
+    }
+
     return {
       bindings: bindings.join('\n'),
-      samplers: samplers.join('\n'),
+      samplers: paramConstants.join('\n') + '\n' + samplers.join('\n'),
     };
   }
 

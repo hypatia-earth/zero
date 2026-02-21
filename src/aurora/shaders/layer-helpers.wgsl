@@ -49,6 +49,7 @@ struct Uniforms {
   rainSizePx: f32,         // particle radius in screen pixels
   rainMinMm: f32,          // minimum precipitation (mm) to render
   rainBackFace: f32,       // 1.0 = render rain on back hemisphere
+  rainFrozenPalette: u32,  // palette texture row for frozen precipitation
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

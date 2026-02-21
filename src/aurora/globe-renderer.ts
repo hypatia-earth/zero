@@ -910,6 +910,13 @@ export class GlobeRenderer {
   }
 
   /**
+   * Set frozen precipitation palette texture row (one-time init)
+   */
+  setRainFrozenPalette(paletteIndex: number): void {
+    this.uniformView.setUint32(U.rainFrozenPalette, paletteIndex, true);
+  }
+
+  /**
    * Set param slot spacing (seconds between t0 and t1)
    */
   setParamDt(paramIndex: number, dtSeconds: number): void {

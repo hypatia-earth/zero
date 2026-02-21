@@ -1,7 +1,7 @@
 // Rain/precipitation layer — procedural SDF particle animation
 //
-// Single param: precipitation_type (WMO code, advected by wind)
-// Type selects shape+color, density is uniform from config.
+// Params: precipitation_type (WMO code), precipitation (mm accumulation)
+// Both advected by wind. Type selects shape, rate drives palette color+alpha.
 
 // ─── Hash ───────────────────────────────────────────────────────────────────
 
@@ -45,21 +45,11 @@ fn sdfStar6(p: vec2f) -> f32 {
   return r - petal;
 }
 
-// ─── Color per WMO code ─────────────────────────────────────────────────────
+// ─── Palette lookup by WMO code ─────────────────────────────────────────────
 
-const RAIN_COLOR_WET = vec3f(0.7, 0.85, 1.0);     // bright blue — liquid
-const RAIN_COLOR_FROZEN = vec3f(1.0, 1.0, 1.0);   // white — frozen
-
-fn precipTypeColor(ptype: f32, cellId: vec2f) -> vec3f {
-  let code = u32(ptype + 0.5);
-  switch code {
-    case 1u:       { return RAIN_COLOR_WET; }               // rain
-    case 3u, 12u:  { return RAIN_COLOR_FROZEN; }            // freezing rain/drizzle — white (frozen+liquid mix)
-    case 5u:       { return RAIN_COLOR_FROZEN; }            // snow
-    case 6u, 7u:   { return RAIN_COLOR_WET; }                 // wet snow, sleet — blue (liquid+frozen mix)
-    case 8u:       { return RAIN_COLOR_FROZEN; }            // ice pellets
-    default:       { return vec3f(1.0, 0.0, 0.0); }        // unknown → red
-  }
+// Wet (liquid) types use LAYER_RAIN palette, frozen types use rainFrozenPalette
+fn isFrozenType(code: u32) -> bool {
+  return code == 3u || code == 5u || code == 8u || code == 12u;
 }
 
 // ─── Blend ──────────────────────────────────────────────────────────────────
@@ -101,21 +91,29 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let code = u32(ptype + 0.5);
   var sdf: f32;
   switch code {
-    case 3u, 12u:  { sdf = sdfDrop(pn); }                    // freezing rain/drizzle — drop (frozen+liquid mix)
+    case 3u, 12u:  { sdf = sdfDrop(pn); }                    // freezing rain/drizzle — drop
     case 5u:       { sdf = sdfStar6(pn); }                   // snow
-    case 6u, 7u:   { sdf = sdfStar6(pn); }                    // wet snow, sleet — star (liquid+frozen mix)
+    case 6u, 7u:   { sdf = sdfStar6(pn); }                   // wet snow, sleet — star
     case 8u:       { sdf = sdfDiamond(pn); }                 // ice pellets
-    case 1u:       { sdf = sdfDrop(pn); }                     // rain
+    case 1u:       { sdf = sdfDrop(pn); }                    // rain
     default:       { sdf = sdfDisk(pn); }                    // unknown
   }
   if (sdf > 0.0) { return color; }
 
-  // Fade loop — reduced range so particles never vanish (avoids pop-in flicker on time scrub)
+  // Fade loop — reduced range so particles never vanish (avoids pop-in flicker)
   let phase = fract(u.time / u.rainFadeDuration + rainHash1(cellId));
   let fadeAlpha = 0.5 + 0.5 * (1.0 - phase);
 
-  // DEBUG: encode raw ptype value as brightness for unknown codes
-  let typeColor = precipTypeColor(ptype, cellId);
-  let alpha = fadeAlpha * opacity;
-  return vec4f(mix(color.rgb, typeColor, alpha), color.a);
+  // Rate normalization: accumulation (mm) → mm/h using param slot spacing
+  let dtHours = max(getParamDt(PARAM_PRECIPITATION) / 3600.0, 1.0);
+  let rateMmh = precip / dtHours;
+
+  // Palette lookup: sqrt mapping gives good spread across 0–50 mm/h range
+  let t = sqrt(clamp(rateMmh / 50.0, 0.0, 1.0));
+  let paletteIdx = select(getLayerPaletteIndex(LAYER_RAIN), u.rainFrozenPalette, isFrozenType(code));
+  let pc = samplePalette(t, paletteIdx);
+
+  // Palette provides color + intensity alpha; combine with fade and layer opacity
+  let alpha = pc.a * fadeAlpha * opacity;
+  return vec4f(mix(color.rgb, pc.rgb, alpha), color.a);
 }

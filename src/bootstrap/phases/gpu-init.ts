@@ -106,7 +106,7 @@ export async function runGpuInitPhase(
       logo,
       layerPalettes: [
         { layerIndex: layerService.getLayerIndex('temp'), paletteId: optionsService.options.value.temp.palette, range: [-40, 50] },
-        { layerIndex: layerService.getLayerIndex('rain'), paletteId: 'rain-type', range: [0, 12] },
+        { layerIndex: layerService.getLayerIndex('rain'), paletteId: 'rain-wet-intensity', range: [0, 50] },
       ],
     };
 

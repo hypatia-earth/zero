@@ -105,7 +105,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Precipitation',
     unit: 'mm',
     range: [0, 50],  // 0-50mm/hr (heavy rain)
-    palette: 'rain-intensity',
+    palette: 'rain-wet-intensity',
     sizeEstimate: 8_000_000,
     published: true,
     layers: ['rain'],
@@ -115,7 +115,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Showers',
     unit: 'mm',
     range: [0, 30],
-    palette: 'rain-intensity',
+    palette: 'rain-wet-intensity',
     sizeEstimate: 0,
   },
   'snowfall_water_equivalent': {
@@ -420,7 +420,7 @@ export const PARAM_METADATA: Record<string, ParamMeta> = {
     label: 'Precip Type',
     unit: 'WMO code',
     range: [0, 12],  // WMO: 0=none, 1=rain, 3=freezing rain, 5=snow, 6-7=mix, 8=ice pellets, 12=freezing drizzle
-    palette: 'rain-type',
+    palette: 'rain-frozen-intensity',
     sizeEstimate: 800_000,
     published: true,
     layers: ['rain'],
