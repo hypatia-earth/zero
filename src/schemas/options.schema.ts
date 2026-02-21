@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import type { TLayer } from '../config/types';
 import { getPaletteIdsEnum } from '../services/palette-service';
+import { U } from '../aurora/globe-uniforms';
 
 // ============================================================
 // UI Metadata Types
@@ -38,6 +39,7 @@ interface UIMetadata {
   model?: 'inertia' | 'velocity';
   device?: 'mouse' | 'touch';
   impact?: OptionImpact;
+  uniform?: { type: string; pos: number };  // GPU uniform binding
 }
 
 interface SliderMeta extends UIMetadata {
@@ -598,6 +600,7 @@ export const optionsSchema = z.object({
         min: 8,
         max: 24,
         step: 1,
+        uniform: { type: 'f32', pos: U.graticuleFontSize },
       }
     ),
     lineWidth: opt(
@@ -612,6 +615,7 @@ export const optionsSchema = z.object({
         min: 1,
         max: 5,
         step: 0.5,
+        uniform: { type: 'f32', pos: U.graticuleLineWidth },
       }
     ),
   }),

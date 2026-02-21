@@ -1,4 +1,6 @@
 import { defineLayer, withType, withUI, withParams, withAdvection, withSlabs, withOptions, withPalettes, withBlend, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
+import { U } from '../../aurora/globe-uniforms';
+
 export const layer = defineLayer('rain',
   withType('texture'),
   withUI('Precipitation', 'Precipitation', 'weather'),
@@ -26,10 +28,10 @@ export const layer = defineLayer('rain',
     'rain-frozen-intensity',
   ),
   withConfig({
-    density: 0.16,
-    sizePx: 0.5625,
-    fadeDuration: 3.0,
-    minMm: 0.1,
+    density:      { value: 0.16, type: 'f32', pos: U.rainDensity },
+    sizePx:       { value: 0.5625, type: 'f32', pos: U.rainSizePx },
+    fadeDuration: { value: 3.0, type: 'f32', pos: U.rainFadeDuration },
+    minMm:        { value: 0.1, type: 'f32', pos: U.rainMinMm },
     colors: {
       rain:            [0.7, 0.85, 1.0],
       freezingRain:    [0.6, 0.8, 0.95],

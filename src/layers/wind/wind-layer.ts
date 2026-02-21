@@ -69,6 +69,14 @@ export class WindLayer {
   private segmentsPerLine: number;
   private stepFactor: number;
 
+  // Config (set from layer config bag)
+  private snakeLength: number;
+  private lineWidth: number;
+  private radius: number;
+
+  // Animation state
+  private animPhase = 0;
+
   // State
   private enabled = false;
   private randomSeed = 0;  // Fixed for deterministic rendering
@@ -77,13 +85,16 @@ export class WindLayer {
   private lastState: LayerState | null = null;
   private needsCompute = true;
 
-  constructor(device: GPUDevice, format: GPUTextureFormat, paletteTexture: PaletteTexture, lineCount: number, windConfig: { segmentsPerLine: number; stepFactor: number }) {
+  constructor(device: GPUDevice, format: GPUTextureFormat, paletteTexture: PaletteTexture, lineCount: number, windConfig: { segmentsPerLine: number; stepFactor: number; snakeLength: number; lineWidth: number; radius: number }) {
     this.device = device;
     this.format = format;
     this.paletteTexture = paletteTexture;
     this.seedCount = lineCount;
     this.segmentsPerLine = windConfig.segmentsPerLine;
     this.stepFactor = windConfig.stepFactor;
+    this.snakeLength = windConfig.snakeLength;
+    this.lineWidth = windConfig.lineWidth;
+    this.radius = windConfig.radius;
 
     this.createComputePipeline();
     this.createComputeBuffers();
@@ -298,6 +309,37 @@ export class WindLayer {
 
   getInterpFactor(): number {
     return this.interpFactor;
+  }
+
+  /**
+   * Advance snake animation phase
+   * @param dtMs Frame delta in milliseconds
+   * @param animSpeed Updates per second (from options)
+   */
+  advanceAnimation(dtMs: number, animSpeed: number): void {
+    const cyclesPerSec = animSpeed / this.segmentsPerLine;
+    const dt = dtMs / 1000;
+    this.animPhase = (this.animPhase + dt * cyclesPerSec) % 1;
+  }
+
+  /** Get current animation phase (0-1) */
+  getAnimPhase(): number {
+    return this.animPhase;
+  }
+
+  /** Get snake length config value */
+  getSnakeLength(): number {
+    return this.snakeLength;
+  }
+
+  /** Get line width config value */
+  getLineWidth(): number {
+    return this.lineWidth;
+  }
+
+  /** Get radius config value */
+  getRadius(): number {
+    return this.radius;
   }
 
   /**

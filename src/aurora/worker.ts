@@ -20,6 +20,7 @@ import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer, activeParamBindings, type ComposedShaders } from './shader-composer';
 import { LayerService, type LayerDeclaration } from '../services/layer/layer-service';
 import type { PaletteId } from '../services/palette-service';
+import { writeConfigUniforms, writeOptionUniforms } from './uniform-writer';
 
 // ============================================================
 // Asset types for worker transfer
@@ -299,9 +300,6 @@ function buildLayerDataReady(): boolean[] {
  */
 function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
   const opts = currentOptions!;
-  const sunCfg = layerRegistry!.get('sun')!.config!;
-  const graticuleCfg = layerRegistry!.get('graticule')!.config!;
-  const rainCfg = layerRegistry!.get('rain')!.config!;
 
   return {
     // Camera (from render message)
@@ -312,13 +310,6 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     time: performance.now() / 1000,
     tanFov: camera.tanFov,
     sunDirection: getSunDirection(time),
-    sunCoreRadius: sunCfg.coreRadius as number,
-    sunGlowRadius: sunCfg.glowRadius as number,
-    sunCoreColor: new Float32Array(sunCfg.coreColor as number[]),
-    sunGlowColor: new Float32Array(sunCfg.glowColor as number[]),
-    graticuleFontSize: opts.graticule.fontSize,
-    graticuleLabelMaxRadius: graticuleCfg.labelMaxRadiusPx as number,
-    graticuleLineWidth: opts.graticule.lineWidth,
     // Per-layer state built from registry (indexed by layer.index)
     layerOpacities: buildLayerOpacities(),
     layerDataReady: buildLayerDataReady(),
@@ -334,11 +325,6 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     logoOpacity: opts.debug.showLogo && !isAnyLayerEnabled()
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
-    // Rain particles
-    rainFadeDuration: rainCfg.fadeDuration as number,
-    rainDensity: rainCfg.density as number,
-    rainSizePx: rainCfg.sizePx as number,
-    rainMinMm: rainCfg.minMm as number,
     rainBackFace: opts.rain.enabled && !opts.earth.enabled && !opts.temp.enabled ? 1 : 0,
   };
 }
@@ -385,7 +371,14 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   const composedShaders = shaderComposer.compose(layers);
 
   const graticuleLodLevels = layerRegistry.get('graticule')!.config!.lodLevels as Array<{ spacing: number; zoomInPx: number; zoomOutPx: number }>;
-  const windCfg = layerRegistry.get('wind')!.config! as { snakeLength: number; lineWidth: number; segmentsPerLine: number; stepFactor: number; radius: number };
+  const windRaw = layerRegistry.get('wind')!.config! as { snakeLength: { value: number }; lineWidth: { value: number }; segmentsPerLine: { value: number }; stepFactor: { value: number }; radius: { value: number } };
+  const windCfg = {
+    snakeLength: windRaw.snakeLength.value,
+    lineWidth: windRaw.lineWidth.value,
+    segmentsPerLine: windRaw.segmentsPerLine.value,
+    stepFactor: windRaw.stepFactor.value,
+    radius: windRaw.radius.value,
+  };
   await renderer.initialize(
     config.timeslotsPerLayer,
     config.windLineCount,
@@ -403,6 +396,14 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 
   // Finalize renderer (creates bind groups)
   renderer.finalize();
+
+  // Write declarative config uniforms for all layers
+  const uniformView = renderer.getUniformView();
+  for (const layer of layers) {
+    if (layer.config) {
+      writeConfigUniforms(uniformView, layer.config);
+    }
+  }
 
   // Create LayerStore instances for each param
   const device = renderer.getDevice();
@@ -455,6 +456,11 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void {
   const prevOptions = currentOptions;
   currentOptions = data.value;
+
+  // Write option uniforms declaratively (graticuleFontSize, graticuleLineWidth, etc.)
+  if (renderer) {
+    writeOptionUniforms(renderer.getUniformView(), currentOptions);
+  }
 
   // React to options that require buffer recreation
   if (prevOptions && currentOptions.wind.seedCount !== prevOptions.wind.seedCount) {

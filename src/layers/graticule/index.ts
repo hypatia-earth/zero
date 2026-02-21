@@ -1,4 +1,5 @@
 import { defineLayer, withType, withUI, withOptions, withBlend, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
+import { U } from '../../aurora/globe-uniforms';
 
 export interface GraticuleLodLevel {
   spacing: number;     // degrees between graticule lines (same for lon/lat)
@@ -17,7 +18,7 @@ export const layer = defineLayer('graticule',
   ]),
   withBlend('blendGraticule'),
   withConfig({
-    labelMaxRadiusPx: 500,
+    labelMaxRadiusPx: { value: 500, type: 'f32', pos: U.graticuleLabelMaxRadius },
     lodLevels: [
       { spacing: 30, zoomInPx: 0, zoomOutPx: 0 },
       { spacing: 20, zoomInPx: 200, zoomOutPx: 170 },

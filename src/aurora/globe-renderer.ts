@@ -35,13 +35,6 @@ export interface GlobeUniforms {
   time: number;
   tanFov: number;
   sunDirection: Float32Array;
-  sunCoreRadius: number;
-  sunGlowRadius: number;
-  sunCoreColor: Float32Array;
-  sunGlowColor: Float32Array;
-  graticuleFontSize: number;
-  graticuleLabelMaxRadius: number;
-  graticuleLineWidth: number;
   // Per-layer state indexed by LAYER_* constants
   layerOpacities: Float32Array;   // indexed by LAYER_EARTH, LAYER_SUN, etc.
   layerDataReady: boolean[];      // indexed by LAYER_TEMP, LAYER_RAIN, etc.
@@ -51,11 +44,6 @@ export interface GlobeUniforms {
   windState: LayerState;  // full state for compute caching
   pressureColors: PressureColorOption;
   logoOpacity: number;       // computed from all layer opacities
-  // Rain particle uniforms
-  rainFadeDuration: number;
-  rainDensity: number;
-  rainSizePx: number;
-  rainMinMm: number;
   rainBackFace: number;
 }
 
@@ -113,13 +101,6 @@ export class GlobeRenderer {
   private lastFrameTime = 0;
   private frameDeltaMs = 0;  // milliseconds since last frame (0 on first frame)
 
-  // Wind animation state (set in initialize() from windConfig)
-  private windAnimPhase = 0;
-  private windSnakeLength!: number;
-  private windLineWidth!: number;
-  private windSegments!: number;
-  private windRadius!: number;
-
   // GPU timing
   private gpuTimestamp: GpuTimestamp | null = null;
 
@@ -137,12 +118,6 @@ export class GlobeRenderer {
     graticuleLodLevels: Array<{ spacing: number; zoomInPx: number; zoomOutPx: number }>,
     windConfig: { snakeLength: number; lineWidth: number; segmentsPerLine: number; stepFactor: number; radius: number }
   ): Promise<void> {
-    // Apply wind config before creating WindLayer
-    this.windSnakeLength = windConfig.snakeLength;
-    this.windLineWidth = windConfig.lineWidth;
-    this.windSegments = windConfig.segmentsPerLine;
-    this.windRadius = windConfig.radius;
-
     const shaderCode = composedShaders.main;
     const postprocessShaderCode = composedShaders.post;
     const adapter = await navigator.gpu.requestAdapter();
@@ -361,7 +336,7 @@ export class GlobeRenderer {
     this.pressureLayer = new PressureLayer(this.device, this.format, this.paletteTexture);
 
     // Initialize wind layer
-    this.windLayer = new WindLayer(this.device, this.format, this.paletteTexture, windLineCount, { segmentsPerLine: windConfig.segmentsPerLine, stepFactor: windConfig.stepFactor });
+    this.windLayer = new WindLayer(this.device, this.format, this.paletteTexture, windLineCount, windConfig);
 
     this.resize();
   }
@@ -564,20 +539,6 @@ export class GlobeRenderer {
     view.setFloat32(O.sunDirection + 4, uniforms.sunDirection[1]!, true);
     view.setFloat32(O.sunDirection + 8, uniforms.sunDirection[2]!, true);
 
-    // sunCoreRadius, sunGlowRadius
-    view.setFloat32(O.sunCoreRadius, uniforms.sunCoreRadius, true);
-    view.setFloat32(O.sunGlowRadius, uniforms.sunGlowRadius, true);
-
-    // vec3 sunCoreColor
-    view.setFloat32(O.sunCoreColor, uniforms.sunCoreColor[0]!, true);
-    view.setFloat32(O.sunCoreColor + 4, uniforms.sunCoreColor[1]!, true);
-    view.setFloat32(O.sunCoreColor + 8, uniforms.sunCoreColor[2]!, true);
-
-    // vec3 sunGlowColor
-    view.setFloat32(O.sunGlowColor, uniforms.sunGlowColor[0]!, true);
-    view.setFloat32(O.sunGlowColor + 4, uniforms.sunGlowColor[1]!, true);
-    view.setFloat32(O.sunGlowColor + 8, uniforms.sunGlowColor[2]!, true);
-
     // Built-in layer opacities and data ready flags (indexed arrays)
     for (let i = 0; i < uniforms.layerOpacities.length; i++) {
       view.setFloat32(getLayerOpacityOffset(i), uniforms.layerOpacities[i]!, true);
@@ -589,19 +550,10 @@ export class GlobeRenderer {
     // Track for depth test decision in render()
     this.currentLayerOpacities.set(uniforms.layerOpacities);
 
-    // Graticule settings
-    view.setFloat32(O.graticuleFontSize, uniforms.graticuleFontSize, true);
-    view.setFloat32(O.graticuleLabelMaxRadius, uniforms.graticuleLabelMaxRadius, true);
-    view.setFloat32(O.graticuleLineWidth, uniforms.graticuleLineWidth, true);
-
     // Logo
     view.setFloat32(O.logoOpacity, uniforms.logoOpacity, true);
 
-    // Rain particles
-    view.setFloat32(O.rainFadeDuration, uniforms.rainFadeDuration, true);
-    view.setFloat32(O.rainDensity, uniforms.rainDensity, true);
-    view.setFloat32(O.rainSizePx, uniforms.rainSizePx, true);
-    view.setFloat32(O.rainMinMm, uniforms.rainMinMm, true);
+    // Rain backface (dynamic: depends on which layers are enabled)
     view.setFloat32(O.rainBackFace, uniforms.rainBackFace, true);
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
@@ -647,11 +599,8 @@ export class GlobeRenderer {
     this.windLayer.setEnabled(windVisible);
 
     if (windVisible) {
-      // Advance snake animation phase using shared frame delta
-      // Convert updates/sec to cycles/sec: cycles = updates / segments
-      const cyclesPerSec = uniforms.windAnimSpeed / this.windSegments;
-      const dt = this.frameDeltaMs / 1000;  // Convert ms to seconds
-      this.windAnimPhase = (this.windAnimPhase + dt * cyclesPerSec) % 1;
+      // Advance snake animation phase
+      this.windLayer.advanceAnimation(this.frameDeltaMs, uniforms.windAnimSpeed);
 
       // Update layer state (triggers compute when state changes)
       this.windLayer.setState(uniforms.windState);
@@ -670,11 +619,11 @@ export class GlobeRenderer {
           uniforms.eyePosition[2]!,
         ],
         opacity: uniforms.layerOpacities[LAYER_WIND]!,
-        animPhase: this.windAnimPhase,
-        snakeLength: this.windSnakeLength,
-        lineWidth: this.windLineWidth,
+        animPhase: this.windLayer.getAnimPhase(),
+        snakeLength: this.windLayer.getSnakeLength(),
+        lineWidth: this.windLayer.getLineWidth(),
         showBackface,
-        radius: this.windRadius,
+        radius: this.windLayer.getRadius(),
         paletteIndex: this.paletteTexture.getPaletteIndex('wind-speed'),
         paletteCount: this.paletteTexture.paletteCount,
       });
@@ -1031,6 +980,11 @@ export class GlobeRenderer {
   /** Get wind layer for external control */
   getWindLayer(): WindLayer {
     return this.windLayer;
+  }
+
+  /** Get uniform DataView for declarative writers */
+  getUniformView(): DataView {
+    return this.uniformView;
   }
 
   /** Get GPU device for external buffer creation */
