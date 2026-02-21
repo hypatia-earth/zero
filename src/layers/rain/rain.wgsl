@@ -47,7 +47,7 @@ fn sdfStar6(p: vec2f) -> f32 {
 
 // ─── Palette lookup by WMO code ─────────────────────────────────────────────
 
-// Wet (liquid) types use LAYER_RAIN palette, frozen types use rainFrozenPalette
+// Wet (liquid) types use LAYER_RAIN slot 0, frozen types use slot 1
 fn isFrozenType(code: u32) -> bool {
   return code == 3u || code == 5u || code == 8u || code == 12u;
 }
@@ -110,7 +110,7 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
 
   // Palette lookup: sqrt mapping gives good spread across 0–50 mm/h range
   let t = sqrt(clamp(rateMmh / 50.0, 0.0, 1.0));
-  let paletteIdx = select(getLayerPaletteIndex(LAYER_RAIN), u.rainFrozenPalette, isFrozenType(code));
+  let paletteIdx = select(getLayerPaletteIndex(LAYER_RAIN, 0u), getLayerPaletteIndex(LAYER_RAIN, 1u), isFrozenType(code));
   let pc = samplePalette(t, paletteIdx);
 
   // Palette provides color + intensity alpha; combine with fade and layer opacity

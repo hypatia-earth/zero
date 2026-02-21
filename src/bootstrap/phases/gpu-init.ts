@@ -105,8 +105,9 @@ export async function runGpuInitPhase(
       fontAtlas,
       logo,
       layerPalettes: [
-        { layerIndex: layerService.getLayerIndex('temp'), paletteId: optionsService.options.value.temp.palette, range: [-40, 50] },
-        { layerIndex: layerService.getLayerIndex('rain'), paletteId: 'rain-wet-intensity', range: [0, 50] },
+        { layerIndex: layerService.getLayerIndex('temp'), slot: 0, paletteId: optionsService.options.value.temp.palette, range: [-40, 50] },
+        { layerIndex: layerService.getLayerIndex('rain'), slot: 0, paletteId: 'rain-wet-intensity', range: [0, 50] },
+        { layerIndex: layerService.getLayerIndex('rain'), slot: 1, paletteId: 'rain-frozen-intensity' },
       ],
     };
 

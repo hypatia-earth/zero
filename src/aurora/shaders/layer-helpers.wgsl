@@ -30,8 +30,8 @@ struct Uniforms {
   paletteStepped: u32, // bitmask — bit i = 1 means palette i is stepped
   logoOpacity: f32,       // computed from all layer opacities
   logoPad: vec2f,         // padding for vec4 alignment
-  // Built-in layer palette indices (16 slots)
-  layerPaletteIndex: array<vec4<u32>, 4>,
+  // Built-in layer palettes: 1 vec4u per layer = 4 palette slots each
+  layerPalettes: array<vec4<u32>, 16>,
   // Built-in layer palette ranges (8 slots x 2 floats packed as min/max pairs)
   layerPaletteRange: array<vec4<f32>, 4>,
   // User layer slots (32 max) - packed as vec4s for alignment
@@ -49,7 +49,6 @@ struct Uniforms {
   rainSizePx: f32,         // particle radius in screen pixels
   rainMinMm: f32,          // minimum precipitation (mm) to render
   rainBackFace: f32,       // 1.0 = render rain on back hemisphere
-  rainFrozenPalette: u32,  // palette texture row for frozen precipitation
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -62,7 +61,7 @@ fn getUserLayerPaletteIndex(index: u32) -> u32     { return u.userLayerPaletteIn
 // Built-in layer accessors (16 slots)
 fn getLayerOpacity(index: u32) -> f32              { return u.layerOpacity[index / 4u][index % 4u]; }
 fn isLayerDataReady(index: u32) -> bool            { return u.layerDataReady[index / 4u][index % 4u] != 0u; }
-fn getLayerPaletteIndex(index: u32) -> u32         { return u.layerPaletteIndex[index / 4u][index % 4u]; }
+fn getLayerPaletteIndex(layer: u32, slot: u32) -> u32 { return u.layerPalettes[layer][slot]; }
 
 // Palette range: min/max pair packed into vec4 (8 slots)
 fn getLayerPaletteRange(index: u32) -> vec2f {

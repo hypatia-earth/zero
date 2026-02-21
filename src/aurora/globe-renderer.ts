@@ -910,13 +910,6 @@ export class GlobeRenderer {
   }
 
   /**
-   * Set frozen precipitation palette texture row (one-time init)
-   */
-  setRainFrozenPalette(paletteIndex: number): void {
-    this.uniformView.setUint32(U.rainFrozenPalette, paletteIndex, true);
-  }
-
-  /**
    * Set param slot spacing (seconds between t0 and t1)
    */
   setParamDt(paramIndex: number, dtSeconds: number): void {
@@ -999,11 +992,11 @@ export class GlobeRenderer {
   }
 
   /**
-   * Set palette for a built-in layer by layer index
+   * Set palette for a built-in layer by layer index and slot
    */
-  setLayerPalette(layerIndex: number, paletteId: PaletteId): void {
+  setLayerPalette(layerIndex: number, slot: number, paletteId: PaletteId): void {
     const paletteIdx = this.paletteTexture.getPaletteIndex(paletteId);
-    const offset = getLayerPaletteIndexOffset(layerIndex);
+    const offset = getLayerPaletteIndexOffset(layerIndex, slot);
     this.uniformView.setUint32(offset, paletteIdx, true);
   }
 

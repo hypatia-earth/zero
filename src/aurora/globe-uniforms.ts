@@ -56,11 +56,23 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['logoOpacity', 'f32'],
   ['logoPad', 'vec2f'],            // pad for vec4 alignment
 
-  // Built-in layer palette index array (16 slots = 4 x vec4u)
-  ['layerPaletteIndex0', 'vec4u'],
-  ['layerPaletteIndex1', 'vec4u'],
-  ['layerPaletteIndex2', 'vec4u'],
-  ['layerPaletteIndex3', 'vec4u'],
+  // Built-in layer palettes: 1 vec4u per layer = 4 palette slots each (16 layers)
+  ['layerPalettes0', 'vec4u'],
+  ['layerPalettes1', 'vec4u'],
+  ['layerPalettes2', 'vec4u'],
+  ['layerPalettes3', 'vec4u'],
+  ['layerPalettes4', 'vec4u'],
+  ['layerPalettes5', 'vec4u'],
+  ['layerPalettes6', 'vec4u'],
+  ['layerPalettes7', 'vec4u'],
+  ['layerPalettes8', 'vec4u'],
+  ['layerPalettes9', 'vec4u'],
+  ['layerPalettes10', 'vec4u'],
+  ['layerPalettes11', 'vec4u'],
+  ['layerPalettes12', 'vec4u'],
+  ['layerPalettes13', 'vec4u'],
+  ['layerPalettes14', 'vec4u'],
+  ['layerPalettes15', 'vec4u'],
 
   // Built-in layer palette range array (8 slots x 2 floats = 4 x vec4f)
   // Packed as (layer0_min, layer0_max, layer1_min, layer1_max) per vec4f
@@ -125,7 +137,6 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['rainSizePx', 'f32'],         // particle radius in screen pixels
   ['rainMinMm', 'f32'],          // minimum precipitation (mm) to render
   ['rainBackFace', 'f32'],       // 1.0 = render rain on back hemisphere
-  ['rainFrozenPalette', 'u32'],  // palette texture row for frozen precipitation
 ]);
 
 // Strongly typed offsets - TypeScript knows all field names exist
@@ -163,11 +174,23 @@ export const U = GLOBE_UNIFORMS.offsets as {
   paletteStepped: number;
   logoOpacity: number;
   logoPad: number;
-  // Built-in layer palette arrays
-  layerPaletteIndex0: number;
-  layerPaletteIndex1: number;
-  layerPaletteIndex2: number;
-  layerPaletteIndex3: number;
+  // Built-in layer palettes (1 vec4u per layer = 4 palette slots each)
+  layerPalettes0: number;
+  layerPalettes1: number;
+  layerPalettes2: number;
+  layerPalettes3: number;
+  layerPalettes4: number;
+  layerPalettes5: number;
+  layerPalettes6: number;
+  layerPalettes7: number;
+  layerPalettes8: number;
+  layerPalettes9: number;
+  layerPalettes10: number;
+  layerPalettes11: number;
+  layerPalettes12: number;
+  layerPalettes13: number;
+  layerPalettes14: number;
+  layerPalettes15: number;
   layerPaletteRange0: number;
   layerPaletteRange1: number;
   layerPaletteRange2: number;
@@ -218,7 +241,6 @@ export const U = GLOBE_UNIFORMS.offsets as {
   rainSizePx: number;
   rainMinMm: number;
   rainBackFace: number;
-  rainFrozenPalette: number;
 };
 
 /** Byte offset of component `index` within a packed vec4 array starting at `base` */
@@ -229,7 +251,9 @@ function packedVec4Offset(base: number, index: number): number {
 // Built-in layer offsets (16 slots, packed as 4 x vec4)
 export const getLayerOpacityOffset       = (index: number) => packedVec4Offset(U.layerOpacity0, index);
 export const getLayerDataReadyOffset     = (index: number) => packedVec4Offset(U.layerDataReady0, index);
-export const getLayerPaletteIndexOffset  = (index: number) => packedVec4Offset(U.layerPaletteIndex0, index);
+/** Byte offset for layerPalettes[layerIndex][slot] — one vec4u per layer, 4 slots each */
+export const getLayerPaletteIndexOffset  = (layerIndex: number, slot: number) =>
+  U.layerPalettes0 + layerIndex * 16 + slot * 4;
 
 /** Palette range: 2 x f32 pair per slot, packed into vec4s */
 export const getLayerPaletteRangeOffset  = (index: number) => packedVec4Offset(U.layerPaletteRange0, index * 2);

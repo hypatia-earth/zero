@@ -9,7 +9,7 @@ fn colormapTemp(tempC: f32) -> vec4f {
     (tempC - range.x) / (range.y - range.x),
     0.0, 1.0
   );
-  return samplePalette(t, getLayerPaletteIndex(LAYER_TEMP));
+  return samplePalette(t, getLayerPaletteIndex(LAYER_TEMP, 0u));
 }
 
 fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {

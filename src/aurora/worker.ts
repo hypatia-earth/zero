@@ -39,8 +39,8 @@ export interface AuroraAssets {
   basemapFaces: ImageBitmap[];
   fontAtlas: ImageBitmap;
   logo: ImageBitmap;
-  // Initial palette configs per built-in layer: { layerIndex, paletteId, range }
-  layerPalettes: Array<{ layerIndex: number; paletteId: PaletteId; range: [number, number] }>;
+  // Initial palette configs per built-in layer: { layerIndex, slot, paletteId, range? }
+  layerPalettes: Array<{ layerIndex: number; slot: number; paletteId: PaletteId; range?: [number, number] }>;
 }
 
 export interface AuroraConfig {
@@ -427,12 +427,11 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 
   // Apply initial palette config for built-in layers
   for (const lp of assets.layerPalettes) {
-    renderer.setLayerPalette(lp.layerIndex, lp.paletteId);
-    renderer.setLayerPaletteRange(lp.layerIndex, lp.range[0], lp.range[1]);
+    renderer.setLayerPalette(lp.layerIndex, lp.slot, lp.paletteId);
+    if (lp.range) {
+      renderer.setLayerPaletteRange(lp.layerIndex, lp.range[0], lp.range[1]);
+    }
   }
-
-  // Set frozen precipitation palette (second palette for rain layer)
-  renderer.setRainFrozenPalette(renderer.getPaletteTexture().getPaletteIndex('rain-frozen-intensity'));
 
   // Recreate pipeline with composed shaders (includes dynamic param bindings)
   const initLayers = layerRegistry.getAll();
@@ -620,9 +619,15 @@ function handleActivateSlots(data: Extract<AuroraRequest, { type: 'activateSlots
       }
     }
   } else if (layerId === 'pressure') {
-    const rawBuffer = store.getSlotBuffer(slot0, 0);
-    if (rawBuffer) {
-      renderer!.triggerPressureRegrid(slot0, rawBuffer);
+    const rawBuffer0 = store.getSlotBuffer(slot0, 0);
+    if (rawBuffer0) {
+      renderer!.triggerPressureRegrid(slot0, rawBuffer0);
+    }
+    if (slot1 !== slot0) {
+      const rawBuffer1 = store.getSlotBuffer(slot1, 0);
+      if (rawBuffer1) {
+        renderer!.triggerPressureRegrid(slot1, rawBuffer1);
+      }
     }
   }
 
@@ -728,7 +733,7 @@ function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette
   if (!renderer || !layerRegistry) return;
   const layerIndex = layerRegistry.getLayerIndex(layer);
   if (isNaN(layerIndex)) return;
-  renderer.setLayerPalette(layerIndex, paletteId);
+  renderer.setLayerPalette(layerIndex, 0, paletteId);
   if (range) {
     renderer.setLayerPaletteRange(layerIndex, range[0], range[1]);
   }
