@@ -30,7 +30,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
       // Toggle handler for any layer
       const toggleLayer = (layer: typeof allLayers[0]) => {
         if (layer.isBuiltIn) {
-          const id = layer.id as TLayer;
+          const id = layer.id as TLayer;  // QC-OK: guarded by isBuiltIn
           optionsService.update(draft => { draft[id].enabled = !draft[id].enabled; });
         } else {
           const enabled = layerRegistry.toggleUserLayer(layer.id);
@@ -44,7 +44,7 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
       // Options handler for any layer
       const openOptions = (layer: typeof allLayers[0]) => {
         if (layer.isBuiltIn) {
-          dialogService.open('options', { filter: layer.id as TLayer });
+          dialogService.open('options', { filter: layer.id as TLayer });  // QC-OK: guarded by isBuiltIn
         } else {
           dialogService.open('create-layer', { editLayerId: layer.id });
         }

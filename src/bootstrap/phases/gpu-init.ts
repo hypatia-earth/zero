@@ -49,7 +49,7 @@ export async function runGpuInitPhase(
   for (const layer of layerService.getAll()) {
     if (layer.params) {
       for (const ref of layer.params) {
-        paramModels.set(ref.param, ref.model as TModel);
+        paramModels.set(ref.param, ref.model);
       }
     }
   }

@@ -18,6 +18,11 @@ export interface ConfigEntry {
   pos?: number;   // byte offset in uniform buffer (from U.xxx)
 }
 
+/** Read a numeric ConfigEntry value from a layer config bag */
+export function configValue(config: Record<string, unknown>, key: string): number {
+  return (config[key] as ConfigEntry).value as number;
+}
+
 /** Type guard: is this value a ConfigEntry with GPU binding? */
 function isGpuEntry(val: unknown): val is ConfigEntry & { type: string; pos: number } {
   return !!val && typeof val === 'object' && 'pos' in val && 'type' in val

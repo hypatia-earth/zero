@@ -12,6 +12,7 @@
 import type { CameraConfig } from './camera';
 import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
+import type { GraticuleLodLevel } from '../layers/graticule';
 import { LayerStore } from './layer-store';
 import type { ZeroOptions } from '../schemas/options.schema';
 import type { TLayer } from '../config/types';
@@ -20,7 +21,7 @@ import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer, activeParamBindings, type ComposedShaders } from './shader-composer';
 import { LayerService, type LayerDeclaration } from '../services/layer/layer-service';
 import type { PaletteId } from '../services/palette-service';
-import { writeConfigUniforms, writeOptionUniforms } from './uniform-writer';
+import { writeConfigUniforms, writeOptionUniforms, configValue } from './uniform-writer';
 
 // ============================================================
 // Asset types for worker transfer
@@ -227,7 +228,7 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
 
     if (layer.isBuiltIn) {
       // Built-in layers: get from Zod-validated options
-      const layerOpts = opts[layer.id as TLayer];
+      const layerOpts = opts[layer.id as TLayer];  // QC-OK: guarded by isBuiltIn
       if (!layerOpts || !('enabled' in layerOpts)) continue;
       enabled = layerOpts.enabled;
       opacity = layerOpts.opacity;
@@ -334,7 +335,7 @@ function isAnyLayerEnabled(): boolean {
   if (!currentOptions || !layerRegistry) return false;
   for (const layer of layerRegistry.getAll()) {
     if (layer.isBuiltIn) {
-      const layerOpts = currentOptions[layer.id as TLayer];
+      const layerOpts = currentOptions[layer.id as TLayer];  // QC-OK: guarded by isBuiltIn
       if (layerOpts && 'enabled' in layerOpts && layerOpts.enabled) return true;
     } else {
       const idx = layer.userLayerIndex!;
@@ -370,14 +371,14 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   const layers = layerRegistry.getAll();
   const composedShaders = shaderComposer.compose(layers);
 
-  const graticuleLodLevels = layerRegistry.get('graticule')!.config!.lodLevels as Array<{ spacing: number; zoomInPx: number; zoomOutPx: number }>;
-  const windRaw = layerRegistry.get('wind')!.config! as { snakeLength: { value: number }; lineWidth: { value: number }; segmentsPerLine: { value: number }; stepFactor: { value: number }; radius: { value: number } };
+  const graticuleLodLevels = layerRegistry.get('graticule')!.config!.lodLevels as GraticuleLodLevel[];
+  const windConfig = layerRegistry.get('wind')!.config!;
   const windCfg = {
-    snakeLength: windRaw.snakeLength.value,
-    lineWidth: windRaw.lineWidth.value,
-    segmentsPerLine: windRaw.segmentsPerLine.value,
-    stepFactor: windRaw.stepFactor.value,
-    radius: windRaw.radius.value,
+    snakeLength: configValue(windConfig, 'snakeLength'),
+    lineWidth: configValue(windConfig, 'lineWidth'),
+    segmentsPerLine: configValue(windConfig, 'segmentsPerLine'),
+    stepFactor: configValue(windConfig, 'stepFactor'),
+    radius: configValue(windConfig, 'radius'),
   };
   await renderer.initialize(
     config.timeslotsPerLayer,
