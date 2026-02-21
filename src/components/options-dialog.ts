@@ -16,7 +16,6 @@ import {
   type ZeroOptions,
   type FlatOption,
   type PressureColorOption,
-  type RadioMeta,
 } from '../schemas/options.schema';
 import type { OptionsService } from '../services/options-service';
 import type { PaletteService } from '../services/palette-service';
@@ -30,24 +29,13 @@ import { PressureColorControl } from './pressure-color-control';
 import { DialogHeader } from './dialog-header';
 
 // ============================================================
-// Type guards for control types
+// Type guard for slider formatting
 // ============================================================
 
-interface SliderMeta {
-  control: 'slider';
+interface SliderFields {
   min: number;
   max: number;
   step: number;
-}
-
-interface SelectMeta {
-  control: 'select';
-  options: { value: string | number; label: string; localhostOnly?: boolean; maxCores?: number }[];
-}
-
-interface LayerToggleMeta {
-  control: 'layer-toggle';
-  layerId: string;
 }
 
 const isLocalhost = location.hostname === 'localhost';
@@ -120,7 +108,7 @@ function isModified(path: string, currentValue: unknown): boolean {
   return currentValue !== defaultValue;
 }
 
-function formatValue(value: number, meta: SliderMeta): string {
+function formatValue(value: number, meta: SliderFields): string {
   if (meta.max === 1 && meta.min <= 0.1) {
     return `${Math.round(value * 100)}%`;
   }
@@ -180,24 +168,22 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
     }
 
     case 'slider': {
-      const sliderMeta = meta as SliderMeta;
       return m('div.slider', [
         m('input[type=range]', {
-          min: sliderMeta.min,
-          max: sliderMeta.max,
-          step: sliderMeta.step,
+          min: meta.min,
+          max: meta.max,
+          step: meta.step,
           value: currentValue as number,
           oninput: (e: Event) => {
             setOptionValue(optionsService, path, parseFloat((e.target as HTMLInputElement).value));
           }
         }),
-        m('span.value', formatValue(currentValue as number, sliderMeta))
+        m('span.value', formatValue(currentValue as number, meta))
       ]);
     }
 
     case 'select': {
-      const selectMeta = meta as SelectMeta;
-      const filteredOptions = selectMeta.options.filter(o =>
+      const filteredOptions = meta.options.filter(o =>
         (!o.localhostOnly || isLocalhost) &&
         (!o.maxCores || navigator.hardwareConcurrency >= o.maxCores)
       );
@@ -212,14 +198,13 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
     }
 
     case 'radio': {
-      const radioMeta = meta as RadioMeta;
       const layerId = path.split('.')[0]!;
       const isLoading = optionsService.loadingLayers.value.has(layerId);
       const groupDisabled = meta.disabled === true;
 
       return m('div.radio-group', { class: groupDisabled ? 'disabled' : '' }, [
         m('span.spinner', { class: isLoading ? 'visible' : '' }),
-        ...radioMeta.options.map(o => {
+        ...meta.options.map(o => {
           const isDisabled = groupDisabled;
           return m('label.radio', {
             class: [
@@ -245,10 +230,9 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
       return null;
 
     case 'layer-toggle': {
-      const layerToggleMeta = meta as LayerToggleMeta;
       return m('div.layer-toggle-row', [
         m('span.layer-color', {
-          style: { backgroundColor: `var(--color-layer-${layerToggleMeta.layerId})` }
+          style: { backgroundColor: `var(--color-layer-${meta.layerId})` }
         }),
         m('label.toggle', [
           m('input[type=checkbox]', {

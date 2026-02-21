@@ -66,12 +66,12 @@ export class TimestepService {
   constructor(
     private layerService: LayerService,
   ) {
-    this.primaryModel = MODELS[0].name as TModel;
+    this.primaryModel = MODELS[0].name;
 
     for (const m of MODELS) {
-      this.timestepsData[m.name as TModel] = [];
-      this.timestepIndex[m.name as TModel] = new Map();
-      this.variablesData[m.name as TModel] = [];
+      this.timestepsData[m.name] = [];
+      this.timestepIndex[m.name] = new Map();
+      this.variablesData[m.name] = [];
     }
   }
 
@@ -83,17 +83,16 @@ export class TimestepService {
 
     // Discover timesteps for each model
     for (const modelDef of MODELS) {
-      const model = modelDef.name as TModel;
-      const result = await discoverModel(model, modelDef.root, onProgress);
-      this.timestepsData[model] = result.timesteps;
-      this.variablesData[model] = result.variables;
+      const result = await discoverModel(modelDef.name, modelDef.root, onProgress);
+      this.timestepsData[modelDef.name] = result.timesteps;
+      this.variablesData[modelDef.name] = result.variables;
 
       // Build index for fast lookup
       const index = new Map<TTimestep, number>();
       for (const ts of result.timesteps) {
         index.set(ts.timestep, ts.index);
       }
-      this.timestepIndex[model] = index;
+      this.timestepIndex[modelDef.name] = index;
     }
 
     // Build ECMWF set from discovered timesteps
@@ -106,8 +105,7 @@ export class TimestepService {
     const params = new Map<TModelParam['param'], ParamState>();
 
     for (const modelDef of MODELS) {
-      const model = modelDef.name as TModel;
-      for (const mp of this.layerService.getParamsForModel(model)) {
+      for (const mp of this.layerService.getParamsForModel(modelDef.name)) {
         if (params.has(mp.param)) continue;
         this.paramModelMap.set(mp.param, mp);
         await onProgress?.('cache', mp.param);
@@ -126,11 +124,10 @@ export class TimestepService {
     // Log summary per model
     const fmt = (t: TTimestep) => t.slice(5, 13);
     for (const modelDef of MODELS) {
-      const model = modelDef.name as TModel;
-      const modelTs = this.timestepsData[model];
-      const vars = this.variablesData[model];
+      const modelTs = this.timestepsData[modelDef.name];
+      const vars = this.variablesData[modelDef.name];
       if (modelTs.length > 0) {
-        console.log(`[Timestep] ${model}: ${vars.length} V, ${modelTs.length} TS, ${fmt(modelTs[0]!.timestep)} - ${fmt(modelTs[modelTs.length - 1]!.timestep)}`);
+        console.log(`[Timestep] ${modelDef.name}: ${vars.length} V, ${modelTs.length} TS, ${fmt(modelTs[0]!.timestep)} - ${fmt(modelTs[modelTs.length - 1]!.timestep)}`);
       }
     }
 

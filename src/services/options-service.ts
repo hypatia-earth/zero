@@ -348,10 +348,10 @@ export class OptionsService {
     // Built-in layers: update options
     for (const layerId of layerIds) {
       const shouldEnable = enabledSet.has(layerId);
-      const current = this.options.value[layerId as keyof ZeroOptions] as { enabled: boolean };
-      if (current.enabled !== shouldEnable) {
+      const isEnabled = getByPath(this.options.value, `${layerId}.enabled`);
+      if (isEnabled !== shouldEnable) {
         this.update(d => {
-          (d[layerId as keyof ZeroOptions] as { enabled: boolean }).enabled = shouldEnable;
+          setByPath(d, `${layerId}.enabled`, shouldEnable);
         });
       }
     }
@@ -372,10 +372,9 @@ export class OptionsService {
    */
   getEnabledLayers(): string[] {
     // Built-in layers from options
-    const enabled: string[] = layerIds.filter(id => {
-      const layer = this.options.value[id as keyof ZeroOptions] as { enabled?: boolean };
-      return layer?.enabled === true;
-    });
+    const enabled: string[] = layerIds.filter(id =>
+      getByPath(this.options.value, `${id}.enabled`) === true
+    );
 
     // Custom layers from LayerService
     if (this.layerService) {
