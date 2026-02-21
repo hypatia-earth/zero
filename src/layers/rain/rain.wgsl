@@ -54,11 +54,9 @@ fn precipTypeColor(ptype: f32, cellId: vec2f) -> vec3f {
   let code = u32(ptype + 0.5);
   switch code {
     case 1u:       { return RAIN_COLOR_WET; }               // rain
-    case 3u, 12u:  { return RAIN_COLOR_FROZEN; }            // freezing rain/drizzle
+    case 3u, 12u:  { return RAIN_COLOR_FROZEN; }            // freezing rain/drizzle — white (frozen+liquid mix)
     case 5u:       { return RAIN_COLOR_FROZEN; }            // snow
-    case 6u, 7u:   {                                        // wet snow, sleet — mixed
-      return select(RAIN_COLOR_WET, RAIN_COLOR_FROZEN, rainHash1(cellId * 137.0) > 0.5);
-    }
+    case 6u, 7u:   { return RAIN_COLOR_WET; }                 // wet snow, sleet — blue (liquid+frozen mix)
     case 8u:       { return RAIN_COLOR_FROZEN; }            // ice pellets
     default:       { return vec3f(1.0, 0.0, 0.0); }        // unknown → red
   }
@@ -103,11 +101,9 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let code = u32(ptype + 0.5);
   var sdf: f32;
   switch code {
-    case 3u, 12u:  { sdf = sdfSquare(pn); }                  // freezing rain/drizzle
+    case 3u, 12u:  { sdf = sdfDrop(pn); }                    // freezing rain/drizzle — drop (frozen+liquid mix)
     case 5u:       { sdf = sdfStar6(pn); }                   // snow
-    case 6u, 7u:   {                                          // wet snow, sleet — mixed
-      sdf = select(sdfDisk(pn), sdfStar6(pn), rainHash1(cellId * 137.0) > 0.5);
-    }
+    case 6u, 7u:   { sdf = sdfStar6(pn); }                    // wet snow, sleet — star (liquid+frozen mix)
     case 8u:       { sdf = sdfDiamond(pn); }                 // ice pellets
     case 1u:       { sdf = sdfDrop(pn); }                     // rain
     default:       { sdf = sdfDisk(pn); }                    // unknown

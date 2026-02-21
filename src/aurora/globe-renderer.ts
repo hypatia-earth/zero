@@ -8,7 +8,7 @@ import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } fro
 import { PressureLayer } from '../layers/pressure';
 import { WindLayer } from '../layers/wind';
 import { GraticuleAnimator, GRATICULE_BUFFER_SIZE } from '../layers/graticule/graticule-animator';
-import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset } from './globe-uniforms';
+import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset, getParamDtOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
 
@@ -52,8 +52,7 @@ export interface GlobeUniforms {
   windState: LayerState;  // full state for compute caching
   pressureColors: PressureColorOption;
   logoOpacity: number;       // computed from all layer opacities
-  // Advection / rain particle uniforms
-  advectionDt: number;
+  // Rain particle uniforms
   rainFadeDuration: number;
   rainDensity: number;
   rainSizePx: number;
@@ -590,8 +589,7 @@ export class GlobeRenderer {
     // Logo
     view.setFloat32(O.logoOpacity, uniforms.logoOpacity, true);
 
-    // Advection / rain particles
-    view.setFloat32(O.advectionDt, uniforms.advectionDt, true);
+    // Rain particles
     view.setFloat32(O.rainFadeDuration, uniforms.rainFadeDuration, true);
     view.setFloat32(O.rainDensity, uniforms.rainDensity, true);
     view.setFloat32(O.rainSizePx, uniforms.rainSizePx, true);
@@ -907,6 +905,14 @@ export class GlobeRenderer {
     const readyOffset = getParamReadyOffset(paramIndex);
     this.uniformView.setFloat32(lerpOffset, lerp, true);
     this.uniformView.setUint32(readyOffset, ready ? 1 : 0, true);
+  }
+
+  /**
+   * Set param slot spacing (seconds between t0 and t1)
+   */
+  setParamDt(paramIndex: number, dtSeconds: number): void {
+    const offset = getParamDtOffset(paramIndex);
+    this.uniformView.setFloat32(offset, dtSeconds, true);
   }
 
   /**

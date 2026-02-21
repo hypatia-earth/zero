@@ -113,8 +113,13 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['paramReady2', 'vec4u'],  // 624: params 8-11
   ['paramReady3', 'vec4u'],  // 640: params 12-15
 
-  // Advection / rain particle uniforms
-  ['advectionDt', 'f32'],        // seconds between adjacent timesteps (from valid_times)
+  // paramDt: 4 x vec4f = 64 bytes (slot spacing in seconds per param)
+  ['paramDt0', 'vec4f'],    // params 0-3
+  ['paramDt1', 'vec4f'],    // params 4-7
+  ['paramDt2', 'vec4f'],    // params 8-11
+  ['paramDt3', 'vec4f'],    // params 12-15
+
+  // Rain particle uniforms
   ['rainFadeDuration', 'f32'],   // particle fade cycle in seconds (~1.0)
   ['rainDensity', 'f32'],        // items per px² (0.01 = 1 per 10×10)
   ['rainSizePx', 'f32'],         // particle radius in screen pixels
@@ -200,8 +205,12 @@ export const U = GLOBE_UNIFORMS.offsets as {
   paramReady1: number;
   paramReady2: number;
   paramReady3: number;
-  // Advection / rain particle uniforms
-  advectionDt: number;
+  // Per-param slot spacing (seconds)
+  paramDt0: number;
+  paramDt1: number;
+  paramDt2: number;
+  paramDt3: number;
+  // Rain particle uniforms
   rainFadeDuration: number;
   rainDensity: number;
   rainSizePx: number;
@@ -229,6 +238,7 @@ export const getUserLayerPaletteIndexOffset = (index: number) => packedVec4Offse
 // Param offsets (16 slots, packed as 4 x vec4)
 export const getParamLerpOffset  = (index: number) => packedVec4Offset(U.paramLerp0, index);
 export const getParamReadyOffset = (index: number) => packedVec4Offset(U.paramReady0, index);
+export const getParamDtOffset    = (index: number) => packedVec4Offset(U.paramDt0, index);
 
 // Expected size - can be used for buffer allocation
 export const UNIFORM_BUFFER_SIZE = GLOBE_UNIFORMS.size;

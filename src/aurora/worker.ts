@@ -331,8 +331,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     logoOpacity: opts.debug.showLogo && !isAnyLayerEnabled()
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
-    // Advection / rain particles
-    advectionDt: 3600,          // TODO: compute from adjacent valid_times
+    // Rain particles
     rainFadeDuration: defaultConfig.rain.fadeDuration,
     rainDensity: defaultConfig.rain.density,
     rainSizePx: defaultConfig.rain.sizePx,
@@ -514,12 +513,14 @@ function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): void {
   }
   renderer!.setUserLayerOpacities(animatedUserOpacities);
 
-  // Update dynamic param state (lerp and ready flags)
+  // Update dynamic param state (lerp, ready flags, and dt)
   for (const [param, binding] of paramBindings) {
     const state = paramSlotStates.get(param);
     if (state) {
       const lerp = state.dataReady ? computeLerp(state, time) : -1;
       renderer!.setParamState(binding.index, lerp, state.dataReady);
+      const dtSeconds = (state.t1 - state.t0) / 1000;
+      renderer!.setParamDt(binding.index, dtSeconds);
     }
   }
 

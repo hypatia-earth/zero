@@ -245,8 +245,8 @@ fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
   // Advection wind at current position (time-interpolated)
   let windU = sampleParam_${uSafe}(lat, lon);
   let windV = sampleParam_${vSafe}(lat, lon);
-  // Displacement in radians
-  let dt = u.advectionDt;
+  // Displacement in radians (param's own t1-t0 spacing)
+  let dt = getParamDt(${cfg.index}u);
   let R = 6371000.0;
   let cosLat = max(cos(lat), 0.01);
   let dlat = (windV * dt) / R;
