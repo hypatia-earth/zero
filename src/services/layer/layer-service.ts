@@ -26,12 +26,8 @@ export interface LayerShaders {
   render?: string;             // Geometry pass render shader
 }
 
-/** Advection configuration: which wind params advect which data params */
-export interface AdvectionConfig {
-  uParam: TModelParam;
-  vParam: TModelParam;
-  targets: TModelParam[];
-}
+export type { AdvectionConfig } from './advection';
+import type { AdvectionConfig } from './advection';
 
 export interface LayerDeclaration {
   id: string;
