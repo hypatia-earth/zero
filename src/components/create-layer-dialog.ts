@@ -10,10 +10,11 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import type { LayerService, LayerDeclaration } from '../services/layer/layer-service';
+import { customLayerId, type LayerService, type LayerDeclaration } from '../services/layer/layer-service';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
 import { defineLayer, withType, withUI, withParams, withPalettes, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
+import type { TCustomLayer } from '../config/types';
 import { DialogHeader } from './dialog-header';
 import { getParamMeta, getPublishedModelParams, getModel, type ParamMeta, type TModelParam } from '../config/models';
 import { PALETTES, PALETTE_IDS, type PaletteId } from '../services/palette-service';
@@ -67,7 +68,7 @@ const PALETTE_OPTIONS = PALETTE_IDS.map(id => ({
 // Template shader for new layers
 // Placeholders: {BlendName}, {userLayerIndex}, {paletteMin}, {paletteMax}, {samplerFn}
 const SHADER_TEMPLATE = `// Custom blend function - palette visualization
-fn blend{BlendName}(color: vec4f, lat: f32, lon: f32) -> vec4f {
+fn {blendFn}(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let opacity = getUserLayerOpacity({userLayerIndex}u);
   let cell = o1280LatLonToCell(lat, lon);
   let value = {samplerFn}(cell);
@@ -81,7 +82,8 @@ fn blend{BlendName}(color: vec4f, lat: f32, lon: f32) -> vec4f {
 type TryPhase = 'idle' | 'compiling' | 'loading';
 
 interface FormState {
-  id: string;
+  displayName: string;
+  layerId: TCustomLayer | null;   // Assigned on first Try/Save (derived from index)
   modelParam: TModelParam;
   paramMeta: ParamMeta;
   paletteId: PaletteId;
@@ -95,7 +97,8 @@ interface FormState {
 
 export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () => {
   const state: FormState = {
-    id: '',
+    displayName: '',
+    layerId: null,
     modelParam: DEFAULT_MODEL_PARAM,
     paramMeta: getParamMeta(DEFAULT_MODEL_PARAM.param),
     paletteId: DEFAULT_PALETTE,
@@ -111,7 +114,12 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
   // Track layer suspended for preview (to restore on cancel)
   let suspendedLayer: LayerDeclaration | null = null;
 
-  function initFromLayer(registry: LayerService, layerId: string) {
+  /** Derive blend function name from custom layer ID (e.g., custom0 → blendCustom0) */
+  function blendFnName(id: string): string {
+    return `blend${id.charAt(0).toUpperCase()}${id.slice(1)}`;
+  }
+
+  function initFromLayer(registry: LayerService, layerId: TCustomLayer) {
     const layer = registry.get(layerId);
     if (!layer || layer.isBuiltIn) {
       console.warn(`[CreateLayer] Layer ${layerId} not found or built-in`);
@@ -129,7 +137,8 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       return;
     }
 
-    state.id = layer.id;
+    state.layerId = layerId;
+    state.displayName = layer.label;
     state.modelParam = paramRef;
     state.paramMeta = getParamMeta(paramRef.param);
     state.paletteId = (layer.palettes?.[0] ?? DEFAULT_PALETTE) as PaletteId;
@@ -140,69 +149,46 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
   }
 
   function updateShaderTemplate() {
-    const blendName = capitalize(state.id || 'Custom');
     const [min, max] = state.paramMeta.range;
     const samplerFn = getSamplerName(state.modelParam.param);
 
-    // Keep {userLayerIndex} placeholder - replaced when index is assigned
-    // Palette index is set via uniform, not baked into shader
+    // Keep {userLayerIndex} and {blendFn} placeholders - replaced when index is assigned
     state.shaderCode = SHADER_TEMPLATE
-      .replace(/{BlendName}/g, blendName)
       .replace(/{paletteMin}/g, min.toFixed(1))
       .replace(/{paletteMax}/g, max.toFixed(1))
       .replace(/{samplerFn}/g, samplerFn);
   }
 
-  /** Replace index placeholder in shader code with actual index */
-  function finalizeShaderCode(index: number): string {
-    return state.shaderCode.replace(/{userLayerIndex}/g, String(index));
-  }
-
-  function capitalize(s: string): string {
-    return s.charAt(0).toUpperCase() + s.slice(1);
+  /** Replace placeholders in shader code with actual values */
+  function finalizeShaderCode(layerId: string, index: number): string {
+    return state.shaderCode
+      .replace(/{blendFn}/g, blendFnName(layerId))
+      .replace(/{userLayerIndex}/g, String(index));
   }
 
   function validateAndCreate(registry: LayerService, aurora: AuroraService) {
     state.error = null;
 
-    // Quick-save path: editing without Try — just update palette/opacity and persist
-    if (!suspendedLayer && !registry.hasPreview()) {
-      const layer = registry.get(state.id);
+    // Validate display name
+    if (!state.displayName.trim()) {
+      state.error = 'Display name is required';
+      m.redraw();
+      return;
+    }
+
+    // Quick-save path: editing without Try — just update palette/opacity/label and persist
+    if (!suspendedLayer && !registry.hasPreview() && state.layerId) {
+      const layer = registry.get(state.layerId);
       if (layer && !layer.isBuiltIn) {
         layer.palettes = [state.paletteId];
-        registry.setUserLayerOpacity(state.id, state.opacity);
-        console.log(`[CreateLayer] Quick-save: ${state.id} palette=${state.paletteId}`);
-        void registry.saveUserLayer(state.id);
+        layer.label = state.displayName;
+        layer.buttonLabel = state.displayName;
+        registry.setUserLayerOpacity(state.layerId, state.opacity);
+        console.log(`[CreateLayer] Quick-save: ${state.layerId} palette=${state.paletteId}`);
+        void registry.saveUserLayer(state.layerId);
         m.redraw();
         return;
       }
-    }
-
-    // Validate ID
-    if (!state.id || !/^[a-z][a-z0-9_]*$/.test(state.id)) {
-      state.error = 'ID must start with lowercase letter, contain only a-z, 0-9, _';
-      m.redraw();
-      return;
-    }
-
-    // Check for duplicate layer ID (built-in or user) — skip if editing this layer
-    const existing = registry.get(state.id);
-    if (existing && existing !== suspendedLayer) {
-      if (existing.isBuiltIn) {
-        state.error = `Cannot use built-in layer ID "${state.id}"`;
-      } else {
-        state.error = `Layer "${state.id}" already exists`;
-      }
-      m.redraw();
-      return;
-    }
-
-    // Validate shader has blend function
-    const blendFn = `blend${capitalize(state.id)}`;
-    if (!state.shaderCode.includes(`fn ${blendFn}`)) {
-      state.error = `Shader must define function: fn ${blendFn}(...)`;
-      m.redraw();
-      return;
     }
 
     // Unregister preview from worker first
@@ -213,29 +199,37 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     // Reuse existing index when editing, allocate new one for new layers
     const index = suspendedLayer?.userLayerIndex ?? registry.allocateUserIndex();
     if (index === null) {
-      state.error = 'No free layer slots (max 31 user layers)';
+      state.error = `No free layer slots (max ${8})`;
       m.redraw();
       return;
     }
+    const layerId = customLayerId(index);
+    const blendFn = blendFnName(layerId);
 
-    // Finalize shader code with permanent index
-    const finalizedCode = finalizeShaderCode(index);
+    // Validate shader has blend function (after finalization)
+    const finalizedCode = finalizeShaderCode(layerId, index);
+    if (!finalizedCode.includes(`fn ${blendFn}`)) {
+      state.error = `Shader must define function: fn ${blendFn}(...)`;
+      if (!suspendedLayer) registry.freeUserIndex(index);
+      m.redraw();
+      return;
+    }
 
     // Unregister preview from registry
     registry.unregisterPreview();
 
     // When editing, unregister old layer before re-registering with updated config
     if (suspendedLayer) {
-      registry.unregister(state.id);
+      registry.unregister(suspendedLayer.id);
     }
 
     // Create and register permanent layer
-    const declaration = defineLayer(state.id,
+    const declaration = defineLayer(layerId,
       withType('texture'),
-      withUI(state.id, state.id, 'custom'),
+      withUI(state.displayName, state.displayName, 'custom'),
       withParams(state.modelParam),
       withPalettes(state.paletteId),
-      withOptions([`${state.id}.enabled`, `${state.id}.opacity`]),
+      withOptions([]),
       withBlend(blendFn),
       withShader('main', finalizedCode),
       withRender({ pass: 'surface', order: state.order }),
@@ -247,7 +241,8 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       isBuiltIn: false,
     };
     registry.register(layer);
-    registry.setUserLayerOpacity(state.id, state.opacity);
+    registry.setUserLayerOpacity(layerId, state.opacity);
+    state.layerId = layerId;
 
     // Send to worker for shader recompilation
     aurora.send({ type: 'registerUserLayer', layer });
@@ -255,9 +250,9 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
     aurora.send({ type: 'setUserLayerOptions', layerIndex: index, enabled: true, opacity: state.opacity, paletteIndex });
 
-    console.log(`[CreateLayer] Saved: ${state.id} (index ${index})`);
+    console.log(`[CreateLayer] Saved: ${layerId} "${state.displayName}" (index ${index})`);
     suspendedLayer = null;  // Don't restore old layer - new one saved
-    void registry.saveUserLayer(state.id);
+    void registry.saveUserLayer(layerId);
   }
 
   function tryLayer(registry: LayerService, aurora: AuroraService) {
@@ -265,34 +260,43 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     state.tryPhase = 'compiling';
     aurora.userLayerState.value = null;  // Reset so signal fires on next ok/error
 
-    if (!state.id) {
-      state.error = 'Layer ID is required';
+    if (!state.displayName.trim()) {
+      state.error = 'Display name is required';
+      state.tryPhase = 'idle';
       m.redraw();
       return;
     }
 
-    // Validate shader has blend function
-    const blendFn = `blend${capitalize(state.id)}`;
-    if (!state.shaderCode.includes(`fn ${blendFn}`)) {
-      state.error = `Shader must define function: fn ${blendFn}(...)`;
-      m.redraw();
-      return;
-    }
+    // Use preview-specific blend function name
+    const blendFn = 'blendPreview';
 
     // If editing existing layer, unregister it from worker to avoid duplicate blend function
-    const existingLayer = registry.get(state.id);
-    if (existingLayer && !existingLayer.isBuiltIn) {
-      suspendedLayer = existingLayer;  // Save for restore on cancel
-      aurora.send({ type: 'unregisterUserLayer', layerId: state.id });
+    if (state.layerId) {
+      const existingLayer = registry.get(state.layerId);
+      if (existingLayer && !existingLayer.isBuiltIn) {
+        suspendedLayer = existingLayer;  // Save for restore on cancel
+        aurora.send({ type: 'unregisterUserLayer', layerId: state.layerId });
+      }
     }
 
-    // Finalize shader code with preview index (31)
-    const finalizedCode = finalizeShaderCode(31);
+    // Finalize shader code with preview blend name and index (8 = preview slot)
+    const previewIndex = 8;
+    const finalizedCode = state.shaderCode
+      .replace(/{blendFn}/g, blendFn)
+      .replace(/{userLayerIndex}/g, String(previewIndex));
+
+    // Validate shader has blend function
+    if (!finalizedCode.includes(`fn ${blendFn}`)) {
+      state.error = `Shader must define function: fn ${blendFn}(...)`;
+      state.tryPhase = 'idle';
+      m.redraw();
+      return;
+    }
 
     // Create preview layer declaration
     const declaration = defineLayer('_preview',
       withType('texture'),
-      withUI('_preview', '_preview', 'custom'),
+      withUI('Preview', 'Preview', 'custom'),
       withParams(state.modelParam),
       withOptions([]),  // Preview has no options
       withBlend(blendFn),
@@ -307,23 +311,24 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     aurora.send({ type: 'registerUserLayer', layer });
     // Enable and set opacity + palette (worker defaults to disabled)
     const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
-    aurora.send({ type: 'setUserLayerOptions', layerIndex: 31, enabled: true, opacity: state.opacity, paletteIndex });
+    aurora.send({ type: 'setUserLayerOptions', layerIndex: previewIndex, enabled: true, opacity: state.opacity, paletteIndex });
 
-    console.log(`[CreateLayer] Preview: ${state.id} param=${state.modelParam.model}/${state.modelParam.param} palette=${state.paletteId} (index 31)`);
+    console.log(`[CreateLayer] Preview: "${state.displayName}" param=${state.modelParam.model}/${state.modelParam.param} palette=${state.paletteId} (index ${previewIndex})`);
     m.redraw();  // Update UI (enables Save button)
   }
 
   async function deleteLayer(registry: LayerService, aurora: AuroraService, modalService: ModalService, onClose: () => void) {
-    const confirmed = await modalService.confirmDelete(state.id);
+    if (!state.layerId) return;
+    const confirmed = await modalService.confirmDelete(state.displayName || state.layerId);
     if (!confirmed) return;
 
     // Delete permanent layer if exists
-    const layer = state.id ? registry.get(state.id) : null;
+    const layer = registry.get(state.layerId);
     if (layer && !layer.isBuiltIn) {
-      registry.unregisterUserLayer(state.id);
-      aurora.send({ type: 'unregisterUserLayer', layerId: state.id });
-      console.log(`[CreateLayer] Deleted: ${state.id}`);
-      void registry.deleteUserLayer(state.id);
+      registry.unregisterUserLayer(state.layerId);
+      aurora.send({ type: 'unregisterUserLayer', layerId: state.layerId });
+      console.log(`[CreateLayer] Deleted: ${state.layerId}`);
+      void registry.deleteUserLayer(state.layerId);
     }
     suspendedLayer = null;  // Don't restore - layer was deleted
     // Also clean up preview
@@ -353,7 +358,8 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
   let disposeErrorEffect: (() => void) | null = null;
 
   function resetState() {
-    state.id = '';
+    state.displayName = '';
+    state.layerId = null;
     state.modelParam = DEFAULT_MODEL_PARAM;
     state.paramMeta = getParamMeta(DEFAULT_MODEL_PARAM.param);
     state.paletteId = DEFAULT_PALETTE;
@@ -386,7 +392,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       }
 
       const payload = dialogService.getPayload('create-layer');
-      const editLayerId = payload?.editLayerId;
+      const editLayerId = payload?.editLayerId as TCustomLayer | undefined;
       const isEditing = !!editLayerId;
 
       // Initialize on open transition
@@ -395,12 +401,14 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
         resetState();
         auroraService.userLayerState.value = null;
 
-        // Generate unique ID for new layers
+        // Auto-generate display name for new layers
         if (!editLayerId) {
-          const existing = new Set(layerRegistry.getAll().filter(l => !l.isBuiltIn).map(l => l.id));
+          const existingNames = new Set(
+            layerRegistry.getAll().filter(l => !l.isBuiltIn).map(l => l.label)
+          );
           let n = 1;
-          while (existing.has(`layer${n}`)) n++;
-          state.id = `layer${n}`;
+          while (existingNames.has(`Custom ${n}`)) n++;
+          state.displayName = `Custom ${n}`;
           updateShaderTemplate();
         }
 
@@ -432,7 +440,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
         initialized = true;
       }
 
-      const exists = state.id && layerRegistry.get(state.id);
+      const exists = state.layerId && layerRegistry.get(state.layerId);
 
       const isFloating = dialogService.isFloating('create-layer');
       const isTop = dialogService.isTop('create-layer');
@@ -476,20 +484,18 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
           // Content (fieldset disables all inputs while shader compiles)
           m('fieldset.content', { disabled: state.tryPhase !== 'idle' }, [
-            // Layer ID
+            // Display Name
             m('.field', [
-              m('label', 'Layer ID'),
+              m('label', 'Display Name'),
               m('input[type=text]', {
-                'data-testid': 'layer-id-input',
-                placeholder: 'e.g., mytemp',
-                disabled: isEditing,
-                value: state.id,
+                'data-testid': 'layer-name-input',
+                placeholder: 'e.g., My Temperature',
+                value: state.displayName,
                 oninput: (e: Event) => {
-                  state.id = (e.target as HTMLInputElement).value.toLowerCase();
-                  updateShaderTemplate();
+                  state.displayName = (e.target as HTMLInputElement).value;
                 },
               }),
-              m('.hint', 'Unique identifier (lowercase, no spaces)'),
+              m('.hint', 'Name shown in the layer panel'),
             ]),
 
             // Data parameter + Palette (side by side)
@@ -517,7 +523,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                   onchange: (e: Event) => {
                     state.paletteId = (e.target as HTMLSelectElement).value as PaletteId;
                     // Live palette switching via uniform (no shader recompilation needed)
-                    const index = isEditing ? layerRegistry.get(editLayerId!)?.userLayerIndex : 31;
+                    const index = isEditing && editLayerId ? layerRegistry.get(editLayerId)?.userLayerIndex : 8;
                     if (index !== undefined && (layerRegistry.hasPreview() || isEditing)) {
                       const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
                       auroraService.send({ type: 'setUserLayerOptions', layerIndex: index, paletteIndex });
@@ -548,7 +554,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                   oninput: (e: Event) => {
                     state.opacity = parseInt((e.target as HTMLInputElement).value) / 100;
                     // Send to worker in real-time
-                    const index = isEditing ? layerRegistry.get(editLayerId!)?.userLayerIndex : 31;
+                    const index = isEditing && editLayerId ? layerRegistry.get(editLayerId)?.userLayerIndex : 8;
                     if (index !== undefined) {
                       auroraService.send({ type: 'setUserLayerOptions', layerIndex: index, opacity: state.opacity });
                     }

@@ -9,10 +9,11 @@
  */
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
-import type { TLayerCategory } from '../../config/types';
+import { BUILT_IN_LAYERS, CUSTOM_LAYERS, type TBuiltInLayer, type TCustomLayer, type TLayerCategory } from '../../config/types';
 import type { OptionsService } from '../options-service';
 import { builtInLayers } from '../../layers';
 import { getPublishedParams, type TModel, type TModelParam } from '../../config/models';
+import type { TLayer } from '../../config/types';
 import type { PaletteId } from '../palette-service';
 
 export type LayerType = 'decoration' | 'texture' | 'geometry' | 'solid';
@@ -30,7 +31,7 @@ export type { AdvectionConfig } from './advection';
 import type { AdvectionConfig } from './advection';
 
 export interface LayerDeclaration {
-  id: string;
+  id: TLayer ;
   type: LayerType;
   // UI metadata
   label: string;               // Full name (e.g., "Temperature")
@@ -62,9 +63,19 @@ interface StoredUserLayer {
   // Note: enabled state comes from URL via sanitize(), not from IDB
 }
 
-const MAX_USER_LAYERS = 31;  // 0-30, index 31 reserved for preview
-const PREVIEW_INDEX = 31;
+const MAX_USER_LAYERS = 8;   // custom0..custom7
+const PREVIEW_INDEX = 8;
 const PREVIEW_ID = '_preview';
+
+/** Derive custom layer ID from allocated index */
+export function customLayerId(index: number): TCustomLayer {
+  return CUSTOM_LAYERS[index]!;
+}
+
+/** Type guard: narrows LayerDeclaration to one with a TBuiltInLayer id */
+export function isBuiltInLayer(layer: LayerDeclaration): layer is LayerDeclaration & { id: TBuiltInLayer } {
+  return (BUILT_IN_LAYERS as readonly string[]).includes(layer.id);
+}
 
 // IDB constants
 const DB_NAME = 'hypatia-zero';
@@ -74,11 +85,11 @@ const USER_LAYERS_STORE = 'user-layers';
 const MAX_BUILT_IN_LAYERS = 16;  // Indices 0-15 for built-in layers
 
 export class LayerService {
-  private layers: Map<string, LayerDeclaration> = new Map();
+  private layers: Map<TLayer , LayerDeclaration> = new Map();
   private changeSignal: Signal<number> = signal(0);
   private usedUserIndices: Set<number> = new Set();
-  private userLayerEnabled: Map<string, boolean> = new Map();
-  private userLayerOpacity: Map<string, number> = new Map();
+  private userLayerEnabled: Map<TLayer , boolean> = new Map();
+  private userLayerOpacity: Map<TLayer , number> = new Map();
   private nextBuiltInIndex = 0;  // Auto-increment for built-in layer indices
   private optionsService: OptionsService | null = null;
 
@@ -120,22 +131,87 @@ export class LayerService {
 
   /**
    * Load user layers from IndexedDB
-   * Call once at bootstrap, after built-in layers are registered
+   * Call once at bootstrap, after built-in layers are registered.
+   * Migrates legacy arbitrary keys → fixed custom0..custom7 IDs.
    */
   async loadUserLayers(): Promise<void> {
     try {
       const db = await this.openDB();
-      const layers = await new Promise<StoredUserLayer[]>((resolve, reject) => {
+
+      // Read all entries with their keys
+      const { entries, needsMigration } = await new Promise<{
+        entries: Array<{ key: string; stored: StoredUserLayer }>;
+        needsMigration: boolean;
+      }>((resolve, reject) => {
         const tx = db.transaction(USER_LAYERS_STORE, 'readonly');
         const store = tx.objectStore(USER_LAYERS_STORE);
-        const request = store.getAll();
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result ?? []); // QC-OK: IndexedDB API
+        const keysReq = store.getAllKeys();
+        const valsReq = store.getAll();
+        let keys: IDBValidKey[];
+        keysReq.onsuccess = () => { keys = keysReq.result; };
+        valsReq.onerror = () => reject(valsReq.error);
+        valsReq.onsuccess = () => {
+          const vals: StoredUserLayer[] = valsReq.result ?? []; // QC-OK: IndexedDB API
+          const customSet = new Set<string>(CUSTOM_LAYERS as unknown as string[]);
+          const entries = keys.map((k, i) => ({ key: String(k), stored: vals[i]! }));
+          const needsMigration = entries.some(e => !customSet.has(e.key));
+          resolve({ entries, needsMigration });
+        };
         tx.oncomplete = () => db.close();
       });
 
+      // Migrate legacy keys → custom0..custom7 in a single transaction
+      if (needsMigration && entries.length > 0) {
+        console.log(`[LayerService] Migrating ${entries.length} legacy user layer(s) to fixed IDs`);
+        const migrateDb = await this.openDB();
+        await new Promise<void>((resolve, reject) => {
+          const tx = migrateDb.transaction(USER_LAYERS_STORE, 'readwrite');
+          const store = tx.objectStore(USER_LAYERS_STORE);
+
+          for (let i = 0; i < Math.min(entries.length, MAX_USER_LAYERS); i++) {
+            const entry = entries[i]!;
+            const newId = customLayerId(i);
+            const oldBlendFn = entry.stored.declaration.blendFn;
+
+            // Update declaration
+            entry.stored.declaration.id = newId;
+            entry.stored.declaration.userLayerIndex = i;
+
+            // Migrate blend function name in shader source
+            if (oldBlendFn && entry.stored.declaration.shaders?.main) {
+              const newBlendFn = `blend${newId.charAt(0).toUpperCase()}${newId.slice(1)}`;
+              entry.stored.declaration.shaders.main =
+                entry.stored.declaration.shaders.main.replace(new RegExp(oldBlendFn, 'g'), newBlendFn);
+              entry.stored.declaration.blendFn = newBlendFn;
+            }
+
+            // Store label from old ID if not already set
+            if (!entry.stored.declaration.label || entry.stored.declaration.label === entry.key) {
+              entry.stored.declaration.label = entry.key;
+              entry.stored.declaration.buttonLabel = entry.key;
+            }
+
+            // Write new key, delete old key
+            store.put(entry.stored, newId);
+            if (entry.key !== newId) {
+              store.delete(entry.key);
+            }
+
+            // Update local entry for subsequent load
+            entry.key = newId;
+          }
+
+          if (entries.length > MAX_USER_LAYERS) {
+            console.warn(`[LayerService] Dropped ${entries.length - MAX_USER_LAYERS} user layer(s) (max ${MAX_USER_LAYERS})`);
+          }
+
+          tx.oncomplete = () => { migrateDb.close(); resolve(); };
+          tx.onerror = () => reject(tx.error);
+        });
+      }
+
       let loadedCount = 0;
-      for (const stored of layers) {
+      for (const { stored } of entries.slice(0, MAX_USER_LAYERS)) {
         const { declaration, opacity } = stored;
         // Validate and allocate index
         if (!declaration.id || declaration.isBuiltIn) continue;
@@ -163,6 +239,7 @@ export class LayerService {
         // Register with fresh index (don't trust stored index)
         const layer: LayerDeclaration = {
           ...declaration,
+          id: declaration.id as TCustomLayer,  // QC-OK: migrated to custom0..7 above
           userLayerIndex: index,
           isBuiltIn: false,
         };
@@ -184,7 +261,7 @@ export class LayerService {
   /**
    * Save a user layer to IndexedDB
    */
-  async saveUserLayer(id: string): Promise<void> {
+  async saveUserLayer(id: TLayer ): Promise<void> {
     const declaration = this.layers.get(id);
     if (!declaration || declaration.isBuiltIn) return;
 
@@ -212,7 +289,7 @@ export class LayerService {
   /**
    * Delete a user layer from IndexedDB
    */
-  async deleteUserLayer(id: string): Promise<void> {
+  async deleteUserLayer(id: TLayer ): Promise<void> {
     try {
       const db = await this.openDB();
       await new Promise<void>((resolve, reject) => {
@@ -257,19 +334,19 @@ export class LayerService {
     }
   }
 
-  unregister(id: string): void {
+  unregister(id: TLayer ): void {
     if (this.layers.delete(id)) {
       this.changeSignal.value++;
     }
   }
 
   /** Get a layer by ID */
-  get(id: string): LayerDeclaration | undefined {
+  get(id: TLayer ): LayerDeclaration | undefined {
     return this.layers.get(id);
   }
 
   /** Get layer index for uniform array access (NaN if not found) */
-  getLayerIndex(id: string): number {
+  getLayerIndex(id: TLayer ): number {
     return this.layers.get(id)?.index ?? NaN; // QC-OK: NaN for unknown layer
   }
 
@@ -288,15 +365,15 @@ export class LayerService {
   }
 
   /** Check if a layer is enabled (works for both built-in and user layers) */
-  isLayerEnabled(id: string): boolean {
+  isLayerEnabled(id: TLayer ): boolean {
     const layer = this.layers.get(id);
     if (!layer) return false;
 
-    if (layer.isBuiltIn) {
+    if (isBuiltInLayer(layer)) {
       // Built-in: check OptionsService
       const opts = this.optionsService?.options.value;
-      const layerOpts = opts?.[id as keyof typeof opts] as { enabled?: boolean } | undefined;
-      return layerOpts?.enabled ?? false; // QC-OK: dynamic options lookup
+      const layerOpts = opts?.[layer.id]; // narrowed to TBuiltInLayer by type guard
+      return (layerOpts as { enabled?: boolean } | undefined)?.enabled ?? false; // QC-OK: dynamic options lookup
     } else {
       // User layer: check internal map
       return this.userLayerEnabled.get(id) ?? true; // QC-OK: new layers default enabled
@@ -371,16 +448,19 @@ export class LayerService {
     this.usedUserIndices.delete(index);
   }
 
-  /** Register with automatic index allocation for user layers */
-  registerUserLayer(declaration: Omit<LayerDeclaration, 'userLayerIndex'>): LayerDeclaration | null {
+  /** Register with automatic index allocation for user layers.
+   *  ID is derived from allocated index (custom0..custom7). */
+  registerUserLayer(declaration: Omit<LayerDeclaration, 'id' | 'userLayerIndex'>): LayerDeclaration | null {
     const index = this.allocateUserIndex();
     if (index === null) {
-      console.error('[LayerService] No free user layer slots (max 32)');
+      console.error(`[LayerService] No free user layer slots (max ${MAX_USER_LAYERS})`);
       return null;
     }
 
+    const id = customLayerId(index);
     const fullDeclaration: LayerDeclaration = {
       ...declaration,
+      id,
       userLayerIndex: index,
       isBuiltIn: false,
     };
@@ -390,7 +470,7 @@ export class LayerService {
   }
 
   /** Unregister and free user layer index */
-  unregisterUserLayer(id: string): void {
+  unregisterUserLayer(id: TLayer ): void {
     const layer = this.layers.get(id);
     if (layer?.userLayerIndex !== undefined) {
       this.freeUserIndex(layer.userLayerIndex);
@@ -433,14 +513,16 @@ export class LayerService {
     return this.layers.get(PREVIEW_ID);
   }
 
-  /** Promote preview to permanent layer with given ID */
-  promotePreview(id: string): LayerDeclaration | null {
+  /** Promote preview to permanent layer. ID derived from allocated index. */
+  promotePreview(): LayerDeclaration | null {
     const preview = this.layers.get(PREVIEW_ID);
     if (!preview) return null;
 
     // Allocate permanent index
     const index = this.allocateUserIndex();
     if (index === null) return null;
+
+    const id = customLayerId(index);
 
     // Create permanent layer
     const permanent: LayerDeclaration = {
@@ -457,25 +539,25 @@ export class LayerService {
   }
 
   /** Set user layer enabled state */
-  setUserLayerEnabled(id: string, enabled: boolean): void {
+  setUserLayerEnabled(id: TLayer , enabled: boolean): void {
     this.userLayerEnabled.set(id, enabled);
     this.changeSignal.value++;
   }
 
   /** Toggle user layer enabled state */
-  toggleUserLayer(id: string): boolean {
+  toggleUserLayer(id: TLayer ): boolean {
     const current = this.isLayerEnabled(id);
     this.setUserLayerEnabled(id, !current);
     return !current;
   }
 
   /** Get user layer opacity */
-  getUserLayerOpacity(id: string): number {
+  getUserLayerOpacity(id: TLayer ): number {
     return this.userLayerOpacity.get(id)!;
   }
 
   /** Set user layer opacity */
-  setUserLayerOpacity(id: string, opacity: number): void {
+  setUserLayerOpacity(id: TLayer , opacity: number): void {
     this.userLayerOpacity.set(id, opacity);
   }
 }

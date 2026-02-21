@@ -15,11 +15,11 @@ import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
 import type { GraticuleLodLevel } from '../layers/graticule';
 import { LayerStore } from './layer-store';
 import type { ZeroOptions } from '../schemas/options.schema';
-import type { TLayer } from '../config/types';
+import type { TBuiltInLayer, TLayer } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer, activeParamBindings, type ComposedShaders } from './shader-composer';
-import { LayerService, type LayerDeclaration } from '../services/layer/layer-service';
+import { LayerService, isBuiltInLayer, type LayerDeclaration } from '../services/layer/layer-service';
 import type { PaletteId } from '../services/palette-service';
 import { writeConfigUniforms, writeOptionUniforms, configValue } from './uniform-writer';
 
@@ -141,7 +141,7 @@ function findLayerForParam(param: string): string | undefined {
 }
 
 // Get slot state for a layer (looks up first param's state)
-function getLayerSlotState(layerId: string): SlotState {
+function getLayerSlotState(layerId: TLayer ): SlotState {
   const params = layerRegistry!.get(layerId)!.params!;
   return paramSlotStates.get(params[0]!.param)!;
 }
@@ -208,7 +208,7 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
   // Check if data is ready AND current time is within data window
   // All params of the layer must be ready (not just the first) — prevents e.g.
   // rain rendering without wind data for advection
-  const isDataReady = (layerId: string): boolean => {
+  const isDataReady = (layerId: TLayer ): boolean => {
     const params = layerRegistry!.get(layerId)!.params;
     if (!params) return false;
     const margin = 30 * 60 * 1000;  // 30 minutes
@@ -226,9 +226,9 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
     let enabled: boolean;
     let opacity: number;
 
-    if (layer.isBuiltIn) {
+    if (isBuiltInLayer(layer)) {
       // Built-in layers: get from Zod-validated options
-      const layerOpts = opts[layer.id as TLayer];  // QC-OK: guarded by isBuiltIn
+      const layerOpts = opts[layer.id];  // narrowed to TBuiltInLayer by type guard
       if (!layerOpts || !('enabled' in layerOpts)) continue;
       enabled = layerOpts.enabled;
       opacity = layerOpts.opacity;
@@ -334,8 +334,8 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
 function isAnyLayerEnabled(): boolean {
   if (!currentOptions || !layerRegistry) return false;
   for (const layer of layerRegistry.getAll()) {
-    if (layer.isBuiltIn) {
-      const layerOpts = currentOptions[layer.id as TLayer];  // QC-OK: guarded by isBuiltIn
+    if (isBuiltInLayer(layer)) {
+      const layerOpts = currentOptions[layer.id];  // narrowed to TBuiltInLayer by type guard
       if (layerOpts && 'enabled' in layerOpts && layerOpts.enabled) return true;
     } else {
       const idx = layer.userLayerIndex!;
@@ -449,7 +449,9 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 
   // Build param binding registry from ShaderComposer (must be after compose())
   rebuildParamBindings();
-  console.log('[Aurora] Using composed shaders for', initLayers.length, 'layers');
+  if (initLayers.length === 0) {
+    console.error('[Aurora] No layers registered for shader composition');
+  }
 
   self.postMessage({ type: 'ready' } satisfies AuroraResponse);
 }
@@ -701,7 +703,7 @@ function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerU
 }
 
 function handleUnregisterUserLayer(data: Extract<AuroraRequest, { type: 'unregisterUserLayer' }>): void {
-  const { layerId } = data;
+  const layerId = data.layerId as TLayer ;  // QC-OK: message boundary, validated by sender
   if (!layerRegistry || !renderer) {
     console.warn('[Aurora] Cannot unregister user layer: not initialized');
     return;
@@ -745,7 +747,7 @@ function handleSetUserLayerOptions(data: Extract<AuroraRequest, { type: 'setUser
 function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette' }>): void {
   const { layer, paletteId, range } = data;
   if (!renderer || !layerRegistry) return;
-  const layerIndex = layerRegistry.getLayerIndex(layer);
+  const layerIndex = layerRegistry.getLayerIndex(layer as TBuiltInLayer);  // QC-OK: palette updates only for built-in layers
   if (isNaN(layerIndex)) return;
   renderer.setLayerPalette(layerIndex, 0, paletteId);
   if (range) {

@@ -9,7 +9,7 @@
  */
 
 import { signal } from '@preact/signals-core';
-import { type TTimestep, type Timestep, type QueueTask, type TimestepOrder } from '../../config/types';
+import { type TTimestep, type TLayer, type Timestep, type QueueTask, type TimestepOrder } from '../../config/types';
 import type { LayerService } from '../layer/layer-service';
 import { parseTimestep, formatTimestep } from '../../utils/timestep';
 import { countBeforeTimestep, clearBeforeTimestep } from '../sw-registration';
@@ -281,7 +281,6 @@ export class TimestepService {
     const entry = this.timestepsData[mp.model][idx]!;
     const meta = getParamMeta(mp.param);
     if (meta.backwardSum && entry.isAnalysis && entry.fallbackUrl) {
-      console.log(`[Timestep] ${P(mp)} at ${ts}: using previous run (analysis, backward sum)`);
       return entry.fallbackUrl;
     }
     return entry.url;
@@ -452,7 +451,7 @@ export class TimestepService {
    * Minimum tasks for a given time — 1 timestep (exact match) or 2 (interpolation pair).
    * Resolves backward-sum fallback URLs. Used by bootstrap for first render.
    */
-  getUrlTimeTasks(time: Date, activeLayers: string[]): TimestepOrder[] {
+  getUrlTimeTasks(time: Date, activeLayers: ReadonlyArray<TLayer >): TimestepOrder[] {
     const orders: TimestepOrder[] = [];
 
     for (const layerId of activeLayers) {
@@ -487,7 +486,7 @@ export class TimestepService {
     return orders;
   }
 
-  getWindowTasks(time: Date, numSlots: number, activeLayers: string[]): {
+  getWindowTasks(time: Date, numSlots: number, activeLayers: ReadonlyArray<TLayer >): {
     window: TTimestep[];
     tasks: QueueTask[];
   } {

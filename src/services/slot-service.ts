@@ -10,7 +10,7 @@
  */
 
 import { effect, signal } from '@preact/signals-core';
-import { type TTimestep, type LayerState } from '../config/types';
+import { type TTimestep, type TLayer, type LayerState } from '../config/types';
 import type { TModelParam } from '../config/models';
 import type { TimestepService } from './timestep/timestep-service';
 import type { AuroraService } from './aurora-service';
@@ -447,7 +447,7 @@ export class SlotService {
    * @param layer Layer name (e.g., 'pressure') - mapped to params via LayerService
    * @param data Float32Array or array of Float32Arrays (for multi-param layers like wind)
    */
-  injectTestData(layer: string, data: Float32Array | Float32Array[]): void {
+  injectTestData(layer: TLayer, data: Float32Array | Float32Array[]): void {
     const layerDecl = this.layerService.get(layer);
     if (!layerDecl?.params?.length) {
       console.warn(`[ParamSlot] injectTestData: no params for layer ${layer}`);

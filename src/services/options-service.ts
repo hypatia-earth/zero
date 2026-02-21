@@ -19,8 +19,8 @@ import {
 } from '../schemas/options.schema';
 import { deepMerge, getByPath, setByPath } from '../utils/object';
 import { debounceFlush } from '../utils/debounce-flush';
-import { layerIds } from '../config/defaults';
-import type { TLayer } from '../config/types';
+import { builtInLayerIds } from '../config/defaults';
+import type { TBuiltInLayer } from '../config/types';
 import type { LayerService } from './layer/layer-service';
 import { updatePrefetchConfig } from './sw-registration';
 
@@ -171,7 +171,7 @@ function deleteByPath<T extends object>(obj: T, path: string): T {
 // OptionsService
 // ============================================================
 
-export type { TLayer };
+export type { TBuiltInLayer };
 
 export class OptionsService {
   /** User overrides only (persisted to IndexedDB) */
@@ -346,7 +346,7 @@ export class OptionsService {
    */
   setEnabledLayers(enabledSet: Set<string>): void {
     // Built-in layers: update options
-    for (const layerId of layerIds) {
+    for (const layerId of builtInLayerIds) {
       const shouldEnable = enabledSet.has(layerId);
       const isEnabled = getByPath(this.options.value, `${layerId}.enabled`);
       if (isEnabled !== shouldEnable) {
@@ -372,7 +372,7 @@ export class OptionsService {
    */
   getEnabledLayers(): string[] {
     // Built-in layers from options
-    const enabled: string[] = layerIds.filter(id =>
+    const enabled: string[] = builtInLayerIds.filter(id =>
       getByPath(this.options.value, `${id}.enabled`) === true
     );
 

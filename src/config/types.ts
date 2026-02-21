@@ -9,8 +9,14 @@ import type { TModelParam } from './models';
 // Layer definitions
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const ALL_LAYERS = ['earth', 'sun', 'graticule', 'temp', 'rain', 'clouds', 'humidity', 'pressure', 'wind'] as const;
-export type TLayer = typeof ALL_LAYERS[number];
+export const BUILT_IN_LAYERS = ['earth', 'sun', 'graticule', 'temp', 'rain', 'clouds', 'humidity', 'pressure', 'wind'] as const;
+export type TBuiltInLayer = typeof BUILT_IN_LAYERS[number];
+
+export const CUSTOM_LAYERS = ['custom0', 'custom1', 'custom2', 'custom3', 'custom4', 'custom5', 'custom6', 'custom7'] as const;
+export type TCustomLayer = typeof CUSTOM_LAYERS[number];
+
+export const ALL_LAYERS = [...BUILT_IN_LAYERS, ...CUSTOM_LAYERS, '_preview'] as const;
+export type TLayer = TBuiltInLayer | TCustomLayer | '_preview';
 
 /** Layer categories */
 export const LAYER_CATEGORIES = ['celestial', 'weather', 'reference', 'custom'] as const;
@@ -50,7 +56,7 @@ export interface LayerState {
 /** Task for QueueService to execute */
 export interface QueueTask {
   url: string;
-  param: string;       // layer ID (built-in or custom)
+  param: TLayer;               // layer ID (built-in or custom)
   timestep: TTimestep;
   sizeEstimate: number;
   modelParam: TModelParam;
@@ -86,7 +92,7 @@ export interface IQueueService {
 /** Timestep download order for QueueService */
 export interface TimestepOrder {
   url: string;
-  param: string;       // layer ID (built-in or custom)
+  param: TLayer;               // layer ID (built-in or custom)
   timestep: TTimestep;
   sizeEstimate: number;  // Estimated bytes (NaN = use default)
   slabIndex: number;     // Which slab to upload to (0 for single-slab layers)

@@ -69,7 +69,7 @@ export class CapabilitiesService {
       `[CAPS] ${gpu}\n` +
       `  buffer: ${MB(bufferLimit)}, storage: ${MB(storageLimit)}, ` +
       `storageBuffers: ${adapter.limits.maxStorageBuffersPerShaderStage}, ` +
-      `textures: ${adapter.limits.maxTextureArrayLayers}\n` +
+      `maxTexture2D: ${adapter.limits.maxTextureDimension2D}\n` +
       `  features: float32=${this.float32Filterable}, timestamp=${adapter.features.has('timestamp-query')}\n` +
       `  cores: ${navigator.hardwareConcurrency}, screen: ${screen.width}x${screen.height} @${devicePixelRatio}x`
     );

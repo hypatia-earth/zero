@@ -7,7 +7,7 @@
  */
 
 import { computed, effect } from '@preact/signals-core';
-import type { FileOrder, IQueueService, TimestepOrder, OmSlice, QueueTask } from '../../config/types';
+import type { FileOrder, IQueueService, TimestepOrder, OmSlice, QueueTask, TLayer } from '../../config/types';
 import { fetchStreaming } from '../../utils/fetch';
 import { sortByTimestep } from './sorter';
 import { QueueStatsTracker } from './stats';
@@ -64,17 +64,15 @@ export class QueueService implements IQueueService {
     this.layerService.changed.value;
 
     // Get all enabled layers with params
-    const activeLayers = new Set<string>(
-      this.layerService.getAll()
-        .filter(l => l.params?.length && this.layerService.isLayerEnabled(l.id))
-        .map(l => l.id)
-    );
+    const activeLayers = this.layerService.getAll()
+      .filter(l => l.params?.length && this.layerService.isLayerEnabled(l.id))
+      .map(l => l.id);
 
     return {
       time: this.stateService.viewState.value.time,
       poolSize: parseInt(opts.gpu.workerPoolSize, 10),
       numSlots: parseInt(opts.gpu.timeslotsPerLayer, 10),
-      activeLayers: [...activeLayers],
+      activeLayers,
       strategy: opts.dataCache.cacheStrategy,
     };
   });
@@ -320,7 +318,7 @@ export class QueueService implements IQueueService {
     time: Date;
     poolSize: number;
     numSlots: number;
-    activeLayers: string[];  // layer IDs (built-in + custom)
+    activeLayers: (TLayer )[];  // layer IDs (built-in + custom)
     strategy: 'alternate' | 'future-first';
   }): void {
     // 1. Get window and tasks from TimestepService

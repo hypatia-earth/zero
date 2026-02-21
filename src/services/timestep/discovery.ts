@@ -94,11 +94,6 @@ export async function discoverModel(
     basePrefix
   );
 
-  const analysisCount = timesteps.filter(t => t.isAnalysis).length;
-  if (analysisCount > 0) {
-    console.log(`[Discovery] ${model}: ${analysisCount} analysis (T+0) timesteps flagged — backward sum params use previous run`);
-  }
-
   return { timesteps, variables };
 }
 

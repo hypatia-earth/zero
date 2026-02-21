@@ -6,10 +6,10 @@ import m from 'mithril';
 import { GearIcon } from './gear-icon';
 import type { ConfigService } from '../services/config-service';
 import type { OptionsService } from '../services/options-service';
-import type { LayerService } from '../services/layer/layer-service';
+import { isBuiltInLayer, type LayerService } from '../services/layer/layer-service';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
-import { LAYER_CATEGORIES, LAYER_CATEGORY_LABELS, type TLayer } from '../config/types';
+import { LAYER_CATEGORIES, LAYER_CATEGORY_LABELS } from '../config/types';
 
 interface LayersPanelAttrs {
   configService: ConfigService;
@@ -29,9 +29,8 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
 
       // Toggle handler for any layer
       const toggleLayer = (layer: typeof allLayers[0]) => {
-        if (layer.isBuiltIn) {
-          const id = layer.id as TLayer;  // QC-OK: guarded by isBuiltIn
-          optionsService.update(draft => { draft[id].enabled = !draft[id].enabled; });
+        if (isBuiltInLayer(layer)) {
+          optionsService.update(draft => { draft[layer.id].enabled = !draft[layer.id].enabled; });
         } else {
           const enabled = layerRegistry.toggleUserLayer(layer.id);
           if (layer.userLayerIndex !== undefined) {
@@ -43,8 +42,8 @@ export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
 
       // Options handler for any layer
       const openOptions = (layer: typeof allLayers[0]) => {
-        if (layer.isBuiltIn) {
-          dialogService.open('options', { filter: layer.id as TLayer });  // QC-OK: guarded by isBuiltIn
+        if (isBuiltInLayer(layer)) {
+          dialogService.open('options', { filter: layer.id });
         } else {
           dialogService.open('create-layer', { editLayerId: layer.id });
         }

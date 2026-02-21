@@ -5,10 +5,13 @@
  * LayerService is the authority for layer config.
  */
 
-import { ALL_LAYERS, type ZeroConfig, type TLayer } from './types';
+import { ALL_LAYERS, BUILT_IN_LAYERS, type ZeroConfig, type TLayer, type TBuiltInLayer } from './types';
 import { CAMERA_DEFAULTS } from '../aurora/defaults';
 
 export const EARTH_RADIUS = 6371000; // meters
+
+/** Built-in layer IDs only (for OptionsService iteration) */
+export const builtInLayerIds: readonly TBuiltInLayer[] = BUILT_IN_LAYERS;
 
 /** All layer IDs in render order */
 export const layerIds: readonly TLayer[] = ALL_LAYERS;

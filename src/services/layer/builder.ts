@@ -20,7 +20,7 @@ export interface LayerFeature {
   apply(declaration: Partial<LayerDeclaration>): Partial<LayerDeclaration>;
 }
 
-export function defineLayer(id: string, ...features: LayerFeature[]): LayerDeclaration {
+export function defineLayer(id: LayerDeclaration['id'], ...features: LayerFeature[]): LayerDeclaration {
   let declaration: Partial<LayerDeclaration> = { id };
 
   for (const feature of features) {

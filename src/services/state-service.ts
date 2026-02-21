@@ -11,7 +11,7 @@ import { debounceFlush } from '../utils/debounce-flush';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { LayerService } from './layer/layer-service';
-import { layerIds } from '../config/defaults';
+import { builtInLayerIds } from '../config/defaults';
 
 const DEBUG = false;
 
@@ -151,7 +151,7 @@ export class StateService {
     // Sanitize layers: validate and apply from URL
     const layersStr = params.get('layers');
     const customIds = this.layerService!.getAll().filter(l => !l.isBuiltIn).map(l => l.id);
-    const validIds = new Set<string>([...layerIds, ...customIds]);
+    const validIds = new Set<string>([...builtInLayerIds, ...customIds]);
 
     let enabledLayers: string[];
     if (layersStr === null || layersStr === '') {
