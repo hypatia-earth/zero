@@ -57,8 +57,8 @@ export class CapabilitiesService {
     info = tempDevice.adapterInfo;
     tempDevice.destroy();
     if (!info?.vendor) {
-      // QC-OK: legacy Chrome/Safari expose adapterInfo on GPUAdapter (non-standard, not in TS types)
-      info = (adapter as unknown as { adapterInfo?: GPUAdapterInfo }).adapterInfo;
+      // Legacy Chrome/Safari expose adapterInfo on GPUAdapter (augmented in global.d.ts)
+      info = adapter.adapterInfo;
     }
 
     const gpu = info?.vendor && info?.architecture
