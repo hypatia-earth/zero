@@ -17,7 +17,6 @@ import type { AuroraService } from './aurora-service';
 import type { QueueService } from './queue/queue-service';
 import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
-import type { ConfigService } from './config-service';  // kept for constructor signature compatibility
 import type { LayerService } from './layer/layer-service';
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
 
@@ -49,7 +48,6 @@ export class SlotService {
     private queueService: QueueService,
     private optionsService: OptionsService,
     private stateService: StateService,
-    _configService: ConfigService,
     private layerService: LayerService,
   ) {
     this.timeslotsPerLayer = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);

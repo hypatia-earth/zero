@@ -83,7 +83,7 @@ async function runBootstrapInner(
 
   // Phase 3: Discovery
   progress.startStep('DISCOVERY');
-  services.timestepService = createTimestepService(services.configService!, services.layerService!);
+  services.timestepService = createTimestepService(services.layerService!);
   await runDiscoveryPhase(services.timestepService, services.stateService!, progress);
 
   // Phase 4: Assets
@@ -92,7 +92,6 @@ async function runBootstrapInner(
     services.omService!,
     services.optionsService!,
     services.stateService!,
-    services.configService!,
     services.timestepService,
     services.layerService!
   );
@@ -113,7 +112,6 @@ async function runBootstrapInner(
     services.queueService,
     services.optionsService!,
     services.stateService!,
-    services.configService!,
     services.layerService!
   );
   await runGpuInitPhase(

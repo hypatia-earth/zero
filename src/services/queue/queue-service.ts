@@ -13,7 +13,6 @@ import { sortByTimestep } from './sorter';
 import { QueueStatsTracker } from './stats';
 import type { OmService } from './om-service';
 import type { OptionsService } from '../options-service';
-import type { ConfigService } from '../config-service';
 import type { StateService } from '../state-service';
 import type { TimestepService } from '../timestep/timestep-service';
 import type { LayerService } from '../layer/layer-service';
@@ -84,7 +83,6 @@ export class QueueService implements IQueueService {
     private omService: OmService,
     private optionsService: OptionsService,
     private stateService: StateService,
-    _configService: ConfigService,
     private timestepService: TimestepService,
     private layerService: LayerService
   ) {}

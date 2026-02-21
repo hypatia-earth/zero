@@ -98,7 +98,7 @@ export function createFoundationServices(): Pick<
 /**
  * Create TimestepService (needs layer service)
  */
-export function createTimestepService(_configService: ConfigService, layerService: LayerService): TimestepService {
+export function createTimestepService(layerService: LayerService): TimestepService {
   return new TimestepService(layerService);
 }
 
@@ -109,11 +109,10 @@ export function createQueueService(
   omService: OmService,
   optionsService: OptionsService,
   stateService: StateService,
-  configService: ConfigService,
   timestepService: TimestepService,
   layerService: LayerService
 ): QueueService {
-  return new QueueService(omService, optionsService, stateService, configService, timestepService, layerService);
+  return new QueueService(omService, optionsService, stateService, timestepService, layerService);
 }
 
 // AuroraService is created via createAuroraService from aurora-service.ts
@@ -128,7 +127,6 @@ export function createSlotService(
   queueService: QueueService,
   optionsService: OptionsService,
   stateService: StateService,
-  configService: ConfigService,
   layerService: LayerService
 ): SlotService {
   const slotService = new SlotService(
@@ -137,7 +135,6 @@ export function createSlotService(
     queueService,
     optionsService,
     stateService,
-    configService,
     layerService
   );
 
