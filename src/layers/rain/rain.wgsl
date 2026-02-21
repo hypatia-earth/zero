@@ -28,13 +28,14 @@ fn sdfDiamond(p: vec2f) -> f32 {
 fn precipTypeColor(ptype: f32) -> vec3f {
   let code = u32(ptype + 0.5);
   switch code {
-    case 1u: { return vec3f(0.7, 0.85, 1.0); }    // rain
-    case 3u: { return vec3f(0.6, 0.8, 0.95); }     // freezing rain
-    case 5u: { return vec3f(1.0, 1.0, 1.0); }      // snow
-    case 6u: { return vec3f(0.9, 0.92, 0.95); }    // wet snow
-    case 7u: { return vec3f(0.85, 0.9, 0.95); }    // sleet
-    case 8u: { return vec3f(0.8, 0.85, 0.95); }    // ice pellets
-    default: { return vec3f(1.0, 0.0, 0.0); }      // unknown → red
+    case 1u:  { return vec3f(0.7, 0.85, 1.0); }     // rain
+    case 3u:  { return vec3f(0.6, 0.8, 0.95); }     // freezing rain
+    case 5u:  { return vec3f(1.0, 1.0, 1.0); }      // snow
+    case 6u:  { return vec3f(0.9, 0.92, 0.95); }    // wet snow
+    case 7u:  { return vec3f(0.85, 0.9, 0.95); }    // sleet
+    case 8u:  { return vec3f(0.8, 0.85, 0.95); }    // ice pellets
+    case 12u: { return vec3f(0.75, 0.85, 0.9); }    // freezing drizzle
+    default:  { return vec3f(1.0, 0.0, 0.0); }      // unknown → red
   }
 }
 
@@ -76,6 +77,7 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   // let fadeAlpha = 1.0 - phase;
   let fadeAlpha = 1.0;
 
+  // DEBUG: encode raw ptype value as brightness for unknown codes
   let typeColor = precipTypeColor(ptype);
   let alpha = fadeAlpha * opacity;
   return vec4f(mix(color.rgb, typeColor, alpha), color.a);

@@ -73,7 +73,8 @@ export const defaultConfig: ZeroConfig = {
       snow:         [1.0, 1.0, 1.0],     // WMO 5
       wetSnow:      [0.9, 0.92, 0.95],   // WMO 6
       sleet:        [0.85, 0.9, 0.95],   // WMO 7
-      icePellets:   [0.8, 0.85, 0.95],   // WMO 8
+      icePellets:      [0.8, 0.85, 0.95],   // WMO 8
+      freezingDrizzle: [0.75, 0.85, 0.9],   // WMO 12
     },
   },
 

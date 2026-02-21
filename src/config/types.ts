@@ -255,6 +255,7 @@ export interface RainConfig {
     wetSnow: [number, number, number];        // WMO 6
     sleet: [number, number, number];          // WMO 7
     icePellets: [number, number, number];     // WMO 8
+    freezingDrizzle: [number, number, number]; // WMO 12
   };
 }
 
