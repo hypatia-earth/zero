@@ -18,9 +18,31 @@ fn rainHash2(p: vec2f) -> vec2f {
 
 // ─── SDF (unit radius, < 0 = inside) ───────────────────────────────────────
 
+fn sdfDisk(p: vec2f) -> f32 {
+  return length(p) - 1.0;
+}
+
+fn sdfDrop(p: vec2f) -> f32 {
+  // Round bottom, pointy top: squeeze x progressively above center
+  let squeeze = 1.0 + max(p.y, 0.0) * 1.5;
+  return length(vec2f(p.x * squeeze, p.y)) - 1.0;
+}
+
 fn sdfDiamond(p: vec2f) -> f32 {
   let q = abs(p);
   return (q.x + q.y) - 1.0;
+}
+
+fn sdfSquare(p: vec2f) -> f32 {
+  let d = abs(p);
+  return max(d.x, d.y) - 0.8;
+}
+
+fn sdfStar6(p: vec2f) -> f32 {
+  let angle = atan2(p.y, p.x);
+  let r = length(p);
+  let petal = abs(cos(angle * 3.0)) * 0.6 + 0.4;
+  return r - petal;
 }
 
 // ─── Color per WMO code ─────────────────────────────────────────────────────
@@ -59,23 +81,36 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
     fract(lat * gridSize / COMMON_PI),
   );
 
-  // Particle SDF — constrain position so diamond fits within cell
+  // Particle SDF — constrain position so shape fits within cell
   let r = u.rainSizePx / cellSidePx;
   let particlePos = rainHash2(cellId) * (1.0 - 2.0 * r) + r;
   let p = cellUV - particlePos;
-  let sdf = sdfDiamond(p / r);
-  if (sdf > 0.0) { return color; }
+  let pn = p / r;
 
-  // Sample ptype at cell center (not per pixel) to avoid O1280 grid clipping
+  // Sample ptype at particle center (not per pixel) to avoid O1280 grid clipping
   let cellCenterLat = (latIdx + particlePos.y) * COMMON_PI / gridSize;
   let cellCenterLon = (lonIdx + particlePos.x) * COMMON_TAU / lonCells;
   let ptype = sampleParam_precipitation_type(cellCenterLat, cellCenterLon);
   if (ptype < 0.5) { return color; }
 
-  // Fade loop (disabled — tuning shapes)
-  // let phase = fract(u.time / u.rainFadeDuration + rainHash1(cellId));
-  // let fadeAlpha = 1.0 - phase;
-  let fadeAlpha = 1.0;
+  // Shape by type
+  let code = u32(ptype + 0.5);
+  var sdf: f32;
+  switch code {
+    case 3u, 12u:  { sdf = sdfSquare(pn); }                  // freezing rain/drizzle
+    case 5u:       { sdf = sdfStar6(pn); }                   // snow
+    case 6u, 7u:   {                                          // wet snow, sleet — mixed
+      sdf = select(sdfDisk(pn), sdfStar6(pn), rainHash1(cellId * 137.0) > 0.5);
+    }
+    case 8u:       { sdf = sdfDiamond(pn); }                 // ice pellets
+    case 1u:       { sdf = sdfDrop(pn); }                     // rain
+    default:       { sdf = sdfDisk(pn); }                    // unknown
+  }
+  if (sdf > 0.0) { return color; }
+
+  // Fade loop
+  let phase = fract(u.time / u.rainFadeDuration + rainHash1(cellId));
+  let fadeAlpha = 1.0 - phase;
 
   // DEBUG: encode raw ptype value as brightness for unknown codes
   let typeColor = precipTypeColor(ptype);

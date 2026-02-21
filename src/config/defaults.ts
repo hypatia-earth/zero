@@ -64,9 +64,9 @@ export const defaultConfig: ZeroConfig = {
   },
 
   rain: {
-    density: 0.005,       // items per px²
-    sizePx: 3,            // radius in screen pixels
-    fadeDuration: 1.0,    // fade cycle in seconds
+    density: 0.01,        // items per px² (1 per 10×10 area)
+    sizePx: 1.5,          // radius in screen pixels
+    fadeDuration: 2.0,    // fade cycle in seconds
     colors: {
       rain:         [0.7, 0.85, 1.0],    // WMO 1
       freezingRain: [0.6, 0.8, 0.95],    // WMO 3
