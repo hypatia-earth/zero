@@ -98,6 +98,7 @@ Different missions, both valuable.
 ## Changelog
 
 ### 2026-02-22
+- **GIF capture** - record animated GIFs of the globe with configurable FPS, duration, palette modes (fast/precise/grayscale), and native DPR support. GPU readback pipeline ensures frame-accurate capture across browsers. Two-phase UI shows capture and processing progress inside the capture rect
 - **Precipitation layer** - rain, snow, freezing rain, sleet and ice pellets with advection-based interpolation: GFS wind fields drive ECMWF precipitation displacement for smooth temporal animation between hourly timesteps
 - **Multi-model fusion** - introduced NCEP GFS 0.25° as second data source alongside ECMWF IFS, enabling cross-model rendering at the shader level
 - **Storage buffer packing** - t0/t1 timestep data packed into single combined buffers per parameter, working within Chrome's 10 storage buffer limit
