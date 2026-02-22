@@ -70,6 +70,17 @@ npm run test:e2e:ui           # Playwright UI with time-travel debugging
 - **Cameron Beccario** - [earth.nullschool.net](https://earth.nullschool.net) pioneered browser atmospheric visualization
 - **AWS Open Data** - hosting infrastructure
 
+## Performance
+
+If the globe feels sluggish -especially on tablets or with wind and precipitation layers active -two settings in the options dialog help:
+
+- **Frame rate limit**  - set to 30 fps. Gives the GPU twice the time per frame.
+- **Downscale**  - set to 2×. Renders at half resolution, the globe looks slightly softer but interaction becomes much smoother.
+
+Combined, these make even demanding layer combinations usable on mobile devices.
+
+<img src=".github/Pasted-image-20260222125458.png" width="800" alt="Pasted image 20260222125458">
+
 ## Known Limitations
 
 - **Alpha software** - expect rough edges
