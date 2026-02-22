@@ -64,7 +64,7 @@
 /* Hide on small screens (phones). Visible on vertical tablets and up. */
 /* Localhost: always visible (skill browser viewport is 860px) */
 .desktop-only { display: none !important; }
-@media (min-height: 960px) {
+@media (min-height: 820px) {
   .desktop-only { display: revert !important; }
 }
 body.localhost .desktop-only { display: revert !important; }

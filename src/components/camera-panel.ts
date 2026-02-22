@@ -12,7 +12,7 @@ interface CameraPanelAttrs {
 export const CameraPanel: m.ClosureComponent<CameraPanelAttrs> = () => {
   return {
     view({ attrs }) {
-      return m('div.camera.panel', [
+      return m('div.camera.panel.desktop-only', [
         m('button.control.circle', {
           onclick: () => attrs.captureService.enter(),
           title: 'Camera',
