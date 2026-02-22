@@ -107,8 +107,14 @@ export class GlobeRenderer {
   // Suppress errors during intentional page unload
   private isDestroying = false;
 
-  constructor(private canvas: HTMLCanvasElement | OffscreenCanvas, cameraConfig?: CameraConfig) {
+  // Device pixel ratio from main thread — workers can't reliably read devicePixelRatio
+  // (Chrome workers may lack it, Safari may differ). Used to convert device-pixel
+  // canvas dimensions to CSS pixels for graticule LoD thresholds.
+  dpr: number;
+
+  constructor(private canvas: HTMLCanvasElement | OffscreenCanvas, cameraConfig?: CameraConfig, dpr = 1) {
     this.camera = new Camera({ lat: 30, lon: 0, distance: 3 }, cameraConfig);
+    this.dpr = dpr;
   }
 
   async initialize(
@@ -221,9 +227,8 @@ export class GlobeRenderer {
     // Graticule animator for LoD transitions (initialize at correct LoD for globe screen size)
     const distance = this.camera.getState().distance;
     const fov = 2 * Math.atan(this.camera.getTanFov());
-    // Use canvas height (already device pixels in worker, CSS pixels on main thread)
-    const heightPx = 'clientHeight' in this.canvas ? (this.canvas.clientHeight || 800) : this.canvas.height;
-    const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightPx / fov);
+    const heightCss = this.canvas.height / this.dpr;
+    const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightCss / fov);
     this.graticuleAnimator = new GraticuleAnimator(initialGlobeRadiusPx, graticuleLodLevels);
 
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
@@ -565,9 +570,7 @@ export class GlobeRenderer {
       uniforms.eyePosition[2]! ** 2
     );
     const fov = 2 * Math.atan(uniforms.tanFov);
-    // In worker, devicePixelRatio doesn't exist - use 1 as fallback (resolution already in device pixels)
-    const dpr = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1;
-    const heightCss = uniforms.resolution[1]! / dpr;
+    const heightCss = uniforms.resolution[1]! / this.dpr;
     const globeRadiusPx = Math.asin(1 / cameraDistance) * (heightCss / fov);
     const graticuleBuffer = this.graticuleAnimator.packToBuffer(globeRadiusPx, this.frameDeltaMs);
     this.device.queue.writeBuffer(this.graticuleLinesBuffer, 0, graticuleBuffer);

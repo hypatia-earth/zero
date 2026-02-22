@@ -195,7 +195,7 @@ export function createAuroraService(
 
       await new Promise<void>((resolve) => {
         onReady = () => resolve();
-        send({ type: 'init', canvas: offscreen, width, height, config, assets }, transferables);
+        send({ type: 'init', canvas: offscreen, width, height, dpr: window.devicePixelRatio, config, assets }, transferables);
       });
 
       // Create camera
@@ -240,7 +240,7 @@ export function createAuroraService(
         const w = Math.round(canvas!.clientWidth * window.devicePixelRatio / d);
         const h = Math.round(canvas!.clientHeight * window.devicePixelRatio / d);
         camera!.setAspect(canvas!.clientWidth, canvas!.clientHeight);
-        send({ type: 'resize', width: w, height: h });
+        send({ type: 'resize', width: w, height: h, dpr: window.devicePixelRatio });
         perfService.setScreen(canvas!.clientWidth, canvas!.clientHeight);
       };
       const resizeObserver = new ResizeObserver(sendResize);

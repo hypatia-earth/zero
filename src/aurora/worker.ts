@@ -22,6 +22,7 @@ import { shaderComposer, activeParamBindings, type ComposedShaders } from './sha
 import { LayerService, isBuiltInLayer, type LayerDeclaration } from '../services/layer/layer-service';
 import type { PaletteId } from '../services/palette-service';
 import { writeConfigUniforms, writeOptionUniforms, configValue } from './uniform-writer';
+import { U } from './globe-uniforms';
 
 // ============================================================
 // Asset types for worker transfer
@@ -60,14 +61,14 @@ export interface AuroraConfig {
 // ============================================================
 
 export type AuroraRequest =
-  | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; config: AuroraConfig; assets: AuroraAssets }
+  | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; dpr: number; config: AuroraConfig; assets: AuroraAssets }
   | { type: 'options'; value: ZeroOptions }
   // Param-centric API
   | { type: 'uploadData'; param: string; slotIndex: number; data: Float32Array }
   | { type: 'activateSlots'; param: string; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
   | { type: 'deactivateSlots'; param: string }
   | { type: 'render'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number }
-  | { type: 'resize'; width: number; height: number }
+  | { type: 'resize'; width: number; height: number; dpr: number }
   | { type: 'registerUserLayer'; layer: LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'setUserLayerOptions'; layerIndex: number; enabled?: boolean; opacity?: number; paletteIndex?: number }
@@ -400,7 +401,9 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   canvas.height = data.height;
 
   // Create and initialize renderer
-  renderer = new GlobeRenderer(canvas, config.cameraConfig);
+  // Pass dpr from main thread — workers may not have devicePixelRatio (Chrome)
+  // or report incorrect values, causing graticule LoD mismatch across browsers
+  renderer = new GlobeRenderer(canvas, config.cameraConfig, data.dpr);
 
   // Register layers from main thread config
   layerRegistry = new LayerService();
@@ -503,7 +506,14 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
 
   // Write option uniforms declaratively (graticuleFontSize, graticuleLineWidth, etc.)
   if (renderer) {
-    writeOptionUniforms(renderer.getUniformView(), currentOptions);
+    const view = renderer.getUniformView();
+    writeOptionUniforms(view, currentOptions);
+
+    // Scale CSS-pixel options to device pixels — shader math uses u.resolution
+    // which is in device pixels, so lineWidth/fontSize must match
+    const dpr = renderer.dpr;
+    view.setFloat32(U.graticuleFontSize, currentOptions.graticule.fontSize * dpr, true);
+    view.setFloat32(U.graticuleLineWidth, currentOptions.graticule.lineWidth * dpr, true);
   }
 
   // React to options that require buffer recreation
@@ -608,6 +618,7 @@ function handleResize(data: Extract<AuroraRequest, { type: 'resize' }>): void {
   if (!canvas || !renderer) return;
   canvas.width = data.width;
   canvas.height = data.height;
+  renderer.dpr = data.dpr;
   renderer.resize(data.width, data.height);
 }
 
