@@ -6,12 +6,14 @@
  */
 
 import m from 'mithril';
-import type { CameraService } from '../services/camera-service';
+import type { CaptureService } from '../services/capture/capture-service';
 import type { DialogService } from '../services/dialog-service';
+import type { OptionsService } from '../services/options-service';
 
 interface CameraOverlayAttrs {
-  cameraService: CameraService;
+  captureService: CaptureService;
   dialogService: DialogService;
+  optionsService: OptionsService;
 }
 
 const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
@@ -32,10 +34,10 @@ function drawPaletteStripe(canvas: HTMLCanvasElement, palette: number[][]): void
 export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
   return {
     view({ attrs }) {
-      const { cameraService, dialogService } = attrs;
-      const mode = cameraService.mode.value;
-      const rect = cameraService.rect.value;
-      const palette = cameraService.palette.value;
+      const { captureService, dialogService, optionsService } = attrs;
+      const mode = captureService.mode.value;
+      const rect = captureService.rect.value;
+      const palette = captureService.palette.value;
       const isRecording = mode === 'recording';
       const isDone = mode === 'done';
       const isLocked = isRecording || isDone;
@@ -52,28 +54,28 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
           // Header bar
           m('.camera-header', [
             m('span.camera-label', 'Camera'),
-            m('span.camera-frames', `${cameraService.frameIndex.value}/${cameraService.totalFrames.value}`),
+            m('span.camera-frames', `${captureService.frameIndex.value}/${captureService.totalFrames.value}`),
             isDone
               ? m('button.camera-record', {
                   style: { borderColor },
                   onclick: () => {
-                    cameraService.mode.value = 'ready';
-                    cameraService.frameIndex.value = 0;
+                    captureService.mode.value = 'ready';
+                    captureService.frameIndex.value = 0;
                     m.redraw();
                   },
                 }, 'New')
               : m('button.camera-record', {
                   style: { borderColor },
-                  onclick: () => isRecording ? cameraService.stop() : cameraService.record(),
-                  disabled: !isRecording && (!cameraService.isQueueIdle ||
-                    (cameraService.paletteMode === 'scene' && !palette)),
+                  onclick: () => isRecording ? captureService.stop() : captureService.record(),
+                  disabled: !isRecording && (!captureService.isQueueIdle ||
+                    (optionsService.options.value.camera.paletteMode !== 'grayscale' && !palette)),
                 }, isRecording ? 'Stop' : 'Record'),
             m('button.camera-settings-btn', {
               onclick: () => dialogService.open('options', { filter: 'camera' }),
               disabled: isLocked,
             }, '\u2699'),
             m('button.camera-close', {
-              onclick: () => cameraService.exit(),
+              onclick: () => captureService.exit(),
             }, '\u2715'),
           ]),
 
@@ -87,21 +89,21 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
             class: isRecording ? 'recording' : '',
             onpointerdown: isLocked ? undefined : (e: PointerEvent) => {
               if ((e.target as HTMLElement).classList.contains('camera-rect')) {
-                cameraService.startMove(e);
+                captureService.startMove(e);
               }
             },
           }, [
             // Resize edge hotspots (hidden during recording/done)
             ...(!isLocked ? EDGES.map(edge =>
               m(`div.edge.edge-${edge}`, {
-                onpointerdown: (e: PointerEvent) => cameraService.startResize(e, edge),
+                onpointerdown: (e: PointerEvent) => captureService.startResize(e, edge),
               })
             ) : []),
 
             // Download link (shown in done mode)
             isDone ? m('a.camera-download', {
-              href: cameraService.downloadUrl,
-              download: cameraService.downloadName,
+              href: captureService.downloadUrl,
+              download: captureService.downloadName,
             }, 'Download GIF') : null,
           ]),
 

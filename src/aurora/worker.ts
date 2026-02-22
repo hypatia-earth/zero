@@ -576,7 +576,10 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
 
   const uniforms = buildUniforms(camera, new Date(time));
 
-  renderer!.updateUniforms(uniforms, data.fixedDtMs);
+  if (data.fixedDtMs !== undefined) {
+    renderer!.setFrameDelta(data.fixedDtMs);
+  }
+  renderer!.updateUniforms(uniforms);
 
   // Build animated user layer opacities (indexed by userLayerIndex)
   const animatedUserOpacities = new Map<number, number>();

@@ -514,6 +514,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
       dataCache: 'Download',
       gpu: 'GPU',
       queue: 'Download',
+      camera: 'Camera',
     };
     const dialogTitle = filter && filter !== 'global'
       ? `${filterTitles[filter] ?? layerLabels[filter]!} Options` // QC-OK: try service title, then layer label

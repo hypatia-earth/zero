@@ -1053,7 +1053,7 @@ export const optionsSchema = z.object({
       }
     ),
     paletteMode: opt(
-      z.enum(['scene', 'grayscale', 'per-frame']).default('scene'),
+      z.enum(['fast', 'precise', 'grayscale']).default('fast'),
       {
         label: 'Palette',
         description: 'Color quantization strategy for GIF encoding',
@@ -1062,9 +1062,9 @@ export const optionsSchema = z.object({
         order: 3,
         control: 'radio',
         options: [
-          { value: 'scene', label: 'Scene' },
+          { value: 'fast', label: 'Fast' },
+          { value: 'precise', label: 'Precise' },
           { value: 'grayscale', label: 'Grayscale' },
-          { value: 'per-frame', label: 'Per-frame' },
         ],
       }
     ),
@@ -1188,7 +1188,7 @@ export const defaultOptions: ZeroOptions = {
   pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
-  camera: { duration: '1', fps: '15', nativeDpr: false, paletteMode: 'scene', format: 'gif' },
+  camera: { duration: '1', fps: '15', nativeDpr: false, paletteMode: 'fast', format: 'gif' },
   debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1', showLogo: true },
 };
 

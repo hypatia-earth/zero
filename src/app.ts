@@ -53,7 +53,7 @@ export const App: m.ClosureComponent = () => {
       const state = progress.state.value;
       const ready = state.complete && !state.error;
       const minimal = ready && services.stateService!.minimalUI.value;
-      const cameraActive = ready && services.cameraService!.mode.value !== 'off';
+      const cameraActive = ready && services.captureService!.mode.value !== 'off';
 
       return [
         m(BootstrapModal, {
@@ -103,7 +103,7 @@ export const App: m.ClosureComponent = () => {
                 dialogService: services.dialogService!,
               }),
               !minimal && !cameraActive && m(FullscreenPanel),
-              !minimal && m(CameraPanel, { cameraService: services.cameraService! }),
+              !minimal && m(CameraPanel, { captureService: services.captureService! }),
               !minimal && !cameraActive && m(AboutPanel, {
                 dialogService: services.dialogService!,
               }),
@@ -120,7 +120,7 @@ export const App: m.ClosureComponent = () => {
               layerService: services.layerService!,
             }),
           ]),
-          cameraActive && m(CameraOverlay, { cameraService: services.cameraService!, dialogService: services.dialogService! }),
+          cameraActive && m(CameraOverlay, { captureService: services.captureService!, dialogService: services.dialogService!, optionsService: services.optionsService! }),
         ] : []),
       ];
     },

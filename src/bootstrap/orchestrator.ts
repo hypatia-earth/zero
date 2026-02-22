@@ -14,7 +14,7 @@ import {
   createAuroraService,
   createSlotService,
   createPaletteService,
-  createCameraService,
+  createCaptureService,
   type ServiceContainer,
 } from './service-container';
 import { extractOptionsMeta, defaultOptions } from '../schemas/options.schema';
@@ -71,10 +71,6 @@ async function runBootstrapInner(
   await foundation.configService.init();
   Object.assign(services, foundation);
 
-  // Camera service (needs config, wired to queue + options later)
-  services.cameraService = createCameraService(foundation.configService);
-  services.cameraService.setOptionsService(foundation.optionsService);
-
   m.redraw();
 
   // Phase 1: Capabilities
@@ -100,7 +96,6 @@ async function runBootstrapInner(
     services.timestepService,
     services.layerService!
   );
-  services.cameraService!.setQueueService(services.queueService.queueStats);
   const assets = await runAssetsPhase(services.queueService, services.capabilitiesService!, progress);
 
   // Phase 5: GPU Init (worker-based)
@@ -134,9 +129,11 @@ async function runBootstrapInner(
     progress
   );
 
-  // Wire camera service to aurora (for frame capture) and state (for frozen time)
-  services.cameraService!.setAuroraService(services.auroraService);
-  services.cameraService!.setStateService(services.stateService!);
+  // Camera service — all deps available after GPU init
+  services.captureService = createCaptureService(
+    foundation.configService, foundation.optionsService, foundation.stateService,
+    services.queueService.queueStats, services.auroraService
+  );
 
   // Send custom layers to worker (loaded from IDB in config phase, enabled state set by sanitize)
   for (const layer of services.layerService!.getAll().filter(l => !l.isBuiltIn)) {
@@ -226,7 +223,7 @@ export function exposeDebugServices(services: ServiceContainer): void {
     themeService: services.themeService,
     perfService: services.perfService,
     layerService: services.layerService,
-    cameraService: services.cameraService,
+    captureService: services.captureService,
     camera: services.auroraService?.getCamera(),
     schema: { extractOptionsMeta, defaultOptions },
   };

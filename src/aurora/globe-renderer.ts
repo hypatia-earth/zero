@@ -99,7 +99,8 @@ export class GlobeRenderer {
 
   // Animation timing (shared across grid, wind, etc.)
   private lastFrameTime = 0;
-  private frameDeltaMs = 0;  // milliseconds since last frame (0 on first frame)
+  private frameDeltaMs = 0;    // milliseconds since last frame (0 on first frame)
+  private frameDeltaFixed = false;  // true when setFrameDelta was called for this frame
 
   // GPU timing
   private gpuTimestamp: GpuTimestamp | null = null;
@@ -510,11 +511,17 @@ export class GlobeRenderer {
     });
   }
 
-  updateUniforms(uniforms: GlobeUniforms, fixedDtMs?: number): void {
-    // Compute frame delta time for animations
+  /** Override frame delta for deterministic recording */
+  setFrameDelta(ms: number): void {
+    this.frameDeltaMs = ms;
+    this.frameDeltaFixed = true;
+  }
+
+  updateUniforms(uniforms: GlobeUniforms): void {
+    // Compute frame delta time for animations (skip if setFrameDelta was called)
     const now = performance.now();
-    if (fixedDtMs !== undefined) {
-      this.frameDeltaMs = fixedDtMs;
+    if (this.frameDeltaFixed) {
+      this.frameDeltaFixed = false;
     } else if (this.lastFrameTime > 0) {
       this.frameDeltaMs = Math.min(now - this.lastFrameTime, 100);  // Cap at 100ms
     }

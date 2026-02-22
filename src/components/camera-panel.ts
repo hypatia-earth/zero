@@ -3,10 +3,10 @@
  */
 
 import m from 'mithril';
-import type { CameraService } from '../services/camera-service';
+import type { CaptureService } from '../services/capture/capture-service';
 
 interface CameraPanelAttrs {
-  cameraService: CameraService;
+  captureService: CaptureService;
 }
 
 export const CameraPanel: m.ClosureComponent<CameraPanelAttrs> = () => {
@@ -14,7 +14,7 @@ export const CameraPanel: m.ClosureComponent<CameraPanelAttrs> = () => {
     view({ attrs }) {
       return m('div.camera.panel', [
         m('button.control.circle', {
-          onclick: () => attrs.cameraService.enter(),
+          onclick: () => attrs.captureService.enter(),
           title: 'Camera',
         }, [
           m('img', {

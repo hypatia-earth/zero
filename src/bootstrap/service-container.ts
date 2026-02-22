@@ -22,7 +22,9 @@ import { PaletteService } from '../services/palette-service';
 import { KeyboardService } from '../services/keyboard-service';
 import { PerfService } from '../services/perf-service';
 import { LayerService } from '../services/layer/layer-service';
-import { CameraService } from '../services/camera-service';
+import { CaptureService } from '../services/capture/capture-service';
+import type { Signal } from '@preact/signals-core';
+import type { QueueStats } from '../config/types';
 
 export interface ServiceContainer {
   // Foundation (no service deps)
@@ -53,7 +55,7 @@ export interface ServiceContainer {
   keyboardService: KeyboardService | null;
 
   // Camera capture
-  cameraService: CameraService;
+  captureService: CaptureService;
 }
 
 /**
@@ -166,10 +168,14 @@ export function createKeyboardService(
 }
 
 /**
- * Create CameraService (needs config service)
+ * Create CaptureService (all deps available after GPU init)
  */
-export function createCameraService(
-  configService: ConfigService
-): CameraService {
-  return new CameraService(configService);
+export function createCaptureService(
+  configService: ConfigService,
+  optionsService: OptionsService,
+  stateService: StateService,
+  queueStats: Signal<QueueStats>,
+  auroraService: AuroraService
+): CaptureService {
+  return new CaptureService(configService, optionsService, stateService, queueStats, auroraService);
 }
