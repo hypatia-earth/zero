@@ -592,7 +592,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
                 }
               }, 'Clear Cache'),
               m('button.btn.btn-danger', {
-                onclick: () => nuke()
+                onclick: async () => { await nuke(); location.href = '/'; }
               }, 'Nuke'),
             ])
           ]) : null,

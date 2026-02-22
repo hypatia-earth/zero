@@ -213,8 +213,7 @@ export async function nuke(): Promise<void> {
   }
   const keys = await caches.keys();
   await Promise.all(keys.map(k => caches.delete(k)));
-  console.log('[Nuke] All data cleared, reloading...');
-  location.reload();
+  console.log('[Nuke] All data cleared');
 }
 
 /**
