@@ -999,6 +999,11 @@ export class GlobeRenderer {
     return this.device;
   }
 
+  /** Reconfigure canvas context (needed after transferToImageBitmap) */
+  reconfigureContext(): void {
+    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied' });
+  }
+
   /** Update level count (may resize vertex buffer) */
   setPressureLevelCount(levelCount: number): void {
     this.pressureLayer.setLevelCount(levelCount);

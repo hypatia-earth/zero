@@ -130,6 +130,24 @@
   cursor: move;
 }
 
+/* ── Palette stripe ──────────────────────────────────────────────── */
+
+.camera-palette-stripe {
+  height: 16px;
+  background: rgba(20, 25, 35, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  overflow: hidden;
+}
+
+.camera-palette-stripe canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
 /* ── Edge resize hotspots ────────────────────────────────────────── */
 
 .camera-rect .edge {

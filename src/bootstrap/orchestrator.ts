@@ -133,6 +133,9 @@ async function runBootstrapInner(
     progress
   );
 
+  // Wire camera service to aurora (for frame capture)
+  services.cameraService!.setAuroraService(services.auroraService);
+
   // Send custom layers to worker (loaded from IDB in config phase, enabled state set by sanitize)
   for (const layer of services.layerService!.getAll().filter(l => !l.isBuiltIn)) {
     services.auroraService.send({ type: 'registerUserLayer', layer });

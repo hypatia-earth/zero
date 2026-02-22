@@ -10,6 +10,7 @@
 import m from 'mithril';
 import { signal, computed, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import type { ConfigService } from './config-service';
+import type { AuroraService } from './aurora-service';
 import type { QueueStats } from '../config/types';
 
 type CameraMode = 'off' | 'ready' | 'recording';
@@ -29,10 +30,14 @@ export class CameraService {
   readonly frameIndex: Signal<number> = signal(0);
   readonly totalFrames: ReadonlySignal<number>;
   readonly durations: readonly number[];
+  readonly palette: Signal<number[][] | null> = signal(null);
 
   private readonly configService: ConfigService;
+  private auroraService: AuroraService | null = null;
+  private paletteCanvas: OffscreenCanvas | null = null;
   private queueStats: Signal<QueueStats> | null = null;
   private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+  private captureDebounce: ReturnType<typeof setTimeout> | null = null;
 
   constructor(configService: ConfigService) {
     this.configService = configService;
@@ -53,6 +58,12 @@ export class CameraService {
     this.queueStats = queueStats;
   }
 
+  /** Wire AuroraService after GPU init (avoids circular dep) */
+  setAuroraService(auroraService: AuroraService): void {
+    this.auroraService = auroraService;
+    auroraService.onExportFrame = (bitmap: ImageBitmap) => this.extractPalette(bitmap);
+  }
+
   get isQueueIdle(): boolean {
     return !this.queueStats || this.queueStats.value.status === 'idle';
   }
@@ -63,7 +74,9 @@ export class CameraService {
     if (this.mode.value !== 'off') return;
     this.mode.value = 'ready';
     this.frameIndex.value = 0;
+    this.palette.value = null;
     this.installEscapeHandler();
+    this.requestCaptureFrame();
     m.redraw();
   }
 
@@ -83,9 +96,49 @@ export class CameraService {
 
   exit(): void {
     if (this.mode.value === 'off') return;
+    if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
     this.mode.value = 'off';
     this.frameIndex.value = 0;
+    this.palette.value = null;
     this.removeEscapeHandler();
+    m.redraw();
+  }
+
+  // ── Frame capture & palette extraction ───────────────────────────
+
+  requestCaptureFrame(): void {
+    if (this.captureDebounce) clearTimeout(this.captureDebounce);
+    this.captureDebounce = setTimeout(() => {
+      this.captureDebounce = null;
+      this.auroraService?.send({ type: 'captureFrame' });
+    }, 150);
+  }
+
+  private async extractPalette(bitmap: ImageBitmap): Promise<void> {
+    if (this.mode.value === 'off') return;
+
+    const rect = this.rect.value;
+    const dpr = window.devicePixelRatio;
+    const srcX = Math.round(rect.x * dpr);
+    const srcY = Math.round(rect.y * dpr);
+    const srcW = Math.round(rect.w * dpr);
+    const srcH = Math.round(rect.h * dpr);
+
+    // Create/reuse offscreen canvas sized to cropped area
+    if (!this.paletteCanvas || this.paletteCanvas.width !== srcW || this.paletteCanvas.height !== srcH) {
+      this.paletteCanvas = new OffscreenCanvas(srcW, srcH);
+    }
+
+    const ctx = this.paletteCanvas.getContext('2d')!;
+    ctx.drawImage(bitmap, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH);
+    bitmap.close();
+
+    const imageData = ctx.getImageData(0, 0, srcW, srcH);
+    const gifencUrl = '/external/gifenc.js';
+    const { quantize } = await import(/* @vite-ignore */ gifencUrl);
+    const palette = quantize(imageData.data, 256);
+
+    this.palette.value = palette;
     m.redraw();
   }
 
@@ -125,6 +178,7 @@ export class CameraService {
       const x = Math.max(0, Math.min(vw - r.w, ev.clientX - startX));
       const y = Math.max(0, Math.min(vh - r.h, ev.clientY - startY));
       this.rect.value = { ...this.rect.value, x, y };
+      this.requestCaptureFrame();
       m.redraw();
     };
 
@@ -180,6 +234,7 @@ export class CameraService {
       }
 
       this.rect.value = { x, y, w, h };
+      this.requestCaptureFrame();
       m.redraw();
     };
 

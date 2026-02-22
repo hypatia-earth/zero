@@ -63,6 +63,7 @@ export interface AuroraService {
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
   userLayerState: Signal<{ layerId: string; error: string } | 'ok' | null>;
+  onExportFrame: ((bitmap: ImageBitmap) => void) | null;
   send(msg: AuroraRequest, transfer?: Transferable[]): void;
 }
 
@@ -81,6 +82,7 @@ export function createAuroraService(
   // Message callbacks
   let onReady: (() => void) | null = null;
   let onFrameComplete: ((timing: { frame: number; pass1: number; pass2: number; pass3: number }, memoryMB: { allocated: number; capacity: number }) => void) | null = null;
+  let onExportFrame: ((bitmap: ImageBitmap) => void) | null = null;
 
   // Render loop state
   let renderInFlight = false;
@@ -139,6 +141,9 @@ export function createAuroraService(
         break;
       case 'error':
         console.error('[Aurora]', msg.message);
+        break;
+      case 'exportFrame':
+        onExportFrame?.(msg.bitmap);
         break;
       case 'userLayerResult':
         if (!msg.success && msg.error) {
@@ -358,6 +363,9 @@ export function createAuroraService(
 
     memoryStats,
     userLayerState,
+
+    get onExportFrame() { return onExportFrame; },
+    set onExportFrame(cb: ((bitmap: ImageBitmap) => void) | null) { onExportFrame = cb; },
 
     cleanup(): void {
       send({ type: 'cleanup' });

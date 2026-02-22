@@ -14,12 +14,26 @@ interface CameraOverlayAttrs {
 
 const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 
+/** Draw 256-color palette swatches on a canvas */
+function drawPaletteStripe(canvas: HTMLCanvasElement, palette: number[][]): void {
+  const ctx = canvas.getContext('2d')!;
+  const w = palette.length;
+  const h = canvas.height;
+  canvas.width = w;
+  for (let i = 0; i < w; i++) {
+    const [r, g, b] = palette[i]!;
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(i, 0, 1, h);
+  }
+}
+
 export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
   return {
     view({ attrs }) {
       const { cameraService } = attrs;
       const mode = cameraService.mode.value;
       const rect = cameraService.rect.value;
+      const palette = cameraService.palette.value;
       const isRecording = mode === 'recording';
       const borderColor = isRecording ? '#cc4444' : '#44cc66';
 
@@ -75,6 +89,19 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
               })
             ) : []),
           ]),
+
+          // Palette stripe (shown when palette extracted)
+          palette ? m('.camera-palette-stripe',
+            m('canvas', {
+              height: 16,
+              oncreate(vnode: m.VnodeDOM) {
+                drawPaletteStripe(vnode.dom as HTMLCanvasElement, palette);
+              },
+              onupdate(vnode: m.VnodeDOM) {
+                drawPaletteStripe(vnode.dom as HTMLCanvasElement, palette);
+              },
+            })
+          ) : null,
         ]),
       ]);
     },

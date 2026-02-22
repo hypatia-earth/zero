@@ -73,13 +73,15 @@ export type AuroraRequest =
   | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'setUserLayerOptions'; layerIndex: number; enabled?: boolean; opacity?: number; paletteIndex?: number }
   | { type: 'updatePalette'; layer: string; paletteId: PaletteId; range?: [number, number] }
+  | { type: 'captureFrame' }
   | { type: 'cleanup' };
 
 export type AuroraResponse =
   | { type: 'ready' }
   | { type: 'frameComplete'; timing: { frame: number; pass1: number; pass2: number; pass3: number }; memoryMB: { allocated: number; capacity: number } }
   | { type: 'error'; message: string; fatal: boolean }
-  | { type: 'userLayerResult'; layerId: string; success: boolean; error?: string };
+  | { type: 'userLayerResult'; layerId: string; success: boolean; error?: string }
+  | { type: 'exportFrame'; bitmap: ImageBitmap };
 
 // ============================================================
 // Worker state
@@ -596,6 +598,9 @@ function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): void {
 
   const passTimings = renderer!.render();
 
+  // Capture frame if pending (right after render, before next frame overwrites)
+  flushCaptureFrame();
+
   // Compute memory stats from param stores
   let allocatedMB = 0;
   let totalSlabSizeMB = 0;
@@ -803,6 +808,25 @@ function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette
   }
 }
 
+// Deferred capture: set flag, actual capture happens after next render
+let captureFramePending = false;
+
+function handleCaptureFrame(): void {
+  captureFramePending = true;
+}
+
+/** Called at end of handleRender — captures frame right after GPU output is ready */
+function flushCaptureFrame(): void {
+  if (!captureFramePending || !canvas || !renderer) return;
+  captureFramePending = false;
+  const bitmap = canvas.transferToImageBitmap();
+  // transferToImageBitmap invalidates WebGPU context — must reconfigure
+  renderer.reconfigureContext();
+  const msg: AuroraResponse = { type: 'exportFrame', bitmap };
+  // Worker postMessage with transferable — cast self for correct overload
+  (self as unknown as Worker).postMessage(msg, [bitmap]);
+}
+
 function handleCleanup(): void {
   for (const buffer of paramCombinedBuffers.values()) {
     buffer.destroy();
@@ -848,6 +872,7 @@ const handlers: { [K in AuroraRequest['type']]: MessageHandler<K> } = {
   unregisterUserLayer: handleUnregisterUserLayer,
   setUserLayerOptions: handleSetUserLayerOptions,
   updatePalette: handleUpdatePalette,
+  captureFrame: handleCaptureFrame,
   cleanup: handleCleanup,
 };
 
