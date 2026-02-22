@@ -6,6 +6,7 @@
  */
 
 import { fetchSuffix, fetchRange } from '../../utils/fetch';
+import { calcSliceCount } from './slice-math';
 
 // WASM module type - functions have underscore prefix
 interface OmWasm {
@@ -346,9 +347,7 @@ export async function streamOmVariable(
   }
 
   // Optimize slice count: small files don't need many round-trips
-  // ~500KB per slice balances parallelism vs HTTP overhead
-  const optimalSlices = Math.max(1, Math.ceil(totalCompressed / 500_000));
-  slices = Math.min(slices, numChunks, optimalSlices);
+  slices = Math.min(calcSliceCount(totalCompressed, slices), numChunks);
 
   // Calculate chunk-aligned slices: first slice gets remainder, rest get equal chunks
   const chunksPerSlice = Math.floor(numChunks / slices);

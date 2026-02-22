@@ -109,7 +109,8 @@ export class TimestepService {
         if (params.has(mp.param)) continue;
         this.paramModelMap.set(mp.param, mp);
         await onProgress?.('cache', mp.param);
-        const { cache, sizes } = await querySWCache(mp.param, this.timestepsData[mp.model]);
+        const meta = getParamMeta(mp.param);
+        const { cache, sizes } = await querySWCache(mp.param, this.timestepsData[mp.model], meta.sizeEstimate);
         params.set(mp.param, { cache, gpu: new Set(), sizes });
 
         if (sizes.size > 0) {
@@ -179,7 +180,8 @@ export class TimestepService {
   }
 
   async refreshCacheState(mp: TModelParam): Promise<void> {
-    await cache.refreshCacheState(this.state, mp.param, this.timestepsData[mp.model]);
+    const meta = getParamMeta(mp.param);
+    await cache.refreshCacheState(this.state, mp.param, this.timestepsData[mp.model], meta.sizeEstimate);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────

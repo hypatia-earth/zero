@@ -9,6 +9,7 @@ import type { Signal } from '@preact/signals-core';
 import type { TTimestep, Timestep } from '../../config/types';
 import type { TModelParam } from '../../config/models';
 import { sendSWMessage } from '../../utils/sw-message';
+import { calcSliceCount } from '../queue/slice-math';
 import type { TimestepState } from './timestep-service';
 
 const DEBUG = false;
@@ -27,7 +28,8 @@ interface ParamDetail {
 
 export async function querySWCache(
   param: string,
-  timestepsData: Timestep[]
+  timestepsData: Timestep[],
+  sizeEstimate: number
 ): Promise<{ cache: Set<TTimestep>; sizes: Map<TTimestep, number> }> {
   const cache = new Set<TTimestep>();
   const sizes = new Map<TTimestep, number>();
@@ -88,10 +90,11 @@ export async function querySWCache(
       }
     }
 
-    // Only mark as cached if >= 10 ranges (data slices) completed
+    // Only mark as cached if all expected slices are present
     // Partial downloads from aborted fetches have fewer ranges
+    const expectedSlices = calcSliceCount(sizeEstimate);
     for (const [ts, count] of rangeCount) {
-      if (count >= 10) {
+      if (count >= expectedSlices) {
         cache.add(ts);
       }
     }
@@ -128,9 +131,10 @@ export function setCached(
 export async function refreshCacheState(
   state: Signal<TimestepState>,
   param: TModelParam['param'],
-  timestepsData: Timestep[]
+  timestepsData: Timestep[],
+  sizeEstimate: number
 ): Promise<void> {
-  const { cache, sizes } = await querySWCache(param, timestepsData);
+  const { cache, sizes } = await querySWCache(param, timestepsData, sizeEstimate);
 
   // Don't wipe cache state if SW query failed or returned empty
   if (cache.size === 0) return;
