@@ -15,7 +15,7 @@ Scrub through up to 2 weeks of weather. Watch storms form and dissolve. Every mi
 ### Layers
 
 - **Temperature** at 2 meters
-- **Precipitation** rate *(planned)*
+- **Precipitation** type and rate
 - **Clouds** total cover *(planned)*
 - **Humidity** relative *(planned)*
 - **Wind** at 10 meters
@@ -35,6 +35,20 @@ Wind speed visualization uses [Beaufort Scale](https://en.wikipedia.org/wiki/Bea
 | 10+ (Storm) | 24+ m/s | Trees uprooted, danger | Full red |
 
 Sources: [NWS Wind Warnings](https://www.weather.gov/safety/wind-ww) · [Beaufort Scale](https://en.wikipedia.org/wiki/Beaufort_scale)
+
+### Precipitation
+
+Precipitation intensity uses a color ramp from blue/white to red. Particles turn red when rainfall rate exceeds 20 mm/h, which corresponds to [heavy rainfall](https://en.wikipedia.org/wiki/Rain#Intensity) thresholds used by meteorological services worldwide.
+
+| Rate | Effect | Color |
+|------|--------|-------|
+| 0-10 mm/h | Light to moderate | Blue (rain) / White (snow) |
+| 10-20 mm/h | Heavy | Saturated blue / white |
+| 20-50 mm/h | Very heavy, flood risk | Red |
+
+Precipitation types are distinguished by particle shape: drops for rain, stars for snow, diamonds for freezing rain and ice pellets.
+
+Sources: [WMO Precipitation Classification](https://severeweather.wmo.int/) · [Rain Intensity (Wikipedia)](https://en.wikipedia.org/wiki/Rain#Intensity)
 
 ## Controls
 

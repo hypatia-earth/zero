@@ -2,7 +2,7 @@
 
 Browser-based weather visualization rendering ECMWF forecast data directly on a 3D globe using WebGPU.
 
-<img src=".github/zero-readme-2026-01-25.gif" width="800" alt="zero-readme-2026-01-25">
+<img src=".github/Pasted-image-20260222115702.png" width="800" alt="Pasted image 20260222115702">
 
 **Live Demo:** [zero.hypatia.earth](http://zero.hypatia.earth)  
 **Mirror:** [hypatia-earth.github.io/zero](https://hypatia-earth.github.io/zero/?dt=2025-12-26T14h00z&ll=0.0,0.0&alt=14000&layers=earth,sun,temp)
@@ -15,7 +15,7 @@ Zero visualizes professional weather hazards for climate adaptation:
 - **Wet-bulb temperature** - actual heat survivability limits in humid conditions (planned)
 - **Wind** - animated flow lines showing speed and direction
 - **Pressure** - isobar contours revealing storm systems
-- **Precipitation** - rainfall intensity (planned)
+- **Precipitation** - rain, snow, freezing rain with wind-advected particle animation
 
 Runs entirely in your browser. No backend, no login, no tracking.
 
@@ -85,6 +85,11 @@ Services like Windy.com and Weather.com excel at polished UX, multi-model compar
 Different missions, both valuable.
 
 ## Changelog
+
+### 2026-02-22
+- **Precipitation layer** - rain, snow, freezing rain, sleet and ice pellets with advection-based interpolation: GFS wind fields drive ECMWF precipitation displacement for smooth temporal animation between hourly timesteps
+- **Multi-model fusion** - introduced NCEP GFS 0.25° as second data source alongside ECMWF IFS, enabling cross-model rendering at the shader level
+- **Storage buffer packing** - t0/t1 timestep data packed into single combined buffers per parameter, working within Chrome's 10 storage buffer limit
 
 ### 2026-02-21
 - **Aurora render engine** - declarative layers with runtime shader composition
