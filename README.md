@@ -72,7 +72,7 @@ npm run test:e2e:ui           # Playwright UI with time-travel debugging
 
 ## Performance
 
-If the globe feels sluggish -especially on tablets or with wind and precipitation layers active -two settings in the options dialog help:
+If the globe feels sluggish - especially on tablets or with wind and precipitation layers active - two settings in the options dialog help:
 
 - **Frame rate limit**  - set to 30 fps. Gives the GPU twice the time per frame.
 - **Downscale**  - set to 2×. Renders at half resolution, the globe looks slightly softer but interaction becomes much smoother.
