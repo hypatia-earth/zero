@@ -76,6 +76,7 @@ export interface QueueStats {
   bytesCompleted: number;
   bytesPerSec: number | undefined;
   etaSeconds: number | undefined;
+  itemsQueued: number;
   status: 'idle' | 'downloading';
 }
 

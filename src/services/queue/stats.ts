@@ -23,6 +23,7 @@ export class QueueStatsTracker {
     bytesCompleted: 0,
     bytesPerSec: undefined,
     etaSeconds: undefined,
+    itemsQueued: 0,
     status: 'idle',
   });
 
@@ -68,6 +69,7 @@ export class QueueStatsTracker {
     taskQueue: QueueTask[],
     inFlightCount: number,
     inFlightBytes: number,
+    itemsQueued: number,
     onBatchComplete?: () => void
   ): void {
     const bytesPerSec = calcBandwidth(this.samples);
@@ -87,13 +89,14 @@ export class QueueStatsTracker {
       : Math.max(0, oldPathPending + oldPathActive);
 
     const wasDownloading = this.stats.value.status === 'downloading';
-    const newStatus = bytesQueued > 0 ? 'downloading' : 'idle';
+    const newStatus = bytesQueued < 1 ? 'idle' : 'downloading';
 
     this.stats.value = {
       bytesQueued,
       bytesCompleted: this.totalBytesCompleted,
       bytesPerSec,
       etaSeconds: calcEta(bytesQueued, bytesPerSec),
+      itemsQueued,
       status: newStatus,
     };
 
@@ -136,6 +139,7 @@ export class QueueStatsTracker {
       bytesCompleted: 0,
       bytesPerSec: undefined,
       etaSeconds: undefined,
+      itemsQueued: 0,
       status: 'idle',
     };
   }

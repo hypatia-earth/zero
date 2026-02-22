@@ -12,10 +12,12 @@ import { signal, computed, type Signal, type ReadonlySignal } from '@preact/sign
 import type { ConfigService } from './config-service';
 import type { AuroraService } from './aurora-service';
 import type { StateService } from './state-service';
+import type { OptionsService } from './options-service';
 import type { QueueStats } from '../config/types';
 
 type CameraMode = 'off' | 'ready' | 'recording' | 'done';
 type Edge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+type PaletteMode = 'scene' | 'grayscale' | 'per-frame';
 
 interface Rect {
   x: number;
@@ -27,13 +29,12 @@ interface Rect {
 export class CameraService {
   readonly mode: Signal<CameraMode> = signal('off');
   readonly rect: Signal<Rect>;
-  readonly duration: Signal<number>;
   readonly frameIndex: Signal<number> = signal(0);
   readonly totalFrames: ReadonlySignal<number>;
-  readonly durations: readonly number[];
   readonly palette: Signal<number[][] | null> = signal(null);
 
   private readonly configService: ConfigService;
+  private optionsService: OptionsService | null = null;
   private auroraService: AuroraService | null = null;
   private stateService: StateService | null = null;
   private paletteCanvas: OffscreenCanvas | null = null;
@@ -54,9 +55,7 @@ export class CameraService {
     const y = Math.round((window.innerHeight - cfg.rectDefaultSize * 0.75) / 2);
     this.rect = signal({ x, y, w: cfg.rectDefaultSize, h: Math.round(cfg.rectDefaultSize * 0.75) });
 
-    this.durations = cfg.durations;
-    this.duration = signal(cfg.durations[1] as number); // default 3s
-    this.totalFrames = computed(() => this.duration.value * cfg.fps);
+    this.totalFrames = computed(() => this.getDuration() * this.getFps());
   }
 
   /** Wire QueueService after construction (avoids circular dep) */
@@ -75,8 +74,31 @@ export class CameraService {
     this.stateService = stateService;
   }
 
+  /** Wire OptionsService for camera settings */
+  setOptionsService(optionsService: OptionsService): void {
+    this.optionsService = optionsService;
+  }
+
+  // ── Camera option accessors (from OptionsService) ──────────────
+
+  getDuration(): number {
+    return Number(this.optionsService!.options.value.camera.duration);
+  }
+
+  getFps(): number {
+    return Number(this.optionsService!.options.value.camera.fps);
+  }
+
+  get nativeDpr(): boolean {
+    return this.optionsService!.options.value.camera.nativeDpr;
+  }
+
+  get paletteMode(): PaletteMode {
+    return this.optionsService!.options.value.camera.paletteMode;
+  }
+
   get isQueueIdle(): boolean {
-    return !this.queueStats || this.queueStats.value.status === 'idle';
+    return !this.queueStats || this.queueStats.value.itemsQueued === 0;
   }
 
   // ── Mode transitions ──────────────────────────────────────────────
@@ -94,7 +116,7 @@ export class CameraService {
   record(): void {
     if (this.mode.value !== 'ready') return;
     if (!this.isQueueIdle) return;
-    if (!this.palette.value) return;
+    if (this.paletteMode === 'scene' && !this.palette.value) return;
     this.mode.value = 'recording';
     this.frameIndex.value = 0;
     this.aborted = false;
@@ -152,36 +174,37 @@ export class CameraService {
 
   private async runRecordingLoop(): Promise<void> {
     const aurora = this.auroraService!;
-    const cfg = this.configService.getConfig().cameraUI;
-    const fps = cfg.fps;
+    const fps = this.getFps();
     const fixedDtMs = 1000 / fps;
     const totalFrames = this.totalFrames.value;
     const frozenTime = this.stateService!.viewState.value.time.getTime();
+    const palMode = this.paletteMode;
 
-    // Take over rendering
     aurora.recording = true;
-    // Swap exportFrame handler to recording capture
     const prevHandler = aurora.onExportFrame;
 
     try {
       const gifencUrl = '/external/gifenc.js';
-      const { GIFEncoder, applyPalette } = await import(/* @vite-ignore */ gifencUrl);
+      const { GIFEncoder, applyPalette, quantize } = await import(/* @vite-ignore */ gifencUrl);
       const encoder = new GIFEncoder();
-      const palette = this.palette.value!;
+      const delay = Math.round(1000 / fps);
+
+      // Palette strategy: scene/grayscale use a single palette, per-frame quantizes each
+      const grayscalePalette = palMode === 'grayscale' ? this.buildGrayscalePalette() : null;
+      const fixedPalette = palMode === 'scene' ? this.palette.value!
+        : grayscalePalette;
 
       for (let i = 0; i < totalFrames; i++) {
         if (this.aborted) break;
 
         const bitmap = await this.captureOneFrame(aurora, frozenTime, fixedDtMs);
         const rgba = this.cropBitmap(bitmap);
-        const rect = this.rect.value;
-        const indexed = applyPalette(rgba, palette);
-        encoder.writeFrame(indexed, rect.w, rect.h, {
-          palette,
-          delay: Math.round(1000 / fps),
-        });
+        const { w, h } = this.getOutputDimensions();
+        const palette = fixedPalette ?? quantize(rgba, 256);
+        // Grayscale: direct luminance indexing (bypasses applyPalette's rgb565 cache)
+        const indexed = grayscalePalette ? this.rgbaToLuminance(rgba) : applyPalette(rgba, palette);
+        encoder.writeFrame(indexed, w, h, { palette, delay });
         this.frameIndex.value = i + 1;
-        // Yield to browser — let RAF fire for UI update + process pending events
         await new Promise<void>(r => setTimeout(r, 0));
         m.redraw();
       }
@@ -219,14 +242,13 @@ export class CameraService {
   private cropBitmap(bitmap: ImageBitmap): Uint8ClampedArray {
     const rect = this.rect.value;
     const dpr = window.devicePixelRatio;
-    // Source region in device pixels
     const srcX = Math.round(rect.x * dpr);
     const srcY = Math.round(rect.y * dpr);
     const srcW = Math.round(rect.w * dpr);
     const srcH = Math.round(rect.h * dpr);
-    // Output at CSS pixels
-    const outW = rect.w;
-    const outH = rect.h;
+    // Native: keep device pixels; default: downscale to CSS pixels
+    const outW = this.nativeDpr ? srcW : rect.w;
+    const outH = this.nativeDpr ? srcH : rect.h;
 
     if (!this.paletteCanvas || this.paletteCanvas.width !== outW || this.paletteCanvas.height !== outH) {
       this.paletteCanvas = new OffscreenCanvas(outW, outH);
@@ -236,6 +258,30 @@ export class CameraService {
     ctx.drawImage(bitmap, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
     bitmap.close();
     return ctx.getImageData(0, 0, outW, outH).data;
+  }
+
+  private getOutputDimensions(): { w: number; h: number } {
+    const rect = this.rect.value;
+    if (this.nativeDpr) {
+      const dpr = window.devicePixelRatio;
+      return { w: Math.round(rect.w * dpr), h: Math.round(rect.h * dpr) };
+    }
+    return { w: rect.w, h: rect.h };
+  }
+
+  private buildGrayscalePalette(): number[][] {
+    return Array.from({ length: 256 }, (_, i) => [i, i, i]);
+  }
+
+  /** Direct RGB→luminance indexing, avoids gifenc's rgb565 cache banding */
+  private rgbaToLuminance(rgba: Uint8ClampedArray): Uint8Array {
+    const n = rgba.length >> 2;
+    const out = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      const off = i << 2;
+      out[i] = (rgba[off]! * 77 + rgba[off + 1]! * 150 + rgba[off + 2]! * 29) >> 8;
+    }
+    return out;
   }
 
   // ── Frame capture & palette extraction ───────────────────────────
@@ -257,17 +303,19 @@ export class CameraService {
     const srcY = Math.round(rect.y * dpr);
     const srcW = Math.round(rect.w * dpr);
     const srcH = Math.round(rect.h * dpr);
+    // Match recording resolution: CSS pixels or device pixels
+    const outW = this.nativeDpr ? srcW : rect.w;
+    const outH = this.nativeDpr ? srcH : rect.h;
 
-    // Create/reuse offscreen canvas sized to cropped area
-    if (!this.paletteCanvas || this.paletteCanvas.width !== srcW || this.paletteCanvas.height !== srcH) {
-      this.paletteCanvas = new OffscreenCanvas(srcW, srcH);
+    if (!this.paletteCanvas || this.paletteCanvas.width !== outW || this.paletteCanvas.height !== outH) {
+      this.paletteCanvas = new OffscreenCanvas(outW, outH);
     }
 
     const ctx = this.paletteCanvas.getContext('2d')!;
-    ctx.drawImage(bitmap, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH);
+    ctx.drawImage(bitmap, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
     bitmap.close();
 
-    const imageData = ctx.getImageData(0, 0, srcW, srcH);
+    const imageData = ctx.getImageData(0, 0, outW, outH);
     const gifencUrl = '/external/gifenc.js';
     const { quantize } = await import(/* @vite-ignore */ gifencUrl);
     const palette = quantize(imageData.data, 256);

@@ -120,7 +120,7 @@ export const App: m.ClosureComponent = () => {
               layerService: services.layerService!,
             }),
           ]),
-          cameraActive && m(CameraOverlay, { cameraService: services.cameraService! }),
+          cameraActive && m(CameraOverlay, { cameraService: services.cameraService!, dialogService: services.dialogService! }),
         ] : []),
       ];
     },

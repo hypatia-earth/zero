@@ -297,10 +297,13 @@ export class QueueService implements IQueueService {
   private updateStats(): void {
     const inFlightBytes = Array.from(this.inFlight.values())
       .reduce((sum, { task }) => sum + (task.sizeEstimate || 0), 0);
+    const itemsQueued = this.taskQueue.length + this.inFlight.size
+      + this.timestepQueue.length + (this.currentlyFetching ? 1 : 0);
     this.statsTracker.update(
       this.taskQueue,
       this.inFlight.size,
       inFlightBytes,
+      itemsQueued,
       () => this.refreshAllCacheStates()
     );
   }

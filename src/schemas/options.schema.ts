@@ -23,12 +23,12 @@ type OptionImpact = 'uniform' | 'recreate';
 type PersistMode = 'url' | 'local';
 
 /** Filter determines which dialog entry points show this option */
-type OptionFilter = TLayer | 'global' | 'dataCache' | 'gpu' | 'queue';
+type OptionFilter = TLayer | 'global' | 'dataCache' | 'gpu' | 'queue' | 'camera';
 
 interface UIMetadata {
   label: string;
   description?: string;
-  group: 'interface' | 'regional' | 'download' | 'environmental' | 'interaction' | 'layers' | 'gpu' | 'advanced' | 'performance';
+  group: 'interface' | 'regional' | 'download' | 'environmental' | 'interaction' | 'layers' | 'gpu' | 'camera' | 'advanced' | 'performance';
   filter: OptionFilter | OptionFilter[];
   order: number;
   control: ControlType;
@@ -131,6 +131,12 @@ export const optionGroups = {
     label: 'GPU',
     description: 'Graphics memory and performance',
     order: 7,
+  },
+  camera: {
+    id: 'camera',
+    label: 'Camera',
+    description: 'GIF recording settings',
+    order: 8,
   },
   advanced: {
     id: 'advanced',
@@ -1000,6 +1006,87 @@ export const optionsSchema = z.object({
   }),
 
   // ----------------------------------------------------------
+  // Camera (GIF recording)
+  // ----------------------------------------------------------
+  camera: z.object({
+    duration: opt(
+      z.enum(['1', '3', '5', '10']).default('1'),
+      {
+        label: 'Duration',
+        description: 'Recording length in seconds',
+        group: 'camera',
+        filter: ['global', 'camera'],
+        order: 0,
+        control: 'radio',
+        options: [
+          { value: '1', label: '1s' },
+          { value: '3', label: '3s' },
+          { value: '5', label: '5s' },
+          { value: '10', label: '10s' },
+        ],
+      }
+    ),
+    fps: opt(
+      z.enum(['15', '30']).default('15'),
+      {
+        label: 'FPS',
+        description: 'Frames per second for GIF recording',
+        group: 'camera',
+        filter: ['global', 'camera'],
+        order: 1,
+        control: 'radio',
+        options: [
+          { value: '15', label: '15' },
+          { value: '30', label: '30' },
+        ],
+      }
+    ),
+    nativeDpr: opt(
+      z.boolean().default(false),
+      {
+        label: 'Native resolution',
+        description: 'Record at device pixel resolution (2× on Retina)',
+        group: 'camera',
+        filter: ['global', 'camera'],
+        order: 2,
+        control: 'toggle',
+      }
+    ),
+    paletteMode: opt(
+      z.enum(['scene', 'grayscale', 'per-frame']).default('scene'),
+      {
+        label: 'Palette',
+        description: 'Color quantization strategy for GIF encoding',
+        group: 'camera',
+        filter: ['global', 'camera'],
+        order: 3,
+        control: 'radio',
+        options: [
+          { value: 'scene', label: 'Scene' },
+          { value: 'grayscale', label: 'Grayscale' },
+          { value: 'per-frame', label: 'Per-frame' },
+        ],
+      }
+    ),
+    format: opt(
+      z.enum(['gif', 'mp4']).default('gif'),
+      {
+        label: 'Format',
+        description: 'Output format for recording',
+        group: 'camera',
+        filter: ['global', 'camera'],
+        order: 4,
+        control: 'radio',
+        options: [
+          { value: 'gif', label: 'GIF' },
+          { value: 'mp4', label: 'MP4' },
+        ],
+        disabled: false,
+      }
+    ),
+  }),
+
+  // ----------------------------------------------------------
   // Debug
   // ----------------------------------------------------------
   debug: z.object({
@@ -1101,6 +1188,7 @@ export const defaultOptions: ZeroOptions = {
   pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
+  camera: { duration: '1', fps: '15', nativeDpr: false, paletteMode: 'scene', format: 'gif' },
   debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1', showLogo: true },
 };
 

@@ -7,9 +7,11 @@
 
 import m from 'mithril';
 import type { CameraService } from '../services/camera-service';
+import type { DialogService } from '../services/dialog-service';
 
 interface CameraOverlayAttrs {
   cameraService: CameraService;
+  dialogService: DialogService;
 }
 
 const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
@@ -30,14 +32,14 @@ function drawPaletteStripe(canvas: HTMLCanvasElement, palette: number[][]): void
 export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
   return {
     view({ attrs }) {
-      const { cameraService } = attrs;
+      const { cameraService, dialogService } = attrs;
       const mode = cameraService.mode.value;
       const rect = cameraService.rect.value;
       const palette = cameraService.palette.value;
       const isRecording = mode === 'recording';
       const isDone = mode === 'done';
       const isLocked = isRecording || isDone;
-      const borderColor = isRecording ? '#cc4444' : isDone ? '#44cc66' : '#44cc66';
+      const borderColor = isRecording ? '#cc4444' : '#44cc66';
 
       return m('.camera-overlay', [
         m('.camera-container', {
@@ -51,15 +53,6 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
           m('.camera-header', [
             m('span.camera-label', 'Camera'),
             m('span.camera-frames', `${cameraService.frameIndex.value}/${cameraService.totalFrames.value}`),
-            m('select.camera-duration', {
-              value: String(cameraService.duration.value),
-              onchange: (e: Event) => {
-                cameraService.duration.value = Number((e.target as HTMLSelectElement).value);
-              },
-              disabled: isLocked,
-            }, cameraService.durations.map(d =>
-              m('option', { value: String(d) }, `${d}s`)
-            )),
             isDone
               ? m('button.camera-record', {
                   style: { borderColor },
@@ -72,8 +65,13 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
               : m('button.camera-record', {
                   style: { borderColor },
                   onclick: () => isRecording ? cameraService.stop() : cameraService.record(),
-                  disabled: !isRecording && (!cameraService.isQueueIdle || !palette),
+                  disabled: !isRecording && (!cameraService.isQueueIdle ||
+                    (cameraService.paletteMode === 'scene' && !palette)),
                 }, isRecording ? 'Stop' : 'Record'),
+            m('button.camera-settings-btn', {
+              onclick: () => dialogService.open('options', { filter: 'camera' }),
+              disabled: isLocked,
+            }, '\u2699'),
             m('button.camera-close', {
               onclick: () => cameraService.exit(),
             }, '\u2715'),

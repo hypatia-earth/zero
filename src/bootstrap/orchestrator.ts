@@ -71,8 +71,9 @@ async function runBootstrapInner(
   await foundation.configService.init();
   Object.assign(services, foundation);
 
-  // Camera service (needs config, wired to queue later)
+  // Camera service (needs config, wired to queue + options later)
   services.cameraService = createCameraService(foundation.configService);
+  services.cameraService.setOptionsService(foundation.optionsService);
 
   m.redraw();
 
