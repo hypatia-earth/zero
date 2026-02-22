@@ -1,0 +1,150 @@
+/**
+ * Camera - Capture overlay and toolbar button
+ */
+
+/* ── Toolbar button ──────────────────────────────────────────────── */
+
+.panel.camera {
+  width: 44px;
+  height: 44px;
+}
+
+.panel.camera > .control.circle {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.panel.camera img {
+  width: 24px;
+  height: 24px;
+  filter: invert(1);
+  opacity: 0.8;
+}
+
+/* ── Overlay ─────────────────────────────────────────────────────── */
+
+.camera-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  pointer-events: auto;
+}
+
+.camera-container {
+  position: absolute;
+}
+
+/* ── Header bar above rect ───────────────────────────────────────── */
+
+.camera-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: rgba(20, 25, 35, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.camera-label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin-right: auto;
+}
+
+.camera-frames {
+  font-size: var(--font-size-mono);
+  font-family: monospace;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5em;
+  text-align: right;
+}
+
+.camera-duration {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 4px;
+  color: var(--color-text-primary);
+  padding: 2px 6px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.camera-duration option {
+  background: #1a1a1a;
+  color: #ffffff;
+}
+
+.camera-record {
+  padding: 3px 12px;
+  border-radius: 12px;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid;
+  background: transparent;
+  color: var(--color-text-primary);
+  transition: opacity 0.15s;
+  font-family: inherit;
+}
+
+.camera-record:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.camera-close {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-lg);
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+@media (hover: hover) {
+  .camera-close:hover {
+    color: var(--color-text-primary);
+  }
+}
+
+/* ── Capture rect ────────────────────────────────────────────────── */
+
+.camera-rect {
+  position: relative;
+  border: 2px solid;
+  border-radius: 0 0 2px 2px;
+  box-sizing: border-box;
+  cursor: move;
+}
+
+/* ── Edge resize hotspots ────────────────────────────────────────── */
+
+.camera-rect .edge {
+  position: absolute;
+  background: transparent;
+}
+
+/* Cardinal edges */
+.camera-rect .edge-n  { top: -4px; left: 8px; right: 8px; height: 8px; cursor: n-resize; }
+.camera-rect .edge-s  { bottom: -4px; left: 8px; right: 8px; height: 8px; cursor: s-resize; }
+.camera-rect .edge-w  { left: -4px; top: 8px; bottom: 8px; width: 8px; cursor: w-resize; }
+.camera-rect .edge-e  { right: -4px; top: 8px; bottom: 8px; width: 8px; cursor: e-resize; }
+
+/* Corner edges */
+.camera-rect .edge-nw { top: -4px; left: -4px; width: 12px; height: 12px; cursor: nw-resize; }
+.camera-rect .edge-ne { top: -4px; right: -4px; width: 12px; height: 12px; cursor: ne-resize; }
+.camera-rect .edge-sw { bottom: -4px; left: -4px; width: 12px; height: 12px; cursor: sw-resize; }
+.camera-rect .edge-se { bottom: -4px; right: -4px; width: 12px; height: 12px; cursor: se-resize; }

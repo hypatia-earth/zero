@@ -20,6 +20,7 @@ import './styles/panels.css';
 import './styles/controls.css';
 import './styles/dialogs.css';
 import './styles/widgets.css';
+import './styles/camera.css';
 
 import { App } from './app';
 

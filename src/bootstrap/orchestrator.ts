@@ -14,6 +14,7 @@ import {
   createAuroraService,
   createSlotService,
   createPaletteService,
+  createCameraService,
   type ServiceContainer,
 } from './service-container';
 import { extractOptionsMeta, defaultOptions } from '../schemas/options.schema';
@@ -70,6 +71,9 @@ async function runBootstrapInner(
   await foundation.configService.init();
   Object.assign(services, foundation);
 
+  // Camera service (needs config, wired to queue later)
+  services.cameraService = createCameraService(foundation.configService);
+
   m.redraw();
 
   // Phase 1: Capabilities
@@ -95,6 +99,7 @@ async function runBootstrapInner(
     services.timestepService,
     services.layerService!
   );
+  services.cameraService!.setQueueService(services.queueService.queueStats);
   const assets = await runAssetsPhase(services.queueService, services.capabilitiesService!, progress);
 
   // Phase 5: GPU Init (worker-based)
@@ -216,6 +221,7 @@ export function exposeDebugServices(services: ServiceContainer): void {
     themeService: services.themeService,
     perfService: services.perfService,
     layerService: services.layerService,
+    cameraService: services.cameraService,
     camera: services.auroraService?.getCamera(),
     schema: { extractOptionsMeta, defaultOptions },
   };

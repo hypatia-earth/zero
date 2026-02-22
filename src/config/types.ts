@@ -201,4 +201,17 @@ export interface ZeroConfig {
     };
     normalOther: readonly [number, number, number, number];
   };
+
+  /** Camera capture UI settings (distinct from 3D camera above) */
+  cameraUI: CameraConfig;
+}
+
+export interface CameraConfig {
+  rectDefaultSize: number;
+  rectMinWidth: number;
+  rectMinHeight: number;
+  fps: number;
+  durations: readonly number[];
+  borderColorIdle: string;
+  borderColorRecording: string;
 }

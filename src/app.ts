@@ -21,6 +21,8 @@ import { TimeBarPanel } from './components/timebar';
 import { LogoPanel } from './components/logo-panel';
 import { OptionsPanel } from './components/options-panel';
 import { FullscreenPanel } from './components/fullscreen-panel';
+import { CameraPanel } from './components/camera-panel';
+import { CameraOverlay } from './components/camera-overlay';
 import { PanelStack } from './components/panel-stack';
 import { CreateLayerDialog } from './components/create-layer-dialog';
 import { Modal } from './components/modal';
@@ -51,6 +53,7 @@ export const App: m.ClosureComponent = () => {
       const state = progress.state.value;
       const ready = state.complete && !state.error;
       const minimal = ready && services.stateService!.minimalUI.value;
+      const cameraActive = ready && services.cameraService!.mode.value !== 'off';
 
       return [
         m(BootstrapModal, {
@@ -79,7 +82,7 @@ export const App: m.ClosureComponent = () => {
           m('.ui-container', [
             m(PanelStack, { side: 'left' }, [
               m(LogoPanel),
-              !minimal && m(LayersPanel, {
+              !minimal && !cameraActive && m(LayersPanel, {
                 configService: services.configService!,
                 optionsService: services.optionsService!,
                 layerRegistry: services.layerService!,
@@ -89,25 +92,26 @@ export const App: m.ClosureComponent = () => {
             ]),
             m(PanelStack, { side: 'right' }, [
               m(TimeCirclePanel, { stateService: services.stateService! }),
-              !minimal && services.optionsService!.options.value.debug.showPerfPanel &&
+              !minimal && !cameraActive && services.optionsService!.options.value.debug.showPerfPanel &&
                 m(PerfPanel, {
                   optionsService: services.optionsService!,
                 }),
-              !minimal && m(QueuePanel, {
+              !minimal && !cameraActive && m(QueuePanel, {
                 queueService: services.queueService!,
                 optionsService: services.optionsService!,
                 slotService: services.slotService!,
                 dialogService: services.dialogService!,
               }),
-              !minimal && m(FullscreenPanel),
-              !minimal && m(AboutPanel, {
+              !minimal && !cameraActive && m(FullscreenPanel),
+              !minimal && m(CameraPanel, { cameraService: services.cameraService! }),
+              !minimal && !cameraActive && m(AboutPanel, {
                 dialogService: services.dialogService!,
               }),
-              !minimal && m(OptionsPanel, {
+              !minimal && !cameraActive && m(OptionsPanel, {
                 dialogService: services.dialogService!,
               }),
             ]),
-            !minimal && m(TimeBarPanel, {
+            !minimal && !cameraActive && m(TimeBarPanel, {
               optionsService: services.optionsService!,
               stateService: services.stateService!,
               slotService: services.slotService!,
@@ -116,6 +120,7 @@ export const App: m.ClosureComponent = () => {
               layerService: services.layerService!,
             }),
           ]),
+          cameraActive && m(CameraOverlay, { cameraService: services.cameraService! }),
         ] : []),
       ];
     },

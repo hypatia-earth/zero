@@ -22,6 +22,7 @@ import { PaletteService } from '../services/palette-service';
 import { KeyboardService } from '../services/keyboard-service';
 import { PerfService } from '../services/perf-service';
 import { LayerService } from '../services/layer/layer-service';
+import { CameraService } from '../services/camera-service';
 
 export interface ServiceContainer {
   // Foundation (no service deps)
@@ -50,6 +51,9 @@ export interface ServiceContainer {
 
   // Input (created after rendering)
   keyboardService: KeyboardService | null;
+
+  // Camera capture
+  cameraService: CameraService;
 }
 
 /**
@@ -159,4 +163,13 @@ export function createKeyboardService(
   timestepService: TimestepService
 ): KeyboardService {
   return new KeyboardService(stateService, timestepService);
+}
+
+/**
+ * Create CameraService (needs config service)
+ */
+export function createCameraService(
+  configService: ConfigService
+): CameraService {
+  return new CameraService(configService);
 }
