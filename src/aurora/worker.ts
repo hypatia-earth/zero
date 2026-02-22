@@ -227,6 +227,7 @@ let lastSmoothing = 'light';
 // Keyed by layer id, initialized from layer registry
 const animatedOpacity = new Map<string, number>();
 let lastFrameTime = 0;
+let recordingTime = 0;  // deterministic clock for capture (seconds)
 
 /** Initialize animated opacity for all registered layers */
 function initAnimatedOpacity(): void {
@@ -578,6 +579,10 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
 
   if (data.fixedDtMs !== undefined) {
     renderer!.setFrameDelta(data.fixedDtMs);
+    recordingTime += data.fixedDtMs / 1000;
+    uniforms.time = recordingTime;
+  } else {
+    recordingTime = 0;
   }
   renderer!.updateUniforms(uniforms);
 
