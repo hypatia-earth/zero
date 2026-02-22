@@ -64,7 +64,9 @@ export interface AuroraService {
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
   userLayerState: Signal<{ layerId: string; error: string } | 'ok' | null>;
   recording: boolean;
-  onExportFrame: ((bitmap: ImageBitmap) => void) | null;
+  onExportFrame: ((bitmap: ImageBitmap, captureId?: number) => void) | null;
+  onRecordProgress: ((frameIndex: number) => void) | null;
+  onRecordBatchComplete: ((bitmaps: ImageBitmap[]) => void) | null;
   getCameraSnapshot(): { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number };
   send(msg: AuroraRequest, transfer?: Transferable[]): void;
 }
@@ -84,7 +86,9 @@ export function createAuroraService(
   // Message callbacks
   let onReady: (() => void) | null = null;
   let onFrameComplete: ((timing: { frame: number; pass1: number; pass2: number; pass3: number }, memoryMB: { allocated: number; capacity: number }) => void) | null = null;
-  let onExportFrame: ((bitmap: ImageBitmap) => void) | null = null;
+  let onExportFrame: ((bitmap: ImageBitmap, captureId?: number) => void) | null = null;
+  let onRecordProgress: ((frameIndex: number) => void) | null = null;
+  let onRecordBatchComplete: ((bitmaps: ImageBitmap[]) => void) | null = null;
 
   // Render loop state
   let renderInFlight = false;
@@ -146,7 +150,13 @@ export function createAuroraService(
         console.error('[Aurora]', msg.message);
         break;
       case 'exportFrame':
-        onExportFrame?.(msg.bitmap);
+        onExportFrame?.(msg.bitmap, msg.captureId);
+        break;
+      case 'recordProgress':
+        onRecordProgress?.(msg.frameIndex);
+        break;
+      case 'recordBatchComplete':
+        onRecordBatchComplete?.(msg.bitmaps);
         break;
       case 'userLayerResult':
         if (!msg.success && msg.error) {
@@ -371,7 +381,13 @@ export function createAuroraService(
     set recording(v: boolean) { recording = v; },
 
     get onExportFrame() { return onExportFrame; },
-    set onExportFrame(cb: ((bitmap: ImageBitmap) => void) | null) { onExportFrame = cb; },
+    set onExportFrame(cb: ((bitmap: ImageBitmap, captureId?: number) => void) | null) { onExportFrame = cb; },
+
+    get onRecordProgress() { return onRecordProgress; },
+    set onRecordProgress(cb: ((frameIndex: number) => void) | null) { onRecordProgress = cb; },
+
+    get onRecordBatchComplete() { return onRecordBatchComplete; },
+    set onRecordBatchComplete(cb: ((bitmaps: ImageBitmap[]) => void) | null) { onRecordBatchComplete = cb; },
 
     getCameraSnapshot() {
       const cam = camera!;

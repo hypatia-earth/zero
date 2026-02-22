@@ -4,7 +4,7 @@
  * Manages camera overlay state: mode transitions, rect position/size,
  * drag/resize interactions, and duration/frame tracking.
  *
- * Modes: off → ready → recording → done → ready → off
+ * Modes: off → ready → capturing → processing → done → ready → off
  */
 
 import m from 'mithril';
@@ -16,7 +16,7 @@ import type { StateService } from '../state-service';
 import type { OptionsService } from '../options-service';
 import type { QueueStats } from '../../config/types';
 
-type CameraMode = 'off' | 'ready' | 'recording' | 'done';
+type CameraMode = 'off' | 'ready' | 'capturing' | 'processing' | 'done';
 type Edge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 interface Rect {
   x: number;
@@ -92,7 +92,9 @@ export class CaptureService {
     if (this.mode.value !== 'ready') return;
     if (!this.isQueueIdle) return;
     if (this.cam.paletteMode !== 'grayscale' && !this.palette.value) return;
-    this.mode.value = 'recording';
+    // Cancel pending preview capture to prevent stale exportFrame during capturing
+    if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
+    this.mode.value = 'capturing';
     this.frameIndex.value = 0;
     this.aborted = false;
     this.runRecordingLoop();
@@ -100,14 +102,14 @@ export class CaptureService {
   }
 
   stop(): void {
-    if (this.mode.value !== 'recording') return;
+    if (this.mode.value !== 'capturing') return;
     this.aborted = true;
     // Mode transition happens when loop detects abort
   }
 
   exit(): void {
     if (this.mode.value === 'off') return;
-    if (this.mode.value === 'recording') this.aborted = true;
+    if (this.mode.value === 'capturing' || this.mode.value === 'processing') this.aborted = true;
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
     this.mode.value = 'off';
     this.frameIndex.value = 0;
@@ -146,21 +148,35 @@ export class CaptureService {
     const frozenTime = this.stateService.viewState.value.time.getTime();
 
     aurora.recording = true;
-    const prevHandler = aurora.onExportFrame;
 
     try {
+      // Worker renders all frames in a tight loop — no cross-thread round trips
+      const bitmaps = await new Promise<ImageBitmap[]>(resolve => {
+        aurora.onRecordProgress = (frameIndex) => {
+          this.frameIndex.value = frameIndex;
+          m.redraw();
+        };
+        aurora.onRecordBatchComplete = (batch) => resolve(batch);
+        const camera = aurora.getCameraSnapshot();
+        aurora.send({ type: 'recordBatch', camera, time: frozenTime, fixedDtMs, totalFrames });
+      });
+
+      // Phase 2: processing (crop + encode)
+      this.mode.value = 'processing';
+      this.frameIndex.value = 0;
+      m.redraw();
+
       const session = await createGifSession(fps, paletteMode, this.palette.value);
 
-      for (let i = 0; i < totalFrames; i++) {
+      for (let i = 0; i < bitmaps.length; i++) {
         if (this.aborted) break;
-
-        const bitmap = await this.captureOneFrame(aurora, frozenTime, fixedDtMs);
-        const rgba = this.cropBitmap(bitmap);
+        const rgba = this.cropBitmap(bitmaps[i]!);
         const { w, h } = this.getOutputDimensions();
         session.addFrame(rgba, w, h);
         this.frameIndex.value = i + 1;
-        await new Promise<void>(r => setTimeout(r, 0));
         m.redraw();
+        // Yield each frame to keep UI responsive during encoding
+        await new Promise<void>(r => setTimeout(r, 0));
       }
 
       if (!this.aborted) {
@@ -174,22 +190,10 @@ export class CaptureService {
       }
     } finally {
       aurora.recording = false;
-      aurora.onExportFrame = prevHandler;
+      aurora.onRecordProgress = null;
+      aurora.onRecordBatchComplete = null;
       m.redraw();
     }
-  }
-
-  private captureOneFrame(
-    aurora: AuroraService,
-    time: number,
-    fixedDtMs: number,
-  ): Promise<ImageBitmap> {
-    return new Promise(resolve => {
-      aurora.onExportFrame = resolve;
-      const camera = aurora.getCameraSnapshot();
-      aurora.send({ type: 'captureFrame' });
-      aurora.send({ type: 'render', camera, time, fixedDtMs });
-    });
   }
 
   private cropBitmap(bitmap: ImageBitmap): Uint8ClampedArray {
@@ -208,7 +212,7 @@ export class CaptureService {
       this.paletteCanvas = new OffscreenCanvas(outW, outH);
     }
 
-    const ctx = this.paletteCanvas.getContext('2d')!;
+    const ctx = this.paletteCanvas.getContext('2d', { willReadFrequently: true })!;
     ctx.drawImage(bitmap, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
     bitmap.close();
     return ctx.getImageData(0, 0, outW, outH).data;
@@ -235,7 +239,13 @@ export class CaptureService {
 
   private async onPreviewFrame(bitmap: ImageBitmap): Promise<void> {
     if (this.mode.value === 'off') return;
-    this.palette.value = await extractPalette(bitmap, this.rect.value, this.cam.nativeDpr);
+    const palette = await extractPalette(bitmap, this.rect.value, this.cam.nativeDpr);
+    // Chrome: first transferToImageBitmap may return black — retry
+    if (palette.every(([r, g, b]) => r === 0 && g === 0 && b === 0)) {
+      this.requestCaptureFrame();
+      return;
+    }
+    this.palette.value = palette;
     m.redraw();
   }
 
@@ -262,8 +272,13 @@ export class CaptureService {
 
   // ── Rect drag (move) ─────────────────────────────────────────────
 
+  private get isLocked(): boolean {
+    const m = this.mode.value;
+    return m === 'capturing' || m === 'processing' || m === 'done';
+  }
+
   startMove(e: PointerEvent): void {
-    if (this.mode.value === 'recording' || this.mode.value === 'done') return;
+    if (this.isLocked) return;
     e.preventDefault();
     const r = this.rect.value;
     const startX = e.clientX - r.x;
@@ -291,7 +306,7 @@ export class CaptureService {
   // ── Rect resize ───────────────────────────────────────────────────
 
   startResize(e: PointerEvent, edge: Edge): void {
-    if (this.mode.value === 'recording' || this.mode.value === 'done') return;
+    if (this.isLocked) return;
     e.preventDefault();
     e.stopPropagation();
     const cfg = this.configService.getConfig().cameraUI;

@@ -38,10 +38,12 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
       const mode = captureService.mode.value;
       const rect = captureService.rect.value;
       const palette = captureService.palette.value;
-      const isRecording = mode === 'recording';
+      const isCapturing = mode === 'capturing';
+      const isProcessing = mode === 'processing';
       const isDone = mode === 'done';
-      const isLocked = isRecording || isDone;
-      const borderColor = isRecording ? '#cc4444' : '#44cc66';
+      const isBusy = isCapturing || isProcessing;
+      const isLocked = isBusy || isDone;
+      const borderColor = isBusy ? '#cc4444' : '#44cc66';
 
       return m('.camera-overlay', [
         m('.camera-container', {
@@ -54,7 +56,6 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
           // Header bar
           m('.camera-header', [
             m('span.camera-label', 'Camera'),
-            m('span.camera-frames', `${captureService.frameIndex.value}/${captureService.totalFrames.value}`),
             isDone
               ? m('button.camera-record', {
                   style: { borderColor },
@@ -66,10 +67,10 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
                 }, 'New')
               : m('button.camera-record', {
                   style: { borderColor },
-                  onclick: () => isRecording ? captureService.stop() : captureService.record(),
-                  disabled: !isRecording && (!captureService.isQueueIdle ||
-                    (optionsService.options.value.camera.paletteMode !== 'grayscale' && !palette)),
-                }, isRecording ? 'Stop' : 'Record'),
+                  onclick: () => isCapturing ? captureService.stop() : captureService.record(),
+                  disabled: isProcessing || (!isCapturing && (!captureService.isQueueIdle ||
+                    (optionsService.options.value.camera.paletteMode !== 'grayscale' && !palette))),
+                }, isCapturing ? 'Stop' : 'Record'),
             m('button.camera-settings-btn', {
               onclick: () => dialogService.open('options', { filter: 'camera' }),
               disabled: isLocked,
@@ -86,19 +87,24 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
               borderColor,
               cursor: isLocked ? 'default' : 'move',
             },
-            class: isRecording ? 'recording' : '',
+            class: isBusy ? 'recording' : '',
             onpointerdown: isLocked ? undefined : (e: PointerEvent) => {
               if ((e.target as HTMLElement).classList.contains('camera-rect')) {
                 captureService.startMove(e);
               }
             },
           }, [
-            // Resize edge hotspots (hidden during recording/done)
+            // Resize edge hotspots (hidden when locked)
             ...(!isLocked ? EDGES.map(edge =>
               m(`div.edge.edge-${edge}`, {
                 onpointerdown: (e: PointerEvent) => captureService.startResize(e, edge),
               })
             ) : []),
+
+            // Status label (capturing / processing)
+            isBusy ? m('span.camera-status',
+              `${isCapturing ? 'Capturing' : 'Processing'} ${captureService.frameIndex.value}/${captureService.totalFrames.value}`
+            ) : null,
 
             // Download link (shown in done mode)
             isDone ? m('a.camera-download', {

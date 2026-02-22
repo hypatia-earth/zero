@@ -183,7 +183,7 @@ export class GlobeRenderer {
 
     this.context = this.canvas.getContext('webgpu')!;
     this.format = navigator.gpu.getPreferredCanvasFormat();
-    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied' });
+    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
 
     // Create GPU timestamp helper if supported
     if (hasTimestampQuery) {
@@ -1013,7 +1013,52 @@ export class GlobeRenderer {
 
   /** Reconfigure canvas context (needed after transferToImageBitmap) */
   reconfigureContext(): void {
-    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied' });
+    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+  }
+
+  /** Read pixels directly from GPU texture — bypasses canvas compositor */
+  async readbackFrame(): Promise<ImageBitmap> {
+    const texture = this.context.getCurrentTexture();
+    const { width, height } = texture;
+    const bytesPerRow = Math.ceil(width * 4 / 256) * 256;
+
+    const staging = this.device.createBuffer({
+      size: bytesPerRow * height,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+
+    const encoder = this.device.createCommandEncoder();
+    encoder.copyTextureToBuffer({ texture }, { buffer: staging, bytesPerRow }, { width, height });
+    this.device.queue.submit([encoder.finish()]);
+
+    await staging.mapAsync(GPUMapMode.READ);
+    const mapped = new Uint8Array(staging.getMappedRange());
+
+    const rowBytes = width * 4;
+    const rgba = new Uint8ClampedArray(width * height * 4);
+    const swapRB = this.format === 'bgra8unorm';
+
+    for (let y = 0; y < height; y++) {
+      const src = y * bytesPerRow;
+      const dst = y * rowBytes;
+      if (swapRB) {
+        for (let x = 0; x < width; x++) {
+          const si = src + x * 4;
+          const di = dst + x * 4;
+          rgba[di] = mapped[si + 2]!;
+          rgba[di + 1] = mapped[si + 1]!;
+          rgba[di + 2] = mapped[si]!;
+          rgba[di + 3] = mapped[si + 3]!;
+        }
+      } else {
+        rgba.set(mapped.subarray(src, src + rowBytes), dst);
+      }
+    }
+
+    staging.unmap();
+    staging.destroy();
+
+    return createImageBitmap(new ImageData(rgba, width, height));
   }
 
   /** Update level count (may resize vertex buffer) */
