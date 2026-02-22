@@ -101,6 +101,7 @@ export class GlobeRenderer {
   private lastFrameTime = 0;
   private frameDeltaMs = 0;    // milliseconds since last frame (0 on first frame)
   private frameDeltaFixed = false;  // true when setFrameDelta was called for this frame
+  private rainAnimTime = 0;   // accumulated rain animation time (seconds)
 
   // GPU timing
   private gpuTimestamp: GpuTimestamp | null = null;
@@ -567,8 +568,10 @@ export class GlobeRenderer {
     // Logo
     view.setFloat32(O.logoOpacity, uniforms.logoOpacity, true);
 
-    // Rain backface (dynamic: depends on which layers are enabled)
+    // Rain (dynamic: backface depends on which layers are enabled)
     view.setFloat32(O.rainBackFace, uniforms.rainBackFace, true);
+    this.rainAnimTime += this.frameDeltaMs / 1000;
+    view.setFloat32(O.rainAnimTime, this.rainAnimTime, true);
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 

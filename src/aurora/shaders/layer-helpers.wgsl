@@ -50,6 +50,7 @@ struct Uniforms {
   rainSizePx: f32,         // particle radius in screen pixels
   rainMinMm: f32,          // minimum precipitation (mm) to render
   rainBackFace: f32,       // 1.0 = render rain on back hemisphere
+  rainAnimTime: f32,       // accumulated animation time (seconds, from frameDelta)
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

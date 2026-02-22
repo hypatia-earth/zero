@@ -143,6 +143,7 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['rainSizePx', 'f32'],         // particle radius in screen pixels
   ['rainMinMm', 'f32'],          // minimum precipitation (mm) to render
   ['rainBackFace', 'f32'],       // 1.0 = render rain on back hemisphere
+  ['rainAnimTime', 'f32'],       // accumulated animation time (seconds, from frameDelta)
 ]);
 
 // Strongly typed offsets - TypeScript knows all field names exist
@@ -252,6 +253,7 @@ export const U = GLOBE_UNIFORMS.offsets as {
   rainSizePx: number;
   rainMinMm: number;
   rainBackFace: number;
+  rainAnimTime: number;
 };
 
 /** Byte offset of component `index` within a packed vec4 array starting at `base` */

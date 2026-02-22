@@ -102,7 +102,7 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   if (sdf > 0.0) { return color; }
 
   // Fade loop — reduced range so particles never vanish (avoids pop-in flicker)
-  let phase = fract(u.time / u.rainFadeDuration + rainHash1(cellId));
+  let phase = fract(u.rainAnimTime / u.rainFadeDuration + rainHash1(cellId));
   let fadeAlpha = 0.5 + 0.5 * (1.0 - phase);
 
   // Rate normalization: accumulation (mm) → mm/h using param slot spacing
