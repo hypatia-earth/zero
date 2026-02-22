@@ -91,7 +91,7 @@ Different missions, both valuable.
 - **Multi-model fusion** - introduced NCEP GFS 0.25° as second data source alongside ECMWF IFS, enabling cross-model rendering at the shader level
 - **Storage buffer packing** - t0/t1 timestep data packed into single combined buffers per parameter, working within Chrome's 10 storage buffer limit
 
-### 2026-02-21
+### 2026-02-19
 - **Aurora render engine** - declarative layers with runtime shader composition
 - **Custom layers** - user-defined layers with additional ECMWF parameters: clouds, precipitation
 - **Unified palette system** - shared palette texture with JSON configuration
