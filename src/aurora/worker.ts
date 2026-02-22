@@ -60,6 +60,13 @@ export interface AuroraConfig {
 // Message types
 // ============================================================
 
+export interface CameraSnapshot {
+  viewProj: Float32Array;
+  viewProjInverse: Float32Array;
+  eye: Float32Array;
+  tanFov: number;
+}
+
 export type AuroraRequest =
   | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; dpr: number; config: AuroraConfig; assets: AuroraAssets }
   | { type: 'options'; value: ZeroOptions }
@@ -67,14 +74,14 @@ export type AuroraRequest =
   | { type: 'uploadData'; param: string; slotIndex: number; data: Float32Array }
   | { type: 'activateSlots'; param: string; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
   | { type: 'deactivateSlots'; param: string }
-  | { type: 'render'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number; fixedDtMs?: number; captureId?: number }
+  | { type: 'render'; camera: CameraSnapshot; time: number }
   | { type: 'resize'; width: number; height: number; dpr: number }
   | { type: 'registerUserLayer'; layer: LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'setUserLayerOptions'; layerIndex: number; enabled?: boolean; opacity?: number; paletteIndex?: number }
   | { type: 'updatePalette'; layer: string; paletteId: PaletteId; range?: [number, number] }
-  | { type: 'captureFrame'; captureId?: number }
-  | { type: 'recordBatch'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number; fixedDtMs: number; totalFrames: number }
+  | { type: 'captureFrame' }
+  | { type: 'recordBatch'; camera: CameraSnapshot; time: number; fixedDtMs: number; totalFrames: number }
   | { type: 'cleanup' };
 
 export type AuroraResponse =
@@ -82,7 +89,7 @@ export type AuroraResponse =
   | { type: 'frameComplete'; timing: { frame: number; pass1: number; pass2: number; pass3: number }; memoryMB: { allocated: number; capacity: number } }
   | { type: 'error'; message: string; fatal: boolean }
   | { type: 'userLayerResult'; layerId: string; success: boolean; error?: string }
-  | { type: 'exportFrame'; bitmap: ImageBitmap; captureId?: number }
+  | { type: 'exportFrame'; bitmap: ImageBitmap }
   | { type: 'recordProgress'; frameIndex: number }
   | { type: 'recordBatchComplete'; bitmaps: ImageBitmap[] };
 
@@ -530,19 +537,11 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
 async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): Promise<void> {
   if (!canvas || !renderer) return;
   const t0 = performance.now();
-  const { camera, time, captureId } = data;
+  const { camera, time } = data;
   const opts = currentOptions!;
 
-  // Render message can carry captureId — atomic capture+render, no race with stale captures
-  if (captureId !== undefined) {
-    captureFramePending = true;
-    pendingCaptureId = captureId;
-  }
-
   // Compute delta time and update animated opacities
-  const dt = data.fixedDtMs !== undefined
-    ? data.fixedDtMs / 1000
-    : (lastFrameTime > 0 ? (t0 - lastFrameTime) / 1000 : 0);
+  const dt = lastFrameTime > 0 ? (t0 - lastFrameTime) / 1000 : 0;
   lastFrameTime = t0;
   updateAnimatedOpacities(dt, time);
 
@@ -584,10 +583,6 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
   }
 
   const uniforms = buildUniforms(camera, new Date(time));
-
-  if (data.fixedDtMs !== undefined) {
-    renderer!.setFrameDelta(data.fixedDtMs);
-  }
   renderer!.updateUniforms(uniforms);
 
   // Build animated user layer opacities (indexed by userLayerIndex)
@@ -824,29 +819,21 @@ function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette
 
 // Deferred capture: set flag, actual capture happens after next render
 let captureFramePending = false;
-let pendingCaptureId: number | undefined;
 
-function handleCaptureFrame(data: Extract<AuroraRequest, { type: 'captureFrame' }>): void {
+function handleCaptureFrame(): void {
   captureFramePending = true;
-  pendingCaptureId = data.captureId;
 }
 
 /** Called at end of handleRender — captures frame right after GPU output is ready */
 async function flushCaptureFrame(): Promise<void> {
   if (!captureFramePending || !canvas || !renderer) return;
   captureFramePending = false;
-  const captureId = pendingCaptureId;
-  pendingCaptureId = undefined;
   // Wait for GPU to finish rendering before grabbing the bitmap
   await renderer.getDevice().queue.onSubmittedWorkDone();
   const bitmap = canvas.transferToImageBitmap();
   // transferToImageBitmap invalidates WebGPU context — must reconfigure
   renderer.reconfigureContext();
-  const msg: AuroraResponse = captureId !== undefined
-    ? { type: 'exportFrame', bitmap, captureId }
-    : { type: 'exportFrame', bitmap };
-  // Worker postMessage with transferable — cast self for correct overload
-  (self as unknown as Worker).postMessage(msg, [bitmap]);
+  (self as unknown as Worker).postMessage({ type: 'exportFrame', bitmap } satisfies AuroraResponse, [bitmap]);
 }
 
 async function handleRecordBatch(data: Extract<AuroraRequest, { type: 'recordBatch' }>): Promise<void> {

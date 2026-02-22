@@ -9,7 +9,7 @@
  */
 
 import { effect, signal, type Signal } from '@preact/signals-core';
-import type { AuroraRequest, AuroraResponse, AuroraConfig, AuroraAssets } from '../aurora/worker';
+import type { AuroraRequest, AuroraResponse, AuroraConfig, AuroraAssets, CameraSnapshot } from '../aurora/worker';
 import type { StateService } from './state-service';
 import type { ConfigService } from './config-service';
 import type { OptionsService } from './options-service';
@@ -24,7 +24,7 @@ function hasPaletteField(val: unknown): val is { palette: PaletteId } {
 }
 
 // Re-export types for consumers
-export type { AuroraConfig, AuroraAssets } from '../aurora/worker';
+export type { AuroraConfig, AuroraAssets, CameraSnapshot } from '../aurora/worker';
 export type { Camera } from '../aurora/camera';
 
 /** Performance statistics emitted each frame */
@@ -64,10 +64,10 @@ export interface AuroraService {
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
   userLayerState: Signal<{ layerId: string; error: string } | 'ok' | null>;
   recording: boolean;
-  onExportFrame: ((bitmap: ImageBitmap, captureId?: number) => void) | null;
+  onExportFrame: ((bitmap: ImageBitmap) => void) | null;
   onRecordProgress: ((frameIndex: number) => void) | null;
   onRecordBatchComplete: ((bitmaps: ImageBitmap[]) => void) | null;
-  getCameraSnapshot(): { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number };
+  getCameraSnapshot(): CameraSnapshot;
   send(msg: AuroraRequest, transfer?: Transferable[]): void;
 }
 
@@ -86,7 +86,7 @@ export function createAuroraService(
   // Message callbacks
   let onReady: (() => void) | null = null;
   let onFrameComplete: ((timing: { frame: number; pass1: number; pass2: number; pass3: number }, memoryMB: { allocated: number; capacity: number }) => void) | null = null;
-  let onExportFrame: ((bitmap: ImageBitmap, captureId?: number) => void) | null = null;
+  let onExportFrame: ((bitmap: ImageBitmap) => void) | null = null;
   let onRecordProgress: ((frameIndex: number) => void) | null = null;
   let onRecordBatchComplete: ((bitmaps: ImageBitmap[]) => void) | null = null;
 
@@ -150,7 +150,7 @@ export function createAuroraService(
         console.error('[Aurora]', msg.message);
         break;
       case 'exportFrame':
-        onExportFrame?.(msg.bitmap, msg.captureId);
+        onExportFrame?.(msg.bitmap);
         break;
       case 'recordProgress':
         onRecordProgress?.(msg.frameIndex);
@@ -381,7 +381,7 @@ export function createAuroraService(
     set recording(v: boolean) { recording = v; },
 
     get onExportFrame() { return onExportFrame; },
-    set onExportFrame(cb: ((bitmap: ImageBitmap, captureId?: number) => void) | null) { onExportFrame = cb; },
+    set onExportFrame(cb: ((bitmap: ImageBitmap) => void) | null) { onExportFrame = cb; },
 
     get onRecordProgress() { return onRecordProgress; },
     set onRecordProgress(cb: ((frameIndex: number) => void) | null) { onRecordProgress = cb; },
