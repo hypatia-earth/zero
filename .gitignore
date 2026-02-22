@@ -12,6 +12,9 @@ DEBUG.md
 # External large dependencies (lazy-loaded)
 extern/
 
+# Local env (secrets)
+.env.local
+
 # Test artifacts
 playwright-report/
 test-results/

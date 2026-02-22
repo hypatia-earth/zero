@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, type Plugin, loadEnv } from 'vite';
 import fs from 'fs';
 import { execSync } from 'child_process';
 
@@ -47,9 +47,71 @@ function servePublicModules(): Plugin {
   };
 }
 
-export default defineConfig({
+/**
+ * Vite plugin to proxy GeoNames reverse geocoding API.
+ * Allows publisher with geonames account to decorate captured media
+ * with geographic details (city, country, ocean/sea name).
+ * Activated only when VITE_GEONAMES_USER is set in .env.local.
+ * Exposes /api/geocode?lat=X&lon=Y on the dev server.
+ */
+function geonamesProxy(env: Record<string, string>): Plugin | null {
+  const username = env.VITE_GEONAMES_USER;
+  if (!username) return null;
+
+  return {
+    name: 'geonames-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith('/api/geocode?')) return next();
+
+        const params = new URLSearchParams(req.url.split('?')[1]);
+        const lat = params.get('lat');
+        const lon = params.get('lon');
+        if (!lat || !lon) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'lat and lon required' }));
+          return;
+        }
+
+        try {
+          const base = 'https://secure.geonames.org';
+
+          // 1. Check land vs water
+          const countryRes = await fetch(`${base}/countryCodeJSON?lat=${lat}&lng=${lon}&username=${username}`);
+          const countryData = await countryRes.json();
+
+          if (countryData.countryName) {
+            // Land — find nearest city
+            const placeRes = await fetch(`${base}/findNearbyPlaceNameJSON?lat=${lat}&lng=${lon}&maxRows=1&username=${username}`);
+            const placeData = await placeRes.json();
+            const place = placeData.geonames?.[0];
+            const label = place?.name
+              ? `${place.name}, ${countryData.countryName}`
+              : countryData.countryName;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ label }));
+          } else {
+            // Water — find ocean/sea
+            const oceanRes = await fetch(`${base}/oceanJSON?lat=${lat}&lng=${lon}&username=${username}`);
+            const oceanData = await oceanRes.json();
+            const label = oceanData.ocean?.name || '';
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ label }));
+          }
+        } catch (e) {
+          res.statusCode = 502;
+          res.end(JSON.stringify({ error: 'GeoNames request failed' }));
+        }
+      });
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd());
+  return {
   base: process.env.BASE_URL || '/',
-  plugins: [cacheHeaders(), servePublicModules()],
+  plugins: [cacheHeaders(), servePublicModules(), geonamesProxy(env)].filter(Boolean) as Plugin[],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __APP_HASH__: JSON.stringify(gitHash),
@@ -77,4 +139,5 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+};
 });
