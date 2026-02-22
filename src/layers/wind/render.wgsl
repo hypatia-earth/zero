@@ -54,7 +54,7 @@ fn vertexMain(
 ) -> VertexOutput {
   // Triangle-list: 6 vertices per segment (2 triangles forming a quad)
   // Vertex pattern: 0,1,2, 2,1,3 for quad [p0+perp, p0-perp, p1+perp, p1-perp]
-  let segmentsPerLine = 32u;
+  let segmentsPerLine = 30u;
   let numSegments = segmentsPerLine - 1u;  // 31 segments from 32 points
   let segmentIdx = vertexIdx / 6u;         // Which segment
   let cornerIdx = vertexIdx % 6u;          // Which vertex in quad (0-5)

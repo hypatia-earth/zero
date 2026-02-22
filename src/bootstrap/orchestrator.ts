@@ -133,8 +133,9 @@ async function runBootstrapInner(
     progress
   );
 
-  // Wire camera service to aurora (for frame capture)
+  // Wire camera service to aurora (for frame capture) and state (for frozen time)
   services.cameraService!.setAuroraService(services.auroraService);
+  services.cameraService!.setStateService(services.stateService!);
 
   // Send custom layers to worker (loaded from IDB in config phase, enabled state set by sanitize)
   for (const layer of services.layerService!.getAll().filter(l => !l.isBuiltIn)) {

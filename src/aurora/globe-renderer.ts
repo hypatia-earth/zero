@@ -510,10 +510,12 @@ export class GlobeRenderer {
     });
   }
 
-  updateUniforms(uniforms: GlobeUniforms): void {
+  updateUniforms(uniforms: GlobeUniforms, fixedDtMs?: number): void {
     // Compute frame delta time for animations
     const now = performance.now();
-    if (this.lastFrameTime > 0) {
+    if (fixedDtMs !== undefined) {
+      this.frameDeltaMs = fixedDtMs;
+    } else if (this.lastFrameTime > 0) {
       this.frameDeltaMs = Math.min(now - this.lastFrameTime, 100);  // Cap at 100ms
     }
     this.lastFrameTime = now;

@@ -67,7 +67,7 @@ export type AuroraRequest =
   | { type: 'uploadData'; param: string; slotIndex: number; data: Float32Array }
   | { type: 'activateSlots'; param: string; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
   | { type: 'deactivateSlots'; param: string }
-  | { type: 'render'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number }
+  | { type: 'render'; camera: { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number }; time: number; fixedDtMs?: number }
   | { type: 'resize'; width: number; height: number; dpr: number }
   | { type: 'registerUserLayer'; layer: LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
@@ -524,14 +524,16 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
   }
 }
 
-function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): void {
+async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): Promise<void> {
   if (!canvas || !renderer) return;
   const t0 = performance.now();
   const { camera, time } = data;
   const opts = currentOptions!;
 
   // Compute delta time and update animated opacities
-  const dt = lastFrameTime > 0 ? (t0 - lastFrameTime) / 1000 : 0;
+  const dt = data.fixedDtMs !== undefined
+    ? data.fixedDtMs / 1000
+    : (lastFrameTime > 0 ? (t0 - lastFrameTime) / 1000 : 0);
   lastFrameTime = t0;
   updateAnimatedOpacities(dt, time);
 
@@ -574,7 +576,7 @@ function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): void {
 
   const uniforms = buildUniforms(camera, new Date(time));
 
-  renderer!.updateUniforms(uniforms);
+  renderer!.updateUniforms(uniforms, data.fixedDtMs);
 
   // Build animated user layer opacities (indexed by userLayerIndex)
   const animatedUserOpacities = new Map<number, number>();
@@ -599,7 +601,7 @@ function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): void {
   const passTimings = renderer!.render();
 
   // Capture frame if pending (right after render, before next frame overwrites)
-  flushCaptureFrame();
+  await flushCaptureFrame();
 
   // Compute memory stats from param stores
   let allocatedMB = 0;
@@ -816,9 +818,11 @@ function handleCaptureFrame(): void {
 }
 
 /** Called at end of handleRender — captures frame right after GPU output is ready */
-function flushCaptureFrame(): void {
+async function flushCaptureFrame(): Promise<void> {
   if (!captureFramePending || !canvas || !renderer) return;
   captureFramePending = false;
+  // Wait for GPU to finish rendering before grabbing the bitmap
+  await renderer.getDevice().queue.onSubmittedWorkDone();
   const bitmap = canvas.transferToImageBitmap();
   // transferToImageBitmap invalidates WebGPU context — must reconfigure
   renderer.reconfigureContext();

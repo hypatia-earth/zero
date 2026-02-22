@@ -35,7 +35,9 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
       const rect = cameraService.rect.value;
       const palette = cameraService.palette.value;
       const isRecording = mode === 'recording';
-      const borderColor = isRecording ? '#cc4444' : '#44cc66';
+      const isDone = mode === 'done';
+      const isLocked = isRecording || isDone;
+      const borderColor = isRecording ? '#cc4444' : isDone ? '#44cc66' : '#44cc66';
 
       return m('.camera-overlay', [
         m('.camera-container', {
@@ -54,15 +56,24 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
               onchange: (e: Event) => {
                 cameraService.duration.value = Number((e.target as HTMLSelectElement).value);
               },
-              disabled: isRecording,
+              disabled: isLocked,
             }, cameraService.durations.map(d =>
               m('option', { value: String(d) }, `${d}s`)
             )),
-            m('button.camera-record', {
-              style: { borderColor },
-              onclick: () => isRecording ? cameraService.stop() : cameraService.record(),
-              disabled: !isRecording && !cameraService.isQueueIdle,
-            }, isRecording ? 'Stop' : 'Record'),
+            isDone
+              ? m('button.camera-record', {
+                  style: { borderColor },
+                  onclick: () => {
+                    cameraService.mode.value = 'ready';
+                    cameraService.frameIndex.value = 0;
+                    m.redraw();
+                  },
+                }, 'New')
+              : m('button.camera-record', {
+                  style: { borderColor },
+                  onclick: () => isRecording ? cameraService.stop() : cameraService.record(),
+                  disabled: !isRecording && (!cameraService.isQueueIdle || !palette),
+                }, isRecording ? 'Stop' : 'Record'),
             m('button.camera-close', {
               onclick: () => cameraService.exit(),
             }, '\u2715'),
@@ -73,25 +84,31 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
             style: {
               height: `${rect.h}px`,
               borderColor,
-              cursor: isRecording ? 'default' : 'move',
+              cursor: isLocked ? 'default' : 'move',
             },
             class: isRecording ? 'recording' : '',
-            onpointerdown: isRecording ? undefined : (e: PointerEvent) => {
+            onpointerdown: isLocked ? undefined : (e: PointerEvent) => {
               if ((e.target as HTMLElement).classList.contains('camera-rect')) {
                 cameraService.startMove(e);
               }
             },
           }, [
-            // Resize edge hotspots (hidden during recording)
-            ...(!isRecording ? EDGES.map(edge =>
+            // Resize edge hotspots (hidden during recording/done)
+            ...(!isLocked ? EDGES.map(edge =>
               m(`div.edge.edge-${edge}`, {
                 onpointerdown: (e: PointerEvent) => cameraService.startResize(e, edge),
               })
             ) : []),
+
+            // Download link (shown in done mode)
+            isDone ? m('a.camera-download', {
+              href: cameraService.downloadUrl,
+              download: cameraService.downloadName,
+            }, 'Download GIF') : null,
           ]),
 
-          // Palette stripe (shown when palette extracted)
-          palette ? m('.camera-palette-stripe',
+          // Palette stripe (shown when palette extracted, hidden in done mode)
+          palette && !isDone ? m('.camera-palette-stripe',
             m('canvas', {
               height: 16,
               oncreate(vnode: m.VnodeDOM) {

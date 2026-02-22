@@ -63,7 +63,9 @@ export interface AuroraService {
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
   userLayerState: Signal<{ layerId: string; error: string } | 'ok' | null>;
+  recording: boolean;
   onExportFrame: ((bitmap: ImageBitmap) => void) | null;
+  getCameraSnapshot(): { viewProj: Float32Array; viewProjInverse: Float32Array; eye: Float32Array; tanFov: number };
   send(msg: AuroraRequest, transfer?: Transferable[]): void;
 }
 
@@ -88,6 +90,7 @@ export function createAuroraService(
   let renderInFlight = false;
   let droppedFrames = 0;
   let paused = false;
+  let recording = false;
 
   // GPU memory stats (updated each frame from worker)
   const memoryStats = signal({ allocatedMB: 0, capacityMB: 0 });
@@ -326,7 +329,7 @@ export function createAuroraService(
           updatePerfStats();
 
           // --- RENDER ---
-          if (!paused && !renderInFlight) {
+          if (!paused && !recording && !renderInFlight) {
             renderInFlight = true;
             viewProjBuffer.set(cam.getViewProj());
             viewProjInverseBuffer.set(cam.getViewProjInverse());
@@ -364,8 +367,21 @@ export function createAuroraService(
     memoryStats,
     userLayerState,
 
+    get recording() { return recording; },
+    set recording(v: boolean) { recording = v; },
+
     get onExportFrame() { return onExportFrame; },
     set onExportFrame(cb: ((bitmap: ImageBitmap) => void) | null) { onExportFrame = cb; },
+
+    getCameraSnapshot() {
+      const cam = camera!;
+      return {
+        viewProj: new Float32Array(cam.getViewProj()),
+        viewProjInverse: new Float32Array(cam.getViewProjInverse()),
+        eye: new Float32Array(cam.getEyePosition()),
+        tanFov: cam.getTanFov(),
+      };
+    },
 
     cleanup(): void {
       send({ type: 'cleanup' });

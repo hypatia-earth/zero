@@ -4,16 +4,17 @@
  * Manages camera overlay state: mode transitions, rect position/size,
  * drag/resize interactions, and duration/frame tracking.
  *
- * Modes: off → ready → recording → ready → off
+ * Modes: off → ready → recording → done → ready → off
  */
 
 import m from 'mithril';
 import { signal, computed, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import type { ConfigService } from './config-service';
 import type { AuroraService } from './aurora-service';
+import type { StateService } from './state-service';
 import type { QueueStats } from '../config/types';
 
-type CameraMode = 'off' | 'ready' | 'recording';
+type CameraMode = 'off' | 'ready' | 'recording' | 'done';
 type Edge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
 interface Rect {
@@ -34,10 +35,15 @@ export class CameraService {
 
   private readonly configService: ConfigService;
   private auroraService: AuroraService | null = null;
+  private stateService: StateService | null = null;
   private paletteCanvas: OffscreenCanvas | null = null;
   private queueStats: Signal<QueueStats> | null = null;
   private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
   private captureDebounce: ReturnType<typeof setTimeout> | null = null;
+  private gifBlob: Blob | null = null;
+  private _downloadUrl: string | null = null;
+  private _downloadName = 'zero.hypatia.gif';
+  private aborted = false;
 
   constructor(configService: ConfigService) {
     this.configService = configService;
@@ -64,6 +70,11 @@ export class CameraService {
     auroraService.onExportFrame = (bitmap: ImageBitmap) => this.extractPalette(bitmap);
   }
 
+  /** Wire StateService for frozen time during recording */
+  setStateService(stateService: StateService): void {
+    this.stateService = stateService;
+  }
+
   get isQueueIdle(): boolean {
     return !this.queueStats || this.queueStats.value.status === 'idle';
   }
@@ -83,25 +94,148 @@ export class CameraService {
   record(): void {
     if (this.mode.value !== 'ready') return;
     if (!this.isQueueIdle) return;
+    if (!this.palette.value) return;
     this.mode.value = 'recording';
     this.frameIndex.value = 0;
+    this.aborted = false;
+    this.gifBlob = null;
+    this.runRecordingLoop();
     m.redraw();
   }
 
   stop(): void {
     if (this.mode.value !== 'recording') return;
-    this.mode.value = 'ready';
-    m.redraw();
+    this.aborted = true;
+    // Mode transition happens when loop detects abort
   }
 
   exit(): void {
     if (this.mode.value === 'off') return;
+    if (this.mode.value === 'recording') this.aborted = true;
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
     this.mode.value = 'off';
     this.frameIndex.value = 0;
     this.palette.value = null;
+    this.gifBlob = null;
+    this.revokeDownloadUrl();
+    this.auroraService!.recording = false;
     this.removeEscapeHandler();
     m.redraw();
+  }
+
+  get downloadUrl(): string | null {
+    return this._downloadUrl;
+  }
+
+  get downloadName(): string {
+    return this._downloadName;
+  }
+
+  private buildFilename(timeMs: number): string {
+    const d = new Date(timeMs);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const dt = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}-${pad(d.getUTCHours())}-${pad(d.getUTCMinutes())}Z`;
+    const cam = this.auroraService!.getCamera();
+    const lat = cam.lat.toFixed(1);
+    const lon = cam.lon.toFixed(1);
+    return `zero.hypatia-${dt}-${lat}-${lon}.gif`;
+  }
+
+  private revokeDownloadUrl(): void {
+    if (this._downloadUrl) {
+      URL.revokeObjectURL(this._downloadUrl);
+      this._downloadUrl = null;
+    }
+  }
+
+  // ── Recording loop ───────────────────────────────────────────────
+
+  private async runRecordingLoop(): Promise<void> {
+    const aurora = this.auroraService!;
+    const cfg = this.configService.getConfig().cameraUI;
+    const fps = cfg.fps;
+    const fixedDtMs = 1000 / fps;
+    const totalFrames = this.totalFrames.value;
+    const frozenTime = this.stateService!.viewState.value.time.getTime();
+
+    // Take over rendering
+    aurora.recording = true;
+    // Swap exportFrame handler to recording capture
+    const prevHandler = aurora.onExportFrame;
+
+    try {
+      const gifencUrl = '/external/gifenc.js';
+      const { GIFEncoder, applyPalette } = await import(/* @vite-ignore */ gifencUrl);
+      const encoder = new GIFEncoder();
+      const palette = this.palette.value!;
+
+      for (let i = 0; i < totalFrames; i++) {
+        if (this.aborted) break;
+
+        const bitmap = await this.captureOneFrame(aurora, frozenTime, fixedDtMs);
+        const rgba = this.cropBitmap(bitmap);
+        const rect = this.rect.value;
+        const indexed = applyPalette(rgba, palette);
+        encoder.writeFrame(indexed, rect.w, rect.h, {
+          palette,
+          delay: Math.round(1000 / fps),
+        });
+        this.frameIndex.value = i + 1;
+        // Yield to browser — let RAF fire for UI update + process pending events
+        await new Promise<void>(r => setTimeout(r, 0));
+        m.redraw();
+      }
+
+      if (!this.aborted) {
+        encoder.finish();
+        this.gifBlob = new Blob([encoder.bytes()], { type: 'image/gif' });
+        this.revokeDownloadUrl();
+        this._downloadUrl = URL.createObjectURL(this.gifBlob);
+        this._downloadName = this.buildFilename(frozenTime);
+        this.mode.value = 'done';
+      } else {
+        this.mode.value = 'ready';
+      }
+    } finally {
+      aurora.recording = false;
+      aurora.onExportFrame = prevHandler;
+      m.redraw();
+    }
+  }
+
+  private captureOneFrame(
+    aurora: AuroraService,
+    time: number,
+    fixedDtMs: number,
+  ): Promise<ImageBitmap> {
+    return new Promise(resolve => {
+      aurora.onExportFrame = resolve;
+      const camera = aurora.getCameraSnapshot();
+      aurora.send({ type: 'captureFrame' });
+      aurora.send({ type: 'render', camera, time, fixedDtMs });
+    });
+  }
+
+  private cropBitmap(bitmap: ImageBitmap): Uint8ClampedArray {
+    const rect = this.rect.value;
+    const dpr = window.devicePixelRatio;
+    // Source region in device pixels
+    const srcX = Math.round(rect.x * dpr);
+    const srcY = Math.round(rect.y * dpr);
+    const srcW = Math.round(rect.w * dpr);
+    const srcH = Math.round(rect.h * dpr);
+    // Output at CSS pixels
+    const outW = rect.w;
+    const outH = rect.h;
+
+    if (!this.paletteCanvas || this.paletteCanvas.width !== outW || this.paletteCanvas.height !== outH) {
+      this.paletteCanvas = new OffscreenCanvas(outW, outH);
+    }
+
+    const ctx = this.paletteCanvas.getContext('2d')!;
+    ctx.drawImage(bitmap, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
+    bitmap.close();
+    return ctx.getImageData(0, 0, outW, outH).data;
   }
 
   // ── Frame capture & palette extraction ───────────────────────────
@@ -166,7 +300,7 @@ export class CameraService {
   // ── Rect drag (move) ─────────────────────────────────────────────
 
   startMove(e: PointerEvent): void {
-    if (this.mode.value === 'recording') return;
+    if (this.mode.value === 'recording' || this.mode.value === 'done') return;
     e.preventDefault();
     const r = this.rect.value;
     const startX = e.clientX - r.x;
@@ -194,7 +328,7 @@ export class CameraService {
   // ── Rect resize ───────────────────────────────────────────────────
 
   startResize(e: PointerEvent, edge: Edge): void {
-    if (this.mode.value === 'recording') return;
+    if (this.mode.value === 'recording' || this.mode.value === 'done') return;
     e.preventDefault();
     e.stopPropagation();
     const cfg = this.configService.getConfig().cameraUI;

@@ -12,7 +12,7 @@ export const layer = defineLayer('wind',
   withConfig({
     snakeLength:     { value: 0.25 },
     lineWidth:       { value: 0.002 },
-    segmentsPerLine: { value: 32 },
+    segmentsPerLine: { value: 30 },
     stepFactor:      { value: 0.005 },
     radius:          { value: 1.0 },
   }),
