@@ -110,7 +110,7 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
             isDone ? m('a.camera-download', {
               href: captureService.downloadUrl,
               download: captureService.downloadName,
-            }, 'Download GIF') : null,
+            }, `Download ${optionsService.options.value.camera.format.toUpperCase()}`) : null,
           ]),
 
           // Palette stripe (shown when palette extracted, hidden in done mode)

@@ -19,10 +19,7 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["vite/client", "@webgpu/types"],
-    "paths": {
-      "/external/gifenc.js": ["./src/types/gifenc"]
-    }
+    "types": ["vite/client", "@webgpu/types"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

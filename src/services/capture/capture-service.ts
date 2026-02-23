@@ -10,13 +10,14 @@
 import m from 'mithril';
 import { signal, computed, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import { extractPalette, createGifSession } from './gif';
+import { createMp4Session } from './mp4';
 import type { ConfigService } from '../config-service';
 import type { AuroraService } from '../aurora-service';
 import type { StateService } from '../state-service';
 import type { OptionsService } from '../options-service';
 import type { QueueStats } from '../../config/types';
 
-type CameraMode = 'off' | 'ready' | 'capturing' | 'processing' | 'done';
+type CaptureMode = 'off' | 'ready' | 'capturing' | 'processing' | 'done';
 type Edge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 interface Rect {
   x: number;
@@ -26,7 +27,7 @@ interface Rect {
 }
 
 export class CaptureService {
-  readonly mode: Signal<CameraMode> = signal('off');
+  readonly mode: Signal<CaptureMode> = signal('off');
   readonly rect: Signal<Rect>;
   readonly frameIndex: Signal<number> = signal(0);
   readonly totalFrames: ReadonlySignal<number>;
@@ -41,7 +42,7 @@ export class CaptureService {
   private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
   private captureDebounce: ReturnType<typeof setTimeout> | null = null;
   downloadUrl: string | null = null;
-  downloadName = 'zero.hypatia.gif';
+  downloadName = 'zero.hypatia';
   private aborted = false;
 
   constructor(
@@ -63,12 +64,12 @@ export class CaptureService {
     const y = Math.round((window.innerHeight - cfg.rectDefaultSize * 0.75) / 2);
     this.rect = signal({ x, y, w: cfg.rectDefaultSize, h: Math.round(cfg.rectDefaultSize * 0.75) });
     this.totalFrames = computed(() => {
-      const { duration, fps } = this.cam;
+      const { duration, fps } = this.options;
       return Number(duration) * Number(fps);
     });
   }
 
-  private get cam() {
+  private get options() {
     return this.optionsService.options.value.camera;
   }
 
@@ -91,7 +92,7 @@ export class CaptureService {
   record(): void {
     if (this.mode.value !== 'ready') return;
     if (!this.isQueueIdle) return;
-    if (this.cam.paletteMode !== 'grayscale' && !this.palette.value) return;
+    if (this.options.format === 'gif' && this.options.paletteMode !== 'grayscale' && !this.palette.value) return;
     // Cancel pending preview capture to prevent stale exportFrame during capturing
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
     this.mode.value = 'capturing';
@@ -127,7 +128,8 @@ export class CaptureService {
     const cam = this.auroraService.getCamera();
     const lat = cam.lat.toFixed(1);
     const lon = cam.lon.toFixed(1);
-    return `zero.hypatia-${dt}-${lat}-${lon}.gif`;
+    const ext = this.options.format;
+    return `zero.hypatia-${dt}-${lat}-${lon}.${ext}`;
   }
 
   private revokeDownloadUrl(): void {
@@ -141,7 +143,7 @@ export class CaptureService {
 
   private async runRecordingLoop(): Promise<void> {
     const aurora = this.auroraService;
-    const { fps: fpsStr, paletteMode } = this.cam;
+    const { format, fps: fpsStr, paletteMode } = this.options;
     const fps = Number(fpsStr);
     const fixedDtMs = 1000 / fps;
     const totalFrames = this.totalFrames.value;
@@ -166,13 +168,19 @@ export class CaptureService {
       this.frameIndex.value = 0;
       m.redraw();
 
-      const session = await createGifSession(fps, paletteMode, this.palette.value);
+      // Compute output dimensions once; MP4 needs even values for H.264
+      const baseDims = this.getOutputDimensions();
+      const outW = format === 'mp4' ? (baseDims.w & ~1) : baseDims.w;
+      const outH = format === 'mp4' ? (baseDims.h & ~1) : baseDims.h;
+
+      const session = format === 'mp4'
+        ? createMp4Session(fps, outW, outH)
+        : createGifSession(fps, paletteMode, this.palette.value);
 
       for (let i = 0; i < bitmaps.length; i++) {
         if (this.aborted) break;
-        const rgba = this.cropBitmap(bitmaps[i]!);
-        const { w, h } = this.getOutputDimensions();
-        session.addFrame(rgba, w, h);
+        const rgba = this.cropBitmap(bitmaps[i]!, outW, outH);
+        session.addFrame(rgba, outW, outH);
         this.frameIndex.value = i + 1;
         m.redraw();
         // Yield each frame to keep UI responsive during encoding
@@ -180,7 +188,7 @@ export class CaptureService {
       }
 
       if (!this.aborted) {
-        const blob = session.finish();
+        const blob = await session.finish();
         this.revokeDownloadUrl();
         this.downloadUrl = URL.createObjectURL(blob);
         this.downloadName = this.buildFilename(frozenTime);
@@ -196,17 +204,13 @@ export class CaptureService {
     }
   }
 
-  private cropBitmap(bitmap: ImageBitmap): Uint8ClampedArray {
+  private cropBitmap(bitmap: ImageBitmap, outW: number, outH: number): Uint8ClampedArray {
     const rect = this.rect.value;
     const dpr = window.devicePixelRatio;
     const srcX = Math.round(rect.x * dpr);
     const srcY = Math.round(rect.y * dpr);
     const srcW = Math.round(rect.w * dpr);
     const srcH = Math.round(rect.h * dpr);
-    // Native: keep device pixels; default: downscale to CSS pixels
-    const { nativeDpr } = this.cam;
-    const outW = nativeDpr ? srcW : rect.w;
-    const outH = nativeDpr ? srcH : rect.h;
 
     if (!this.paletteCanvas || this.paletteCanvas.width !== outW || this.paletteCanvas.height !== outH) {
       this.paletteCanvas = new OffscreenCanvas(outW, outH);
@@ -220,7 +224,7 @@ export class CaptureService {
 
   private getOutputDimensions(): { w: number; h: number } {
     const rect = this.rect.value;
-    if (this.cam.nativeDpr) {
+    if (this.options.nativeDpr) {
       const dpr = window.devicePixelRatio;
       return { w: Math.round(rect.w * dpr), h: Math.round(rect.h * dpr) };
     }
@@ -239,7 +243,7 @@ export class CaptureService {
 
   private async onPreviewFrame(bitmap: ImageBitmap): Promise<void> {
     if (this.mode.value === 'off') return;
-    const palette = await extractPalette(bitmap, this.rect.value, this.cam.nativeDpr);
+    const palette = await extractPalette(bitmap, this.rect.value, this.options.nativeDpr);
     // Chrome: first transferToImageBitmap may return black — retry
     if (palette.every(([r, g, b]) => r === 0 && g === 0 && b === 0)) {
       this.requestCaptureFrame();

@@ -5,28 +5,7 @@
  * The session owns all palette logic — callers just pass RGBA frames.
  */
 
-const GIFENC_URL = '/external/gifenc.js';
-
-interface Gifenc {
-  GIFEncoder: new () => GifEncoder;
-  applyPalette: (rgba: Uint8ClampedArray, palette: number[][]) => Uint8Array;
-  quantize: (rgba: Uint8ClampedArray, maxColors: number) => number[][];
-}
-
-interface GifEncoder {
-  writeFrame(indexed: Uint8Array, w: number, h: number, opts: { palette: number[][]; delay: number }): void;
-  finish(): void;
-  bytes(): Uint8Array<ArrayBuffer>;
-}
-
-let gifenc: Gifenc | null = null;
-
-async function loadGifenc(): Promise<Gifenc> {
-  if (!gifenc) {
-    gifenc = await import(/* @vite-ignore */ GIFENC_URL) as Gifenc;
-  }
-  return gifenc;
-}
+import { GIFEncoder, applyPalette, quantize } from 'gifenc';
 
 function buildGrayscalePalette(): number[][] {
   return Array.from({ length: 256 }, (_, i) => [i, i, i]);
@@ -74,11 +53,11 @@ function applyPaletteNearest(rgba: Uint8ClampedArray, palette: number[][]): Uint
 }
 
 /** Extract a 256-color palette from a bitmap crop region */
-export async function extractPalette(
+export function extractPalette(
   bitmap: ImageBitmap,
   rect: { x: number; y: number; w: number; h: number },
   nativeDpr: boolean,
-): Promise<number[][]> {
+): number[][] {
   const dpr = window.devicePixelRatio;
   const srcX = Math.round(rect.x * dpr);
   const srcY = Math.round(rect.y * dpr);
@@ -92,15 +71,13 @@ export async function extractPalette(
   ctx.drawImage(bitmap, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
   bitmap.close();
 
-  const { quantize } = await loadGifenc();
   return quantize(ctx.getImageData(0, 0, outW, outH).data, 256);
 }
 
 type PaletteMode = 'fast' | 'precise' | 'grayscale';
 
 /** Create a GIF encoding session that manages palette strategy internally */
-export async function createGifSession(fps: number, paletteMode: PaletteMode, scenePalette: number[][] | null) {
-  const { GIFEncoder, applyPalette } = await loadGifenc();
+export function createGifSession(fps: number, paletteMode: PaletteMode, scenePalette: number[][] | null) {
   const encoder = new GIFEncoder();
   const delay = Math.round(1000 / fps);
   const palette = paletteMode === 'grayscale' ? buildGrayscalePalette() : scenePalette!;
