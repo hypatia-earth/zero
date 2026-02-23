@@ -11,6 +11,8 @@ import m from 'mithril';
 import { signal, computed, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import { extractPalette, createGifSession } from './gif';
 import { createMp4Session } from './mp4';
+import { reverseGeocode } from './location';
+import { loadLogo, createDecorator } from './decorate';
 import type { ConfigService } from '../config-service';
 import type { AuroraService } from '../aurora-service';
 import type { StateService } from '../state-service';
@@ -32,6 +34,7 @@ export class CaptureService {
   readonly frameIndex: Signal<number> = signal(0);
   readonly totalFrames: ReadonlySignal<number>;
   readonly palette: Signal<number[][] | null> = signal(null);
+  readonly locationLabel: Signal<string> = signal('');
 
   private readonly configService: ConfigService;
   private readonly optionsService: OptionsService;
@@ -41,6 +44,8 @@ export class CaptureService {
   private paletteCanvas: OffscreenCanvas | null = null;
   private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
   private captureDebounce: ReturnType<typeof setTimeout> | null = null;
+  private locationDebounce: ReturnType<typeof setTimeout> | null = null;
+  private geocodeAvailable = true;
   downloadUrl: string | null = null;
   downloadName = 'zero.hypatia';
   private aborted = false;
@@ -87,6 +92,8 @@ export class CaptureService {
     this.installEscapeHandler();
     this.requestCaptureFrame();
     m.redraw();
+    // Delay so .camera-rect DOM exists after redraw
+    requestAnimationFrame(() => this.requestLocationUpdate(0));
   }
 
   record(): void {
@@ -112,9 +119,12 @@ export class CaptureService {
     if (this.mode.value === 'off') return;
     if (this.mode.value === 'capturing' || this.mode.value === 'processing') this.aborted = true;
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
+    if (this.locationDebounce) { clearTimeout(this.locationDebounce); this.locationDebounce = null; }
     this.mode.value = 'off';
     this.frameIndex.value = 0;
     this.palette.value = null;
+    this.locationLabel.value = '';
+    this.geocodeAvailable = true;
     this.revokeDownloadUrl();
     this.auroraService.recording = false;
     this.removeEscapeHandler();
@@ -173,14 +183,25 @@ export class CaptureService {
       const outW = format === 'mp4' ? (baseDims.w & ~1) : baseDims.w;
       const outH = format === 'mp4' ? (baseDims.h & ~1) : baseDims.h;
 
+      // Build decorator for header/footer bars
+      const label = this.locationLabel.value;
+      const d = new Date(frozenTime);
+      const pad2 = (n: number) => String(n).padStart(2, '0');
+      const timestamp = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC`;
+      const logo = await loadLogo();
+      const scale = outW / this.rect.value.w;
+      const decorator = createDecorator(outW, outH, label, timestamp, logo, scale);
+      const decH = decorator.height;
+
       const session = format === 'mp4'
-        ? createMp4Session(fps, outW, outH)
+        ? createMp4Session(fps, outW, decH)
         : createGifSession(fps, paletteMode, this.palette.value);
 
       for (let i = 0; i < bitmaps.length; i++) {
         if (this.aborted) break;
         const rgba = this.cropBitmap(bitmaps[i]!, outW, outH);
-        session.addFrame(rgba, outW, outH);
+        const decorated = decorator.decorate(rgba);
+        session.addFrame(decorated, outW, decH);
         this.frameIndex.value = i + 1;
         m.redraw();
         // Yield each frame to keep UI responsive during encoding
@@ -239,6 +260,42 @@ export class CaptureService {
       this.captureDebounce = null;
       this.auroraService?.send({ type: 'captureFrame' });
     }, 150);
+  }
+
+  /** Debounced geocode from rect center. Immediate when delay=0 (e.g. on enter). */
+  requestLocationUpdate(delay = 1000): void {
+    if (!this.options.label || !this.geocodeAvailable) return;
+    if (this.locationDebounce) clearTimeout(this.locationDebounce);
+    this.locationLabel.value = '\u2026';
+    m.redraw();
+    this.locationDebounce = setTimeout(() => {
+      this.locationDebounce = null;
+      const el = document.querySelector('.camera-rect');
+      if (!el) return;
+      const bounds = el.getBoundingClientRect();
+      const cam = this.auroraService.getCamera();
+      const hit = cam.screenToGlobe(
+        bounds.left + bounds.width / 2,
+        bounds.top + bounds.height / 2,
+        window.innerWidth,
+        window.innerHeight,
+      );
+      if (!hit) {
+        this.locationLabel.value = 'Space';
+        m.redraw();
+        return;
+      }
+      reverseGeocode(hit.lat, hit.lon).then(label => {
+        if (this.mode.value === 'off') return;
+        if (!label) {
+          this.geocodeAvailable = false;
+          this.locationLabel.value = 'Your description here';
+        } else {
+          this.locationLabel.value = label;
+        }
+        m.redraw();
+      });
+    }, delay);
   }
 
   private async onPreviewFrame(bitmap: ImageBitmap): Promise<void> {
@@ -301,6 +358,7 @@ export class CaptureService {
     const onUp = () => {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
+      this.requestLocationUpdate();
     };
 
     document.addEventListener('pointermove', onMove);
@@ -349,6 +407,10 @@ export class CaptureService {
         if (h < cfg.rectMinHeight) { h = cfg.rectMinHeight; y = startRect.y + startRect.h - h; }
       }
 
+      // Snap to 2px grid (even dimensions for encoder compatibility)
+      w = w & ~1;
+      h = h & ~1;
+
       this.rect.value = { x, y, w, h };
       this.requestCaptureFrame();
       m.redraw();
@@ -357,6 +419,7 @@ export class CaptureService {
     const onUp = () => {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
+      this.requestLocationUpdate();
     };
 
     document.addEventListener('pointermove', onMove);

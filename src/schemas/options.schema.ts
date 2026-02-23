@@ -1084,6 +1084,17 @@ export const optionsSchema = z.object({
         disabled: false,
       }
     ),
+    label: opt(
+      z.boolean().default(true),
+      {
+        label: 'Location label',
+        description: 'Show location label in exported media',
+        group: 'camera',
+        filter: ['global', 'camera'],
+        order: 5,
+        control: 'toggle',
+      }
+    ),
   }),
 
   // ----------------------------------------------------------
@@ -1188,7 +1199,7 @@ export const defaultOptions: ZeroOptions = {
   pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
-  camera: { duration: '1', fps: '15', nativeDpr: false, paletteMode: 'fast', format: 'gif' },
+  camera: { duration: '1', fps: '15', nativeDpr: false, paletteMode: 'fast', format: 'gif', label: true },
   debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1', showLogo: true },
 };
 
