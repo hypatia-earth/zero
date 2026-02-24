@@ -11,6 +11,8 @@ import m from 'mithril';
 import { signal, computed, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import { extractPalette, createGifSession } from './gif';
 import { createMp4Session } from './mp4';
+import { reverseGeocode } from './location';
+import { loadLogo, createDecorator } from './decorate';
 import type { ConfigService } from '../config-service';
 import type { AuroraService } from '../aurora-service';
 import type { StateService } from '../state-service';
@@ -32,6 +34,7 @@ export class CaptureService {
   readonly frameIndex: Signal<number> = signal(0);
   readonly totalFrames: ReadonlySignal<number>;
   readonly palette: Signal<number[][] | null> = signal(null);
+  readonly locationLabel: Signal<string> = signal('');
 
   private readonly configService: ConfigService;
   private readonly optionsService: OptionsService;
@@ -41,8 +44,12 @@ export class CaptureService {
   private paletteCanvas: OffscreenCanvas | null = null;
   private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
   private captureDebounce: ReturnType<typeof setTimeout> | null = null;
+  private locationDebounce: ReturnType<typeof setTimeout> | null = null;
+  private geocodeAvailable = true;
   downloadUrl: string | null = null;
   downloadName = 'zero.hypatia';
+  downloadSize = '';
+  private downloadBlob: Blob | null = null;
   private aborted = false;
 
   constructor(
@@ -60,9 +67,24 @@ export class CaptureService {
     auroraService.onExportFrame = (bitmap: ImageBitmap) => this.onPreviewFrame(bitmap);
 
     const cfg = configService.getConfig().cameraUI;
-    const x = Math.round((window.innerWidth - cfg.rectDefaultSize) / 2);
-    const y = Math.round((window.innerHeight - cfg.rectDefaultSize * 0.75) / 2);
-    this.rect = signal({ x, y, w: cfg.rectDefaultSize, h: Math.round(cfg.rectDefaultSize * 0.75) });
+    const saved = optionsService.options.value.camera.lastRect;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Restore saved rect if it fits within current viewport
+    const valid = saved
+      && saved.w >= cfg.rectMinWidth && saved.h >= cfg.rectMinHeight
+      && saved.x >= 0 && saved.y >= 0
+      && saved.x + saved.w <= vw && saved.y + saved.h <= vh;
+
+    if (valid) {
+      this.rect = signal(saved);
+    } else {
+      const h = Math.round(cfg.rectDefaultSize * 0.75) & ~1;
+      const x = Math.round((vw - cfg.rectDefaultSize) / 2);
+      const y = Math.round((vh - h) / 2);
+      this.rect = signal({ x, y, w: cfg.rectDefaultSize, h });
+    }
     this.totalFrames = computed(() => {
       const { duration, fps } = this.options;
       return Number(duration) * Number(fps);
@@ -87,6 +109,8 @@ export class CaptureService {
     this.installEscapeHandler();
     this.requestCaptureFrame();
     m.redraw();
+    // Delay so .camera-rect DOM exists after redraw
+    requestAnimationFrame(() => this.requestLocationUpdate(0));
   }
 
   record(): void {
@@ -95,6 +119,8 @@ export class CaptureService {
     if (this.options.format === 'gif' && this.options.paletteMode !== 'grayscale' && !this.palette.value) return;
     // Cancel pending preview capture to prevent stale exportFrame during capturing
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
+    // Persist rect for next session
+    this.optionsService.update(d => { d.camera.lastRect = { ...this.rect.value }; });
     this.mode.value = 'capturing';
     this.frameIndex.value = 0;
     this.aborted = false;
@@ -103,7 +129,7 @@ export class CaptureService {
   }
 
   stop(): void {
-    if (this.mode.value !== 'capturing') return;
+    if (this.mode.value !== 'capturing' && this.mode.value !== 'processing') return;
     this.aborted = true;
     // Mode transition happens when loop detects abort
   }
@@ -112,24 +138,39 @@ export class CaptureService {
     if (this.mode.value === 'off') return;
     if (this.mode.value === 'capturing' || this.mode.value === 'processing') this.aborted = true;
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
+    if (this.locationDebounce) { clearTimeout(this.locationDebounce); this.locationDebounce = null; }
     this.mode.value = 'off';
     this.frameIndex.value = 0;
     this.palette.value = null;
+    this.locationLabel.value = '';
+    this.geocodeAvailable = true;
     this.revokeDownloadUrl();
     this.auroraService.recording = false;
     this.removeEscapeHandler();
     m.redraw();
   }
 
+  get canShare(): boolean {
+    if (!this.downloadBlob || !navigator.canShare) return false;
+    const file = new File([this.downloadBlob], this.downloadName, { type: this.downloadBlob.type });
+    return navigator.canShare({ files: [file] });
+  }
+
+  async share(): Promise<void> {
+    if (!this.downloadBlob) return;
+    const file = new File([this.downloadBlob], this.downloadName, { type: this.downloadBlob.type });
+    await navigator.share({ files: [file] });
+  }
+
   private buildFilename(timeMs: number): string {
     const d = new Date(timeMs);
     const pad = (n: number) => String(n).padStart(2, '0');
-    const dt = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}-${pad(d.getUTCHours())}-${pad(d.getUTCMinutes())}Z`;
-    const cam = this.auroraService.getCamera();
-    const lat = cam.lat.toFixed(1);
-    const lon = cam.lon.toFixed(1);
+    const dt = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}UTC`;
+    const loc = this.locationLabel.value.trim().replace(/[<>:"/\\|?*]+/g, '');
     const ext = this.options.format;
-    return `zero.hypatia-${dt}-${lat}-${lon}.${ext}`;
+    return loc
+      ? `zero.hypatia-${dt}-${loc}.${ext}`
+      : `zero.hypatia-${dt}.${ext}`;
   }
 
   private revokeDownloadUrl(): void {
@@ -137,6 +178,7 @@ export class CaptureService {
       URL.revokeObjectURL(this.downloadUrl);
       this.downloadUrl = null;
     }
+    this.downloadBlob = null;
   }
 
   // ── Recording loop ───────────────────────────────────────────────
@@ -155,6 +197,7 @@ export class CaptureService {
       // Worker renders all frames in a tight loop — no cross-thread round trips
       const bitmaps = await new Promise<ImageBitmap[]>(resolve => {
         aurora.onRecordProgress = (frameIndex) => {
+          if (this.aborted) { resolve([]); return; }
           this.frameIndex.value = frameIndex;
           m.redraw();
         };
@@ -163,24 +206,41 @@ export class CaptureService {
         aurora.send({ type: 'recordBatch', camera, time: frozenTime, fixedDtMs, totalFrames });
       });
 
+      // Abort during capturing — skip processing entirely
+      if (this.aborted) {
+        for (const bmp of bitmaps) bmp.close();
+        this.mode.value = 'ready';
+        return;
+      }
+
       // Phase 2: processing (crop + encode)
       this.mode.value = 'processing';
       this.frameIndex.value = 0;
       m.redraw();
 
-      // Compute output dimensions once; MP4 needs even values for H.264
-      const baseDims = this.getOutputDimensions();
-      const outW = format === 'mp4' ? (baseDims.w & ~1) : baseDims.w;
-      const outH = format === 'mp4' ? (baseDims.h & ~1) : baseDims.h;
+      const { w: outW, h: outH } = this.getOutputDimensions();
+
+      // Build decorator for header/footer bars
+      const label = this.options.label ? this.locationLabel.value : '';
+      const d = new Date(frozenTime);
+      const pad2 = (n: number) => String(n).padStart(2, '0');
+      const timestamp = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC`;
+      const logo = await loadLogo();
+      const scale = outW / this.rect.value.w;
+      const decorator = createDecorator(outW, outH, label, timestamp, logo, scale);
 
       const session = format === 'mp4'
         ? createMp4Session(fps, outW, outH)
         : createGifSession(fps, paletteMode, this.palette.value);
 
       for (let i = 0; i < bitmaps.length; i++) {
-        if (this.aborted) break;
+        if (this.aborted) {
+          for (let j = i; j < bitmaps.length; j++) bitmaps[j]!.close();
+          break;
+        }
         const rgba = this.cropBitmap(bitmaps[i]!, outW, outH);
-        session.addFrame(rgba, outW, outH);
+        const decorated = decorator.decorate(rgba);
+        session.addFrame(decorated, outW, outH);
         this.frameIndex.value = i + 1;
         m.redraw();
         // Yield each frame to keep UI responsive during encoding
@@ -190,8 +250,11 @@ export class CaptureService {
       if (!this.aborted) {
         const blob = await session.finish();
         this.revokeDownloadUrl();
+        this.downloadBlob = blob;
         this.downloadUrl = URL.createObjectURL(blob);
         this.downloadName = this.buildFilename(frozenTime);
+        const mb = blob.size / (1024 * 1024);
+        this.downloadSize = mb >= 1 ? `${mb.toFixed(1)}MB` : `${(blob.size / 1024).toFixed(0)}KB`;
         this.mode.value = 'done';
       } else {
         this.mode.value = 'ready';
@@ -207,10 +270,18 @@ export class CaptureService {
   private cropBitmap(bitmap: ImageBitmap, outW: number, outH: number): Uint8ClampedArray {
     const rect = this.rect.value;
     const dpr = window.devicePixelRatio;
-    const srcX = Math.round(rect.x * dpr);
-    const srcY = Math.round(rect.y * dpr);
-    const srcW = Math.round(rect.w * dpr);
-    const srcH = Math.round(rect.h * dpr);
+    const border = 2;  // CSS px, matches .camera-rect border width
+    let srcX = Math.round((rect.x + border) * dpr);
+    let srcY = Math.round((rect.y + border) * dpr);
+    let srcW = Math.round((rect.w - border * 2) * dpr);
+    let srcH = Math.round((rect.h - border * 2) * dpr);
+
+    // Clamp to bitmap bounds — shouldn't happen (rect is viewport-constrained),
+    // but guards against stale bitmap after orientation change on iPad Safari
+    srcX = Math.min(srcX, bitmap.width);
+    srcY = Math.min(srcY, bitmap.height);
+    srcW = Math.min(srcW, bitmap.width - srcX);
+    srcH = Math.min(srcH, bitmap.height - srcY);
 
     if (!this.paletteCanvas || this.paletteCanvas.width !== outW || this.paletteCanvas.height !== outH) {
       this.paletteCanvas = new OffscreenCanvas(outW, outH);
@@ -224,11 +295,15 @@ export class CaptureService {
 
   private getOutputDimensions(): { w: number; h: number } {
     const rect = this.rect.value;
+    const border = 2;  // CSS px, matches .camera-rect border width
+    const contentW = rect.w - border * 2;
+    const contentH = rect.h - border * 2;
     if (this.options.nativeDpr) {
       const dpr = window.devicePixelRatio;
-      return { w: Math.round(rect.w * dpr), h: Math.round(rect.h * dpr) };
+      // Snap to even — H.264 requires even dimensions, GIF benefits too
+      return { w: Math.round(contentW * dpr) & ~1, h: Math.round(contentH * dpr) & ~1 };
     }
-    return { w: rect.w, h: rect.h };
+    return { w: contentW, h: contentH };
   }
 
   // ── Frame capture & palette extraction ───────────────────────────
@@ -241,14 +316,54 @@ export class CaptureService {
     }, 150);
   }
 
+  /** Debounced geocode from rect center. Immediate when delay=0 (e.g. on enter). */
+  requestLocationUpdate(delay = 1000): void {
+    if (!this.options.label || !this.geocodeAvailable) return;
+    if (this.locationDebounce) clearTimeout(this.locationDebounce);
+    this.locationLabel.value = '\u2026';
+    m.redraw();
+    this.locationDebounce = setTimeout(() => {
+      this.locationDebounce = null;
+      const el = document.querySelector('.camera-rect');
+      if (!el) return;
+      const bounds = el.getBoundingClientRect();
+      const cam = this.auroraService.getCamera();
+      const hit = cam.screenToGlobe(
+        bounds.left + bounds.width / 2,
+        bounds.top + bounds.height / 2,
+        window.innerWidth,
+        window.innerHeight,
+      );
+      if (!hit) {
+        this.locationLabel.value = 'Space';
+        m.redraw();
+        return;
+      }
+      reverseGeocode(hit.lat, hit.lon).then(label => {
+        if (this.mode.value === 'off') return;
+        if (!label) {
+          this.geocodeAvailable = false;
+          this.locationLabel.value = 'Your description here';
+        } else {
+          this.locationLabel.value = label;
+        }
+        m.redraw();
+      });
+    }, delay);
+  }
+
+  private paletteRetries = 0;
+
   private async onPreviewFrame(bitmap: ImageBitmap): Promise<void> {
     if (this.mode.value === 'off') return;
     const palette = await extractPalette(bitmap, this.rect.value, this.options.nativeDpr);
-    // Chrome: first transferToImageBitmap may return black — retry
-    if (palette.every(([r, g, b]) => r === 0 && g === 0 && b === 0)) {
+    // First frame may return black (GPU not ready) — retry up to 3 times
+    if (palette.every(([r, g, b]) => r === 0 && g === 0 && b === 0) && this.paletteRetries < 3) {
+      this.paletteRetries++;
       this.requestCaptureFrame();
       return;
     }
+    this.paletteRetries = 0;
     this.palette.value = palette;
     m.redraw();
   }
@@ -301,6 +416,7 @@ export class CaptureService {
     const onUp = () => {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
+      this.requestLocationUpdate();
     };
 
     document.addEventListener('pointermove', onMove);
@@ -349,6 +465,10 @@ export class CaptureService {
         if (h < cfg.rectMinHeight) { h = cfg.rectMinHeight; y = startRect.y + startRect.h - h; }
       }
 
+      // Snap to 2px grid (even dimensions for encoder compatibility)
+      w = w & ~1;
+      h = h & ~1;
+
       this.rect.value = { x, y, w, h };
       this.requestCaptureFrame();
       m.redraw();
@@ -357,6 +477,7 @@ export class CaptureService {
     const onUp = () => {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
+      this.requestLocationUpdate();
     };
 
     document.addEventListener('pointermove', onMove);

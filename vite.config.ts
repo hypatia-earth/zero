@@ -81,13 +81,19 @@ function geonamesProxy(env: Record<string, string>): Plugin | null {
           const countryData = await countryRes.json();
 
           if (countryData.countryName) {
-            // Land — find nearest city
-            const placeRes = await fetch(`${base}/findNearbyPlaceNameJSON?lat=${lat}&lng=${lon}&maxRows=1&username=${username}`);
+            // Land — find nearest city + continent (parallel)
+            const [placeRes, infoRes] = await Promise.all([
+              fetch(`${base}/findNearbyPlaceNameJSON?lat=${lat}&lng=${lon}&maxRows=1&username=${username}`),
+              fetch(`${base}/countryInfoJSON?country=${countryData.countryCode}&username=${username}`),
+            ]);
             const placeData = await placeRes.json();
+            const infoData = await infoRes.json();
             const place = placeData.geonames?.[0];
-            const label = place?.name
-              ? `${place.name}, ${countryData.countryName}`
-              : countryData.countryName;
+            const continent = infoData.geonames?.[0]?.continentName || '';
+            const admin = place?.adminName1 && place.adminName1 !== place.name ? place.adminName1 : '';
+            // Format: continent, country, admin1, city
+            const parts = [continent, countryData.countryName, admin, place?.name].filter(Boolean);
+            const label = parts.join(', ');
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ label }));
           } else {

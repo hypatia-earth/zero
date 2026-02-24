@@ -11,6 +11,7 @@ import { GraticuleAnimator, GRATICULE_BUFFER_SIZE } from '../layers/graticule/gr
 import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset, getParamDtOffset, getParamSizeOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
+import { createCaptureTexture, readbackFrame as readbackFrameImpl } from './capture';
 
 // Re-export for consumers
 export type { PassTimings } from './gpu-timestamp';
@@ -74,6 +75,9 @@ export class GlobeRenderer {
   private depthTexture!: GPUTexture;
   // Post-process pass for atmosphere
   private colorTexture!: GPUTexture;
+  // Owned capture texture — post-process renders here, readback reads from here
+  // (never auto-presented, so content is stable for GPU readback on all platforms)
+  private captureTexture!: GPUTexture;
   // Pressure contour layer
   private pressureLayer!: PressureLayer;
   // Wind layer
@@ -183,7 +187,7 @@ export class GlobeRenderer {
 
     this.context = this.canvas.getContext('webgpu')!;
     this.format = navigator.gpu.getPreferredCanvasFormat();
-    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST });
 
     // Create GPU timestamp helper if supported
     if (hasTimestampQuery) {
@@ -281,6 +285,9 @@ export class GlobeRenderer {
       format: this.format,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
+
+    // Capture texture (post-process renders here, readback reads from here)
+    this.captureTexture = createCaptureTexture(this.device, texWidth, texHeight, this.format);
 
     // Depth texture (globe writes, post-process reads for world position reconstruction)
     this.depthTexture = this.device.createTexture({
@@ -482,6 +489,9 @@ export class GlobeRenderer {
       format: this.format,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
+
+    this.captureTexture?.destroy();
+    this.captureTexture = createCaptureTexture(this.device, width, height, this.format);
 
     this.depthTexture?.destroy();
     this.depthTexture = this.device.createTexture({
@@ -720,11 +730,11 @@ export class GlobeRenderer {
 
     geometryPass.end();
 
-    // PASS 3: Post-process - apply atmosphere to final output
-    const canvasView = this.context.getCurrentTexture().createView();
+    // PASS 3: Post-process - render to owned captureTexture (stable for readback)
+    const captureView = this.captureTexture.createView();
     const postProcessDescriptor: GPURenderPassDescriptor = {
       colorAttachments: [{
-        view: canvasView,
+        view: captureView,
         clearValue: { r: 0, g: 0, b: 0, a: 1 },
         loadOp: 'clear',
         storeOp: 'store',
@@ -741,6 +751,14 @@ export class GlobeRenderer {
     postProcessPass.setBindGroup(0, this.postProcessBindGroup);
     postProcessPass.draw(3);
     postProcessPass.end();
+
+    // Copy capture texture to canvas for display
+    const canvasTexture = this.context.getCurrentTexture();
+    commandEncoder.copyTextureToTexture(
+      { texture: this.captureTexture },
+      { texture: canvasTexture },
+      { width: canvasTexture.width, height: canvasTexture.height }
+    );
 
     // Encode timestamp resolve commands BEFORE submit
     if (this.gpuTimestamp) {
@@ -1011,54 +1029,9 @@ export class GlobeRenderer {
     return this.device;
   }
 
-  /** Reconfigure canvas context (needed after transferToImageBitmap) */
-  reconfigureContext(): void {
-    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
-  }
-
   /** Read pixels directly from GPU texture — bypasses canvas compositor */
   async readbackFrame(): Promise<ImageBitmap> {
-    const texture = this.context.getCurrentTexture();
-    const { width, height } = texture;
-    const bytesPerRow = Math.ceil(width * 4 / 256) * 256;
-
-    const staging = this.device.createBuffer({
-      size: bytesPerRow * height,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-
-    const encoder = this.device.createCommandEncoder();
-    encoder.copyTextureToBuffer({ texture }, { buffer: staging, bytesPerRow }, { width, height });
-    this.device.queue.submit([encoder.finish()]);
-
-    await staging.mapAsync(GPUMapMode.READ);
-    const mapped = new Uint8Array(staging.getMappedRange());
-
-    const rowBytes = width * 4;
-    const rgba = new Uint8ClampedArray(width * height * 4);
-    const swapRB = this.format === 'bgra8unorm';
-
-    for (let y = 0; y < height; y++) {
-      const src = y * bytesPerRow;
-      const dst = y * rowBytes;
-      if (swapRB) {
-        for (let x = 0; x < width; x++) {
-          const si = src + x * 4;
-          const di = dst + x * 4;
-          rgba[di] = mapped[si + 2]!;
-          rgba[di + 1] = mapped[si + 1]!;
-          rgba[di + 2] = mapped[si]!;
-          rgba[di + 3] = mapped[si + 3]!;
-        }
-      } else {
-        rgba.set(mapped.subarray(src, src + rowBytes), dst);
-      }
-    }
-
-    staging.unmap();
-    staging.destroy();
-
-    return createImageBitmap(new ImageData(rgba, width, height));
+    return readbackFrameImpl(this.device, this.captureTexture, this.format);
   }
 
   /** Update level count (may resize vertex buffer) */
@@ -1145,6 +1118,7 @@ export class GlobeRenderer {
     this.paletteTexture?.dispose();
     this.depthTexture?.destroy();
     this.colorTexture?.destroy();
+    this.captureTexture?.destroy();
     this.pressureLayer?.dispose();
     this.windLayer?.dispose();
     this.gpuTimestamp?.dispose();
