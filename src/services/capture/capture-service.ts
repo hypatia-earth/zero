@@ -48,6 +48,8 @@ export class CaptureService {
   private geocodeAvailable = true;
   downloadUrl: string | null = null;
   downloadName = 'zero.hypatia';
+  downloadSize = '';
+  private downloadBlob: Blob | null = null;
   private aborted = false;
 
   constructor(
@@ -65,9 +67,24 @@ export class CaptureService {
     auroraService.onExportFrame = (bitmap: ImageBitmap) => this.onPreviewFrame(bitmap);
 
     const cfg = configService.getConfig().cameraUI;
-    const x = Math.round((window.innerWidth - cfg.rectDefaultSize) / 2);
-    const y = Math.round((window.innerHeight - cfg.rectDefaultSize * 0.75) / 2);
-    this.rect = signal({ x, y, w: cfg.rectDefaultSize, h: Math.round(cfg.rectDefaultSize * 0.75) });
+    const saved = optionsService.options.value.camera.lastRect;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Restore saved rect if it fits within current viewport
+    const valid = saved
+      && saved.w >= cfg.rectMinWidth && saved.h >= cfg.rectMinHeight
+      && saved.x >= 0 && saved.y >= 0
+      && saved.x + saved.w <= vw && saved.y + saved.h <= vh;
+
+    if (valid) {
+      this.rect = signal(saved);
+    } else {
+      const h = Math.round(cfg.rectDefaultSize * 0.75) & ~1;
+      const x = Math.round((vw - cfg.rectDefaultSize) / 2);
+      const y = Math.round((vh - h) / 2);
+      this.rect = signal({ x, y, w: cfg.rectDefaultSize, h });
+    }
     this.totalFrames = computed(() => {
       const { duration, fps } = this.options;
       return Number(duration) * Number(fps);
@@ -102,6 +119,8 @@ export class CaptureService {
     if (this.options.format === 'gif' && this.options.paletteMode !== 'grayscale' && !this.palette.value) return;
     // Cancel pending preview capture to prevent stale exportFrame during capturing
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
+    // Persist rect for next session
+    this.optionsService.update(d => { d.camera.lastRect = { ...this.rect.value }; });
     this.mode.value = 'capturing';
     this.frameIndex.value = 0;
     this.aborted = false;
@@ -131,6 +150,18 @@ export class CaptureService {
     m.redraw();
   }
 
+  get canShare(): boolean {
+    if (!this.downloadBlob || !navigator.canShare) return false;
+    const file = new File([this.downloadBlob], this.downloadName, { type: this.downloadBlob.type });
+    return navigator.canShare({ files: [file] });
+  }
+
+  async share(): Promise<void> {
+    if (!this.downloadBlob) return;
+    const file = new File([this.downloadBlob], this.downloadName, { type: this.downloadBlob.type });
+    await navigator.share({ files: [file] });
+  }
+
   private buildFilename(timeMs: number): string {
     const d = new Date(timeMs);
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -147,6 +178,7 @@ export class CaptureService {
       URL.revokeObjectURL(this.downloadUrl);
       this.downloadUrl = null;
     }
+    this.downloadBlob = null;
   }
 
   // ── Recording loop ───────────────────────────────────────────────
@@ -178,10 +210,7 @@ export class CaptureService {
       this.frameIndex.value = 0;
       m.redraw();
 
-      // Compute output dimensions once; MP4 needs even values for H.264
-      const baseDims = this.getOutputDimensions();
-      const outW = format === 'mp4' ? (baseDims.w & ~1) : baseDims.w;
-      const outH = format === 'mp4' ? (baseDims.h & ~1) : baseDims.h;
+      const { w: outW, h: outH } = this.getOutputDimensions();
 
       // Build decorator for header/footer bars
       const label = this.options.label ? this.locationLabel.value : '';
@@ -211,8 +240,11 @@ export class CaptureService {
       if (!this.aborted) {
         const blob = await session.finish();
         this.revokeDownloadUrl();
+        this.downloadBlob = blob;
         this.downloadUrl = URL.createObjectURL(blob);
         this.downloadName = this.buildFilename(frozenTime);
+        const mb = blob.size / (1024 * 1024);
+        this.downloadSize = mb >= 1 ? `${mb.toFixed(1)}MB` : `${(blob.size / 1024).toFixed(0)}KB`;
         this.mode.value = 'done';
       } else {
         this.mode.value = 'ready';
@@ -228,10 +260,17 @@ export class CaptureService {
   private cropBitmap(bitmap: ImageBitmap, outW: number, outH: number): Uint8ClampedArray {
     const rect = this.rect.value;
     const dpr = window.devicePixelRatio;
-    const srcX = Math.round(rect.x * dpr);
-    const srcY = Math.round(rect.y * dpr);
-    const srcW = Math.round(rect.w * dpr);
-    const srcH = Math.round(rect.h * dpr);
+    let srcX = Math.round(rect.x * dpr);
+    let srcY = Math.round(rect.y * dpr);
+    let srcW = Math.round(rect.w * dpr);
+    let srcH = Math.round(rect.h * dpr);
+
+    // Clamp to bitmap bounds — shouldn't happen (rect is viewport-constrained),
+    // but guards against stale bitmap after orientation change on iPad Safari
+    srcX = Math.min(srcX, bitmap.width);
+    srcY = Math.min(srcY, bitmap.height);
+    srcW = Math.min(srcW, bitmap.width - srcX);
+    srcH = Math.min(srcH, bitmap.height - srcY);
 
     if (!this.paletteCanvas || this.paletteCanvas.width !== outW || this.paletteCanvas.height !== outH) {
       this.paletteCanvas = new OffscreenCanvas(outW, outH);
@@ -247,7 +286,8 @@ export class CaptureService {
     const rect = this.rect.value;
     if (this.options.nativeDpr) {
       const dpr = window.devicePixelRatio;
-      return { w: Math.round(rect.w * dpr), h: Math.round(rect.h * dpr) };
+      // Snap to even — H.264 requires even dimensions, GIF benefits too
+      return { w: Math.round(rect.w * dpr) & ~1, h: Math.round(rect.h * dpr) & ~1 };
     }
     return { w: rect.w, h: rect.h };
   }
@@ -298,14 +338,18 @@ export class CaptureService {
     }, delay);
   }
 
+  private paletteRetries = 0;
+
   private async onPreviewFrame(bitmap: ImageBitmap): Promise<void> {
     if (this.mode.value === 'off') return;
     const palette = await extractPalette(bitmap, this.rect.value, this.options.nativeDpr);
-    // Chrome: first transferToImageBitmap may return black — retry
-    if (palette.every(([r, g, b]) => r === 0 && g === 0 && b === 0)) {
+    // First frame may return black (GPU not ready) — retry up to 3 times
+    if (palette.every(([r, g, b]) => r === 0 && g === 0 && b === 0) && this.paletteRetries < 3) {
+      this.paletteRetries++;
       this.requestCaptureFrame();
       return;
     }
+    this.paletteRetries = 0;
     this.palette.value = palette;
     m.redraw();
   }

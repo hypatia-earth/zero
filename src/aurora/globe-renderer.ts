@@ -74,6 +74,9 @@ export class GlobeRenderer {
   private depthTexture!: GPUTexture;
   // Post-process pass for atmosphere
   private colorTexture!: GPUTexture;
+  // Owned capture texture — post-process renders here, readback reads from here
+  // (never auto-presented, so content is stable for GPU readback on all platforms)
+  private captureTexture!: GPUTexture;
   // Pressure contour layer
   private pressureLayer!: PressureLayer;
   // Wind layer
@@ -183,7 +186,7 @@ export class GlobeRenderer {
 
     this.context = this.canvas.getContext('webgpu')!;
     this.format = navigator.gpu.getPreferredCanvasFormat();
-    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST });
 
     // Create GPU timestamp helper if supported
     if (hasTimestampQuery) {
@@ -280,6 +283,13 @@ export class GlobeRenderer {
       size: [texWidth, texHeight],
       format: this.format,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    // Capture texture (post-process renders here, readback reads from here)
+    this.captureTexture = this.device.createTexture({
+      size: [texWidth, texHeight],
+      format: this.format,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
 
     // Depth texture (globe writes, post-process reads for world position reconstruction)
@@ -481,6 +491,13 @@ export class GlobeRenderer {
       size: [width, height],
       format: this.format,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+
+    this.captureTexture?.destroy();
+    this.captureTexture = this.device.createTexture({
+      size: [width, height],
+      format: this.format,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
 
     this.depthTexture?.destroy();
@@ -720,11 +737,11 @@ export class GlobeRenderer {
 
     geometryPass.end();
 
-    // PASS 3: Post-process - apply atmosphere to final output
-    const canvasView = this.context.getCurrentTexture().createView();
+    // PASS 3: Post-process - render to owned captureTexture (stable for readback)
+    const captureView = this.captureTexture.createView();
     const postProcessDescriptor: GPURenderPassDescriptor = {
       colorAttachments: [{
-        view: canvasView,
+        view: captureView,
         clearValue: { r: 0, g: 0, b: 0, a: 1 },
         loadOp: 'clear',
         storeOp: 'store',
@@ -741,6 +758,14 @@ export class GlobeRenderer {
     postProcessPass.setBindGroup(0, this.postProcessBindGroup);
     postProcessPass.draw(3);
     postProcessPass.end();
+
+    // Copy capture texture to canvas for display
+    const canvasTexture = this.context.getCurrentTexture();
+    commandEncoder.copyTextureToTexture(
+      { texture: this.captureTexture },
+      { texture: canvasTexture },
+      { width: canvasTexture.width, height: canvasTexture.height }
+    );
 
     // Encode timestamp resolve commands BEFORE submit
     if (this.gpuTimestamp) {
@@ -1013,12 +1038,12 @@ export class GlobeRenderer {
 
   /** Reconfigure canvas context (needed after transferToImageBitmap) */
   reconfigureContext(): void {
-    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST });
   }
 
   /** Read pixels directly from GPU texture — bypasses canvas compositor */
   async readbackFrame(): Promise<ImageBitmap> {
-    const texture = this.context.getCurrentTexture();
+    const texture = this.captureTexture;
     const { width, height } = texture;
     const bytesPerRow = Math.ceil(width * 4 / 256) * 256;
 
@@ -1145,6 +1170,7 @@ export class GlobeRenderer {
     this.paletteTexture?.dispose();
     this.depthTexture?.destroy();
     this.colorTexture?.destroy();
+    this.captureTexture?.destroy();
     this.pressureLayer?.dispose();
     this.windLayer?.dispose();
     this.gpuTimestamp?.dispose();

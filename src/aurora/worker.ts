@@ -828,11 +828,7 @@ function handleCaptureFrame(): void {
 async function flushCaptureFrame(): Promise<void> {
   if (!captureFramePending || !canvas || !renderer) return;
   captureFramePending = false;
-  // Wait for GPU to finish rendering before grabbing the bitmap
-  await renderer.getDevice().queue.onSubmittedWorkDone();
-  const bitmap = canvas.transferToImageBitmap();
-  // transferToImageBitmap invalidates WebGPU context — must reconfigure
-  renderer.reconfigureContext();
+  const bitmap = await renderer.readbackFrame();
   (self as unknown as Worker).postMessage({ type: 'exportFrame', bitmap } satisfies AuroraResponse, [bitmap]);
 }
 
@@ -870,7 +866,6 @@ async function handleRecordBatch(data: Extract<AuroraRequest, { type: 'recordBat
 
     renderer.render();
     const bitmap = await renderer.readbackFrame();
-    renderer.reconfigureContext();
     bitmaps.push(bitmap);
     (self as unknown as Worker).postMessage({ type: 'recordProgress', frameIndex: i + 1 } satisfies AuroraResponse);
   }
