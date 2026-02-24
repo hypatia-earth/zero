@@ -494,10 +494,14 @@ export class OptionsService {
             target[key] = curVal;
           }
         } else if (typeof curVal === 'object' && curVal !== null && !Array.isArray(curVal)) {
-          const nested: Record<string, unknown> = {};
-          extract(defVal, curVal, nested);
-          if (Object.keys(nested).length > 0) {
-            target[key] = nested;
+          if (defVal === null || defVal === undefined) {
+            target[key] = curVal;
+          } else {
+            const nested: Record<string, unknown> = {};
+            extract(defVal, curVal, nested);
+            if (Object.keys(nested).length > 0) {
+              target[key] = nested;
+            }
           }
         } else if (curVal !== defVal) {
           target[key] = curVal;

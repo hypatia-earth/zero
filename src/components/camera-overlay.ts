@@ -71,8 +71,11 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
 
       // Compute output dimensions for display
       const dpr = window.devicePixelRatio;
-      const outW = cameraOpts.nativeDpr ? Math.round(rect.w * dpr) : rect.w;
-      const outH = cameraOpts.nativeDpr ? Math.round(rect.h * dpr) : rect.h;
+      const border = 2;  // CSS px, matches .camera-rect border width
+      const contentW = rect.w - border * 2;
+      const contentH = rect.h - border * 2;
+      const outW = cameraOpts.nativeDpr ? Math.round(contentW * dpr) : contentW;
+      const outH = cameraOpts.nativeDpr ? Math.round(contentH * dpr) : contentH;
 
       return m('.camera-overlay', [
         m('.camera-container', {
@@ -106,14 +109,14 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
                     m.redraw();
                   },
                 }, 'New')
-              : isCapturing
+              : isBusy
                 ? m('button.btn.btn-danger.camera-record', {
                     onclick: () => captureService.stop(),
                   }, 'Stop')
                 : m('button.btn.btn-primary.camera-record', {
                     onclick: () => captureService.record(),
-                    disabled: isProcessing || (!captureService.isQueueIdle ||
-                      (isGif && cameraOpts.paletteMode !== 'grayscale' && !palette)),
+                    disabled: !captureService.isQueueIdle ||
+                      (isGif && cameraOpts.paletteMode !== 'grayscale' && !palette),
                   }, 'Record'),
             m('button.camera-settings-btn', {
               onclick: () => dialogService.open('options', { filter: 'camera' }),
@@ -137,12 +140,10 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
             })
           ) : null,
 
-          // Capture rect — grows in done mode to fit decorated preview
+          // Capture rect
           m('.camera-rect', {
             style: {
-              height: isDone
-                ? `${rect.h + 32 + (cameraOpts.label && captureService.locationLabel.value ? 24 : 0)}px`
-                : `${rect.h}px`,
+              height: `${rect.h}px`,
               borderColor,
               cursor: isLocked ? 'default' : 'move',
             },

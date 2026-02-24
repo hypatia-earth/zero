@@ -11,49 +11,19 @@ const BASE_HEADER_H = 32;
 const BASE_FOOTER_H = 24;
 const BASE_HEADER_FONT = 14;
 const BASE_FOOTER_FONT = 13;
-const LOGO_PATH = '/favicon.svg';
+const LOGO_PATH = '/favicon-512.png';
 
 let logoBitmapCache: Promise<ImageBitmap> | null = null;
 
-/** Rasterize brand SVG at high resolution so downscaling is always sharp. */
-const LOGO_RENDER_SIZE = 256;
-
 export function loadLogo(): Promise<ImageBitmap> {
   if (!logoBitmapCache) {
-    logoBitmapCache = fetch(LOGO_PATH)
-      .then(r => r.text())
-      .then(svg => {
-        // Re-rasterize SVG at high resolution by overriding width/height
-        const scaled = svg
-          .replace(/width="\d+"/, `width="${LOGO_RENDER_SIZE}"`)
-          .replace(/height="\d+"/, `height="${LOGO_RENDER_SIZE}"`);
-        const blob = new Blob([scaled], { type: 'image/svg+xml' });
-        const url = URL.createObjectURL(blob);
-        return new Promise<ImageBitmap>((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => {
-            URL.revokeObjectURL(url);
-            const canvas = new OffscreenCanvas(LOGO_RENDER_SIZE, LOGO_RENDER_SIZE);
-            const ctx = canvas.getContext('2d')!;
-            ctx.drawImage(img, 0, 0, LOGO_RENDER_SIZE, LOGO_RENDER_SIZE);
-            resolve(createImageBitmap(canvas));
-          };
-          img.onerror = reject;
-          img.src = url;
-        });
-      });
+    logoBitmapCache = fetch(LOGO_PATH).then(r => r.blob()).then(b => createImageBitmap(b));
   }
   return logoBitmapCache;
 }
 
 export interface Decorator {
-  /** Header height in pixels (scaled by DPR) */
-  headerH: number;
-  /** Footer height in pixels (0 if no label) */
-  footerH: number;
-  /** Total output height (content + header + optional footer) */
-  height: number;
-  /** Decorate a cropped RGBA frame, returns decorated RGBA */
+  /** Decorate a cropped RGBA frame, returns decorated RGBA (same dimensions) */
   decorate(rgba: Uint8ClampedArray): Uint8ClampedArray;
 }
 
@@ -71,32 +41,28 @@ export function createDecorator(
   const headerFont = Math.round(BASE_HEADER_FONT * scale);
   const footerFont = Math.round(BASE_FOOTER_FONT * scale);
   const pad = Math.round(6 * scale);
-  const totalH = headerH + h + footerH;
 
-  const canvas = new OffscreenCanvas(w, totalH);
+  const canvas = new OffscreenCanvas(w, h);
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.imageSmoothingQuality = 'high';
 
-  // Pre-compute logo scale — fit into header with padding
+  // Pre-compute logo scale — fit into header bar with padding
   const logoScale = (headerH - Math.round(4 * scale)) / logo.height;
   const logoW = Math.round(logo.width * logoScale);
   const logoH = Math.round(logo.height * logoScale);
   const logoY = Math.round((headerH - logoH) / 2);
   const logoGap = Math.round(10 * scale);
 
-  // Temp canvas for putting RGBA pixel data (content region)
-  const contentCanvas = new OffscreenCanvas(w, h);
-  const contentCtx = contentCanvas.getContext('2d', { willReadFrequently: true })!;
-
   return {
-    headerH,
-    footerH,
-    height: totalH,
-
     decorate(rgba: Uint8ClampedArray): Uint8ClampedArray {
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, w, totalH);
+      // ── Content ──
+      const imageData = ctx.createImageData(w, h);
+      imageData.data.set(rgba);
+      ctx.putImageData(imageData, 0, 0);
 
-      // ── Header ──
+      // ── Header overlay ──
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(0, 0, w, headerH);
       ctx.drawImage(logo, pad, logoY, logoW, logoH);
 
       ctx.fillStyle = '#ffffff';
@@ -109,24 +75,18 @@ export function createDecorator(
       ctx.textAlign = 'right';
       ctx.fillText(timestamp, w - pad, headerH / 2);
 
-      // ── Content ──
-      const imageData = contentCtx.createImageData(w, h);
-      imageData.data.set(rgba);
-      contentCtx.putImageData(imageData, 0, 0);
-      ctx.drawImage(contentCanvas, 0, headerH);
-
-      // ── Footer ──
+      // ── Footer overlay ──
       if (footerH > 0) {
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, headerH + h, w, footerH);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(0, h - footerH, w, footerH);
         ctx.fillStyle = '#ffffff';
         ctx.font = `${footerFont}px Inter, -apple-system, BlinkMacSystemFont, sans-serif`;
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'center';
-        ctx.fillText(label, w / 2, headerH + h + footerH / 2);
+        ctx.fillText(label, w / 2, h - footerH / 2);
       }
 
-      return ctx.getImageData(0, 0, w, totalH).data;
+      return ctx.getImageData(0, 0, w, h).data;
     },
   };
 }

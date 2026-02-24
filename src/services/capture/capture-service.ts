@@ -129,7 +129,7 @@ export class CaptureService {
   }
 
   stop(): void {
-    if (this.mode.value !== 'capturing') return;
+    if (this.mode.value !== 'capturing' && this.mode.value !== 'processing') return;
     this.aborted = true;
     // Mode transition happens when loop detects abort
   }
@@ -197,6 +197,7 @@ export class CaptureService {
       // Worker renders all frames in a tight loop — no cross-thread round trips
       const bitmaps = await new Promise<ImageBitmap[]>(resolve => {
         aurora.onRecordProgress = (frameIndex) => {
+          if (this.aborted) { resolve([]); return; }
           this.frameIndex.value = frameIndex;
           m.redraw();
         };
@@ -204,6 +205,13 @@ export class CaptureService {
         const camera = aurora.getCameraSnapshot();
         aurora.send({ type: 'recordBatch', camera, time: frozenTime, fixedDtMs, totalFrames });
       });
+
+      // Abort during capturing — skip processing entirely
+      if (this.aborted) {
+        for (const bmp of bitmaps) bmp.close();
+        this.mode.value = 'ready';
+        return;
+      }
 
       // Phase 2: processing (crop + encode)
       this.mode.value = 'processing';
@@ -220,17 +228,19 @@ export class CaptureService {
       const logo = await loadLogo();
       const scale = outW / this.rect.value.w;
       const decorator = createDecorator(outW, outH, label, timestamp, logo, scale);
-      const decH = decorator.height;
 
       const session = format === 'mp4'
-        ? createMp4Session(fps, outW, decH)
+        ? createMp4Session(fps, outW, outH)
         : createGifSession(fps, paletteMode, this.palette.value);
 
       for (let i = 0; i < bitmaps.length; i++) {
-        if (this.aborted) break;
+        if (this.aborted) {
+          for (let j = i; j < bitmaps.length; j++) bitmaps[j]!.close();
+          break;
+        }
         const rgba = this.cropBitmap(bitmaps[i]!, outW, outH);
         const decorated = decorator.decorate(rgba);
-        session.addFrame(decorated, outW, decH);
+        session.addFrame(decorated, outW, outH);
         this.frameIndex.value = i + 1;
         m.redraw();
         // Yield each frame to keep UI responsive during encoding
@@ -260,10 +270,11 @@ export class CaptureService {
   private cropBitmap(bitmap: ImageBitmap, outW: number, outH: number): Uint8ClampedArray {
     const rect = this.rect.value;
     const dpr = window.devicePixelRatio;
-    let srcX = Math.round(rect.x * dpr);
-    let srcY = Math.round(rect.y * dpr);
-    let srcW = Math.round(rect.w * dpr);
-    let srcH = Math.round(rect.h * dpr);
+    const border = 2;  // CSS px, matches .camera-rect border width
+    let srcX = Math.round((rect.x + border) * dpr);
+    let srcY = Math.round((rect.y + border) * dpr);
+    let srcW = Math.round((rect.w - border * 2) * dpr);
+    let srcH = Math.round((rect.h - border * 2) * dpr);
 
     // Clamp to bitmap bounds — shouldn't happen (rect is viewport-constrained),
     // but guards against stale bitmap after orientation change on iPad Safari
@@ -284,12 +295,15 @@ export class CaptureService {
 
   private getOutputDimensions(): { w: number; h: number } {
     const rect = this.rect.value;
+    const border = 2;  // CSS px, matches .camera-rect border width
+    const contentW = rect.w - border * 2;
+    const contentH = rect.h - border * 2;
     if (this.options.nativeDpr) {
       const dpr = window.devicePixelRatio;
       // Snap to even — H.264 requires even dimensions, GIF benefits too
-      return { w: Math.round(rect.w * dpr) & ~1, h: Math.round(rect.h * dpr) & ~1 };
+      return { w: Math.round(contentW * dpr) & ~1, h: Math.round(contentH * dpr) & ~1 };
     }
-    return { w: rect.w, h: rect.h };
+    return { w: contentW, h: contentH };
   }
 
   // ── Frame capture & palette extraction ───────────────────────────
