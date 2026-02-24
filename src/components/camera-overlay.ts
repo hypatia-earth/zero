@@ -151,6 +151,18 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
             // Dimensions display (ready mode)
             isReady ? m('span.camera-dimensions', `${outW} \u00d7 ${outH}`) : null,
 
+            // Waiting label (ready mode, below dimensions)
+            isReady && (!captureService.isQueueIdle || (isGif && cameraOpts.paletteMode !== 'grayscale' && !palette))
+              ? m('span.camera-waiting', [
+                  'Waiting for ',
+                  [
+                    !captureService.isQueueIdle ? 'Queue' : null,
+                    isGif && cameraOpts.paletteMode !== 'grayscale' && !palette ? 'Palette' : null,
+                  ].filter(Boolean).join(', '),
+                  '\u2026',
+                ].flat())
+              : null,
+
             // Status label (capturing / processing)
             isBusy ? m('span.camera-status',
               `${isCapturing ? 'Capturing' : 'Processing'} ${captureService.frameIndex.value}/${captureService.totalFrames.value}`

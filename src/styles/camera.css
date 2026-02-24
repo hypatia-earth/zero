@@ -180,6 +180,21 @@
   object-fit: fill;
 }
 
+/* ── Waiting label (ready mode, above dimensions) ────────────────── */
+
+.camera-waiting {
+  position: absolute;
+  top: calc(50% + 2rem);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  white-space: nowrap;
+}
+
 /* ── Dimensions display (ready mode) ─────────────────────────────── */
 
 .camera-dimensions {
