@@ -11,6 +11,7 @@ import { GraticuleAnimator, GRATICULE_BUFFER_SIZE } from '../layers/graticule/gr
 import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset, getParamDtOffset, getParamSizeOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
+import { createCaptureTexture, readbackFrame as readbackFrameImpl } from './capture';
 
 // Re-export for consumers
 export type { PassTimings } from './gpu-timestamp';
@@ -286,11 +287,7 @@ export class GlobeRenderer {
     });
 
     // Capture texture (post-process renders here, readback reads from here)
-    this.captureTexture = this.device.createTexture({
-      size: [texWidth, texHeight],
-      format: this.format,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
-    });
+    this.captureTexture = createCaptureTexture(this.device, texWidth, texHeight, this.format);
 
     // Depth texture (globe writes, post-process reads for world position reconstruction)
     this.depthTexture = this.device.createTexture({
@@ -494,11 +491,7 @@ export class GlobeRenderer {
     });
 
     this.captureTexture?.destroy();
-    this.captureTexture = this.device.createTexture({
-      size: [width, height],
-      format: this.format,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
-    });
+    this.captureTexture = createCaptureTexture(this.device, width, height, this.format);
 
     this.depthTexture?.destroy();
     this.depthTexture = this.device.createTexture({
@@ -1036,54 +1029,9 @@ export class GlobeRenderer {
     return this.device;
   }
 
-  /** Reconfigure canvas context (needed after transferToImageBitmap) */
-  reconfigureContext(): void {
-    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST });
-  }
-
   /** Read pixels directly from GPU texture — bypasses canvas compositor */
   async readbackFrame(): Promise<ImageBitmap> {
-    const texture = this.captureTexture;
-    const { width, height } = texture;
-    const bytesPerRow = Math.ceil(width * 4 / 256) * 256;
-
-    const staging = this.device.createBuffer({
-      size: bytesPerRow * height,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-
-    const encoder = this.device.createCommandEncoder();
-    encoder.copyTextureToBuffer({ texture }, { buffer: staging, bytesPerRow }, { width, height });
-    this.device.queue.submit([encoder.finish()]);
-
-    await staging.mapAsync(GPUMapMode.READ);
-    const mapped = new Uint8Array(staging.getMappedRange());
-
-    const rowBytes = width * 4;
-    const rgba = new Uint8ClampedArray(width * height * 4);
-    const swapRB = this.format === 'bgra8unorm';
-
-    for (let y = 0; y < height; y++) {
-      const src = y * bytesPerRow;
-      const dst = y * rowBytes;
-      if (swapRB) {
-        for (let x = 0; x < width; x++) {
-          const si = src + x * 4;
-          const di = dst + x * 4;
-          rgba[di] = mapped[si + 2]!;
-          rgba[di + 1] = mapped[si + 1]!;
-          rgba[di + 2] = mapped[si]!;
-          rgba[di + 3] = mapped[si + 3]!;
-        }
-      } else {
-        rgba.set(mapped.subarray(src, src + rowBytes), dst);
-      }
-    }
-
-    staging.unmap();
-    staging.destroy();
-
-    return createImageBitmap(new ImageData(rgba, width, height));
+    return readbackFrameImpl(this.device, this.captureTexture, this.format);
   }
 
   /** Update level count (may resize vertex buffer) */

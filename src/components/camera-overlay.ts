@@ -171,17 +171,22 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
                   })
             ) : null,
 
-            // Download/share (overlaid on preview in done mode)
-            isDone && captureService.canShare
-              ? m('button.camera-download', {
-                  onclick: () => captureService.share(),
-                }, `Share ${format.toUpperCase()} (${captureService.downloadSize})`)
-              : isDone
-                ? m('a.camera-download', {
-                    href: captureService.downloadUrl,
-                    download: captureService.downloadName,
-                  }, `Save ${format.toUpperCase()} (${captureService.downloadSize})`)
-                : null,
+            // Done overlay: filename label + action buttons
+            isDone ? m('.camera-done-overlay', [
+              m('span.camera-done-filename',
+                `${captureService.downloadName} (${captureService.downloadSize})`),
+              m('.camera-done-actions', [
+                captureService.canShare
+                  ? m('button.btn.btn-primary', {
+                      onclick: () => captureService.share(),
+                    }, 'Share')
+                  : null,
+                m('a.btn.btn-primary', {
+                  href: captureService.downloadUrl,
+                  download: captureService.downloadName,
+                }, 'Save'),
+              ]),
+            ]) : null,
           ]),
 
           // Location input (disabled when locked)

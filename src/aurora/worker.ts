@@ -23,6 +23,7 @@ import { LayerService, isBuiltInLayer, type LayerDeclaration } from '../services
 import type { PaletteId } from '../services/palette-service';
 import { writeConfigUniforms, writeOptionUniforms, configValue } from './uniform-writer';
 import { U } from './globe-uniforms';
+import { createCaptureHandler } from './capture';
 
 // ============================================================
 // Asset types for worker transfer
@@ -818,19 +819,7 @@ function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette
 }
 
 // Deferred capture: set flag, actual capture happens after next render
-let captureFramePending = false;
-
-function handleCaptureFrame(): void {
-  captureFramePending = true;
-}
-
-/** Called at end of handleRender — captures frame right after GPU output is ready */
-async function flushCaptureFrame(): Promise<void> {
-  if (!captureFramePending || !canvas || !renderer) return;
-  captureFramePending = false;
-  const bitmap = await renderer.readbackFrame();
-  (self as unknown as Worker).postMessage({ type: 'exportFrame', bitmap } satisfies AuroraResponse, [bitmap]);
-}
+const { handleCaptureFrame, flushCaptureFrame } = createCaptureHandler(() => renderer);
 
 async function handleRecordBatch(data: Extract<AuroraRequest, { type: 'recordBatch' }>): Promise<void> {
   if (!canvas || !renderer) return;

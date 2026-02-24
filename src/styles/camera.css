@@ -216,31 +216,42 @@
   -webkit-user-select: none;
 }
 
-/* ── Download button (done mode) ─────────────────────────────────── */
+/* ── Done overlay (filename + action buttons) ────────────────────── */
 
-.camera-download {
+.camera-done-overlay {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  padding: 8px 20px;
-  border-radius: 16px;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(20, 25, 35, 0.85);
-  color: var(--color-text-primary);
-  font-family: inherit;
-  transition: background 0.15s;
-  white-space: nowrap;
-  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
-@media (hover: hover) {
-  .camera-download:hover {
-    background: rgba(40, 50, 70, 0.92);
-  }
+.camera-done-filename {
+  padding: 4px 12px;
+  border-radius: 4px;
+  background: #000;
+  color: #fff;
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.camera-done-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.camera-done-actions .btn {
+  padding: 6px 16px;
+  font-size: var(--font-size-sm);
+}
+
+.camera-done-actions a.btn {
+  text-decoration: none;
 }
 
 /* ── Edge resize hotspots (on .camera-container) ─────────────────── */

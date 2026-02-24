@@ -165,12 +165,12 @@ export class CaptureService {
   private buildFilename(timeMs: number): string {
     const d = new Date(timeMs);
     const pad = (n: number) => String(n).padStart(2, '0');
-    const dt = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}-${pad(d.getUTCHours())}-${pad(d.getUTCMinutes())}Z`;
-    const cam = this.auroraService.getCamera();
-    const lat = cam.lat.toFixed(1);
-    const lon = cam.lon.toFixed(1);
+    const dt = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}UTC`;
+    const loc = this.locationLabel.value.trim().replace(/[<>:"/\\|?*]+/g, '');
     const ext = this.options.format;
-    return `zero.hypatia-${dt}-${lat}-${lon}.${ext}`;
+    return loc
+      ? `zero.hypatia-${dt}-${loc}.${ext}`
+      : `zero.hypatia-${dt}.${ext}`;
   }
 
   private revokeDownloadUrl(): void {
