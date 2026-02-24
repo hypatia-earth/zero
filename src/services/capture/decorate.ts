@@ -15,20 +15,33 @@ const LOGO_PATH = '/favicon.svg';
 
 let logoBitmapCache: Promise<ImageBitmap> | null = null;
 
-/** Fetch the brand SVG as an ImageBitmap. Cached after first call. */
+/** Rasterize brand SVG at high resolution so downscaling is always sharp. */
+const LOGO_RENDER_SIZE = 256;
+
 export function loadLogo(): Promise<ImageBitmap> {
   if (!logoBitmapCache) {
-    logoBitmapCache = new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = new OffscreenCanvas(img.naturalWidth, img.naturalHeight);
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0);
-        resolve(createImageBitmap(canvas));
-      };
-      img.onerror = reject;
-      img.src = LOGO_PATH;
-    });
+    logoBitmapCache = fetch(LOGO_PATH)
+      .then(r => r.text())
+      .then(svg => {
+        // Re-rasterize SVG at high resolution by overriding width/height
+        const scaled = svg
+          .replace(/width="\d+"/, `width="${LOGO_RENDER_SIZE}"`)
+          .replace(/height="\d+"/, `height="${LOGO_RENDER_SIZE}"`);
+        const blob = new Blob([scaled], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        return new Promise<ImageBitmap>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            const canvas = new OffscreenCanvas(LOGO_RENDER_SIZE, LOGO_RENDER_SIZE);
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(img, 0, 0, LOGO_RENDER_SIZE, LOGO_RENDER_SIZE);
+            resolve(createImageBitmap(canvas));
+          };
+          img.onerror = reject;
+          img.src = url;
+        });
+      });
   }
   return logoBitmapCache;
 }

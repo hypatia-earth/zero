@@ -90,8 +90,9 @@ function geonamesProxy(env: Record<string, string>): Plugin | null {
             const infoData = await infoRes.json();
             const place = placeData.geonames?.[0];
             const continent = infoData.geonames?.[0]?.continentName || '';
-            // Format: continent, country, city
-            const parts = [continent, countryData.countryName, place?.name].filter(Boolean);
+            const admin = place?.adminName1 && place.adminName1 !== place.name ? place.adminName1 : '';
+            // Format: continent, country, admin1, city
+            const parts = [continent, countryData.countryName, admin, place?.name].filter(Boolean);
             const label = parts.join(', ');
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ label }));

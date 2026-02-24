@@ -184,7 +184,7 @@ export class CaptureService {
       const outH = format === 'mp4' ? (baseDims.h & ~1) : baseDims.h;
 
       // Build decorator for header/footer bars
-      const label = this.locationLabel.value;
+      const label = this.options.label ? this.locationLabel.value : '';
       const d = new Date(frozenTime);
       const pad2 = (n: number) => String(n).padStart(2, '0');
       const timestamp = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC`;

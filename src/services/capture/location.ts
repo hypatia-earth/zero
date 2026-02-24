@@ -12,9 +12,13 @@ export function formatLabel(raw: string): string {
 
 /** Reverse-geocode lat/lon via the /api/geocode proxy. Returns "" on error. */
 export async function reverseGeocode(lat: number, lon: number): Promise<string> {
-  const url = `/api/geocode?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`;
-  const res = await fetch(url);
-  if (!res.ok) return '';
-  const data: { label?: string } = await res.json();
-  return formatLabel(data.label ?? '');
+  try {
+    const url = `/api/geocode?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`;
+    const res = await fetch(url);
+    if (!res.ok) return '';
+    const data: { label?: string } = await res.json();
+    return formatLabel(data.label ?? '');
+  } catch {
+    return '';
+  }
 }

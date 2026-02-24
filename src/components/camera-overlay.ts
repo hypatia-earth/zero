@@ -141,7 +141,7 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
           m('.camera-rect', {
             style: {
               height: isDone
-                ? `${rect.h + 32 + (captureService.locationLabel.value ? 24 : 0)}px`
+                ? `${rect.h + 32 + (cameraOpts.label && captureService.locationLabel.value ? 24 : 0)}px`
                 : `${rect.h}px`,
               borderColor,
               cursor: isLocked ? 'default' : 'move',
