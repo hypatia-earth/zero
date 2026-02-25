@@ -269,8 +269,9 @@ export class CaptureService {
       const decorator = createDecorator(outW, outH, label, timestamp, logo, scale);
 
       const comment = `zero.hypatia.earth | ${timestamp}${label ? ` | ${label}` : ''}\nData: ECMWF IFS \u00b7 CC BY 4.0`;
+      const title = label ? `Weather \u2014 ${label}` : `Weather \u2014 ${timestamp}`;
       const session = format === 'mp4'
-        ? createMp4Session(fps, outW, outH)
+        ? createMp4Session(fps, outW, outH, { title, timestamp, label, comment })
         : createGifSession(fps, paletteMode, this.palette.value, comment);
 
       for (let i = 0; i < bitmaps.length; i++) {

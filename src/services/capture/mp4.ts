@@ -21,7 +21,14 @@ function pickCodecString(w: number, h: number): string {
   return (w <= 1280 && h <= 720) ? 'avc1.42001f' : 'avc1.640028';
 }
 
-export function createMp4Session(fps: number, width: number, height: number) {
+export interface Mp4Metadata {
+  title: string;
+  timestamp: string;
+  label: string;
+  comment: string;
+}
+
+export function createMp4Session(fps: number, width: number, height: number, meta: Mp4Metadata) {
   // H.264 requires even dimensions
   const w = width & ~1;
   const h = height & ~1;
@@ -33,6 +40,14 @@ export function createMp4Session(fps: number, width: number, height: number) {
     target,
   });
   output.addVideoTrack(videoSource, { frameRate: fps });
+  output.setMetadataTags({
+    title: meta.title,
+    artist: 'zero.hypatia.earth',
+    description: meta.label ? `${meta.timestamp}, ${meta.label}` : meta.timestamp,
+    date: new Date(),
+    comment: meta.comment,
+    raw: { '\u00A9cpy': `Data: ECMWF IFS CC BY 4.0` },
+  });
 
   let frameCount = 0;
   const frameDurationUs = Math.round(1_000_000 / fps);
