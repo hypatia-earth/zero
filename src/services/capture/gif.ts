@@ -84,8 +84,21 @@ export function extractPalette(
 
 type PaletteMode = 'fast' | 'precise' | 'grayscale';
 
+/** Build a GIF comment extension block (0x21 0xFE) from text */
+function buildCommentBlock(text: string): Uint8Array {
+  const data = new TextEncoder().encode(text);
+  const bytes: number[] = [0x21, 0xFE];
+  for (let i = 0; i < data.length; i += 255) {
+    const end = Math.min(i + 255, data.length);
+    bytes.push(end - i);
+    for (let j = i; j < end; j++) bytes.push(data[j]!);
+  }
+  bytes.push(0x00);
+  return new Uint8Array(bytes);
+}
+
 /** Create a GIF encoding session that manages palette strategy internally */
-export function createGifSession(fps: number, paletteMode: PaletteMode, scenePalette: number[][] | null) {
+export function createGifSession(fps: number, paletteMode: PaletteMode, scenePalette: number[][] | null, comment: string) {
   const encoder = new GIFEncoder();
   const delay = Math.round(1000 / fps);
   const palette = paletteMode === 'grayscale' ? buildGrayscalePalette() : scenePalette!;
@@ -100,7 +113,17 @@ export function createGifSession(fps: number, paletteMode: PaletteMode, scenePal
 
     finish(): Blob {
       encoder.finish();
-      return new Blob([encoder.bytes()], { type: 'image/gif' });
+      const gif = encoder.bytes();
+      const block = buildCommentBlock(comment);
+      // Insert comment after header (6B) + LSD (7B) + global color table
+      const packed = gif[10]!;
+      const gctBytes = (packed >> 7) & 1 ? 3 * (2 ** ((packed & 0x07) + 1)) : 0;
+      const insertAt = 13 + gctBytes;
+      const result = new Uint8Array(gif.length + block.length);
+      result.set(gif.subarray(0, insertAt));
+      result.set(block, insertAt);
+      result.set(gif.subarray(insertAt), insertAt + block.length);
+      return new Blob([result], { type: 'image/gif' });
     },
   };
 }

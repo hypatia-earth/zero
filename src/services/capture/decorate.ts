@@ -11,6 +11,7 @@ const BASE_HEADER_H = 32;
 const BASE_FOOTER_H = 24;
 const BASE_HEADER_FONT = 14;
 const BASE_FOOTER_FONT = 13;
+const BASE_ATTRIBUTION_FONT = 11;
 const LOGO_PATH = '/favicon-512.png';
 
 let logoBitmapCache: Promise<ImageBitmap> | null = null;
@@ -40,6 +41,7 @@ export function createDecorator(
   const footerH = label.length > 0 ? (Math.round(BASE_FOOTER_H * scale) & ~1) : 0;
   const headerFont = Math.round(BASE_HEADER_FONT * scale);
   const footerFont = Math.round(BASE_FOOTER_FONT * scale);
+  const attrFont = Math.round(BASE_ATTRIBUTION_FONT * scale);
   const pad = Math.round(6 * scale);
 
   const canvas = new OffscreenCanvas(w, h);
@@ -74,6 +76,13 @@ export function createDecorator(
       ctx.font = `300 ${headerFont}px 'IBM Plex Mono', monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(timestamp, w - pad, headerH / 2);
+
+      // ── Attribution (above footer) ──
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `${attrFont}px Inter, -apple-system, BlinkMacSystemFont, sans-serif`;
+      ctx.textBaseline = 'bottom';
+      ctx.textAlign = 'right';
+      ctx.fillText('Data: ECMWF IFS \u00b7 CC BY 4.0', w - pad, h - footerH - Math.round(4 * scale));
 
       // ── Footer overlay ──
       if (footerH > 0) {
