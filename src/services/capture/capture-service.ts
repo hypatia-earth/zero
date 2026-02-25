@@ -1,7 +1,7 @@
 /**
- * CaptureService - Camera capture mode state machine
+ * CaptureService - Capture mode state machine
  *
- * Manages camera overlay state: mode transitions, rect position/size,
+ * Manages capture overlay state: mode transitions, rect position/size,
  * drag/resize interactions, and duration/frame tracking.
  *
  * Modes: off → ready → capturing → processing → done → ready → off
@@ -13,11 +13,15 @@ import { extractPalette, createGifSession } from './gif';
 import { createMp4Session } from './mp4';
 import { reverseGeocode } from './location';
 import { loadLogo, createDecorator } from './decorate';
-import type { ConfigService } from '../config-service';
 import type { AuroraService } from '../aurora-service';
 import type { StateService } from '../state-service';
 import type { OptionsService } from '../options-service';
 import type { QueueStats } from '../../config/types';
+
+const RECT_BORDER = 2;
+const RECT_DEFAULT_SIZE = 480;
+const RECT_MIN_WIDTH = 320 + RECT_BORDER * 2;
+const RECT_MIN_HEIGHT = 240 + RECT_BORDER * 2;
 
 type CaptureMode = 'off' | 'ready' | 'capturing' | 'processing' | 'done';
 type Edge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
@@ -36,7 +40,6 @@ export class CaptureService {
   readonly palette: Signal<number[][] | null> = signal(null);
   readonly locationLabel: Signal<string> = signal('');
 
-  private readonly configService: ConfigService;
   private readonly optionsService: OptionsService;
   private readonly stateService: StateService;
   private readonly auroraService: AuroraService;
@@ -53,37 +56,34 @@ export class CaptureService {
   private aborted = false;
 
   constructor(
-    configService: ConfigService,
     optionsService: OptionsService,
     stateService: StateService,
     queueStats: Signal<QueueStats>,
     auroraService: AuroraService,
   ) {
-    this.configService = configService;
     this.optionsService = optionsService;
     this.stateService = stateService;
     this.queueStats = queueStats;
     this.auroraService = auroraService;
     auroraService.onExportFrame = (bitmap: ImageBitmap) => this.onPreviewFrame(bitmap);
 
-    const cfg = configService.getConfig().cameraUI;
-    const saved = optionsService.options.value.camera.lastRect;
+    const saved = optionsService.options.value.capture.lastRect;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
     // Restore saved rect if it fits within current viewport
     const valid = saved
-      && saved.w >= cfg.rectMinWidth && saved.h >= cfg.rectMinHeight
+      && saved.w >= RECT_MIN_WIDTH && saved.h >= RECT_MIN_HEIGHT
       && saved.x >= 0 && saved.y >= 0
       && saved.x + saved.w <= vw && saved.y + saved.h <= vh;
 
     if (valid) {
       this.rect = signal(saved);
     } else {
-      const h = Math.round(cfg.rectDefaultSize * 0.75) & ~1;
-      const x = Math.round((vw - cfg.rectDefaultSize) / 2);
+      const h = Math.round(RECT_DEFAULT_SIZE * 0.75) & ~1;
+      const x = Math.round((vw - RECT_DEFAULT_SIZE) / 2);
       const y = Math.round((vh - h) / 2);
-      this.rect = signal({ x, y, w: cfg.rectDefaultSize, h });
+      this.rect = signal({ x, y, w: RECT_DEFAULT_SIZE, h });
     }
     this.totalFrames = computed(() => {
       const { duration, fps } = this.options;
@@ -92,7 +92,7 @@ export class CaptureService {
   }
 
   private get options() {
-    return this.optionsService.options.value.camera;
+    return this.optionsService.options.value.capture;
   }
 
   get isQueueIdle(): boolean {
@@ -109,7 +109,7 @@ export class CaptureService {
     this.installEscapeHandler();
     this.requestCaptureFrame();
     m.redraw();
-    // Delay so .camera-rect DOM exists after redraw
+    // Delay so .capture-rect DOM exists after redraw
     requestAnimationFrame(() => this.requestLocationUpdate(0));
   }
 
@@ -120,7 +120,7 @@ export class CaptureService {
     // Cancel pending preview capture to prevent stale exportFrame during capturing
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
     // Persist rect for next session
-    this.optionsService.update(d => { d.camera.lastRect = { ...this.rect.value }; });
+    this.optionsService.update(d => { d.capture.lastRect = { ...this.rect.value }; });
     this.mode.value = 'capturing';
     this.frameIndex.value = 0;
     this.aborted = false;
@@ -270,7 +270,7 @@ export class CaptureService {
   private cropBitmap(bitmap: ImageBitmap, outW: number, outH: number): Uint8ClampedArray {
     const rect = this.rect.value;
     const dpr = window.devicePixelRatio;
-    const border = 2;  // CSS px, matches .camera-rect border width
+    const border = 2;  // CSS px, matches .capture-rect border width
     let srcX = Math.round((rect.x + border) * dpr);
     let srcY = Math.round((rect.y + border) * dpr);
     let srcW = Math.round((rect.w - border * 2) * dpr);
@@ -295,7 +295,7 @@ export class CaptureService {
 
   private getOutputDimensions(): { w: number; h: number } {
     const rect = this.rect.value;
-    const border = 2;  // CSS px, matches .camera-rect border width
+    const border = 2;  // CSS px, matches .capture-rect border width
     const contentW = rect.w - border * 2;
     const contentH = rect.h - border * 2;
     if (this.options.nativeDpr) {
@@ -324,7 +324,7 @@ export class CaptureService {
     m.redraw();
     this.locationDebounce = setTimeout(() => {
       this.locationDebounce = null;
-      const el = document.querySelector('.camera-rect');
+      const el = document.querySelector('.capture-rect');
       if (!el) return;
       const bounds = el.getBoundingClientRect();
       const cam = this.auroraService.getCamera();
@@ -391,6 +391,12 @@ export class CaptureService {
 
   // ── Rect drag (move) ─────────────────────────────────────────────
 
+  /** Measure header height from DOM so rect.y never pushes header offscreen */
+  private getHeaderHeight(): number {
+    const el = document.querySelector('.capture-header');
+    return el ? el.getBoundingClientRect().height : 0;
+  }
+
   private get isLocked(): boolean {
     const m = this.mode.value;
     return m === 'capturing' || m === 'processing' || m === 'done';
@@ -402,12 +408,13 @@ export class CaptureService {
     const r = this.rect.value;
     const startX = e.clientX - r.x;
     const startY = e.clientY - r.y;
+    const minY = this.getHeaderHeight();
 
     const onMove = (ev: PointerEvent) => {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const x = Math.max(0, Math.min(vw - r.w, ev.clientX - startX));
-      const y = Math.max(0, Math.min(vh - r.h, ev.clientY - startY));
+      const y = Math.max(minY, Math.min(vh - r.h, ev.clientY - startY));
       this.rect.value = { ...this.rect.value, x, y };
       this.requestCaptureFrame();
       m.redraw();
@@ -429,10 +436,10 @@ export class CaptureService {
     if (this.isLocked) return;
     e.preventDefault();
     e.stopPropagation();
-    const cfg = this.configService.getConfig().cameraUI;
     const startRect = { ...this.rect.value };
     const startX = e.clientX;
     const startY = e.clientY;
+    const minY = this.getHeaderHeight();
 
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
@@ -443,33 +450,26 @@ export class CaptureService {
 
       // Horizontal edges
       if (edge.includes('e')) {
-        w = Math.max(cfg.rectMinWidth, Math.min(vw - x, startRect.w + dx));
+        w = Math.max(RECT_MIN_WIDTH, Math.min(vw - x, startRect.w + dx));
       }
       if (edge.includes('w')) {
-        const maxShift = startRect.w - cfg.rectMinWidth;
-        const shift = Math.min(Math.max(0, dx), maxShift);
-        x = Math.max(0, startRect.x + shift);
+        // dx < 0 = drag left = expand, dx > 0 = drag right = shrink
+        x = Math.max(0, Math.min(startRect.x + dx, startRect.x + startRect.w - RECT_MIN_WIDTH));
         w = startRect.x + startRect.w - x;
-        if (w < cfg.rectMinWidth) { w = cfg.rectMinWidth; x = startRect.x + startRect.w - w; }
       }
 
       // Vertical edges
       if (edge.includes('s')) {
-        h = Math.max(cfg.rectMinHeight, Math.min(vh - y, startRect.h + dy));
+        h = Math.max(RECT_MIN_HEIGHT, Math.min(vh - y, startRect.h + dy));
       }
       if (edge === 'n' || edge === 'ne' || edge === 'nw') {
-        const maxShift = startRect.h - cfg.rectMinHeight;
-        const shift = Math.min(Math.max(0, dy), maxShift);
-        y = Math.max(0, startRect.y + shift);
+        // dy < 0 = drag up = expand, dy > 0 = drag down = shrink
+        y = Math.max(minY, Math.min(startRect.y + dy, startRect.y + startRect.h - RECT_MIN_HEIGHT));
         h = startRect.y + startRect.h - y;
-        if (h < cfg.rectMinHeight) { h = cfg.rectMinHeight; y = startRect.y + startRect.h - h; }
       }
 
-      // Snap to 2px grid (even dimensions for encoder compatibility)
-      w = w & ~1;
-      h = h & ~1;
-
-      this.rect.value = { x, y, w, h };
+      // Snap to even so output dimensions are always even (H.264 requirement)
+      this.rect.value = { x, y, w: w & ~1, h: h & ~1 };
       this.requestCaptureFrame();
       m.redraw();
     };

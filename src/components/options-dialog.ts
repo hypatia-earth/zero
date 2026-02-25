@@ -121,7 +121,7 @@ function formatValue(value: number, meta: SliderFields): string {
 // Control renderers
 // ============================================================
 
-function renderControl(opt: FlatOption, currentValue: unknown, optionsService: OptionsService, paletteService: PaletteService): m.Children {
+function renderControl(opt: FlatOption, currentValue: unknown, optionsService: OptionsService, paletteService: PaletteService, options: ZeroOptions): m.Children {
   const { path, meta } = opt;
 
   // Special handling for palette selection
@@ -153,8 +153,8 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
 
   switch (meta.control) {
     case 'toggle': {
-      // Disable prefetch.enabled (feature disabled for now)
-      const disabled = path === 'prefetch.enabled';
+      const disabled = path === 'prefetch.enabled'
+        || (meta.disabledWhen !== undefined && getByPath(options, meta.disabledWhen.path) === meta.disabledWhen.equals);
       return m('label.toggle', { class: disabled ? 'disabled' : '' }, [
         m('input[type=checkbox]', {
           checked: currentValue as boolean,
@@ -200,7 +200,8 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
     case 'radio': {
       const layerId = path.split('.')[0]!;
       const isLoading = optionsService.loadingLayers.value.has(layerId);
-      const groupDisabled = meta.disabled === true;
+      const groupDisabled = meta.disabled === true
+        || (meta.disabledWhen !== undefined && getByPath(options, meta.disabledWhen.path) === meta.disabledWhen.equals);
 
       return m('div.radio-group', { class: groupDisabled ? 'disabled' : '' }, [
         m('span.spinner', { class: isLoading ? 'visible' : '' }),
@@ -304,7 +305,7 @@ function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: Opt
         onclick: () => optionsService.reset(opt.path),
         style: { visibility: modified ? 'visible' : 'hidden' }
       }, '↺') : null,
-      renderControl(opt, currentValue, optionsService, paletteService)
+      renderControl(opt, currentValue, optionsService, paletteService, options)
     ].filter(Boolean))
   ]);
 }
@@ -514,7 +515,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
       dataCache: 'Download',
       gpu: 'GPU',
       queue: 'Download',
-      camera: 'Camera',
+      capture: 'Capture',
     };
     const dialogTitle = filter && filter !== 'global'
       ? `${filterTitles[filter] ?? layerLabels[filter]!} Options` // QC-OK: try service title, then layer label

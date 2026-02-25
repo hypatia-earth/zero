@@ -23,12 +23,12 @@ type OptionImpact = 'uniform' | 'recreate';
 type PersistMode = 'url' | 'local';
 
 /** Filter determines which dialog entry points show this option */
-type OptionFilter = TLayer | 'global' | 'dataCache' | 'gpu' | 'queue' | 'camera';
+type OptionFilter = TLayer | 'global' | 'dataCache' | 'gpu' | 'queue' | 'capture';
 
 interface UIMetadata {
   label: string;
   description?: string;
-  group: 'interface' | 'regional' | 'download' | 'environmental' | 'interaction' | 'layers' | 'gpu' | 'camera' | 'advanced' | 'performance';
+  group: 'interface' | 'regional' | 'download' | 'environmental' | 'interaction' | 'layers' | 'gpu' | 'capture' | 'advanced' | 'performance';
   filter: OptionFilter | OptionFilter[];
   order: number;
   control: ControlType;
@@ -36,6 +36,7 @@ interface UIMetadata {
   advanced?: boolean;
   hidden?: boolean;       // Hide from options dialog (for internal use)
   disabled?: boolean;     // Show but disable in options dialog
+  disabledWhen?: { path: string; equals: unknown };  // Conditionally disable based on another option's value
   model?: 'inertia' | 'velocity';
   device?: 'mouse' | 'touch';
   impact?: OptionImpact;
@@ -132,9 +133,9 @@ export const optionGroups = {
     description: 'Graphics memory and performance',
     order: 7,
   },
-  camera: {
-    id: 'camera',
-    label: 'Camera',
+  capture: {
+    id: 'capture',
+    label: 'Capture',
     description: 'GIF recording settings',
     order: 8,
   },
@@ -1006,23 +1007,39 @@ export const optionsSchema = z.object({
   }),
 
   // ----------------------------------------------------------
-  // Camera (GIF recording)
+  // Capture (GIF recording)
   // ----------------------------------------------------------
-  camera: z.object({
+  capture: z.object({
+    format: opt(
+      z.enum(['gif', 'mp4']).default('gif'),
+      {
+        label: 'Format',
+        description: 'Output format for recording',
+        group: 'capture',
+        filter: ['global', 'capture'],
+        order: 0,
+        control: 'radio',
+        options: [
+          { value: 'gif', label: 'GIF' },
+          { value: 'mp4', label: 'MP4' },
+        ],
+      }
+    ),
     duration: opt(
-      z.enum(['1', '3', '5', '10']).default('1'),
+      z.enum(['1', '3', '5', '10', '15']).default('1'),
       {
         label: 'Duration',
         description: 'Recording length in seconds',
-        group: 'camera',
-        filter: ['global', 'camera'],
-        order: 0,
+        group: 'capture',
+        filter: ['global', 'capture'],
+        order: 1,
         control: 'radio',
         options: [
           { value: '1', label: '1s' },
           { value: '3', label: '3s' },
           { value: '5', label: '5s' },
           { value: '10', label: '10s' },
+          { value: '15', label: '15s' },
         ],
       }
     ),
@@ -1030,10 +1047,10 @@ export const optionsSchema = z.object({
       z.enum(['15', '30']).default('15'),
       {
         label: 'FPS',
-        description: 'Frames per second for GIF recording',
-        group: 'camera',
-        filter: ['global', 'camera'],
-        order: 1,
+        description: 'Frames per second',
+        group: 'capture',
+        filter: ['global', 'capture'],
+        order: 2,
         control: 'radio',
         options: [
           { value: '15', label: '15' },
@@ -1045,10 +1062,10 @@ export const optionsSchema = z.object({
       z.boolean().default(false),
       {
         label: 'Native resolution',
-        description: 'Record at device pixel resolution (2× on Retina)',
-        group: 'camera',
-        filter: ['global', 'camera'],
-        order: 2,
+        description: `Record at device pixel resolution (${typeof window !== 'undefined' ? parseFloat(window.devicePixelRatio.toFixed(2)) : 2}× on this device)`,
+        group: 'capture',
+        filter: ['global', 'capture'],
+        order: 3,
         control: 'toggle',
       }
     ),
@@ -1057,10 +1074,11 @@ export const optionsSchema = z.object({
       {
         label: 'Palette',
         description: 'Color quantization strategy for GIF encoding',
-        group: 'camera',
-        filter: ['global', 'camera'],
-        order: 3,
+        group: 'capture',
+        filter: ['global', 'capture'],
+        order: 4,
         control: 'radio',
+        disabledWhen: { path: 'capture.format', equals: 'mp4' },
         options: [
           { value: 'fast', label: 'Fast' },
           { value: 'precise', label: 'Precise' },
@@ -1068,29 +1086,13 @@ export const optionsSchema = z.object({
         ],
       }
     ),
-    format: opt(
-      z.enum(['gif', 'mp4']).default('gif'),
-      {
-        label: 'Format',
-        description: 'Output format for recording',
-        group: 'camera',
-        filter: ['global', 'camera'],
-        order: 4,
-        control: 'radio',
-        options: [
-          { value: 'gif', label: 'GIF' },
-          { value: 'mp4', label: 'MP4' },
-        ],
-        disabled: false,
-      }
-    ),
     label: opt(
       z.boolean().default(true),
       {
         label: 'Location label',
         description: 'Show location label in exported media',
-        group: 'camera',
-        filter: ['global', 'camera'],
+        group: 'capture',
+        filter: ['global', 'capture'],
         order: 5,
         control: 'toggle',
       }
@@ -1099,8 +1101,8 @@ export const optionsSchema = z.object({
       z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).nullable().default(null),
       {
         label: 'Last rect',
-        group: 'camera',
-        filter: 'camera',
+        group: 'capture',
+        filter: 'capture',
         order: 99,
         control: 'toggle',
         hidden: true,
@@ -1210,7 +1212,7 @@ export const defaultOptions: ZeroOptions = {
   pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
-  camera: { duration: '1', fps: '15', nativeDpr: false, paletteMode: 'fast', format: 'gif', label: true, lastRect: null },
+  capture: { duration: '1', fps: '15', nativeDpr: false, paletteMode: 'fast', format: 'gif', label: true, lastRect: null },
   debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1', showLogo: true },
 };
 

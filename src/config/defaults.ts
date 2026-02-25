@@ -47,16 +47,6 @@ export const defaultConfig: ZeroConfig = {
     logoEnabled: true,
   },
 
-  cameraUI: {
-    rectDefaultSize: 480,
-    rectMinWidth: 320,
-    rectMinHeight: 240,
-    fps: 15,
-    durations: [1, 3, 5, 10] as const,
-    borderColorIdle: '#44cc66',
-    borderColorRecording: '#cc4444',
-  },
-
   pressureColors: {
     white:  [1, 1, 1, 0.85] as const,
     violet: [0.72, 0.50, 0.88, 0.85] as const,

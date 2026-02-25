@@ -129,9 +129,9 @@ async function runBootstrapInner(
     progress
   );
 
-  // Camera service — all deps available after GPU init
+  // Capture service — all deps available after GPU init
   services.captureService = createCaptureService(
-    foundation.configService, foundation.optionsService, foundation.stateService,
+    foundation.optionsService, foundation.stateService,
     services.queueService.queueStats, services.auroraService
   );
 

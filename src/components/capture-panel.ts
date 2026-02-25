@@ -1,25 +1,25 @@
 /**
- * CameraPanel - Toolbar button to enter camera capture mode
+ * CapturePanel - Toolbar button to enter capture mode
  */
 
 import m from 'mithril';
 import type { CaptureService } from '../services/capture/capture-service';
 
-interface CameraPanelAttrs {
+interface CapturePanelAttrs {
   captureService: CaptureService;
 }
 
-export const CameraPanel: m.ClosureComponent<CameraPanelAttrs> = () => {
+export const CapturePanel: m.ClosureComponent<CapturePanelAttrs> = () => {
   return {
     view({ attrs }) {
-      return m('div.camera.panel.desktop-only', [
+      return m('div.capture.panel.desktop-only', [
         m('button.control.circle', {
           onclick: () => attrs.captureService.enter(),
-          title: 'Camera',
+          title: 'Capture',
         }, [
           m('img', {
             src: `${import.meta.env.BASE_URL}icon-camera.svg`,
-            alt: 'Camera',
+            alt: 'Capture',
           }),
         ]),
       ]);

@@ -1,7 +1,7 @@
 /**
- * CameraOverlay - Full-screen overlay with movable/resizable capture rect
+ * CaptureOverlay - Full-screen overlay with movable/resizable capture rect
  *
- * Rendered when camera mode !== 'off'. Blocks all globe interaction
+ * Rendered when capture mode !== 'off'. Blocks all globe interaction
  * via pointer-events: auto covering the viewport.
  *
  * Layout (top to bottom):
@@ -20,7 +20,7 @@ import type { CaptureService } from '../services/capture/capture-service';
 import type { DialogService } from '../services/dialog-service';
 import type { OptionsService } from '../services/options-service';
 
-interface CameraOverlayAttrs {
+interface CaptureOverlayAttrs {
   captureService: CaptureService;
   dialogService: DialogService;
   optionsService: OptionsService;
@@ -51,15 +51,15 @@ function isInteractive(target: EventTarget | null): boolean {
   return false;
 }
 
-export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
+export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
   return {
     view({ attrs }) {
       const { captureService, dialogService, optionsService } = attrs;
       const mode = captureService.mode.value;
       const rect = captureService.rect.value;
       const palette = captureService.palette.value;
-      const cameraOpts = optionsService.options.value.camera;
-      const format = cameraOpts.format;
+      const captureOpts = optionsService.options.value.capture;
+      const format = captureOpts.format;
       const isGif = format === 'gif';
       const isCapturing = mode === 'capturing';
       const isProcessing = mode === 'processing';
@@ -71,14 +71,14 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
 
       // Compute output dimensions for display
       const dpr = window.devicePixelRatio;
-      const border = 2;  // CSS px, matches .camera-rect border width
+      const border = 2;  // CSS px, matches .capture-rect border width
       const contentW = rect.w - border * 2;
       const contentH = rect.h - border * 2;
-      const outW = cameraOpts.nativeDpr ? Math.round(contentW * dpr) : contentW;
-      const outH = cameraOpts.nativeDpr ? Math.round(contentH * dpr) : contentH;
+      const outW = captureOpts.nativeDpr ? Math.round(contentW * dpr) & ~1 : contentW;
+      const outH = captureOpts.nativeDpr ? Math.round(contentH * dpr) & ~1 : contentH;
 
-      return m('.camera-overlay', [
-        m('.camera-container', {
+      return m('.capture-overlay', [
+        m('.capture-container', {
           style: {
             left: `${rect.x}px`,
             top: `${rect.y}px`,
@@ -91,18 +91,11 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
             }
           },
         }, [
-          // Resize edge hotspots on the container (hidden when locked)
-          ...(!isLocked ? EDGES.map(edge =>
-            m(`div.edge.edge-${edge}`, {
-              onpointerdown: (e: PointerEvent) => captureService.startResize(e, edge),
-            })
-          ) : []),
-
           // Header bar
-          m('.camera-header', [
-            m('span.camera-label', `${format.toUpperCase()} Camera`),
+          m('.capture-header', [
+            m('span.capture-label', `${format.toUpperCase()} Capture`),
             isDone
-              ? m('button.btn.btn-primary.camera-record', {
+              ? m('button.btn.btn-primary.capture-record', {
                   onclick: () => {
                     captureService.mode.value = 'ready';
                     captureService.frameIndex.value = 0;
@@ -110,25 +103,25 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
                   },
                 }, 'New')
               : isBusy
-                ? m('button.btn.btn-danger.camera-record', {
+                ? m('button.btn.btn-danger.capture-record', {
                     onclick: () => captureService.stop(),
                   }, 'Stop')
-                : m('button.btn.btn-primary.camera-record', {
+                : m('button.btn.btn-primary.capture-record', {
                     onclick: () => captureService.record(),
                     disabled: !captureService.isQueueIdle ||
-                      (isGif && cameraOpts.paletteMode !== 'grayscale' && !palette),
+                      (isGif && captureOpts.paletteMode !== 'grayscale' && !palette),
                   }, 'Record'),
-            m('button.camera-settings-btn', {
-              onclick: () => dialogService.open('options', { filter: 'camera' }),
+            m('button.capture-settings-btn', {
+              onclick: () => dialogService.open('options', { filter: 'capture' }),
               disabled: isLocked,
             }, m(GearIcon)),
-            m('button.camera-close', {
+            m('button.capture-close', {
               onclick: () => captureService.exit(),
             }, '\u2715'),
           ]),
 
           // Palette stripe (GIF mode only, hidden in done mode)
-          isGif && palette && !isDone ? m('.camera-palette-stripe',
+          isGif && palette && !isDone ? m('.capture-palette-stripe',
             m('canvas', {
               height: 16,
               oncreate(vnode: m.VnodeDOM) {
@@ -141,70 +134,80 @@ export const CameraOverlay: m.ClosureComponent<CameraOverlayAttrs> = () => {
           ) : null,
 
           // Capture rect
-          m('.camera-rect', {
-            style: {
-              height: `${rect.h}px`,
-              borderColor,
-              cursor: isLocked ? 'default' : 'move',
-            },
-            class: isBusy ? 'recording' : '',
+          m('.capture-rect', {
+            style: { height: `${rect.h}px` },
           }, [
-            // Dimensions display (ready mode)
-            isReady ? m('span.camera-dimensions', `${outW} \u00d7 ${outH}`) : null,
+            // Border (visual only, no pointer events)
+            m('.capture-border', { style: { borderColor } }),
 
-            // Waiting label (ready mode, below dimensions)
-            isReady && (!captureService.isQueueIdle || (isGif && cameraOpts.paletteMode !== 'grayscale' && !palette))
-              ? m('span.camera-waiting', [
-                  'Waiting for ',
-                  [
-                    !captureService.isQueueIdle ? 'Queue' : null,
-                    isGif && cameraOpts.paletteMode !== 'grayscale' && !palette ? 'Palette' : null,
-                  ].filter(Boolean).join(', '),
-                  '\u2026',
-                ].flat())
-              : null,
+            // Resize edge hotspots (hidden when locked)
+            ...(!isLocked ? EDGES.map(edge =>
+              m(`div.edge.edge-${edge}`, {
+                onpointerdown: (e: PointerEvent) => captureService.startResize(e, edge),
+              })
+            ) : []),
 
-            // Status label (capturing / processing)
-            isBusy ? m('span.camera-status',
-              `${isCapturing ? 'Capturing' : 'Processing'} ${captureService.frameIndex.value}/${captureService.totalFrames.value}`
-            ) : null,
+            // Content area (move handle)
+            m('.capture-content', {
+              style: { cursor: isLocked ? 'default' : undefined },
+            }, [
+              // Dimensions display (ready mode)
+              isReady ? m('span.capture-dimensions', `${outW} \u00d7 ${outH}`) : null,
 
-            // Preview (done mode) — autoplay loop
-            isDone && captureService.downloadUrl ? (
-              isGif
-                ? m('img.camera-preview', {
-                    src: captureService.downloadUrl,
-                  })
-                : m('video.camera-preview', {
-                    src: captureService.downloadUrl,
-                    autoplay: true,
-                    loop: true,
-                    muted: true,
-                    playsinline: true,
-                  })
-            ) : null,
+              // Waiting label (ready mode, below dimensions)
+              isReady && (!captureService.isQueueIdle || (isGif && captureOpts.paletteMode !== 'grayscale' && !palette))
+                ? m('span.capture-waiting', [
+                    'Waiting for ',
+                    [
+                      !captureService.isQueueIdle ? 'Queue' : null,
+                      isGif && captureOpts.paletteMode !== 'grayscale' && !palette ? 'Palette' : null,
+                    ].filter(Boolean).join(', '),
+                    '\u2026',
+                  ].flat())
+                : null,
 
-            // Done overlay: filename label + action buttons
-            isDone ? m('.camera-done-overlay', [
-              m('span.camera-done-filename',
-                `${captureService.downloadName} (${captureService.downloadSize})`),
-              m('.camera-done-actions', [
-                captureService.canShare
-                  ? m('button.btn.btn-primary', {
-                      onclick: () => captureService.share(),
-                    }, 'Share')
-                  : null,
-                m('a.btn.btn-primary', {
-                  href: captureService.downloadUrl,
-                  download: captureService.downloadName,
-                }, 'Save'),
-              ]),
-            ]) : null,
+              // Status label (capturing / processing)
+              isBusy ? m('span.capture-status',
+                `${isCapturing ? 'Capturing' : 'Processing'} ${captureService.frameIndex.value}/${captureService.totalFrames.value}`
+              ) : null,
+
+              // Preview (done mode) — autoplay loop
+              isDone && captureService.downloadUrl ? (
+                isGif
+                  ? m('img.capture-preview', {
+                      src: captureService.downloadUrl,
+                    })
+                  : m('video.capture-preview', {
+                      src: captureService.downloadUrl,
+                      autoplay: true,
+                      loop: true,
+                      muted: true,
+                      playsinline: true,
+                    })
+              ) : null,
+
+              // Done overlay: filename label + action buttons
+              isDone ? m('.capture-done-overlay', [
+                m('span.capture-done-filename',
+                  `${captureService.downloadName} (${captureService.downloadSize})`),
+                m('.capture-done-actions', [
+                  captureService.canShare
+                    ? m('button.btn.btn-primary', {
+                        onclick: () => captureService.share(),
+                      }, 'Share')
+                    : null,
+                  m('a.btn.btn-primary', {
+                    href: captureService.downloadUrl,
+                    download: captureService.downloadName,
+                  }, 'Save'),
+                ]),
+              ]) : null,
+            ]),
           ]),
 
           // Location input (disabled when locked)
-          cameraOpts.label ? m('.camera-location-row',
-            m('input.camera-location-input', {
+          captureOpts.label ? m('.capture-location-row',
+            m('input.capture-location-input', {
               type: 'text',
               placeholder: 'Location\u2026',
               value: captureService.locationLabel.value,

@@ -171,11 +171,10 @@ export function createKeyboardService(
  * Create CaptureService (all deps available after GPU init)
  */
 export function createCaptureService(
-  configService: ConfigService,
   optionsService: OptionsService,
   stateService: StateService,
   queueStats: Signal<QueueStats>,
   auroraService: AuroraService
 ): CaptureService {
-  return new CaptureService(configService, optionsService, stateService, queueStats, auroraService);
+  return new CaptureService(optionsService, stateService, queueStats, auroraService);
 }

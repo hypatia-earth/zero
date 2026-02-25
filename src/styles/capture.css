@@ -1,15 +1,15 @@
 /**
- * Camera - Capture overlay and toolbar button
+ * Capture - Capture overlay and toolbar button
  */
 
 /* ── Toolbar button ──────────────────────────────────────────────── */
 
-.panel.camera {
+.panel.capture {
   width: 44px;
   height: 44px;
 }
 
-.panel.camera > .control.circle {
+.panel.capture > .control.circle {
   width: 44px;
   height: 44px;
   display: flex;
@@ -18,7 +18,7 @@
   padding: 0;
 }
 
-.panel.camera img {
+.panel.capture img {
   width: 24px;
   height: 24px;
   filter: invert(1);
@@ -27,21 +27,21 @@
 
 /* ── Overlay ─────────────────────────────────────────────────────── */
 
-.camera-overlay {
+.capture-overlay {
   position: fixed;
   inset: 0;
   z-index: 35;
   pointer-events: auto;
 }
 
-.camera-container {
+.capture-container {
   position: absolute;
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
 }
 
 /* ── Header bar — floats above rect via bottom-anchoring ─────────── */
 
-.camera-header {
+.capture-header {
   position: absolute;
   bottom: 100%;
   left: 0;
@@ -52,18 +52,19 @@
   padding: 8px 12px;
   background: rgba(20, 25, 35, 0.92);
   border-radius: 6px 6px 0 0;
+  cursor: move;
   user-select: none;
   -webkit-user-select: none;
 }
 
-.camera-label {
+.capture-label {
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-text-primary);
   margin-right: auto;
 }
 
-.camera-frames {
+.capture-frames {
   font-size: var(--font-size-mono);
   font-family: monospace;
   color: var(--color-text-muted);
@@ -72,7 +73,7 @@
   text-align: right;
 }
 
-.camera-duration {
+.capture-duration {
   background: var(--color-surface);
   border: 1px solid var(--color-border-subtle);
   border-radius: 4px;
@@ -83,26 +84,26 @@
   font-family: inherit;
 }
 
-.camera-duration option {
+.capture-duration option {
   background: #1a1a1a;
   color: #ffffff;
 }
 
 /* ── Record / Stop / New button (uses .btn .btn-primary / .btn-danger) ── */
 
-.camera-record {
+.capture-record {
   padding: 5px 14px;
   font-size: var(--font-size-xs);
 }
 
-.camera-record:disabled {
+.capture-record:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
 
 /* ── Close button ────────────────────────────────────────────────── */
 
-.camera-close {
+.capture-close {
   background: none;
   border: none;
   color: var(--color-text-muted);
@@ -114,14 +115,14 @@
 }
 
 @media (hover: hover) {
-  .camera-close:hover {
+  .capture-close:hover {
     color: var(--color-text-primary);
   }
 }
 
 /* ── Settings button (gear icon, matches layer button size) ──────── */
 
-.camera-settings-btn {
+.capture-settings-btn {
   background: none;
   border: none;
   cursor: pointer;
@@ -132,32 +133,32 @@
   transition: opacity 0.15s;
 }
 
-.camera-settings-btn svg {
+.capture-settings-btn svg {
   width: 14px;
   height: 14px;
   fill: rgba(255, 255, 255, 0.5);
 }
 
-.camera-settings-btn:disabled {
+.capture-settings-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
 
 @media (hover: hover) {
-  .camera-settings-btn:hover:not(:disabled) svg {
+  .capture-settings-btn:hover:not(:disabled) svg {
     fill: white;
   }
 }
 
 /* ── Palette stripe (GIF mode, between header and rect) ──────────── */
 
-.camera-palette-stripe {
+.capture-palette-stripe {
   height: 16px;
   background: rgba(20, 25, 35, 0.92);
   overflow: hidden;
 }
 
-.camera-palette-stripe canvas {
+.capture-palette-stripe canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -166,18 +167,30 @@
 
 /* ── Capture rect ────────────────────────────────────────────────── */
 
-.camera-rect {
+.capture-rect {
   position: relative;
+}
+
+.capture-border {
+  position: absolute;
+  inset: 0;
   border: 2px solid;
   border-radius: 0 0 2px 2px;
   box-sizing: border-box;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.capture-content {
+  position: absolute;
+  inset: 2px;
   cursor: move;
   overflow: hidden;
 }
 
 /* ── Preview (done mode) ─────────────────────────────────────────── */
 
-.camera-preview {
+.capture-preview {
   display: block;
   width: 100%;
   height: 100%;
@@ -186,7 +199,7 @@
 
 /* ── Waiting label (ready mode, above dimensions) ────────────────── */
 
-.camera-waiting {
+.capture-waiting {
   position: absolute;
   top: calc(50% + 2rem);
   left: 50%;
@@ -201,7 +214,7 @@
 
 /* ── Dimensions display (ready mode) ─────────────────────────────── */
 
-.camera-dimensions {
+.capture-dimensions {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -217,7 +230,7 @@
 
 /* ── Status label (capturing/processing) ─────────────────────────── */
 
-.camera-status {
+.capture-status {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -237,7 +250,7 @@
 
 /* ── Done overlay (filename + action buttons) ────────────────────── */
 
-.camera-done-overlay {
+.capture-done-overlay {
   position: absolute;
   bottom: 50%;
   left: 50%;
@@ -249,7 +262,7 @@
   max-width: 80%;
 }
 
-.camera-done-filename {
+.capture-done-filename {
   padding: 4px 12px;
   border-radius: 4px;
   background: #000;
@@ -261,48 +274,48 @@
   -webkit-user-select: none;
 }
 
-.camera-done-actions {
+.capture-done-actions {
   display: flex;
   gap: 8px;
 }
 
-.camera-done-actions .btn {
+.capture-done-actions .btn {
   padding: 6px 16px;
   font-size: var(--font-size-sm);
 }
 
-.camera-done-actions a.btn {
+.capture-done-actions a.btn {
   text-decoration: none;
 }
 
-/* ── Edge resize hotspots (on .camera-container) ─────────────────── */
+/* ── Edge resize hotspots (on .capture-rect) ─────────────────────── */
 
-.camera-container > .edge {
+.capture-rect > .edge {
   position: absolute;
   background: transparent;
   z-index: 1;
 }
 
 /* Cardinal edges */
-.camera-container > .edge-n  { top: -4px; left: 8px; right: 8px; height: 8px; cursor: n-resize; }
-.camera-container > .edge-s  { bottom: -4px; left: 8px; right: 8px; height: 8px; cursor: s-resize; }
-.camera-container > .edge-w  { left: -4px; top: 8px; bottom: 8px; width: 8px; cursor: w-resize; }
-.camera-container > .edge-e  { right: -4px; top: 8px; bottom: 8px; width: 8px; cursor: e-resize; }
+.capture-rect > .edge-n  { top: -4px; left: 8px; right: 8px; height: 8px; cursor: n-resize; }
+.capture-rect > .edge-s  { bottom: -4px; left: 8px; right: 8px; height: 8px; cursor: s-resize; }
+.capture-rect > .edge-w  { left: -4px; top: 8px; bottom: 8px; width: 8px; cursor: w-resize; }
+.capture-rect > .edge-e  { right: -4px; top: 8px; bottom: 8px; width: 8px; cursor: e-resize; }
 
 /* Corner edges */
-.camera-container > .edge-nw { top: -4px; left: -4px; width: 12px; height: 12px; cursor: nw-resize; }
-.camera-container > .edge-ne { top: -4px; right: -4px; width: 12px; height: 12px; cursor: ne-resize; }
-.camera-container > .edge-sw { bottom: -4px; left: -4px; width: 12px; height: 12px; cursor: sw-resize; }
-.camera-container > .edge-se { bottom: -4px; right: -4px; width: 12px; height: 12px; cursor: se-resize; }
+.capture-rect > .edge-nw { top: -4px; left: -4px; width: 12px; height: 12px; cursor: nw-resize; }
+.capture-rect > .edge-ne { top: -4px; right: -4px; width: 12px; height: 12px; cursor: ne-resize; }
+.capture-rect > .edge-sw { bottom: -4px; left: -4px; width: 12px; height: 12px; cursor: sw-resize; }
+.capture-rect > .edge-se { bottom: -4px; right: -4px; width: 12px; height: 12px; cursor: se-resize; }
 
 /* ── Location input row ──────────────────────────────────────────── */
 
-.camera-location-row {
+.capture-location-row {
   background: rgba(20, 25, 35, 0.92);
   border-radius: 0 0 6px 6px;
 }
 
-.camera-location-input {
+.capture-location-input {
   width: 100%;
   box-sizing: border-box;
   padding: 6px 12px;
@@ -315,11 +328,11 @@
   outline: none;
 }
 
-.camera-location-input:focus {
+.capture-location-input:focus {
   border-color: rgba(255, 255, 255, 0.35);
 }
 
-.camera-location-input:disabled {
+.capture-location-input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
