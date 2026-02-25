@@ -23,6 +23,60 @@ const RECT_DEFAULT_SIZE = 480;
 const RECT_MIN_WIDTH = 320 + RECT_BORDER * 2;
 const RECT_MIN_HEIGHT = 240 + RECT_BORDER * 2;
 
+const ASPECT_RATIOS: Record<string, number | null> = {
+  'free': null,
+  '16:9': 16 / 9,
+  '4:5': 4 / 5,
+  '1:1': 1,
+  '9:16': 9 / 16,
+};
+
+/**
+ * Resolve initial rect from saved lastRect with fallback chain:
+ * 1. Saved rect as-is (if valid size and fits viewport)
+ * 2. Saved rect re-centered (if valid size but outside viewport)
+ * 3. Default rect matching current aspect ratio option
+ */
+function resolveInitialRect(
+  saved: { x: number; y: number; w: number; h: number } | null,
+  ratio: number | null,
+  minY: number,
+): Rect {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // Check if saved rect has valid dimensions
+  if (saved && saved.w >= RECT_MIN_WIDTH && saved.h >= RECT_MIN_HEIGHT) {
+    // Try as-is
+    if (saved.x >= 0 && saved.y >= minY && saved.x + saved.w <= vw && saved.y + saved.h <= vh) {
+      return { ...saved };
+    }
+    // Re-center with saved dimensions
+    const x = Math.round((vw - saved.w) / 2);
+    const y = Math.round((vh - saved.h) / 2);
+    if (x >= 0 && y >= minY && x + saved.w <= vw && y + saved.h <= vh) {
+      return { x, y, w: saved.w, h: saved.h };
+    }
+  }
+
+  // Default rect matching aspect ratio
+  let w = RECT_DEFAULT_SIZE;
+  let h: number;
+  if (ratio !== null) {
+    h = Math.round((w - RECT_BORDER * 2) / ratio) + RECT_BORDER * 2;
+    // If too tall for viewport, derive from height instead
+    if (h > vh - minY) {
+      h = Math.round((vh - minY) * 0.75);
+      w = Math.round((h - RECT_BORDER * 2) * ratio) + RECT_BORDER * 2;
+    }
+  } else {
+    h = Math.round(w * 0.75);
+  }
+  const x = Math.round((vw - w) / 2);
+  const y = Math.round((vh - h) / 2);
+  return { x, y, w, h };
+}
+
 type CaptureMode = 'off' | 'ready' | 'capturing' | 'processing' | 'done';
 type Edge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 interface Rect {
@@ -68,23 +122,8 @@ export class CaptureService {
     auroraService.onExportFrame = (bitmap: ImageBitmap) => this.onPreviewFrame(bitmap);
 
     const saved = optionsService.options.value.capture.lastRect;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    // Restore saved rect if it fits within current viewport
-    const valid = saved
-      && saved.w >= RECT_MIN_WIDTH && saved.h >= RECT_MIN_HEIGHT
-      && saved.x >= 0 && saved.y >= 0
-      && saved.x + saved.w <= vw && saved.y + saved.h <= vh;
-
-    if (valid) {
-      this.rect = signal(saved);
-    } else {
-      const h = Math.round(RECT_DEFAULT_SIZE * 0.75) & ~1;
-      const x = Math.round((vw - RECT_DEFAULT_SIZE) / 2);
-      const y = Math.round((vh - h) / 2);
-      this.rect = signal({ x, y, w: RECT_DEFAULT_SIZE, h });
-    }
+    const ratio = ASPECT_RATIOS[optionsService.options.value.capture.aspectRatio] ?? null;
+    this.rect = signal(resolveInitialRect(saved, ratio, 0));
     this.totalFrames = computed(() => {
       const { duration, fps } = this.options;
       return Number(duration) * Number(fps);
@@ -441,6 +480,9 @@ export class CaptureService {
     const startY = e.clientY;
     const minY = this.getHeaderHeight();
 
+    const ratio = ASPECT_RATIOS[this.options.aspectRatio] ?? null;
+    const isCardinal = edge.length === 1;
+
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
@@ -453,7 +495,6 @@ export class CaptureService {
         w = Math.max(RECT_MIN_WIDTH, Math.min(vw - x, startRect.w + dx));
       }
       if (edge.includes('w')) {
-        // dx < 0 = drag left = expand, dx > 0 = drag right = shrink
         x = Math.max(0, Math.min(startRect.x + dx, startRect.x + startRect.w - RECT_MIN_WIDTH));
         w = startRect.x + startRect.w - x;
       }
@@ -463,9 +504,49 @@ export class CaptureService {
         h = Math.max(RECT_MIN_HEIGHT, Math.min(vh - y, startRect.h + dy));
       }
       if (edge === 'n' || edge === 'ne' || edge === 'nw') {
-        // dy < 0 = drag up = expand, dy > 0 = drag down = shrink
         y = Math.max(minY, Math.min(startRect.y + dy, startRect.y + startRect.h - RECT_MIN_HEIGHT));
         h = startRect.y + startRect.h - y;
+      }
+
+      // Aspect ratio enforcement
+      if (ratio !== null) {
+        const contentRatio = ratio;  // w/h ratio for content area (inside border)
+
+        if (isCardinal) {
+          // Cardinal edge: dragged axis leads, other axis follows
+          if (edge === 'e' || edge === 'w') {
+            // Width leads → compute height from width
+            const contentW = w - RECT_BORDER * 2;
+            h = Math.round(contentW / contentRatio) + RECT_BORDER * 2;
+            // Clamp height to viewport, adjust width if needed
+            if (y + h > vh) { h = vh - y; w = Math.round((h - RECT_BORDER * 2) * contentRatio) + RECT_BORDER * 2; }
+          } else {
+            // Height leads → compute width from height
+            const contentH = h - RECT_BORDER * 2;
+            w = Math.round(contentH * contentRatio) + RECT_BORDER * 2;
+            // Clamp width to viewport, adjust height if needed
+            if (edge === 'n') {
+              if (x + w > vw) { w = vw - x; h = Math.round((w - RECT_BORDER * 2) / contentRatio) + RECT_BORDER * 2; y = startRect.y + startRect.h - h; }
+            } else {
+              if (x + w > vw) { w = vw - x; h = Math.round((w - RECT_BORDER * 2) / contentRatio) + RECT_BORDER * 2; }
+            }
+          }
+        } else {
+          // Corner: width leads, height follows; anchor is opposite corner
+          const contentW = w - RECT_BORDER * 2;
+          h = Math.round(contentW / contentRatio) + RECT_BORDER * 2;
+          // For north corners, adjust y to keep bottom edge anchored
+          if (edge === 'ne' || edge === 'nw') {
+            y = startRect.y + startRect.h - h;
+            if (y < minY) { y = minY; h = startRect.y + startRect.h - y; w = Math.round((h - RECT_BORDER * 2) * contentRatio) + RECT_BORDER * 2; }
+          }
+          if (y + h > vh) { h = vh - y; w = Math.round((h - RECT_BORDER * 2) * contentRatio) + RECT_BORDER * 2; }
+          // For west corners, adjust x to keep right edge anchored
+          if (edge === 'nw' || edge === 'sw') {
+            x = startRect.x + startRect.w - w;
+            if (x < 0) { x = 0; w = startRect.x + startRect.w; h = Math.round((w - RECT_BORDER * 2) / contentRatio) + RECT_BORDER * 2; }
+          }
+        }
       }
 
       // Snap to even so output dimensions are always even (H.264 requirement)

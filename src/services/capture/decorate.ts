@@ -71,7 +71,7 @@ export function createDecorator(
       ctx.textAlign = 'left';
       ctx.fillText('zero.hypatia.earth', logoW + logoGap, headerH / 2);
 
-      ctx.font = `${headerFont}px monospace`;
+      ctx.font = `300 ${headerFont}px 'IBM Plex Mono', monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(timestamp, w - pad, headerH / 2);
 

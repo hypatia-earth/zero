@@ -1010,6 +1010,24 @@ export const optionsSchema = z.object({
   // Capture (GIF recording)
   // ----------------------------------------------------------
   capture: z.object({
+    aspectRatio: opt(
+      z.enum(['free', '16:9', '4:5', '1:1', '9:16']).default('free'),
+      {
+        label: 'Aspect ratio',
+        description: 'Lock capture rect to aspect ratio',
+        group: 'capture',
+        filter: ['global', 'capture'],
+        order: 0,
+        control: 'radio',
+        options: [
+          { value: 'free', label: 'Free' },
+          { value: '16:9', label: '16:9' },
+          { value: '4:5', label: '4:5' },
+          { value: '1:1', label: '1:1' },
+          { value: '9:16', label: '9:16' },
+        ],
+      }
+    ),
     format: opt(
       z.enum(['gif', 'mp4']).default('gif'),
       {
@@ -1017,7 +1035,7 @@ export const optionsSchema = z.object({
         description: 'Output format for recording',
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 0,
+        order: 1,
         control: 'radio',
         options: [
           { value: 'gif', label: 'GIF' },
@@ -1032,7 +1050,7 @@ export const optionsSchema = z.object({
         description: 'Recording length in seconds',
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 1,
+        order: 2,
         control: 'radio',
         options: [
           { value: '1', label: '1s' },
@@ -1050,7 +1068,7 @@ export const optionsSchema = z.object({
         description: 'Frames per second',
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 2,
+        order: 3,
         control: 'radio',
         options: [
           { value: '15', label: '15' },
@@ -1065,7 +1083,7 @@ export const optionsSchema = z.object({
         description: `Record at device pixel resolution (${typeof window !== 'undefined' ? parseFloat(window.devicePixelRatio.toFixed(2)) : 2}× on this device)`,
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 3,
+        order: 4,
         control: 'toggle',
       }
     ),
@@ -1076,7 +1094,7 @@ export const optionsSchema = z.object({
         description: 'Color quantization strategy for GIF encoding',
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 4,
+        order: 5,
         control: 'radio',
         disabledWhen: { path: 'capture.format', equals: 'mp4' },
         options: [
@@ -1093,7 +1111,7 @@ export const optionsSchema = z.object({
         description: 'Show location label in exported media',
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 5,
+        order: 6,
         control: 'toggle',
       }
     ),
@@ -1212,7 +1230,7 @@ export const defaultOptions: ZeroOptions = {
   pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
-  capture: { duration: '1', fps: '15', nativeDpr: false, paletteMode: 'fast', format: 'gif', label: true, lastRect: null },
+  capture: { aspectRatio: 'free', duration: '1', fps: '15', nativeDpr: false, paletteMode: 'fast', format: 'gif', label: true, lastRect: null },
   debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1', showLogo: true },
 };
 
