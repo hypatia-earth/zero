@@ -132,7 +132,8 @@ async function runBootstrapInner(
   // Capture service — all deps available after GPU init
   services.captureService = createCaptureService(
     foundation.optionsService, foundation.stateService,
-    services.queueService.queueStats, services.auroraService
+    services.queueService.queueStats, services.auroraService,
+    services.queueService, services.timestepService
   );
 
   // Send custom layers to worker (loaded from IDB in config phase, enabled state set by sanitize)

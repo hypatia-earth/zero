@@ -21,6 +21,7 @@ import './styles/controls.css';
 import './styles/dialogs.css';
 import './styles/widgets.css';
 import './styles/capture.css';
+import './styles/capture-bar.css';
 
 import { App } from './app';
 

@@ -52,7 +52,27 @@ function isInteractive(target: EventTarget | null): boolean {
 }
 
 export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
+  let pointerUpHandler: ((e: PointerEvent) => void) | null = null;
+
   return {
+    oncreate({ attrs }) {
+      // In animated mode, update active keyframe camera on pointerup (after drag)
+      pointerUpHandler = (_e: PointerEvent) => {
+        if (attrs.captureService.captureType.value === 'animated' &&
+            attrs.captureService.activeKeyframeId.value !== null) {
+          attrs.captureService.updateActiveKeyframeCamera();
+        }
+      };
+      document.addEventListener('pointerup', pointerUpHandler);
+    },
+
+    onremove() {
+      if (pointerUpHandler) {
+        document.removeEventListener('pointerup', pointerUpHandler);
+        pointerUpHandler = null;
+      }
+    },
+
     view({ attrs }) {
       const { captureService, dialogService, optionsService } = attrs;
       const mode = captureService.mode.value;
@@ -67,6 +87,7 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
       const isReady = mode === 'ready';
       const isBusy = isCapturing || isProcessing;
       const isLocked = isBusy || isDone;
+      const isAnimated = captureService.captureType.value === 'animated';
       const borderColor = isBusy ? '#cc4444' : isDone ? '#000000' : '#44cc66';
 
       // Compute output dimensions for display
@@ -77,12 +98,17 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
       const outW = captureOpts.nativeDpr ? Math.round(contentW * dpr) & ~1 : contentW;
       const outH = captureOpts.nativeDpr ? Math.round(contentH * dpr) & ~1 : contentH;
 
-      return m('.capture-overlay', [
+      // In animated mode: overlay background is pointer-events:none so canvas receives events.
+      // Header, rect border, and capture-container get pointer-events:auto explicitly.
+      return m('.capture-overlay', {
+        style: isAnimated ? { pointerEvents: 'none' } : undefined,
+      }, [
         m('.capture-container', {
           style: {
             left: `${rect.x}px`,
             top: `${rect.y}px`,
             width: `${rect.w}px`,
+            ...(isAnimated ? { pointerEvents: 'auto' } : {}),
           },
           // Move drag from any inner surface (except interactive elements)
           onpointerdown: isLocked ? undefined : (e: PointerEvent) => {
@@ -94,6 +120,11 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
           // Header bar
           m('.capture-header', [
             m('span.capture-label', `${format.toUpperCase()} Capture`),
+            // Toggle simple/animated button (ready mode only)
+            isReady ? m('button.capture-type-toggle', {
+              onclick: () => captureService.toggleCaptureType(),
+              title: isAnimated ? 'Switch to simple capture' : 'Switch to animated capture',
+            }, isAnimated ? '\u25B6' : '\u23F1') : null,
             isDone
               ? m('button.btn.btn-primary.capture-record', {
                   onclick: () => {
@@ -109,7 +140,7 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
                 : m('button.btn.btn-primary.capture-record', {
                     onclick: () => captureService.record(),
                     disabled: !captureService.isQueueIdle ||
-                      (isGif && captureOpts.paletteMode !== 'grayscale' && !palette),
+                      (!isAnimated && isGif && captureOpts.paletteMode !== 'grayscale' && !palette),
                   }, 'Record'),
             m('button.capture-settings-btn', {
               onclick: () => dialogService.open('options', { filter: 'capture' }),
@@ -120,8 +151,8 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
             }, '\u2715'),
           ]),
 
-          // Palette stripe (GIF mode only, hidden in done mode)
-          isGif && palette && !isDone ? m('.capture-palette-stripe',
+          // Palette stripe (GIF mode only, hidden in done mode and animated mode)
+          isGif && palette && !isDone && !isAnimated ? m('.capture-palette-stripe',
             m('canvas', {
               height: 16,
               oncreate(vnode: m.VnodeDOM) {
@@ -147,15 +178,18 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
               })
             ) : []),
 
-            // Content area (move handle)
+            // Content area (move handle, pointer-events:none in animated for canvas passthrough)
             m('.capture-content', {
-              style: { cursor: isLocked ? 'default' : undefined },
+              style: {
+                cursor: isLocked ? 'default' : undefined,
+                ...(isAnimated && !isLocked && !isDone ? { pointerEvents: 'none' } : {}),
+              },
             }, [
               // Dimensions display (ready mode)
               isReady ? m('span.capture-dimensions', `${outW} \u00d7 ${outH}`) : null,
 
               // Waiting label (ready mode, below dimensions)
-              isReady && (!captureService.isQueueIdle || (isGif && captureOpts.paletteMode !== 'grayscale' && !palette))
+              isReady && !isAnimated && (!captureService.isQueueIdle || (isGif && captureOpts.paletteMode !== 'grayscale' && !palette))
                 ? m('span.capture-waiting', [
                     'Waiting for ',
                     [

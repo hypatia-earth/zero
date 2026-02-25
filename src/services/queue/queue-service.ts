@@ -6,7 +6,7 @@
  * Single source of truth for all pending downloads.
  */
 
-import { computed, effect } from '@preact/signals-core';
+import { computed, effect, signal } from '@preact/signals-core';
 import type { FileOrder, IQueueService, TimestepOrder, OmSlice, QueueTask, TLayer } from '../../config/types';
 import { fetchStreaming } from '../../utils/fetch';
 import { sortByTimestep } from './sorter';
@@ -44,6 +44,9 @@ export class QueueService implements IQueueService {
   // Stats tracking (bandwidth, ETA, compression learning)
   private readonly statsTracker = new QueueStatsTracker();
   readonly queueStats = this.statsTracker.stats;
+
+  /** When true, reactive effect skips — no new downloads or evictions */
+  readonly paused = signal(false);
 
   // Timestep queue (replaceable)
   private timestepQueue: QueuedTimestepOrder[] = [];
@@ -97,6 +100,7 @@ export class QueueService implements IQueueService {
 
     this.disposeEffect = effect(() => {
       const params = this.qsParams.value;
+      if (this.paused.value) return;
       const curr = {
         time: params.time.toISOString().slice(11, 16),
         pool: params.poolSize,

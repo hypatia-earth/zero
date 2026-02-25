@@ -8,14 +8,17 @@
  */
 
 import m from 'mithril';
-import { signal, computed, type Signal, type ReadonlySignal } from '@preact/signals-core';
+import { signal, computed, effect, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import { extractPalette, createGifSession } from './gif';
 import { createMp4Session } from './mp4';
 import { reverseGeocode } from './location';
 import { loadLogo, createDecorator } from './decorate';
+import { createKeyframe, interpolateCamera, type CameraKeyframe } from './keyframe';
 import type { AuroraService } from '../aurora-service';
 import type { StateService } from '../state-service';
 import type { OptionsService } from '../options-service';
+import type { QueueService } from '../queue/queue-service';
+import type { TimestepService } from '../timestep/timestep-service';
 import type { QueueStats } from '../../config/types';
 
 const RECT_BORDER = 2;
@@ -78,6 +81,7 @@ function resolveInitialRect(
 }
 
 type CaptureMode = 'off' | 'ready' | 'capturing' | 'processing' | 'done';
+export type CaptureType = 'simple' | 'animated';
 type Edge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 interface Rect {
   x: number;
@@ -88,6 +92,7 @@ interface Rect {
 
 export class CaptureService {
   readonly mode: Signal<CaptureMode> = signal('off');
+  readonly captureType: Signal<CaptureType> = signal('simple');
   readonly rect: Signal<Rect>;
   readonly frameIndex: Signal<number> = signal(0);
   readonly totalFrames: ReadonlySignal<number>;
@@ -97,7 +102,20 @@ export class CaptureService {
   private readonly optionsService: OptionsService;
   private readonly stateService: StateService;
   private readonly auroraService: AuroraService;
+  readonly queueService: QueueService;
+  readonly timestepService: TimestepService;
   private readonly queueStats: Signal<QueueStats>;
+  // Keyframe state (animated mode)
+  readonly keyframes: Signal<CameraKeyframe[]> = signal([]);
+  readonly activeKeyframeId: Signal<number | null> = signal(null);
+  dataWindowStart = 0;
+  dataWindowEnd = 0;
+
+  // Dry run state
+  readonly dryRunning: Signal<boolean> = signal(false);
+  private dryRunAborted = false;
+
+  private disposeTimeClamp: (() => void) | null = null;
   private paletteCanvas: OffscreenCanvas | null = null;
   private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
   private captureDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -114,11 +132,15 @@ export class CaptureService {
     stateService: StateService,
     queueStats: Signal<QueueStats>,
     auroraService: AuroraService,
+    queueService: QueueService,
+    timestepService: TimestepService,
   ) {
     this.optionsService = optionsService;
     this.stateService = stateService;
     this.queueStats = queueStats;
     this.auroraService = auroraService;
+    this.queueService = queueService;
+    this.timestepService = timestepService;
     auroraService.onExportFrame = (bitmap: ImageBitmap) => this.onPreviewFrame(bitmap);
 
     const saved = optionsService.options.value.capture.lastRect;
@@ -140,9 +162,206 @@ export class CaptureService {
 
   // ── Mode transitions ──────────────────────────────────────────────
 
+  toggleCaptureType(): void {
+    if (this.mode.value !== 'ready') return;
+    if (this.captureType.value === 'simple') {
+      this.enterAnimatedMode();
+    } else {
+      this.exitAnimatedMode();
+    }
+    m.redraw();
+  }
+
+  private enterAnimatedMode(): void {
+    // Query loaded time range from timestepService
+    const ts = this.timestepService;
+    const firstMs = ts.toDate(ts.first()).getTime();
+    const lastMs = ts.toDate(ts.last()).getTime();
+    this.dataWindowStart = firstMs;
+    this.dataWindowEnd = lastMs;
+
+    // Create start/end keyframes with current camera
+    const cam = this.auroraService.getCamera().getState();
+    const startKf = createKeyframe(firstMs, cam, true);
+    const endKf = createKeyframe(lastMs, cam, true);
+    this.keyframes.value = [startKf, endKf];
+    this.activeKeyframeId.value = null;
+
+    // Pause queue
+    this.queueService.paused.value = true;
+
+    // Install time clamp effect — clamps viewState.time to data window
+    this.disposeTimeClamp = effect(() => {
+      const timeMs = this.stateService.viewState.value.time.getTime();
+      if (timeMs < this.dataWindowStart) {
+        this.stateService.setTime(new Date(this.dataWindowStart));
+      } else if (timeMs > this.dataWindowEnd) {
+        this.stateService.setTime(new Date(this.dataWindowEnd));
+      }
+    });
+
+    this.captureType.value = 'animated';
+  }
+
+  private exitAnimatedMode(): void {
+    // Dispose time clamp
+    this.disposeTimeClamp?.();
+    this.disposeTimeClamp = null;
+
+    // Resume queue
+    this.queueService.paused.value = false;
+
+    // Clear keyframes
+    this.keyframes.value = [];
+    this.activeKeyframeId.value = null;
+
+    this.captureType.value = 'simple';
+  }
+
+  // ── Keyframe management ────────────────────────────────────────────
+
+  private static readonly MAX_KEYFRAMES = 10;
+
+  addKeyframe(timeMs: number): void {
+    if (this.captureType.value !== 'animated') return;
+    const kfs = this.keyframes.value;
+    if (kfs.length >= CaptureService.MAX_KEYFRAMES) return;
+
+    const cam = this.auroraService.getCamera().getState();
+    const kf = createKeyframe(timeMs, cam, false);
+    const updated = [...kfs, kf].sort((a, b) => a.time - b.time);
+    this.keyframes.value = updated;
+    this.activeKeyframeId.value = kf.id;
+    m.redraw();
+  }
+
+  activateKeyframe(id: number): void {
+    const kf = this.keyframes.value.find(k => k.id === id);
+    if (!kf) return;
+    this.activeKeyframeId.value = id;
+    // Snap time and camera to keyframe values
+    this.stateService.setTime(new Date(kf.time));
+    this.auroraService.setCameraPosition(kf.lat, kf.lon, kf.distance);
+    m.redraw();
+  }
+
+  deactivateKeyframe(): void {
+    this.activeKeyframeId.value = null;
+    m.redraw();
+  }
+
+  toggleKeyframe(id: number): void {
+    if (this.activeKeyframeId.value === id) {
+      this.deactivateKeyframe();
+    } else {
+      this.activateKeyframe(id);
+    }
+  }
+
+  moveKeyframe(id: number, newTimeMs: number): void {
+    const kfs = this.keyframes.value;
+    const idx = kfs.findIndex(k => k.id === id);
+    if (idx < 0) return;
+
+    // Constrain between neighbor keyframes (can't reorder)
+    const prevTime = idx > 0 ? kfs[idx - 1]!.time : this.dataWindowStart;
+    const nextTime = idx < kfs.length - 1 ? kfs[idx + 1]!.time : this.dataWindowEnd;
+    const clamped = Math.max(prevTime, Math.min(nextTime, newTimeMs));
+
+    const updated = kfs.map(k => k.id === id ? { ...k, time: clamped } : k);
+    this.keyframes.value = updated;
+
+    // If active, also set time
+    if (this.activeKeyframeId.value === id) {
+      this.stateService.setTime(new Date(clamped));
+    }
+    m.redraw();
+  }
+
+  deleteActiveKeyframe(): void {
+    const activeId = this.activeKeyframeId.value;
+    if (activeId === null) return;
+    const kf = this.keyframes.value.find(k => k.id === activeId);
+    if (!kf || kf.pinned) return;
+
+    this.keyframes.value = this.keyframes.value.filter(k => k.id !== activeId);
+    this.activeKeyframeId.value = null;
+    m.redraw();
+  }
+
+  updateActiveKeyframeCamera(): void {
+    const activeId = this.activeKeyframeId.value;
+    if (activeId === null) return;
+    const cam = this.auroraService.getCamera().getState();
+    this.keyframes.value = this.keyframes.value.map(k =>
+      k.id === activeId ? { ...k, lat: cam.lat, lon: cam.lon, distance: cam.distance } : k
+    );
+  }
+
+  // ── Dry run ─────────────────────────────────────────────────────
+
+  async dryRun(): Promise<void> {
+    if (this.captureType.value !== 'animated') return;
+    if (this.keyframes.value.length < 2) return;
+    if (this.dryRunning.value) return;
+
+    const aurora = this.auroraService;
+    const camera = aurora.getCamera();
+    const kfs = this.keyframes.value;
+    const { fps: fpsStr, duration: durStr } = this.options;
+    const fps = Number(fpsStr);
+    const totalFrames = Number(durStr) * fps;
+    const startTime = kfs[0]!.time;
+    const endTime = kfs[kfs.length - 1]!.time;
+    const totalMinutes = (endTime - startTime) / 60000;
+    const framesPerMinute = totalMinutes > 0 ? totalFrames / totalMinutes : totalFrames;
+
+    this.dryRunning.value = true;
+    this.dryRunAborted = false;
+    this.frameIndex.value = 0;
+    this.activeKeyframeId.value = null;
+    aurora.recording = true;
+
+    try {
+      for (let i = 0; i < totalFrames; i++) {
+        if (this.dryRunAborted) break;
+
+        // Compute weather time (minute-stepped)
+        const weatherTime = totalMinutes > 0
+          ? startTime + Math.floor(i / framesPerMinute) * 60000
+          : startTime;
+
+        // Interpolate camera
+        const cam = interpolateCamera(kfs, weatherTime);
+
+        // Apply to camera and state
+        this.stateService.setTime(new Date(weatherTime));
+        camera.setPosition(cam.lat, cam.lon, cam.distance);
+        camera.update();
+
+        // Render frame
+        const snapshot = aurora.getCameraSnapshot();
+        aurora.send({ type: 'render', camera: snapshot, time: weatherTime });
+        await aurora.waitForFrameComplete();
+
+        this.frameIndex.value = i + 1;
+        m.redraw();
+      }
+    } finally {
+      aurora.recording = false;
+      this.dryRunning.value = false;
+      m.redraw();
+    }
+  }
+
+  abortDryRun(): void {
+    this.dryRunAborted = true;
+  }
+
   enter(): void {
     if (this.mode.value !== 'off') return;
     this.mode.value = 'ready';
+    this.captureType.value = 'simple';
     this.frameIndex.value = 0;
     this.palette.value = null;
     this.installEscapeHandler();
@@ -155,7 +374,9 @@ export class CaptureService {
   record(): void {
     if (this.mode.value !== 'ready') return;
     if (!this.isQueueIdle) return;
-    if (this.options.format === 'gif' && this.options.paletteMode !== 'grayscale' && !this.palette.value) return;
+    // In simple mode, GIF requires palette (except grayscale)
+    if (this.captureType.value === 'simple' &&
+        this.options.format === 'gif' && this.options.paletteMode !== 'grayscale' && !this.palette.value) return;
     // Cancel pending preview capture to prevent stale exportFrame during capturing
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
     // Persist rect for next session
@@ -163,7 +384,11 @@ export class CaptureService {
     this.mode.value = 'capturing';
     this.frameIndex.value = 0;
     this.aborted = false;
-    this.runRecordingLoop();
+    if (this.captureType.value === 'animated') {
+      this.runAnimatedRecordingLoop();
+    } else {
+      this.runRecordingLoop();
+    }
     m.redraw();
   }
 
@@ -178,6 +403,15 @@ export class CaptureService {
     if (this.mode.value === 'capturing' || this.mode.value === 'processing') this.aborted = true;
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
     if (this.locationDebounce) { clearTimeout(this.locationDebounce); this.locationDebounce = null; }
+    // Clean up animated mode state
+    this.disposeTimeClamp?.();
+    this.disposeTimeClamp = null;
+    if (this.captureType.value === 'animated') {
+      this.queueService.paused.value = false;
+    }
+    this.keyframes.value = [];
+    this.activeKeyframeId.value = null;
+    this.captureType.value = 'simple';
     this.mode.value = 'off';
     this.frameIndex.value = 0;
     this.palette.value = null;
@@ -304,6 +538,133 @@ export class CaptureService {
       aurora.recording = false;
       aurora.onRecordProgress = null;
       aurora.onRecordBatchComplete = null;
+      m.redraw();
+    }
+  }
+
+  private buildAnimatedFilename(startMs: number, endMs: number): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const fmt = (ms: number) => {
+      const d = new Date(ms);
+      return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}UTC`;
+    };
+    const loc = this.locationLabel.value.trim().replace(/[<>:"/\\|?*]+/g, '');
+    const ext = this.options.format;
+    const range = `${fmt(startMs)}-${fmt(endMs)}`;
+    return loc
+      ? `zero.hypatia-${range}-${loc}.${ext}`
+      : `zero.hypatia-${range}.${ext}`;
+  }
+
+  private static formatTimestamp(ms: number): string {
+    const d = new Date(ms);
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC`;
+  }
+
+  private async runAnimatedRecordingLoop(): Promise<void> {
+    const aurora = this.auroraService;
+    const camera = aurora.getCamera();
+    const kfs = this.keyframes.value;
+    const { format, fps: fpsStr, paletteMode } = this.options;
+    const fps = Number(fpsStr);
+    const totalFrames = this.totalFrames.value;
+    const startTime = kfs[0]!.time;
+    const endTime = kfs[kfs.length - 1]!.time;
+    const totalMinutes = (endTime - startTime) / 60000;
+    const framesPerMinute = totalMinutes > 0 ? totalFrames / totalMinutes : totalFrames;
+
+    aurora.recording = true;
+    this.activeKeyframeId.value = null;
+
+    try {
+      // Phase 1: capture bitmaps frame by frame
+      const bitmaps: ImageBitmap[] = [];
+      const frameTimes: number[] = [];
+
+      for (let i = 0; i < totalFrames; i++) {
+        if (this.aborted) break;
+
+        // Compute weather time (minute-stepped)
+        const weatherTime = totalMinutes > 0
+          ? startTime + Math.floor(i / framesPerMinute) * 60000
+          : startTime;
+
+        // Interpolate camera
+        const cam = interpolateCamera(kfs, weatherTime);
+
+        // Apply to camera and state
+        this.stateService.setTime(new Date(weatherTime));
+        camera.setPosition(cam.lat, cam.lon, cam.distance);
+        camera.update();
+
+        // Arm deferred capture, then render
+        aurora.send({ type: 'captureFrame' });
+        const snapshot = aurora.getCameraSnapshot();
+        aurora.send({ type: 'render', camera: snapshot, time: weatherTime });
+
+        const bitmap = await aurora.waitForExportFrame();
+        bitmaps.push(bitmap);
+        frameTimes.push(weatherTime);
+
+        this.frameIndex.value = i + 1;
+        m.redraw();
+      }
+
+      if (this.aborted) {
+        for (const bmp of bitmaps) bmp.close();
+        this.mode.value = 'ready';
+        return;
+      }
+
+      // Phase 2: processing (crop + decorate + encode)
+      this.mode.value = 'processing';
+      this.frameIndex.value = 0;
+      m.redraw();
+
+      const { w: outW, h: outH } = this.getOutputDimensions();
+
+      // Build decorator
+      const label = this.options.label ? this.locationLabel.value : '';
+      const baseTimestamp = CaptureService.formatTimestamp(startTime);
+      const logo = await loadLogo();
+      const scale = outW / this.rect.value.w;
+      const decorator = createDecorator(outW, outH, label, baseTimestamp, logo, scale);
+
+      const comment = `zero.hypatia.earth | ${baseTimestamp}${label ? ` | ${label}` : ''}\nData: ECMWF IFS \u00b7 CC BY 4.0`;
+      const title = label ? `Weather \u2014 ${label}` : `Weather \u2014 ${baseTimestamp}`;
+      const session = format === 'mp4'
+        ? createMp4Session(fps, outW, outH, { title, timestamp: baseTimestamp, label, comment })
+        : createGifSession(fps, paletteMode, this.palette.value, comment);
+
+      for (let i = 0; i < bitmaps.length; i++) {
+        if (this.aborted) {
+          for (let j = i; j < bitmaps.length; j++) bitmaps[j]!.close();
+          break;
+        }
+        const rgba = this.cropBitmap(bitmaps[i]!, outW, outH);
+        const frameTs = CaptureService.formatTimestamp(frameTimes[i]!);
+        const decorated = decorator.decorate(rgba, frameTs);
+        session.addFrame(decorated, outW, outH);
+        this.frameIndex.value = i + 1;
+        m.redraw();
+        await new Promise<void>(r => setTimeout(r, 0));
+      }
+
+      if (!this.aborted) {
+        const blob = await session.finish();
+        this.revokeDownloadUrl();
+        this.downloadBlob = blob;
+        this.downloadUrl = URL.createObjectURL(blob);
+        this.downloadName = this.buildAnimatedFilename(startTime, endTime);
+        const mb = blob.size / (1024 * 1024);
+        this.downloadSize = mb >= 1 ? `${mb.toFixed(1)}MB` : `${(blob.size / 1024).toFixed(0)}KB`;
+        this.mode.value = 'done';
+      } else {
+        this.mode.value = 'ready';
+      }
+    } finally {
+      aurora.recording = false;
       m.redraw();
     }
   }

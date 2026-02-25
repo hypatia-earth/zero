@@ -1,0 +1,116 @@
+/**
+ * CaptureBar - Timeline track for animated capture mode
+ */
+
+.capture-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 36;
+  pointer-events: auto;
+  padding: 8px 16px;
+  background: rgba(20, 25, 35, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ── Button row ──────────────────────────────────────────────────── */
+
+.capture-bar-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.capture-bar-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  padding: 4px 10px;
+  transition: background 0.15s;
+}
+
+.capture-bar-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.capture-bar-btn.danger {
+  border-color: rgba(204, 68, 68, 0.4);
+  color: #ee6666;
+}
+
+@media (hover: hover) {
+  .capture-bar-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.2);
+  }
+  .capture-bar-btn.danger:hover:not(:disabled) {
+    background: rgba(204, 68, 68, 0.2);
+  }
+}
+
+.capture-bar-progress {
+  font-size: var(--font-size-xs);
+  font-family: monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+
+/* ── Track ───────────────────────────────────────────────────────── */
+
+.capture-bar-track {
+  position: relative;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  cursor: crosshair;
+}
+
+/* ── Time indicator ──────────────────────────────────────────────── */
+
+.capture-bar-time-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── Keyframe markers ────────────────────────────────────────────── */
+
+.capture-bar-keyframe {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  z-index: 2;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.capture-bar-keyframe.pinned {
+  background: rgba(100, 200, 255, 0.7);
+}
+
+.capture-bar-keyframe.active {
+  background: #44cc66;
+  box-shadow: 0 0 8px rgba(68, 204, 102, 0.6);
+}
+
+@media (hover: hover) {
+  .capture-bar-keyframe:hover {
+    background: rgba(255, 255, 255, 0.8);
+  }
+  .capture-bar-keyframe.active:hover {
+    background: #55dd77;
+  }
+}

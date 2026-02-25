@@ -24,8 +24,9 @@ export function loadLogo(): Promise<ImageBitmap> {
 }
 
 export interface Decorator {
-  /** Decorate a cropped RGBA frame, returns decorated RGBA (same dimensions) */
-  decorate(rgba: Uint8ClampedArray): Uint8ClampedArray;
+  /** Decorate a cropped RGBA frame, returns decorated RGBA (same dimensions).
+   *  Optional timestampOverride replaces baked-in timestamp (for animated capture). */
+  decorate(rgba: Uint8ClampedArray, timestampOverride?: string): Uint8ClampedArray;
 }
 
 /** Create a decorator. Scale > 1 for nativeDpr (e.g. 2 on Retina). */
@@ -56,7 +57,9 @@ export function createDecorator(
   const logoGap = Math.round(10 * scale);
 
   return {
-    decorate(rgba: Uint8ClampedArray): Uint8ClampedArray {
+    decorate(rgba: Uint8ClampedArray, timestampOverride?: string): Uint8ClampedArray {
+      const ts = timestampOverride ?? timestamp;
+
       // ── Content ──
       const imageData = ctx.createImageData(w, h);
       imageData.data.set(rgba);
@@ -75,7 +78,7 @@ export function createDecorator(
 
       ctx.font = `300 ${headerFont}px 'IBM Plex Mono', monospace`;
       ctx.textAlign = 'right';
-      ctx.fillText(timestamp, w - pad, headerH / 2);
+      ctx.fillText(ts, w - pad, headerH / 2);
 
       // ── Attribution (above footer) ──
       ctx.fillStyle = '#ffffff';

@@ -174,7 +174,9 @@ export function createCaptureService(
   optionsService: OptionsService,
   stateService: StateService,
   queueStats: Signal<QueueStats>,
-  auroraService: AuroraService
+  auroraService: AuroraService,
+  queueService: QueueService,
+  timestepService: TimestepService
 ): CaptureService {
-  return new CaptureService(optionsService, stateService, queueStats, auroraService);
+  return new CaptureService(optionsService, stateService, queueStats, auroraService, queueService, timestepService);
 }

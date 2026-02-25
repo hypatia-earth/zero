@@ -69,6 +69,8 @@ export interface AuroraService {
   onRecordBatchComplete: ((bitmaps: ImageBitmap[]) => void) | null;
   getCameraSnapshot(): CameraSnapshot;
   send(msg: AuroraRequest, transfer?: Transferable[]): void;
+  waitForFrameComplete(): Promise<void>;
+  waitForExportFrame(): Promise<ImageBitmap>;
 }
 
 export function createAuroraService(
@@ -89,6 +91,10 @@ export function createAuroraService(
   let onExportFrame: ((bitmap: ImageBitmap) => void) | null = null;
   let onRecordProgress: ((frameIndex: number) => void) | null = null;
   let onRecordBatchComplete: ((bitmaps: ImageBitmap[]) => void) | null = null;
+
+  // Promise resolvers for frame-by-frame control
+  let frameCompleteResolve: (() => void) | null = null;
+  let exportFrameResolve: ((bitmap: ImageBitmap) => void) | null = null;
 
   // Render loop state
   let renderInFlight = false;
@@ -145,12 +151,23 @@ export function createAuroraService(
         break;
       case 'frameComplete':
         onFrameComplete?.(msg.timing, msg.memoryMB);
+        if (frameCompleteResolve) {
+          const resolve = frameCompleteResolve;
+          frameCompleteResolve = null;
+          resolve();
+        }
         break;
       case 'error':
         console.error('[Aurora]', msg.message);
         break;
       case 'exportFrame':
-        onExportFrame?.(msg.bitmap);
+        if (exportFrameResolve) {
+          const resolve = exportFrameResolve;
+          exportFrameResolve = null;
+          resolve(msg.bitmap);
+        } else {
+          onExportFrame?.(msg.bitmap);
+        }
         break;
       case 'recordProgress':
         onRecordProgress?.(msg.frameIndex);
@@ -397,6 +414,18 @@ export function createAuroraService(
         eye: new Float32Array(cam.getEyePosition()),
         tanFov: cam.getTanFov(),
       };
+    },
+
+    waitForFrameComplete(): Promise<void> {
+      return new Promise(resolve => {
+        frameCompleteResolve = resolve;
+      });
+    },
+
+    waitForExportFrame(): Promise<ImageBitmap> {
+      return new Promise(resolve => {
+        exportFrameResolve = resolve;
+      });
     },
 
     cleanup(): void {

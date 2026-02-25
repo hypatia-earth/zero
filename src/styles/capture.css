@@ -89,6 +89,27 @@
   color: #ffffff;
 }
 
+/* ── Type toggle button (simple / animated) ──────────────────────── */
+
+.capture-type-toggle {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  padding: 3px 8px;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+@media (hover: hover) {
+  .capture-type-toggle:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+}
+
 /* ── Record / Stop / New button (uses .btn .btn-primary / .btn-danger) ── */
 
 .capture-record {

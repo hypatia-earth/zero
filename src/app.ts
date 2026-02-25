@@ -23,6 +23,7 @@ import { OptionsPanel } from './components/options-panel';
 import { FullscreenPanel } from './components/fullscreen-panel';
 import { CapturePanel } from './components/capture-panel';
 import { CaptureOverlay } from './components/capture-overlay';
+import { CaptureBar } from './components/capture-bar';
 import { PanelStack } from './components/panel-stack';
 import { CreateLayerDialog } from './components/create-layer-dialog';
 import { Modal } from './components/modal';
@@ -54,6 +55,7 @@ export const App: m.ClosureComponent = () => {
       const ready = state.complete && !state.error;
       const minimal = ready && services.stateService!.minimalUI.value;
       const captureActive = ready && services.captureService!.mode.value !== 'off';
+      const captureAnimated = captureActive && services.captureService!.captureType.value === 'animated';
 
       return [
         m(BootstrapModal, {
@@ -91,7 +93,7 @@ export const App: m.ClosureComponent = () => {
               }),
             ]),
             m(PanelStack, { side: 'right' }, [
-              m(TimeCirclePanel, { stateService: services.stateService! }),
+              !captureAnimated && m(TimeCirclePanel, { stateService: services.stateService! }),
               !minimal && !captureActive && services.optionsService!.options.value.debug.showPerfPanel &&
                 m(PerfPanel, {
                   optionsService: services.optionsService!,
@@ -121,6 +123,7 @@ export const App: m.ClosureComponent = () => {
             }),
           ]),
           captureActive && m(CaptureOverlay, { captureService: services.captureService!, dialogService: services.dialogService!, optionsService: services.optionsService! }),
+          captureAnimated && m(CaptureBar, { captureService: services.captureService!, stateService: services.stateService! }),
         ] : []),
       ];
     },
