@@ -147,14 +147,6 @@ export class CaptureService {
     const ratio = ASPECT_RATIOS[optionsService.options.value.capture.aspectRatio] ?? null;
     this.rect = signal(resolveInitialRect(saved, ratio, 0));
     this.totalFrames = computed(() => {
-      if (this.captureType.value === 'animated') {
-        const kfs = this.keyframes.value;
-        if (kfs.length < 2) return 0;
-        const startTime = kfs[0]!.time;
-        const endTime = kfs[kfs.length - 1]!.time;
-        const totalMinutes = (endTime - startTime) / 60_000;
-        return Math.ceil(totalMinutes * Number(this.options.fps));
-      }
       const { duration, fps } = this.options;
       return Number(duration) * Number(fps);
     });
@@ -431,6 +423,8 @@ export class CaptureService {
 
     // Grab DOM elements for direct update (avoid m.redraw() per frame)
     const timeIndicator = document.querySelector('.capture-bar-time-indicator') as HTMLElement | null;
+    const frameDuration = 1000 / Number(this.options.fps);
+    const runStart = performance.now();
 
     try {
       for (let i = 0; i < totalFrames; i++) {
@@ -461,6 +455,11 @@ export class CaptureService {
         const snapshot = aurora.getCameraSnapshot();
         aurora.send({ type: 'render', camera: snapshot, time: weatherTime });
         await aurora.waitForFrameComplete();
+
+        // 3. Pace to absolute timeline
+        const targetTime = runStart + (i + 1) * frameDuration;
+        const wait = targetTime - performance.now();
+        if (wait > 0) await new Promise(r => setTimeout(r, wait));
       }
     } finally {
       const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
