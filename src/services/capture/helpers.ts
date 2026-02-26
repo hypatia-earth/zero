@@ -67,6 +67,12 @@ export function formatTimeHHMM(ms: number): string {
   return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
 }
 
+/** "MM:SS" — anim elapsed time from duration in ms */
+export function formatElapsedMMSS(ms: number): string {
+  const totalSec = Math.round(ms / 1000);
+  return `${pad2(Math.floor(totalSec / 60))}:${pad2(totalSec % 60)}`;
+}
+
 // ── Pixel math ───────────────────────────────────────────────
 
 /** Snap to nearest even number (H.264 requires even dimensions) */

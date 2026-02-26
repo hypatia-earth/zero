@@ -1,5 +1,7 @@
 /**
  * CaptureBar - Timeline track for animated capture mode
+ *
+ * 3-row layout: weather times, track, anim times
  */
 
 .capture-bar {
@@ -11,7 +13,7 @@
   max-width: 90%;
   z-index: 36;
   pointer-events: auto;
-  padding: 8px 16px 26px;
+  padding: 8px 32px;
   background: #000;
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 21px;
@@ -65,14 +67,71 @@
   margin-left: auto;
 }
 
-/* ── Track ───────────────────────────────────────────────────────── */
+/* ── 3-row timeline ─────────────────────────────────────────────── */
+
+.capture-bar-timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Row 1 & 3: Time label rows ─────────────────────────────────── */
+
+.capture-bar-row {
+  position: relative;
+  height: 20px;
+}
+
+.capture-bar-time-label {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: var(--font-size-sm);
+  font-family: monospace;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  pointer-events: none;
+  line-height: 20px;
+}
+
+.capture-bar-time-label.active {
+  color: #44cc66;
+}
+
+/* ── Row 2: Track ───────────────────────────────────────────────── */
 
 .capture-bar-track {
   position: relative;
-  height: 32px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 4px;
+  height: 20px;
   cursor: crosshair;
+}
+
+/* Horizontal line through center */
+.capture-bar-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+/* Vertical bars at start/end */
+.capture-bar-edge-bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+.capture-bar-edge-bar.left {
+  left: 0;
+}
+
+.capture-bar-edge-bar.right {
+  right: 0;
 }
 
 /* ── Time indicator ──────────────────────────────────────────────── */
@@ -115,44 +174,6 @@
 .capture-bar-keyframe.deleting {
   background: #cc4444;
   box-shadow: 0 0 8px rgba(204, 68, 68, 0.6);
-}
-
-/* ── Keyframe time labels ─────────────────────────────────────────── */
-
-.capture-bar-kf-label {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%) rotate(-45deg);
-  margin-top: 6px;
-  font-size: 9px;
-  font-family: monospace;
-  color: rgba(255, 255, 255, 0.7);
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.capture-bar-keyframe.active .capture-bar-kf-label {
-  color: #44cc66;
-}
-
-/* ── Data window edge labels ─────────────────────────────────────── */
-
-.capture-bar-edge-label {
-  position: absolute;
-  bottom: -18px;
-  font-size: 9px;
-  font-family: monospace;
-  color: rgba(255, 255, 255, 0.35);
-  pointer-events: none;
-}
-
-.capture-bar-edge-label.left {
-  left: 0;
-}
-
-.capture-bar-edge-label.right {
-  right: 0;
 }
 
 @media (hover: hover) {
