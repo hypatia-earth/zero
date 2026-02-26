@@ -229,6 +229,12 @@ export class KeyframeManager {
   add(timeMs: number): void {
     const kfs = this.keyframes.value;
     if (kfs.length >= KeyframeManager.MAX) return;
+    // Clamp to start/end keyframe range
+    if (kfs.length >= 2) {
+      const first = kfs[0]!.time;
+      const last = kfs[kfs.length - 1]!.time;
+      if (timeMs <= first || timeMs >= last) return;
+    }
     const state = this.cam.getCamera().getState();
     const kf = createKeyframe(timeMs, state, false);
     this.keyframes.value = [...kfs, kf].sort((a, b) => a.time - b.time);

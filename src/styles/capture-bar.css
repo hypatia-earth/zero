@@ -103,6 +103,8 @@
 
 .capture-bar-keyframe.pinned {
   background: rgba(100, 200, 255, 0.7);
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
 }
 
 .capture-bar-keyframe.active {

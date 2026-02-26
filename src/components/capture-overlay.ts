@@ -136,7 +136,7 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
                 ? m('button.btn.btn-primary.capture-record', {
                     onclick: () => captureService.animated.dryRun(),
                     title: 'Preview animation',
-                  }, 'Dry Run')
+                  }, 'Preview')
                 : null,
             isDone
               ? m('button.btn.btn-primary.capture-record', {
