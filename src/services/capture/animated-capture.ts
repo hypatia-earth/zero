@@ -207,11 +207,14 @@ export class AnimatedCapture {
     this.dryRunAborted = true;
   }
 
-  // ── Animated recording (phase 1: capture bitmaps) ───────────────
+  // ── Animated recording (streaming capture) ──────────────────────
 
-  async captureFrames(aborted: () => boolean): Promise<{ bitmaps: ImageBitmap[]; frameTimes: number[] } | null> {
+  async captureFrames(opts: {
+    aborted: () => boolean;
+    onFrame: (bitmap: ImageBitmap, weatherTime: number) => Promise<void>;
+  }): Promise<boolean> {
     this.frameIndex.value = 0;
-    return this.runFrameLoop({ capture: true, aborted });
+    return this.runFrameLoop({ capture: true, aborted: opts.aborted, onFrame: opts.onFrame });
   }
 
   // ── Shared frame loop ──────────────────────────────────────────
@@ -219,12 +222,14 @@ export class AnimatedCapture {
   /**
    * Iterate all frames: interpolate camera, render, update UI.
    * capture=false (dry run): waitForFrameComplete, pace at fps
-   * capture=true (record):   arm captureFrame, waitForExportFrame, collect bitmaps
+   * capture=true (record):   arm captureFrame, waitForExportFrame, stream via onFrame
+   * Returns true if completed, false if aborted.
    */
   private async runFrameLoop(opts: {
     capture: boolean;
     aborted: () => boolean;
-  }): Promise<{ bitmaps: ImageBitmap[]; frameTimes: number[] } | null> {
+    onFrame?: (bitmap: ImageBitmap, weatherTime: number) => Promise<void>;
+  }): Promise<boolean> {
     const aurora = this.auroraService;
     const camera = aurora.getCamera();
     const kfs = this.km.keyframes.value;
@@ -238,11 +243,8 @@ export class AnimatedCapture {
     const frameDuration = 1000 / Number(this.options.fps);
     const runStart = performance.now();
 
-    const bitmaps: ImageBitmap[] = [];
-    const frameTimes: number[] = [];
-
     for (let i = 0; i < totalFrames; i++) {
-      if (opts.aborted()) break;
+      if (opts.aborted()) return false;
 
       const weatherTime = weatherTimeAt(i);
       const frame = i + 1;
@@ -268,8 +270,7 @@ export class AnimatedCapture {
         const snapshot = aurora.getCameraSnapshot();
         aurora.send({ type: 'render', camera: snapshot, time: weatherTime });
         const bitmap = await aurora.waitForExportFrame();
-        bitmaps.push(bitmap);
-        frameTimes.push(weatherTime);
+        await opts.onFrame!(bitmap, weatherTime);
       } else {
         const snapshot = aurora.getCameraSnapshot();
         aurora.send({ type: 'render', camera: snapshot, time: weatherTime });
@@ -281,11 +282,6 @@ export class AnimatedCapture {
       }
     }
 
-    if (opts.aborted()) {
-      for (const bmp of bitmaps) bmp.close();
-      return null;
-    }
-
-    return opts.capture ? { bitmaps, frameTimes } : null;
+    return !opts.aborted();
   }
 }

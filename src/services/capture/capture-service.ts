@@ -238,7 +238,7 @@ export class CaptureService {
 
   private async runSimpleRecordingLoop(): Promise<void> {
     const aurora = this.auroraService;
-    const { format, fps: fpsStr, paletteMode } = this.options;
+    const { format, fps: fpsStr, paletteMode, bitrate: bitrateStr } = this.options;
     const fps = Number(fpsStr);
     const fixedDtMs = 1000 / fps;
     const totalFrames = this.totalFrames.value;
@@ -278,7 +278,7 @@ export class CaptureService {
       const comment = `zero.hypatia.earth | ${timestamp}${label ? ` | ${label}` : ''}\nData: ECMWF IFS \u00b7 CC BY 4.0`;
       const title = label ? `Weather \u2014 ${label}` : `Weather \u2014 ${timestamp}`;
       const session = format === 'mp4'
-        ? createMp4Session(fps, outW, outH, { title, timestamp, label, comment })
+        ? createMp4Session(fps, outW, outH, Number(bitrateStr), { title, timestamp, label, comment })
         : createGifSession(fps, paletteMode, this.palette.value, comment);
 
       for (let i = 0; i < bitmaps.length; i++) {
@@ -311,22 +311,9 @@ export class CaptureService {
     const aurora = this.auroraService;
 
     try {
-      // Phase 1: capture bitmaps via AnimatedCapture
-      const result = await this.animated.captureFrames(() => this.aborted);
-
-      if (!result) {
-        this.mode.value = 'ready';
-        return;
-      }
-
-      // Phase 2: process (crop + decorate + encode)
-      this.mode.value = 'processing';
-      this.frameIndex.value = 0;
-      m.redraw();
-
-      const { bitmaps, frameTimes } = result;
+      // Set up encoder before capture — frames stream through inline
       const startTime = this.animated.startTime;
-      const { format, fps: fpsStr, paletteMode } = this.options;
+      const { format, fps: fpsStr, paletteMode, bitrate: bitrateStr } = this.options;
       const fps = Number(fpsStr);
       const { w: outW, h: outH } = this.getOutputDimensions();
 
@@ -339,24 +326,20 @@ export class CaptureService {
       const comment = `zero.hypatia.earth | ${baseTimestamp}${label ? ` | ${label}` : ''}\nData: ECMWF IFS \u00b7 CC BY 4.0`;
       const title = label ? `Weather \u2014 ${label}` : `Weather \u2014 ${baseTimestamp}`;
       const session = format === 'mp4'
-        ? createMp4Session(fps, outW, outH, { title, timestamp: baseTimestamp, label, comment })
+        ? createMp4Session(fps, outW, outH, Number(bitrateStr), { title, timestamp: baseTimestamp, label, comment })
         : createGifSession(fps, paletteMode, this.palette.value, comment);
 
-      for (let i = 0; i < bitmaps.length; i++) {
-        if (this.aborted) {
-          for (let j = i; j < bitmaps.length; j++) bitmaps[j]!.close();
-          break;
-        }
-        const rgba = this.cropBitmap(bitmaps[i]!, outW, outH);
-        const frameTs = formatTimestampUTC(frameTimes[i]!);
-        const decorated = decorator.decorate(rgba, frameTs);
-        session.addFrame(decorated, outW, outH);
-        this.frameIndex.value = i + 1;
-        m.redraw();
-        await new Promise<void>(r => setTimeout(r, 0));
-      }
+      const completed = await this.animated.captureFrames({
+        aborted: () => this.aborted,
+        onFrame: async (bitmap, weatherTime) => {
+          const rgba = this.cropBitmap(bitmap, outW, outH);
+          const frameTs = formatTimestampUTC(weatherTime);
+          const decorated = decorator.decorate(rgba, frameTs);
+          session.addFrame(decorated, outW, outH);
+        },
+      });
 
-      if (!this.aborted) {
+      if (completed) {
         this.finishRecording(await session.finish(), this.buildAnimatedFilename(startTime, this.animated.endTime));
       } else {
         this.mode.value = 'ready';

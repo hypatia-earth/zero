@@ -1043,8 +1043,25 @@ export const optionsSchema = z.object({
         ],
       }
     ),
+    bitrate: opt(
+      z.enum(['1', '3', '5']).default('3'),
+      {
+        label: 'Bitrate',
+        description: 'MP4 encoding bitrate',
+        group: 'capture',
+        filter: ['global', 'capture'],
+        order: 1.5,
+        control: 'radio',
+        disabledWhen: { path: 'capture.format', equals: 'gif' },
+        options: [
+          { value: '1', label: '1 Mbps' },
+          { value: '3', label: '3 Mbps' },
+          { value: '5', label: '5 Mbps' },
+        ],
+      }
+    ),
     duration: opt(
-      z.enum(['1', '3', '5', '10', '15']).default('1'),
+      z.enum(['1', '5', '10', '30', '60', '300']).default('5'),
       {
         label: 'Duration',
         description: 'Recording length in seconds',
@@ -1054,10 +1071,11 @@ export const optionsSchema = z.object({
         control: 'radio',
         options: [
           { value: '1', label: '1s' },
-          { value: '3', label: '3s' },
           { value: '5', label: '5s' },
           { value: '10', label: '10s' },
-          { value: '15', label: '15s' },
+          { value: '30', label: '30s' },
+          { value: '60', label: '1m' },
+          { value: '300', label: '5m' },
         ],
       }
     ),
@@ -1241,7 +1259,7 @@ export const defaultOptions: ZeroOptions = {
   pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
-  capture: { aspectRatio: 'free', duration: '1', fps: '15', nativeDpr: false, paletteMode: 'fast', format: 'gif', label: true, lastRect: null, lastCaptureType: 'simple' },
+  capture: { aspectRatio: 'free', duration: '5', fps: '15', nativeDpr: false, paletteMode: 'fast', format: 'gif', bitrate: '3', label: true, lastRect: null, lastCaptureType: 'simple' },
   debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1', showLogo: true },
 };
 

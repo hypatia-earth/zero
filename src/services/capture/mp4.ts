@@ -13,12 +13,10 @@ import {
   EncodedPacket,
 } from 'mediabunny';
 
-const BITRATE = 3_000_000; // 3 Mbps
-
-/** Pick H.264 profile/level based on resolution */
+/** Pick H.264 High Profile codec string based on resolution */
 function pickCodecString(w: number, h: number): string {
-  // Baseline L3.1 handles up to 1280×720; High L4.0 for anything larger
-  return (w <= 1280 && h <= 720) ? 'avc1.42001f' : 'avc1.640028';
+  // High Profile L3.1 handles up to 1280×720; High L4.0 for anything larger
+  return (w <= 1280 && h <= 720) ? 'avc1.64001f' : 'avc1.640028';
 }
 
 export interface Mp4Metadata {
@@ -28,7 +26,7 @@ export interface Mp4Metadata {
   comment: string;
 }
 
-export function createMp4Session(fps: number, width: number, height: number, meta: Mp4Metadata) {
+export function createMp4Session(fps: number, width: number, height: number, bitrateMbps: number, meta: Mp4Metadata) {
   // H.264 requires even dimensions
   const w = width & ~1;
   const h = height & ~1;
@@ -69,7 +67,8 @@ export function createMp4Session(fps: number, width: number, height: number, met
     codec: pickCodecString(w, h),
     width: w,
     height: h,
-    bitrate: BITRATE,
+    bitrate: bitrateMbps * 1_000_000,
+    framerate: fps,
     avc: { format: 'avc' },
   });
 
