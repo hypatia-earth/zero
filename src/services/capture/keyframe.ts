@@ -118,7 +118,7 @@ function catmullRom1D(p0: number, p1: number, p2: number, p3: number, t: number)
   );
 }
 
-function catmullRomPosition(keyframes: CameraKeyframe[], timeMs: number): InterpolatedCamera {
+function catmullRomPosition(keyframes: CameraKeyframe[], timeMs: number, wrap: boolean): InterpolatedCamera {
   const n = keyframes.length;
 
   // Clamp to range
@@ -145,11 +145,11 @@ function catmullRomPosition(keyframes: CameraKeyframe[], timeMs: number): Interp
   const t1 = keyframes[seg + 1]!.time;
   const t = t1 === t0 ? 0 : (timeMs - t0) / (t1 - t0);
 
-  // 4 control points (duplicate endpoints for first/last)
-  const i0 = Math.max(0, seg - 1);
+  // 4 control points — wrap indices at seam when wrap=true
   const i1 = seg;
   const i2 = seg + 1;
-  const i3 = Math.min(n - 1, seg + 2);
+  const i0 = wrap && seg === 0 ? n - 1 : Math.max(0, seg - 1);
+  const i3 = wrap && seg === n - 2 ? 0 : Math.min(n - 1, seg + 2);
 
   const p0 = latLonToCartesian(keyframes[i0]!.lat, keyframes[i0]!.lon);
   const p1 = latLonToCartesian(keyframes[i1]!.lat, keyframes[i1]!.lon);
@@ -175,7 +175,7 @@ function catmullRomPosition(keyframes: CameraKeyframe[], timeMs: number): Interp
 
 // ── Public interpolation dispatch ────────────────────────────────
 
-export function interpolateCamera(keyframes: CameraKeyframe[], timeMs: number): InterpolatedCamera {
+export function interpolateCamera(keyframes: CameraKeyframe[], timeMs: number, wrap: boolean): InterpolatedCamera {
   if (keyframes.length === 0) {
     return { lat: 0, lon: 0, distance: 3 };
   }
@@ -188,7 +188,7 @@ export function interpolateCamera(keyframes: CameraKeyframe[], timeMs: number): 
     const t = range > 0 ? Math.max(0, Math.min(1, (timeMs - keyframes[0]!.time) / range)) : 0;
     return slerpPosition(keyframes[0]!, keyframes[1]!, t);
   }
-  return catmullRomPosition(keyframes, timeMs);
+  return catmullRomPosition(keyframes, timeMs, wrap);
 }
 
 // ── KeyframeManager ──────────────────────────────────────────────
@@ -196,6 +196,7 @@ export function interpolateCamera(keyframes: CameraKeyframe[], timeMs: number): 
 export class KeyframeManager {
   readonly keyframes: Signal<CameraKeyframe[]> = signal([]);
   readonly activeKeyframeId: Signal<number | null> = signal(null);
+  wrap = false;
   dataWindowStart = 0;
   dataWindowEnd = 0;
 
@@ -222,6 +223,7 @@ export class KeyframeManager {
   reset(): void {
     this.keyframes.value = [];
     this.activeKeyframeId.value = null;
+    this.wrap = false;
     this.dataWindowStart = 0;
     this.dataWindowEnd = 0;
   }
@@ -290,6 +292,22 @@ export class KeyframeManager {
     this.keyframes.value = this.keyframes.value.filter(k => k.id !== id);
     if (this.activeKeyframeId.value === id) this.activeKeyframeId.value = null;
     m.redraw();
+  }
+
+  /** Get keyframes for interpolation — appends virtual wrap keyframe when wrap=true */
+  getInterpolationKeyframes(): CameraKeyframe[] {
+    const kfs = this.keyframes.value;
+    if (!this.wrap || kfs.length < 3) return kfs;
+    // Append virtual keyframe at dataWindowEnd with first keyframe's position
+    const first = kfs[0]!;
+    return [...kfs, {
+      id: -1,
+      time: this.dataWindowEnd,
+      lat: first.lat,
+      lon: first.lon,
+      distance: first.distance,
+      pinned: true,
+    }];
   }
 
   updateActiveCamera(): void {

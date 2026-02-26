@@ -26,6 +26,7 @@ import { CaptureOverlay } from './components/capture-overlay';
 import { CaptureBar } from './components/capture-bar';
 import { PanelStack } from './components/panel-stack';
 import { CreateLayerDialog } from './components/create-layer-dialog';
+import { FlightPlanDialog } from './components/flight-plan-dialog';
 import { Modal } from './components/modal';
 
 export const App: m.ClosureComponent = () => {
@@ -124,6 +125,10 @@ export const App: m.ClosureComponent = () => {
           ]),
           captureActive && m(CaptureOverlay, { captureService: services.captureService!, dialogService: services.dialogService!, optionsService: services.optionsService! }),
           captureAnimated && m(CaptureBar, { captureService: services.captureService!, stateService: services.stateService! }),
+          captureAnimated && m(FlightPlanDialog, {
+            captureService: services.captureService!,
+            dialogService: services.dialogService!,
+          }),
         ] : []),
       ];
     },

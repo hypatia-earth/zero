@@ -240,7 +240,7 @@ export class AnimatedCapture {
   }): Promise<boolean> {
     const aurora = this.auroraService;
     const camera = aurora.getCamera();
-    const kfs = this.km.keyframes.value;
+    const kfs = this.km.getInterpolationKeyframes();
     const totalFrames = this.totalFrames.value;
     const weatherTimeAt = createFrameTimeMapper(kfs[0]!.time, kfs[kfs.length - 1]!.time, totalFrames);
 
@@ -269,7 +269,7 @@ export class AnimatedCapture {
       }
 
       // 2. Interpolate camera, set state
-      const cam = interpolateCamera(kfs, weatherTime);
+      const cam = interpolateCamera(kfs, weatherTime, this.km.wrap);
       this.stateService.setTime(new Date(weatherTime));
       camera.setPosition(cam.lat, cam.lon, cam.distance);
       camera.update();

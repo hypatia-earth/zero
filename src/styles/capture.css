@@ -117,6 +117,32 @@
   }
 }
 
+/* ── Flight plan button (same style as type toggle) ───────────────── */
+
+.capture-flight-plan-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  padding: 3px 8px;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.capture-flight-plan-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .capture-flight-plan-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+}
+
 /* ── Record / Stop / New button (uses .btn .btn-primary / .btn-danger) ── */
 
 .capture-record {
