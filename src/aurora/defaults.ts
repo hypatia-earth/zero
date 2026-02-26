@@ -8,6 +8,6 @@ import type { CameraConfig } from './camera';
 
 export const CAMERA_DEFAULTS: CameraConfig = {
   fov: 75,
-  near: 0.1,
+  near: 0.01,
   far: 100,
 };
