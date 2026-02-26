@@ -145,18 +145,26 @@ export class AnimatedCapture {
   // ── Anim info ───────────────────────────────────────────────────
 
   /** Compute anim info from current state or a given frame number */
-  getAnimInfo(frame?: number): { startLabel: string; smpte: string; frameLabel: string } {
+  getAnimInfo(frame?: number): { timeLabel: string; smpte: string; frameLabel: string } {
     const kfs = this.km.keyframes.value;
-    const startTime = kfs.length > 0 ? kfs[0]!.time : this.km.dataWindowStart;
     const fps = Number(this.options.fps);
     const totalFrames = this.totalFrames.value;
 
-    if (frame === undefined) {
-      frame = timeToFrame(this.currentTimeMs, this.km.dataWindowStart, this.km.dataWindowEnd, totalFrames);
+    let weatherTimeMs: number;
+    if (frame !== undefined) {
+      // During preview/recording: compute weather time from frame
+      const mapper = createFrameTimeMapper(kfs[0]!.time, kfs[kfs.length - 1]!.time, totalFrames);
+      weatherTimeMs = mapper(frame);
+    } else {
+      // Ready mode: active keyframe time, or current view time
+      const activeId = this.km.activeKeyframeId.value;
+      const activeKf = activeId !== null ? kfs.find(k => k.id === activeId) : null;
+      weatherTimeMs = activeKf ? activeKf.time : this.currentTimeMs;
+      frame = timeToFrame(weatherTimeMs, this.km.dataWindowStart, this.km.dataWindowEnd, totalFrames);
     }
 
     return {
-      startLabel: `${formatTimeHHMM(startTime)} UTC`,
+      timeLabel: `${formatTimeHHMM(weatherTimeMs)} UTC`,
       smpte: frameToSMPTE(frame, fps),
       frameLabel: `${frame}/${totalFrames}`,
     };
@@ -167,7 +175,7 @@ export class AnimatedCapture {
     const info = this.getAnimInfo(frame);
     const spans = document.querySelector('.capture-anim-info')?.querySelectorAll('span');
     if (spans && spans.length >= 3) {
-      spans[0]!.textContent = info.startLabel;
+      spans[0]!.textContent = info.timeLabel;
       spans[1]!.textContent = info.smpte;
       spans[2]!.textContent = info.frameLabel;
     }
@@ -249,9 +257,11 @@ export class AnimatedCapture {
       const weatherTime = weatherTimeAt(i);
       const frame = i + 1;
 
-      // 1. Update UI before render
+      // 1. Update UI before render (direct DOM, no m.redraw at 30fps)
       this.frameIndex.value = frame;
       this.updateAnimInfoDOM(frame);
+      const statusEl = document.querySelector('.capture-status');
+      if (statusEl) statusEl.textContent = `Capturing ${frame}/${totalFrames}`;
       const progressEl = document.querySelector('.capture-bar-progress');
       if (progressEl) progressEl.textContent = `${frame}/${totalFrames}`;
       if (timeIndicator) {

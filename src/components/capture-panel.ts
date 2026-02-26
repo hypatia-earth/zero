@@ -15,6 +15,7 @@ export const CapturePanel: m.ClosureComponent<CapturePanelAttrs> = () => {
       return m('div.capture.panel.desktop-only', [
         m('button.control.circle', {
           onclick: () => attrs.captureService.enter(),
+          disabled: !attrs.captureService.isQueueIdle,
           title: 'Capture',
         }, [
           m('img', {

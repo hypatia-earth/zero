@@ -25,6 +25,11 @@
   opacity: 0.8;
 }
 
+.panel.capture > .control.circle:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 /* ── Overlay ─────────────────────────────────────────────────────── */
 
 .capture-overlay {
@@ -220,28 +225,15 @@
   object-fit: fill;
 }
 
-/* ── Waiting label (ready mode, above dimensions) ────────────────── */
-
-.capture-waiting {
-  position: absolute;
-  top: calc(50% + 2rem);
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-  pointer-events: none;
-  user-select: none;
-  -webkit-user-select: none;
-  white-space: nowrap;
-}
-
-/* ── Dimensions display (ready mode) ─────────────────────────────── */
+/* ── Dimensions display (centered) ────────────────────────────────── */
 
 .capture-dimensions {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
   font-size: var(--font-size-2xl);
   font-family: monospace;
   font-variant-numeric: tabular-nums;
@@ -251,17 +243,31 @@
   -webkit-user-select: none;
 }
 
-/* ── Animated info (below dimensions) ────────────────────────────── */
+.dim-value {
+  min-width: 4ch;
+}
 
-.capture-anim-info {
+.dim-left {
+  text-align: right;
+}
+
+.dim-right {
+  text-align: left;
+}
+
+.dim-sep {
+  margin: 0 0.3ch;
+}
+
+/* ── Info labels below dimensions ────────────────────────────────── */
+
+.capture-anim-info,
+.capture-waiting,
+.capture-status {
   position: absolute;
-  top: calc(50% + 1.2rem);
+  top: calc(50% + 1.5rem);
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
   font-size: var(--font-size-lg);
   font-family: monospace;
   font-variant-numeric: tabular-nums;
@@ -272,24 +278,19 @@
   white-space: nowrap;
 }
 
-/* ── Status label (capturing/processing) ─────────────────────────── */
+.capture-anim-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
 
 .capture-status {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   padding: 8px 20px;
   border-radius: 16px;
-  font-size: var(--font-size-sm);
-  font-variant-numeric: tabular-nums;
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: rgba(20, 25, 35, 0.85);
   color: var(--color-text-primary);
-  white-space: nowrap;
-  pointer-events: none;
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 /* ── Done overlay (filename + action buttons) ────────────────────── */
@@ -313,7 +314,7 @@
   color: #fff;
   font-size: var(--font-size-xs);
   text-align: center;
-  word-break: break-word;
+  white-space: nowrap;
   user-select: none;
   -webkit-user-select: none;
 }

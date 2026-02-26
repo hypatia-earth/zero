@@ -110,6 +110,7 @@ export class CaptureService {
   private captureDebounce: ReturnType<typeof setTimeout> | null = null;
   private locationDebounce: ReturnType<typeof setTimeout> | null = null;
   private geocodeAvailable = true;
+  private locationDirty = false;
   private paletteRetries = 0;
   downloadUrl: string | null = null;
   downloadName = 'zero.hypatia';
@@ -199,6 +200,7 @@ export class CaptureService {
     this.palette.value = null;
     this.locationLabel.value = '';
     this.geocodeAvailable = true;
+    this.locationDirty = false;
     this.revokeDownloadUrl();
     this.auroraService.recording = false;
     this.removeEscapeHandler();
@@ -212,7 +214,6 @@ export class CaptureService {
 
   record(): void {
     if (this.mode.value !== 'ready') return;
-    if (!this.isQueueIdle) return;
     // In simple mode, GIF requires palette (except grayscale)
     if (this.animated.captureType.value === 'simple' &&
         this.options.format === 'gif' && this.options.paletteMode !== 'grayscale' && !this.palette.value) return;
@@ -429,8 +430,13 @@ export class CaptureService {
     }, 150);
   }
 
+  setLocationLabel(label: string): void {
+    this.locationLabel.value = label;
+    this.locationDirty = true;
+  }
+
   requestLocationUpdate(delay = 1000): void {
-    if (!this.options.label || !this.geocodeAvailable) return;
+    if (!this.options.label || !this.geocodeAvailable || this.locationDirty) return;
     if (this.locationDebounce) clearTimeout(this.locationDebounce);
     this.locationLabel.value = '\u2026';
     m.redraw();

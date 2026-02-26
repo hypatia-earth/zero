@@ -42,6 +42,17 @@ function drawPaletteStripe(canvas: HTMLCanvasElement, palette: number[][]): void
   }
 }
 
+/** Truncate a filename in the middle, preserving start and extension */
+function middleTruncate(name: string, max: number): string {
+  if (name.length <= max) return name;
+  const dot = name.lastIndexOf('.');
+  const ext = dot >= 0 ? name.slice(dot) : '';
+  const keep = max - ext.length - 1; // 1 for ellipsis char
+  const head = name.slice(0, Math.ceil(keep / 2));
+  const tail = name.slice(name.length - ext.length - Math.floor(keep / 2), name.length - ext.length);
+  return head + '\u2026' + tail + ext;
+}
+
 /** Check if the event target is an interactive element (not a drag surface) */
 function isInteractive(target: EventTarget | null): boolean {
   if (!target || !(target instanceof HTMLElement)) return false;
@@ -132,9 +143,10 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
                   onclick: () => captureService.animated.abortDryRun(),
                   title: 'Stop preview',
                 }, 'Abort')
-              : isAnimated && isReady && captureService.km.keyframes.value.length >= 2
+              : isAnimated && (isReady || isBusy) && captureService.km.keyframes.value.length >= 2
                 ? m('button.btn.btn-primary.capture-record', {
                     onclick: () => captureService.animated.dryRun(),
+                    disabled: isBusy,
                     title: 'Preview animation',
                   }, 'Preview')
                 : null,
@@ -149,10 +161,10 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
               : isBusy
                 ? m('button.btn.btn-danger.capture-record', {
                     onclick: () => captureService.stop(),
-                  }, 'Stop')
+                  }, 'Abort')
                 : m('button.btn.btn-primary.capture-record', {
                     onclick: () => captureService.record(),
-                    disabled: !captureService.isQueueIdle ||
+                    disabled: captureService.animated.dryRunning.value ||
                       (!isAnimated && isGif && captureOpts.paletteMode !== 'grayscale' && !palette),
                   }, 'Record'),
             m('button.capture-settings-btn', {
@@ -198,39 +210,34 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
                 ...(isAnimated && !isLocked && !isDone ? { pointerEvents: 'none' } : {}),
               },
             }, [
-              // Dimensions display (ready mode)
-              isReady ? m('span.capture-dimensions', `${outW} \u00d7 ${outH}`) : null,
-
-              // Animated info (ready mode, below dimensions)
-              isReady && isAnimated ? (
-                captureService.km.dataWindowEnd > 0
-                  ? (() => {
-                      const info = captureService.animated.getAnimInfo();
-                      return m('.capture-anim-info', [
-                        m('span', info.startLabel),
-                        m('span', info.smpte),
-                        m('span', info.frameLabel),
-                      ]);
-                    })()
-                  : m('span.capture-waiting', 'Waiting for Queue\u2026')
+              // During recording: only status
+              isBusy ? m('span.capture-status',
+                `Capturing ${captureService.frameIndex.value}/${captureService.totalFrames.value}`
               ) : null,
 
-              // Waiting label (ready mode, below dimensions)
-              isReady && !isAnimated && (!captureService.isQueueIdle || (isGif && captureOpts.paletteMode !== 'grayscale' && !palette))
-                ? m('span.capture-waiting', [
-                    'Waiting for ',
-                    [
-                      !captureService.isQueueIdle ? 'Queue' : null,
-                      isGif && captureOpts.paletteMode !== 'grayscale' && !palette ? 'Palette' : null,
-                    ].filter(Boolean).join(', '),
-                    '\u2026',
-                  ].flat())
+              // Dimensions display (ready mode / dry run)
+              !isBusy && !isDone ? m('.capture-dimensions', [
+                m('span.dim-value.dim-left', `${outW}`),
+                m('span.dim-sep', '\u00d7'),
+                m('span.dim-value.dim-right', `${outH}`),
+              ]) : null,
+
+              // Animated info (ready / dry run)
+              !isBusy && !isDone && isAnimated && captureService.km.dataWindowEnd > 0
+                ? (() => {
+                    const info = captureService.animated.getAnimInfo();
+                    return m('.capture-anim-info', [
+                      m('span', info.timeLabel),
+                      m('span', info.smpte),
+                      m('span', info.frameLabel),
+                    ]);
+                  })()
                 : null,
 
-              // Status label (capturing / processing)
-              isBusy ? m('span.capture-status',
-                `${isCapturing ? 'Capturing' : 'Processing'} ${captureService.frameIndex.value}/${captureService.totalFrames.value}`
-              ) : null,
+              // Waiting label (ready mode, palette extraction in progress)
+              isReady && !isAnimated && isGif && captureOpts.paletteMode !== 'grayscale' && !palette
+                ? m('span.capture-waiting', 'Waiting for Palette\u2026')
+                : null,
 
               // Preview (done mode) — autoplay loop
               isDone && captureService.downloadUrl ? (
@@ -250,7 +257,7 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
               // Done overlay: filename label + action buttons
               isDone ? m('.capture-done-overlay', [
                 m('span.capture-done-filename',
-                  `${captureService.downloadName} (${captureService.downloadSize})`),
+                  `${middleTruncate(captureService.downloadName, 36)} (${captureService.downloadSize})`),
                 m('.capture-done-actions', [
                   captureService.canShare
                     ? m('button.btn.btn-primary', {
@@ -274,7 +281,7 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
               value: captureService.locationLabel.value,
               disabled: isLocked,
               oninput: (e: InputEvent) => {
-                captureService.locationLabel.value = (e.target as HTMLInputElement).value;
+                captureService.setLocationLabel((e.target as HTMLInputElement).value);
               },
             })
           ) : null,
