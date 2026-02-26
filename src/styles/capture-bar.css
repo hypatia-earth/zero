@@ -112,6 +112,11 @@
   box-shadow: 0 0 8px rgba(68, 204, 102, 0.6);
 }
 
+.capture-bar-keyframe.deleting {
+  background: #cc4444;
+  box-shadow: 0 0 8px rgba(204, 68, 68, 0.6);
+}
+
 /* ── Keyframe time labels ─────────────────────────────────────────── */
 
 .capture-bar-kf-label {

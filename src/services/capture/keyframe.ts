@@ -281,10 +281,14 @@ export class KeyframeManager {
   deleteActive(): void {
     const activeId = this.activeKeyframeId.value;
     if (activeId === null) return;
-    const kf = this.keyframes.value.find(k => k.id === activeId);
+    this.deleteById(activeId);
+  }
+
+  deleteById(id: number): void {
+    const kf = this.keyframes.value.find(k => k.id === id);
     if (!kf || kf.pinned) return;
-    this.keyframes.value = this.keyframes.value.filter(k => k.id !== activeId);
-    this.activeKeyframeId.value = null;
+    this.keyframes.value = this.keyframes.value.filter(k => k.id !== id);
+    if (this.activeKeyframeId.value === id) this.activeKeyframeId.value = null;
     m.redraw();
   }
 

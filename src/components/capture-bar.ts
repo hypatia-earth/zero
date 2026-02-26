@@ -22,9 +22,13 @@ function xToTime(clientX: number, trackEl: HTMLElement, start: number, end: numb
   return start + t * (end - start);
 }
 
+const DELETE_THRESHOLD = 20;
+
 export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
   let trackEl: HTMLElement | null = null;
   let draggingId: number | null = null;
+  let dragStartY = 0;
+  let pendingDelete = false;
 
   return {
     view({ attrs }) {
@@ -37,8 +41,6 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
       const activeId = km.activeKeyframeId.value;
       const start = km.dataWindowStart;
       const end = km.dataWindowEnd;
-      const activeKf = activeId !== null ? keyframes.find(k => k.id === activeId) : null;
-
       // Current time indicator position
       const currentTime = stateService.viewState.value.time.getTime();
       const clampedTimePos = timeToPercent(currentTime, start, end);
@@ -46,19 +48,12 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
       const isDryRunning = animated.dryRunning.value;
 
       return m('.capture-bar', [
-        // Buttons row
-        m('.capture-bar-buttons', [
-          !isDryRunning && activeKf && !activeKf.pinned
-            ? m('button.capture-bar-btn.danger', {
-                onclick: () => km.deleteActive(),
-                title: 'Delete active keyframe',
-              }, '\u2715 Delete')
-            : null,
-          isDryRunning
-            ? m('span.capture-bar-progress',
-                `${captureService.frameIndex.value}/${Number(captureService.totalFrames.value)}`)
-            : null,
-        ]),
+        // Progress (dry run only)
+        isDryRunning
+          ? m('.capture-bar-buttons',
+              m('span.capture-bar-progress',
+                `${captureService.frameIndex.value}/${Number(captureService.totalFrames.value)}`))
+          : null,
 
         // Track
         m('.capture-bar-track', {
@@ -98,15 +93,32 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
                 e.stopPropagation();
                 e.preventDefault();
                 draggingId = kf.id;
+                dragStartY = e.clientY;
+                pendingDelete = false;
+                const markerEl = e.currentTarget as HTMLElement;
 
                 const onMove = (ev: PointerEvent) => {
                   if (draggingId === null || !trackEl) return;
                   const time = xToTime(ev.clientX, trackEl, start, end);
                   km.move(draggingId, time);
+                  // Track vertical drag for delete gesture (non-pinned only)
+                  if (!kf.pinned) {
+                    const dy = Math.abs(ev.clientY - dragStartY);
+                    const shouldDelete = dy > DELETE_THRESHOLD;
+                    if (shouldDelete !== pendingDelete) {
+                      pendingDelete = shouldDelete;
+                      markerEl.classList.toggle('deleting', pendingDelete);
+                    }
+                  }
                 };
 
                 const onUp = () => {
+                  if (pendingDelete && draggingId !== null) {
+                    km.deleteById(draggingId);
+                  }
+                  markerEl.classList.remove('deleting');
                   draggingId = null;
+                  pendingDelete = false;
                   document.removeEventListener('pointermove', onMove);
                   document.removeEventListener('pointerup', onUp);
                 };

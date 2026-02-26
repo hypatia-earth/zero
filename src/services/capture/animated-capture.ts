@@ -195,6 +195,10 @@ export class AnimatedCapture {
       console.log('[capture] dry run done: %ss', ((performance.now() - t0) / 1000).toFixed(1));
       this.auroraService.recording = false;
       this.dryRunning.value = false;
+      if (!this.dryRunAborted) {
+        const lastKf = kfs[kfs.length - 1]!;
+        this.km.activate(lastKf.id);
+      }
       m.redraw();
     }
   }
