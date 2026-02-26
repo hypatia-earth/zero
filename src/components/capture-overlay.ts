@@ -189,30 +189,18 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
               isReady ? m('span.capture-dimensions', `${outW} \u00d7 ${outH}`) : null,
 
               // Animated info (ready mode, below dimensions)
-              isReady && isAnimated && captureService.dataWindowEnd > 0 ? (() => {
-                const kfs = captureService.keyframes.value;
-                const startTime = kfs.length > 0 ? kfs[0]!.time : captureService.dataWindowStart;
-                const currentTime = captureService.currentTimeMs;
-                const elapsedMs = Math.max(0, currentTime - startTime);
-                const totalMs = captureService.dataWindowEnd - captureService.dataWindowStart;
-                const fps = Number(captureOpts.fps);
-                const totalFrames = captureService.totalFrames.value;
-                const frame = totalMs > 0 ? Math.min(Math.round((elapsedMs / totalMs) * totalFrames), totalFrames) : 0;
-                // SMPTE timecode HH:MM:SS:FF from frame position
-                const ff = String(frame % fps).padStart(2, '0');
-                const totalSec = Math.floor(frame / fps);
-                const ss = String(totalSec % 60).padStart(2, '0');
-                const mm = String(Math.floor(totalSec / 60) % 60).padStart(2, '0');
-                const hh = String(Math.floor(totalSec / 3600)).padStart(2, '0');
-                const startD = new Date(startTime);
-                const startHH = String(startD.getUTCHours()).padStart(2, '0');
-                const startMM = String(startD.getUTCMinutes()).padStart(2, '0');
-                return m('.capture-anim-info', [
-                  m('span', `${startHH}:${startMM} UTC`),
-                  m('span', `${hh}:${mm}:${ss}:${ff}`),
-                  m('span', `${frame}/${totalFrames}`),
-                ]);
-              })() : null,
+              isReady && isAnimated ? (
+                captureService.dataWindowEnd > 0
+                  ? (() => {
+                      const info = captureService.getAnimInfo();
+                      return m('.capture-anim-info', [
+                        m('span', info.startLabel),
+                        m('span', info.smpte),
+                        m('span', info.frameLabel),
+                      ]);
+                    })()
+                  : m('span.capture-waiting', 'Waiting for Queue\u2026')
+              ) : null,
 
               // Waiting label (ready mode, below dimensions)
               isReady && !isAnimated && (!captureService.isQueueIdle || (isGif && captureOpts.paletteMode !== 'grayscale' && !palette))

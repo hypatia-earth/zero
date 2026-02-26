@@ -172,6 +172,46 @@ export class CaptureService {
     return this.stateService.viewState.value.time.getTime();
   }
 
+  /** Compute anim info from current state or a given frame number */
+  getAnimInfo(frame?: number): { startLabel: string; smpte: string; frameLabel: string } {
+    const kfs = this.keyframes.value;
+    const startTime = kfs.length > 0 ? kfs[0]!.time : this.dataWindowStart;
+    const fps = Number(this.options.fps);
+    const totalFrames = this.totalFrames.value;
+
+    if (frame === undefined) {
+      const elapsedMs = Math.max(0, this.currentTimeMs - startTime);
+      const totalMs = this.dataWindowEnd - this.dataWindowStart;
+      frame = totalMs > 0 ? Math.min(Math.round((elapsedMs / totalMs) * totalFrames), totalFrames) : 0;
+    }
+
+    const ff = String(frame % fps).padStart(2, '0');
+    const totalSec = Math.floor(frame / fps);
+    const ss = String(totalSec % 60).padStart(2, '0');
+    const mm = String(Math.floor(totalSec / 60) % 60).padStart(2, '0');
+    const hh = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+    const d = new Date(startTime);
+    const startHH = String(d.getUTCHours()).padStart(2, '0');
+    const startMM = String(d.getUTCMinutes()).padStart(2, '0');
+
+    return {
+      startLabel: `${startHH}:${startMM} UTC`,
+      smpte: `${hh}:${mm}:${ss}:${ff}`,
+      frameLabel: `${frame}/${totalFrames}`,
+    };
+  }
+
+  /** Write anim info directly to DOM (for use during dry run / recording) */
+  updateAnimInfoDOM(frame: number): void {
+    const info = this.getAnimInfo(frame);
+    const spans = document.querySelector('.capture-anim-info')?.querySelectorAll('span');
+    if (spans && spans.length >= 3) {
+      spans[0]!.textContent = info.startLabel;
+      spans[1]!.textContent = info.smpte;
+      spans[2]!.textContent = info.frameLabel;
+    }
+  }
+
   // ── Mode transitions ──────────────────────────────────────────────
 
   toggleCaptureType(): void {
@@ -196,20 +236,30 @@ export class CaptureService {
     this.stateService.setTime(new Date(currentTime.getTime() + 5 * 60_000));
     this.stateService.setTime(currentTime);
 
-    // If queue is already idle, lock immediately; otherwise wait for idle
-    if (this.isQueueIdle) {
-      this.lockDataWindow();
-    } else {
-      this.disposeQueueWait = effect(() => {
-        if (this.queueStats.value.itemsQueued === 0) {
-          queueMicrotask(() => {
-            this.disposeQueueWait?.();
-            this.disposeQueueWait = null;
-            this.lockDataWindow();
-          });
-        }
-      });
-    }
+    // Wait for queue to go busy then idle. If it never goes busy
+    // (everything cached), a fallback timeout locks after 200ms.
+    let seenBusy = false;
+    const fallback = setTimeout(() => {
+      if (this.disposeQueueWait) {
+        this.disposeQueueWait();
+        this.disposeQueueWait = null;
+        this.lockDataWindow();
+      }
+    }, 200);
+    this.disposeQueueWait = effect(() => {
+      const idle = this.queueStats.value.itemsQueued === 0;
+      if (!idle) {
+        seenBusy = true;
+      } else if (seenBusy) {
+        clearTimeout(fallback);
+        queueMicrotask(() => {
+          if (!this.disposeQueueWait) return;
+          this.disposeQueueWait();
+          this.disposeQueueWait = null;
+          this.lockDataWindow();
+        });
+      }
+    });
   }
 
   private lockDataWindow(): void {
@@ -369,16 +419,18 @@ export class CaptureService {
     const totalMinutes = (endTime - startTime) / 60_000;
     const framesPerMinute = totalMinutes > 0 ? totalFrames / totalMinutes : totalFrames;
 
+    const fmt = (ms: number) => new Date(ms).toISOString().slice(5, 16).replace('T', ' ');
+    console.log('[capture] dry run: %s → %s, %d frames', fmt(startTime), fmt(endTime), totalFrames);
+    const t0 = performance.now();
+
     this.dryRunning.value = true;
     this.dryRunAborted = false;
     this.frameIndex.value = 0;
     this.activeKeyframeId.value = null;
     aurora.recording = true;
 
-    // Grab DOM spans for direct update (avoid m.redraw() per frame)
-    const infoEl = document.querySelector('.capture-anim-info');
-    const spans = infoEl?.querySelectorAll('span');
-    const fps = Number(this.options.fps);
+    // Grab DOM elements for direct update (avoid m.redraw() per frame)
+    const timeIndicator = document.querySelector('.capture-bar-time-indicator') as HTMLElement | null;
 
     try {
       for (let i = 0; i < totalFrames; i++) {
@@ -389,35 +441,30 @@ export class CaptureService {
           ? startTime + Math.floor(i / framesPerMinute) * 60000
           : startTime;
 
-        // Interpolate camera
-        const cam = interpolateCamera(kfs, weatherTime);
+        // 1. Update all UI to match this frame BEFORE render
+        const frame = i + 1;
+        this.frameIndex.value = frame;
+        this.updateAnimInfoDOM(frame);
+        const progressEl = document.querySelector('.capture-bar-progress');
+        if (progressEl) progressEl.textContent = `${frame}/${totalFrames}`;
+        if (timeIndicator) {
+          const range = this.dataWindowEnd - this.dataWindowStart;
+          const pos = range > 0 ? ((weatherTime - this.dataWindowStart) / range) * 100 : 0;
+          timeIndicator.style.left = `${Math.max(0, Math.min(100, pos))}%`;
+        }
 
-        // Apply to camera and state
+        // 2. Interpolate camera, set state, render, wait
+        const cam = interpolateCamera(kfs, weatherTime);
         this.stateService.setTime(new Date(weatherTime));
         camera.setPosition(cam.lat, cam.lon, cam.distance);
         camera.update();
-
-        // Render frame
         const snapshot = aurora.getCameraSnapshot();
         aurora.send({ type: 'render', camera: snapshot, time: weatherTime });
         await aurora.waitForFrameComplete();
-
-        // Direct DOM updates for anim info + progress
-        const frame = i + 1;
-        this.frameIndex.value = frame;
-        const progressEl = document.querySelector('.capture-bar-progress');
-        if (progressEl) progressEl.textContent = `${frame}/${totalFrames}`;
-        if (spans && spans.length >= 3) {
-          const ff = String(frame % fps).padStart(2, '0');
-          const totalSec = Math.floor(frame / fps);
-          const ss = String(totalSec % 60).padStart(2, '0');
-          const mm = String(Math.floor(totalSec / 60) % 60).padStart(2, '0');
-          const hh = String(Math.floor(totalSec / 3600)).padStart(2, '0');
-          spans[1]!.textContent = `${hh}:${mm}:${ss}:${ff}`;
-          spans[2]!.textContent = `${frame}/${totalFrames}`;
-        }
       }
     } finally {
+      const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+      console.log('[capture] dry run done: %ss', elapsed);
       aurora.recording = false;
       this.dryRunning.value = false;
       m.redraw();
