@@ -44,22 +44,10 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
       const clampedTimePos = timeToPercent(currentTime, start, end);
 
       const isDryRunning = animated.dryRunning.value;
-      const mode = captureService.mode.value;
-      const canDryRun = mode === 'ready' && keyframes.length >= 2 && !isDryRunning;
 
       return m('.capture-bar', [
         // Buttons row
         m('.capture-bar-buttons', [
-          isDryRunning
-            ? m('button.capture-bar-btn.danger', {
-                onclick: () => animated.abortDryRun(),
-                title: 'Stop preview',
-              }, '\u25A0 Abort')
-            : m('button.capture-bar-btn', {
-                disabled: !canDryRun,
-                onclick: () => animated.dryRun(),
-                title: 'Preview animation',
-              }, '\u25B6 Dry Run'),
           !isDryRunning && activeKf && !activeKf.pinned
             ? m('button.capture-bar-btn.danger', {
                 onclick: () => km.deleteActive(),

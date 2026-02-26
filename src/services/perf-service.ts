@@ -19,7 +19,7 @@ export class PerfService {
   } | null = null;
 
   private ensureElements(): boolean {
-    if (this.els) return true;
+    if (this.els && this.els.fps?.isConnected) return true;
     const fps = document.querySelector<HTMLElement>('.perf-fps');
     if (!fps) return false;  // Panel not mounted yet
     this.els = {

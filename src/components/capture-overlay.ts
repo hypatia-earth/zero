@@ -126,6 +126,18 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
               onclick: () => captureService.toggleCaptureType(),
               title: isAnimated ? 'Switch to simple capture' : 'Switch to animated capture',
             }, isAnimated ? '\u25B6' : '\u23F1') : null,
+            // Dry run / abort (animated mode only)
+            isAnimated && captureService.animated.dryRunning.value
+              ? m('button.btn.btn-danger.capture-record', {
+                  onclick: () => captureService.animated.abortDryRun(),
+                  title: 'Stop preview',
+                }, 'Abort')
+              : isAnimated && isReady && captureService.km.keyframes.value.length >= 2
+                ? m('button.btn.btn-primary.capture-record', {
+                    onclick: () => captureService.animated.dryRun(),
+                    title: 'Preview animation',
+                  }, 'Dry Run')
+                : null,
             isDone
               ? m('button.btn.btn-primary.capture-record', {
                   onclick: () => {
