@@ -249,6 +249,27 @@
   -webkit-user-select: none;
 }
 
+/* ── Animated info (below dimensions) ────────────────────────────── */
+
+.capture-anim-info {
+  position: absolute;
+  top: calc(50% + 1.2rem);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-size-lg);
+  font-family: monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  white-space: nowrap;
+}
+
 /* ── Status label (capturing/processing) ─────────────────────────── */
 
 .capture-status {

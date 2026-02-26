@@ -91,6 +91,10 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
             captureService.addKeyframe(time);
           },
         }, [
+          // Data window edge labels
+          m('span.capture-bar-edge-label.left', fmtTime(start)),
+          m('span.capture-bar-edge-label.right', fmtTime(end)),
+
           // Time indicator
           m('.capture-bar-time-indicator', {
             style: { left: `${clampedTimePos}%` },
@@ -107,7 +111,6 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
                 kf.pinned ? 'pinned' : '',
               ].filter(Boolean).join(' '),
               style: { left: `${pos}%` },
-              title: fmtTime(kf.time),
               onclick: (e: MouseEvent) => {
                 e.stopPropagation();
                 captureService.toggleKeyframe(kf.id);
@@ -132,7 +135,7 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
                 document.addEventListener('pointermove', onMove);
                 document.addEventListener('pointerup', onUp);
               },
-            });
+            }, m('span.capture-bar-kf-label', fmtTime(kf.time)));
           }),
         ]),
       ]);

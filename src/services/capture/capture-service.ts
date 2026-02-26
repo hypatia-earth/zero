@@ -147,6 +147,14 @@ export class CaptureService {
     const ratio = ASPECT_RATIOS[optionsService.options.value.capture.aspectRatio] ?? null;
     this.rect = signal(resolveInitialRect(saved, ratio, 0));
     this.totalFrames = computed(() => {
+      if (this.captureType.value === 'animated') {
+        const kfs = this.keyframes.value;
+        if (kfs.length < 2) return 0;
+        const startTime = kfs[0]!.time;
+        const endTime = kfs[kfs.length - 1]!.time;
+        const totalMinutes = (endTime - startTime) / 60_000;
+        return Math.ceil(totalMinutes * Number(this.options.fps));
+      }
       const { duration, fps } = this.options;
       return Number(duration) * Number(fps);
     });
@@ -160,6 +168,10 @@ export class CaptureService {
     return this.queueStats.value.itemsQueued === 0;
   }
 
+  get currentTimeMs(): number {
+    return this.stateService.viewState.value.time.getTime();
+  }
+
   // ── Mode transitions ──────────────────────────────────────────────
 
   toggleCaptureType(): void {
@@ -169,14 +181,45 @@ export class CaptureService {
     } else {
       this.exitAnimatedMode();
     }
+    this.optionsService.update(d => { d.capture.lastCaptureType = this.captureType.value; });
     m.redraw();
   }
 
+  private disposeQueueWait: (() => void) | null = null;
+
   private enterAnimatedMode(): void {
-    // Query loaded time range from timestepService
+    this.captureType.value = 'animated';
+
+    // Nudge time to trigger queue loading the full slot window
+    const currentTime = this.stateService.viewState.value.time;
+    console.log('[capture] nudge +5min to trigger queue');
+    this.stateService.setTime(new Date(currentTime.getTime() + 5 * 60_000));
+    this.stateService.setTime(currentTime);
+
+    // If queue is already idle, lock immediately; otherwise wait for idle
+    if (this.isQueueIdle) {
+      this.lockDataWindow();
+    } else {
+      this.disposeQueueWait = effect(() => {
+        if (this.queueStats.value.itemsQueued === 0) {
+          queueMicrotask(() => {
+            this.disposeQueueWait?.();
+            this.disposeQueueWait = null;
+            this.lockDataWindow();
+          });
+        }
+      });
+    }
+  }
+
+  private lockDataWindow(): void {
     const ts = this.timestepService;
-    const firstMs = ts.toDate(ts.first()).getTime();
-    const lastMs = ts.toDate(ts.last()).getTime();
+    const numSlots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
+    const currentTime = this.stateService.viewState.value.time;
+    const window = ts.getWindow(currentTime, numSlots);
+    const windowMs = window.map(t => ts.toDate(t).getTime());
+    const firstMs = Math.min(...windowMs);
+    const lastMs = Math.max(...windowMs);
     this.dataWindowStart = firstMs;
     this.dataWindowEnd = lastMs;
 
@@ -190,7 +233,7 @@ export class CaptureService {
     // Pause queue
     this.queueService.paused.value = true;
 
-    // Install time clamp effect — clamps viewState.time to data window
+    // Install time clamp effect
     this.disposeTimeClamp = effect(() => {
       const timeMs = this.stateService.viewState.value.time.getTime();
       if (timeMs < this.dataWindowStart) {
@@ -198,13 +241,25 @@ export class CaptureService {
       } else if (timeMs > this.dataWindowEnd) {
         this.stateService.setTime(new Date(this.dataWindowEnd));
       }
+      m.redraw();
     });
 
-    this.captureType.value = 'animated';
+    const fmt = (ms: number) => {
+      const d = new Date(ms);
+      const MM = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const DD = String(d.getUTCDate()).padStart(2, '0');
+      const hh = String(d.getUTCHours()).padStart(2, '0');
+      const mm = String(d.getUTCMinutes()).padStart(2, '0');
+      return `${MM}-${DD}:${hh}:${mm}`;
+    };
+    console.log('[capture] locked: %s → %s', fmt(firstMs), fmt(lastMs));
+    m.redraw();
   }
 
   private exitAnimatedMode(): void {
-    // Dispose time clamp
+    // Dispose effects
+    this.disposeQueueWait?.();
+    this.disposeQueueWait = null;
     this.disposeTimeClamp?.();
     this.disposeTimeClamp = null;
 
@@ -308,12 +363,10 @@ export class CaptureService {
     const aurora = this.auroraService;
     const camera = aurora.getCamera();
     const kfs = this.keyframes.value;
-    const { fps: fpsStr, duration: durStr } = this.options;
-    const fps = Number(fpsStr);
-    const totalFrames = Number(durStr) * fps;
+    const totalFrames = this.totalFrames.value;
     const startTime = kfs[0]!.time;
     const endTime = kfs[kfs.length - 1]!.time;
-    const totalMinutes = (endTime - startTime) / 60000;
+    const totalMinutes = (endTime - startTime) / 60_000;
     const framesPerMinute = totalMinutes > 0 ? totalFrames / totalMinutes : totalFrames;
 
     this.dryRunning.value = true;
@@ -321,6 +374,11 @@ export class CaptureService {
     this.frameIndex.value = 0;
     this.activeKeyframeId.value = null;
     aurora.recording = true;
+
+    // Grab DOM spans for direct update (avoid m.redraw() per frame)
+    const infoEl = document.querySelector('.capture-anim-info');
+    const spans = infoEl?.querySelectorAll('span');
+    const fps = Number(this.options.fps);
 
     try {
       for (let i = 0; i < totalFrames; i++) {
@@ -344,8 +402,20 @@ export class CaptureService {
         aurora.send({ type: 'render', camera: snapshot, time: weatherTime });
         await aurora.waitForFrameComplete();
 
-        this.frameIndex.value = i + 1;
-        m.redraw();
+        // Direct DOM updates for anim info + progress
+        const frame = i + 1;
+        this.frameIndex.value = frame;
+        const progressEl = document.querySelector('.capture-bar-progress');
+        if (progressEl) progressEl.textContent = `${frame}/${totalFrames}`;
+        if (spans && spans.length >= 3) {
+          const ff = String(frame % fps).padStart(2, '0');
+          const totalSec = Math.floor(frame / fps);
+          const ss = String(totalSec % 60).padStart(2, '0');
+          const mm = String(Math.floor(totalSec / 60) % 60).padStart(2, '0');
+          const hh = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+          spans[1]!.textContent = `${hh}:${mm}:${ss}:${ff}`;
+          spans[2]!.textContent = `${frame}/${totalFrames}`;
+        }
       }
     } finally {
       aurora.recording = false;
@@ -361,11 +431,17 @@ export class CaptureService {
   enter(): void {
     if (this.mode.value !== 'off') return;
     this.mode.value = 'ready';
-    this.captureType.value = 'simple';
     this.frameIndex.value = 0;
     this.palette.value = null;
     this.installEscapeHandler();
     this.requestCaptureFrame();
+    // Restore last capture type from persisted options
+    const lastType = this.optionsService.options.value.capture.lastCaptureType;
+    if (lastType === 'animated') {
+      this.enterAnimatedMode();
+    } else {
+      this.captureType.value = 'simple';
+    }
     m.redraw();
     // Delay so .capture-rect DOM exists after redraw
     requestAnimationFrame(() => this.requestLocationUpdate(0));
@@ -404,6 +480,8 @@ export class CaptureService {
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
     if (this.locationDebounce) { clearTimeout(this.locationDebounce); this.locationDebounce = null; }
     // Clean up animated mode state
+    this.disposeQueueWait?.();
+    this.disposeQueueWait = null;
     this.disposeTimeClamp?.();
     this.disposeTimeClamp = null;
     if (this.captureType.value === 'animated') {
@@ -411,7 +489,6 @@ export class CaptureService {
     }
     this.keyframes.value = [];
     this.activeKeyframeId.value = null;
-    this.captureType.value = 'simple';
     this.mode.value = 'off';
     this.frameIndex.value = 0;
     this.palette.value = null;

@@ -1126,6 +1126,17 @@ export const optionsSchema = z.object({
         hidden: true,
       }
     ),
+    lastCaptureType: opt(
+      z.enum(['simple', 'animated']).default('simple'),
+      {
+        label: 'Last capture type',
+        group: 'capture',
+        filter: 'capture',
+        order: 100,
+        control: 'toggle',
+        hidden: true,
+      }
+    ),
   }),
 
   // ----------------------------------------------------------
@@ -1230,7 +1241,7 @@ export const defaultOptions: ZeroOptions = {
   pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
-  capture: { aspectRatio: 'free', duration: '1', fps: '15', nativeDpr: false, paletteMode: 'fast', format: 'gif', label: true, lastRect: null },
+  capture: { aspectRatio: 'free', duration: '1', fps: '15', nativeDpr: false, paletteMode: 'fast', format: 'gif', label: true, lastRect: null, lastCaptureType: 'simple' },
   debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1', showLogo: true },
 };
 

@@ -9,7 +9,7 @@
   right: 0;
   z-index: 36;
   pointer-events: auto;
-  padding: 8px 16px;
+  padding: 8px 16px 26px;
   background: rgba(20, 25, 35, 0.92);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -104,6 +104,44 @@
 .capture-bar-keyframe.active {
   background: #44cc66;
   box-shadow: 0 0 8px rgba(68, 204, 102, 0.6);
+}
+
+/* ── Keyframe time labels ─────────────────────────────────────────── */
+
+.capture-bar-kf-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%) rotate(-45deg);
+  margin-top: 6px;
+  font-size: 9px;
+  font-family: monospace;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.capture-bar-keyframe.active .capture-bar-kf-label {
+  color: #44cc66;
+}
+
+/* ── Data window edge labels ─────────────────────────────────────── */
+
+.capture-bar-edge-label {
+  position: absolute;
+  bottom: -18px;
+  font-size: 9px;
+  font-family: monospace;
+  color: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+}
+
+.capture-bar-edge-label.left {
+  left: 0;
+}
+
+.capture-bar-edge-label.right {
+  right: 0;
 }
 
 @media (hover: hover) {

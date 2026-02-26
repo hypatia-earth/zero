@@ -167,7 +167,7 @@ export class SlotService {
     const [t0, t1] = this.timestepService.adjacentFor(time, mp);
 
     const exactTs = this.timestepService.getExactTimestep(time);
-    if (exactTs && this.timestepService.adjacentFor(time, mp)[0] === exactTs) {
+    if (exactTs) {
       return { mode: 'single', priority: [exactTs], window };
     } else {
       return { mode: 'pair', priority: [t0, t1], window };
