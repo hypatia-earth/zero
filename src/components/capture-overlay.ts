@@ -16,6 +16,7 @@
 
 import m from 'mithril';
 import { GearIcon } from './gear-icon';
+import { snapEven } from '../services/capture/helpers';
 import type { CaptureService } from '../services/capture/capture-service';
 import type { DialogService } from '../services/dialog-service';
 import type { OptionsService } from '../services/options-service';
@@ -58,9 +59,9 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
     oncreate({ attrs }) {
       // In animated mode, update active keyframe camera on pointerup (after drag)
       pointerUpHandler = (_e: PointerEvent) => {
-        if (attrs.captureService.captureType.value === 'animated' &&
-            attrs.captureService.activeKeyframeId.value !== null) {
-          attrs.captureService.updateActiveKeyframeCamera();
+        if (attrs.captureService.animated.captureType.value === 'animated' &&
+            attrs.captureService.km.activeKeyframeId.value !== null) {
+          attrs.captureService.km.updateActiveCamera();
         }
       };
       document.addEventListener('pointerup', pointerUpHandler);
@@ -87,7 +88,7 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
       const isReady = mode === 'ready';
       const isBusy = isCapturing || isProcessing;
       const isLocked = isBusy || isDone;
-      const isAnimated = captureService.captureType.value === 'animated';
+      const isAnimated = captureService.animated.captureType.value === 'animated';
       const borderColor = isBusy ? '#cc4444' : isDone ? '#000000' : '#44cc66';
 
       // Compute output dimensions for display
@@ -95,8 +96,8 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
       const border = 2;  // CSS px, matches .capture-rect border width
       const contentW = rect.w - border * 2;
       const contentH = rect.h - border * 2;
-      const outW = captureOpts.nativeDpr ? Math.round(contentW * dpr) & ~1 : contentW;
-      const outH = captureOpts.nativeDpr ? Math.round(contentH * dpr) & ~1 : contentH;
+      const outW = captureOpts.nativeDpr ? snapEven(Math.round(contentW * dpr)) : contentW;
+      const outH = captureOpts.nativeDpr ? snapEven(Math.round(contentH * dpr)) : contentH;
 
       // In animated mode: overlay background is pointer-events:none so canvas receives events.
       // Header, rect border, and capture-container get pointer-events:auto explicitly.
@@ -190,9 +191,9 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
 
               // Animated info (ready mode, below dimensions)
               isReady && isAnimated ? (
-                captureService.dataWindowEnd > 0
+                captureService.km.dataWindowEnd > 0
                   ? (() => {
-                      const info = captureService.getAnimInfo();
+                      const info = captureService.animated.getAnimInfo();
                       return m('.capture-anim-info', [
                         m('span', info.startLabel),
                         m('span', info.smpte),

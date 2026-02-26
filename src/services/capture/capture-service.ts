@@ -5,21 +5,29 @@
  * drag/resize interactions, and duration/frame tracking.
  *
  * Modes: off → ready → capturing → processing → done → ready → off
+ *
+ * Delegates to:
+ *   KeyframeManager  — keyframe state and CRUD
+ *   AnimatedCapture   — animated mode lifecycle, dry run, frame capture
  */
 
 import m from 'mithril';
-import { signal, computed, effect, type Signal, type ReadonlySignal } from '@preact/signals-core';
+import { signal, computed, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import { extractPalette, createGifSession } from './gif';
 import { createMp4Session } from './mp4';
 import { reverseGeocode } from './location';
 import { loadLogo, createDecorator } from './decorate';
-import { createKeyframe, interpolateCamera, type CameraKeyframe } from './keyframe';
+import { KeyframeManager } from './keyframe';
+import { AnimatedCapture } from './animated-capture';
+import { formatTimestampUTC, formatDateFilename, formatFileSize, snapEven } from './helpers';
 import type { AuroraService } from '../aurora-service';
 import type { StateService } from '../state-service';
 import type { OptionsService } from '../options-service';
 import type { QueueService } from '../queue/queue-service';
 import type { TimestepService } from '../timestep/timestep-service';
 import type { QueueStats } from '../../config/types';
+
+export type { CaptureType } from './animated-capture';
 
 const RECT_BORDER = 2;
 const RECT_DEFAULT_SIZE = 480;
@@ -48,13 +56,10 @@ function resolveInitialRect(
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
-  // Check if saved rect has valid dimensions
   if (saved && saved.w >= RECT_MIN_WIDTH && saved.h >= RECT_MIN_HEIGHT) {
-    // Try as-is
     if (saved.x >= 0 && saved.y >= minY && saved.x + saved.w <= vw && saved.y + saved.h <= vh) {
       return { ...saved };
     }
-    // Re-center with saved dimensions
     const x = Math.round((vw - saved.w) / 2);
     const y = Math.round((vh - saved.h) / 2);
     if (x >= 0 && y >= minY && x + saved.w <= vw && y + saved.h <= vh) {
@@ -62,12 +67,10 @@ function resolveInitialRect(
     }
   }
 
-  // Default rect matching aspect ratio
   let w = RECT_DEFAULT_SIZE;
   let h: number;
   if (ratio !== null) {
     h = Math.round((w - RECT_BORDER * 2) / ratio) + RECT_BORDER * 2;
-    // If too tall for viewport, derive from height instead
     if (h > vh - minY) {
       h = Math.round((vh - minY) * 0.75);
       w = Math.round((h - RECT_BORDER * 2) * ratio) + RECT_BORDER * 2;
@@ -81,51 +84,40 @@ function resolveInitialRect(
 }
 
 type CaptureMode = 'off' | 'ready' | 'capturing' | 'processing' | 'done';
-export type CaptureType = 'simple' | 'animated';
 type Edge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
-interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+interface Rect { x: number; y: number; w: number; h: number }
 
 export class CaptureService {
+
+  // ── Fields ──────────────────────────────────────────────────────
+
   readonly mode: Signal<CaptureMode> = signal('off');
-  readonly captureType: Signal<CaptureType> = signal('simple');
   readonly rect: Signal<Rect>;
   readonly frameIndex: Signal<number> = signal(0);
   readonly totalFrames: ReadonlySignal<number>;
   readonly palette: Signal<number[][] | null> = signal(null);
   readonly locationLabel: Signal<string> = signal('');
 
+  readonly km: KeyframeManager;
+  readonly animated: AnimatedCapture;
+
   private readonly optionsService: OptionsService;
   private readonly stateService: StateService;
   private readonly auroraService: AuroraService;
-  readonly queueService: QueueService;
-  readonly timestepService: TimestepService;
   private readonly queueStats: Signal<QueueStats>;
-  // Keyframe state (animated mode)
-  readonly keyframes: Signal<CameraKeyframe[]> = signal([]);
-  readonly activeKeyframeId: Signal<number | null> = signal(null);
-  dataWindowStart = 0;
-  dataWindowEnd = 0;
-
-  // Dry run state
-  readonly dryRunning: Signal<boolean> = signal(false);
-  private dryRunAborted = false;
-
-  private disposeTimeClamp: (() => void) | null = null;
   private paletteCanvas: OffscreenCanvas | null = null;
   private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
   private captureDebounce: ReturnType<typeof setTimeout> | null = null;
   private locationDebounce: ReturnType<typeof setTimeout> | null = null;
   private geocodeAvailable = true;
+  private paletteRetries = 0;
   downloadUrl: string | null = null;
   downloadName = 'zero.hypatia';
   downloadSize = '';
   private downloadBlob: Blob | null = null;
   private aborted = false;
+
+  // ── Constructor ─────────────────────────────────────────────────
 
   constructor(
     optionsService: OptionsService,
@@ -137,10 +129,8 @@ export class CaptureService {
   ) {
     this.optionsService = optionsService;
     this.stateService = stateService;
-    this.queueStats = queueStats;
     this.auroraService = auroraService;
-    this.queueService = queueService;
-    this.timestepService = timestepService;
+    this.queueStats = queueStats;
     auroraService.onExportFrame = (bitmap: ImageBitmap) => this.onPreviewFrame(bitmap);
 
     const saved = optionsService.options.value.capture.lastRect;
@@ -150,329 +140,35 @@ export class CaptureService {
       const { duration, fps } = this.options;
       return Number(duration) * Number(fps);
     });
+
+    this.km = new KeyframeManager(auroraService, stateService);
+    this.animated = new AnimatedCapture(
+      this.km, auroraService, stateService,
+      queueService, timestepService, optionsService,
+      queueStats, this.totalFrames, this.frameIndex,
+    );
   }
 
-  private get options() {
-    return this.optionsService.options.value.capture;
-  }
+  // ── Getters ─────────────────────────────────────────────────────
+
+  private get options() { return this.optionsService.options.value.capture; }
 
   get isQueueIdle(): boolean {
     return this.queueStats.value.itemsQueued === 0;
   }
 
-  get currentTimeMs(): number {
-    return this.stateService.viewState.value.time.getTime();
+  get canShare(): boolean {
+    if (!this.downloadBlob || !navigator.canShare) return false;
+    const file = new File([this.downloadBlob], this.downloadName, { type: this.downloadBlob.type });
+    return navigator.canShare({ files: [file] });
   }
 
-  /** Compute anim info from current state or a given frame number */
-  getAnimInfo(frame?: number): { startLabel: string; smpte: string; frameLabel: string } {
-    const kfs = this.keyframes.value;
-    const startTime = kfs.length > 0 ? kfs[0]!.time : this.dataWindowStart;
-    const fps = Number(this.options.fps);
-    const totalFrames = this.totalFrames.value;
-
-    if (frame === undefined) {
-      const elapsedMs = Math.max(0, this.currentTimeMs - startTime);
-      const totalMs = this.dataWindowEnd - this.dataWindowStart;
-      frame = totalMs > 0 ? Math.min(Math.round((elapsedMs / totalMs) * totalFrames), totalFrames) : 0;
-    }
-
-    const ff = String(frame % fps).padStart(2, '0');
-    const totalSec = Math.floor(frame / fps);
-    const ss = String(totalSec % 60).padStart(2, '0');
-    const mm = String(Math.floor(totalSec / 60) % 60).padStart(2, '0');
-    const hh = String(Math.floor(totalSec / 3600)).padStart(2, '0');
-    const d = new Date(startTime);
-    const startHH = String(d.getUTCHours()).padStart(2, '0');
-    const startMM = String(d.getUTCMinutes()).padStart(2, '0');
-
-    return {
-      startLabel: `${startHH}:${startMM} UTC`,
-      smpte: `${hh}:${mm}:${ss}:${ff}`,
-      frameLabel: `${frame}/${totalFrames}`,
-    };
+  private get isLocked(): boolean {
+    const m = this.mode.value;
+    return m === 'capturing' || m === 'processing' || m === 'done';
   }
 
-  /** Write anim info directly to DOM (for use during dry run / recording) */
-  updateAnimInfoDOM(frame: number): void {
-    const info = this.getAnimInfo(frame);
-    const spans = document.querySelector('.capture-anim-info')?.querySelectorAll('span');
-    if (spans && spans.length >= 3) {
-      spans[0]!.textContent = info.startLabel;
-      spans[1]!.textContent = info.smpte;
-      spans[2]!.textContent = info.frameLabel;
-    }
-  }
-
-  // ── Mode transitions ──────────────────────────────────────────────
-
-  toggleCaptureType(): void {
-    if (this.mode.value !== 'ready') return;
-    if (this.captureType.value === 'simple') {
-      this.enterAnimatedMode();
-    } else {
-      this.exitAnimatedMode();
-    }
-    this.optionsService.update(d => { d.capture.lastCaptureType = this.captureType.value; });
-    m.redraw();
-  }
-
-  private disposeQueueWait: (() => void) | null = null;
-
-  private enterAnimatedMode(): void {
-    this.captureType.value = 'animated';
-
-    // Nudge time to trigger queue loading the full slot window
-    const currentTime = this.stateService.viewState.value.time;
-    console.log('[capture] nudge +5min to trigger queue');
-    this.stateService.setTime(new Date(currentTime.getTime() + 5 * 60_000));
-    this.stateService.setTime(currentTime);
-
-    // Wait for queue to go busy then idle. If it never goes busy
-    // (everything cached), a fallback timeout locks after 200ms.
-    let seenBusy = false;
-    const fallback = setTimeout(() => {
-      if (this.disposeQueueWait) {
-        this.disposeQueueWait();
-        this.disposeQueueWait = null;
-        this.lockDataWindow();
-      }
-    }, 200);
-    this.disposeQueueWait = effect(() => {
-      const idle = this.queueStats.value.itemsQueued === 0;
-      if (!idle) {
-        seenBusy = true;
-      } else if (seenBusy) {
-        clearTimeout(fallback);
-        queueMicrotask(() => {
-          if (!this.disposeQueueWait) return;
-          this.disposeQueueWait();
-          this.disposeQueueWait = null;
-          this.lockDataWindow();
-        });
-      }
-    });
-  }
-
-  private lockDataWindow(): void {
-    const ts = this.timestepService;
-    const numSlots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
-    const currentTime = this.stateService.viewState.value.time;
-    const window = ts.getWindow(currentTime, numSlots);
-    const windowMs = window.map(t => ts.toDate(t).getTime());
-    const firstMs = Math.min(...windowMs);
-    const lastMs = Math.max(...windowMs);
-    this.dataWindowStart = firstMs;
-    this.dataWindowEnd = lastMs;
-
-    // Create start/end keyframes with current camera
-    const cam = this.auroraService.getCamera().getState();
-    const startKf = createKeyframe(firstMs, cam, true);
-    const endKf = createKeyframe(lastMs, cam, true);
-    this.keyframes.value = [startKf, endKf];
-    this.activeKeyframeId.value = null;
-
-    // Pause queue
-    this.queueService.paused.value = true;
-
-    // Install time clamp effect
-    this.disposeTimeClamp = effect(() => {
-      const timeMs = this.stateService.viewState.value.time.getTime();
-      if (timeMs < this.dataWindowStart) {
-        this.stateService.setTime(new Date(this.dataWindowStart));
-      } else if (timeMs > this.dataWindowEnd) {
-        this.stateService.setTime(new Date(this.dataWindowEnd));
-      }
-      m.redraw();
-    });
-
-    const fmt = (ms: number) => {
-      const d = new Date(ms);
-      const MM = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const DD = String(d.getUTCDate()).padStart(2, '0');
-      const hh = String(d.getUTCHours()).padStart(2, '0');
-      const mm = String(d.getUTCMinutes()).padStart(2, '0');
-      return `${MM}-${DD}:${hh}:${mm}`;
-    };
-    console.log('[capture] locked: %s → %s', fmt(firstMs), fmt(lastMs));
-    m.redraw();
-  }
-
-  private exitAnimatedMode(): void {
-    // Dispose effects
-    this.disposeQueueWait?.();
-    this.disposeQueueWait = null;
-    this.disposeTimeClamp?.();
-    this.disposeTimeClamp = null;
-
-    // Resume queue
-    this.queueService.paused.value = false;
-
-    // Clear keyframes
-    this.keyframes.value = [];
-    this.activeKeyframeId.value = null;
-
-    this.captureType.value = 'simple';
-  }
-
-  // ── Keyframe management ────────────────────────────────────────────
-
-  private static readonly MAX_KEYFRAMES = 10;
-
-  addKeyframe(timeMs: number): void {
-    if (this.captureType.value !== 'animated') return;
-    const kfs = this.keyframes.value;
-    if (kfs.length >= CaptureService.MAX_KEYFRAMES) return;
-
-    const cam = this.auroraService.getCamera().getState();
-    const kf = createKeyframe(timeMs, cam, false);
-    const updated = [...kfs, kf].sort((a, b) => a.time - b.time);
-    this.keyframes.value = updated;
-    this.activeKeyframeId.value = kf.id;
-    m.redraw();
-  }
-
-  activateKeyframe(id: number): void {
-    const kf = this.keyframes.value.find(k => k.id === id);
-    if (!kf) return;
-    this.activeKeyframeId.value = id;
-    // Snap time and camera to keyframe values
-    this.stateService.setTime(new Date(kf.time));
-    this.auroraService.setCameraPosition(kf.lat, kf.lon, kf.distance);
-    m.redraw();
-  }
-
-  deactivateKeyframe(): void {
-    this.activeKeyframeId.value = null;
-    m.redraw();
-  }
-
-  toggleKeyframe(id: number): void {
-    if (this.activeKeyframeId.value === id) {
-      this.deactivateKeyframe();
-    } else {
-      this.activateKeyframe(id);
-    }
-  }
-
-  moveKeyframe(id: number, newTimeMs: number): void {
-    const kfs = this.keyframes.value;
-    const idx = kfs.findIndex(k => k.id === id);
-    if (idx < 0) return;
-
-    // Constrain between neighbor keyframes (can't reorder)
-    const prevTime = idx > 0 ? kfs[idx - 1]!.time : this.dataWindowStart;
-    const nextTime = idx < kfs.length - 1 ? kfs[idx + 1]!.time : this.dataWindowEnd;
-    const clamped = Math.max(prevTime, Math.min(nextTime, newTimeMs));
-
-    const updated = kfs.map(k => k.id === id ? { ...k, time: clamped } : k);
-    this.keyframes.value = updated;
-
-    // If active, also set time
-    if (this.activeKeyframeId.value === id) {
-      this.stateService.setTime(new Date(clamped));
-    }
-    m.redraw();
-  }
-
-  deleteActiveKeyframe(): void {
-    const activeId = this.activeKeyframeId.value;
-    if (activeId === null) return;
-    const kf = this.keyframes.value.find(k => k.id === activeId);
-    if (!kf || kf.pinned) return;
-
-    this.keyframes.value = this.keyframes.value.filter(k => k.id !== activeId);
-    this.activeKeyframeId.value = null;
-    m.redraw();
-  }
-
-  updateActiveKeyframeCamera(): void {
-    const activeId = this.activeKeyframeId.value;
-    if (activeId === null) return;
-    const cam = this.auroraService.getCamera().getState();
-    this.keyframes.value = this.keyframes.value.map(k =>
-      k.id === activeId ? { ...k, lat: cam.lat, lon: cam.lon, distance: cam.distance } : k
-    );
-  }
-
-  // ── Dry run ─────────────────────────────────────────────────────
-
-  async dryRun(): Promise<void> {
-    if (this.captureType.value !== 'animated') return;
-    if (this.keyframes.value.length < 2) return;
-    if (this.dryRunning.value) return;
-
-    const aurora = this.auroraService;
-    const camera = aurora.getCamera();
-    const kfs = this.keyframes.value;
-    const totalFrames = this.totalFrames.value;
-    const startTime = kfs[0]!.time;
-    const endTime = kfs[kfs.length - 1]!.time;
-    const totalMinutes = (endTime - startTime) / 60_000;
-    const framesPerMinute = totalMinutes > 0 ? totalFrames / totalMinutes : totalFrames;
-
-    const fmt = (ms: number) => new Date(ms).toISOString().slice(5, 16).replace('T', ' ');
-    console.log('[capture] dry run: %s → %s, %d frames', fmt(startTime), fmt(endTime), totalFrames);
-    const t0 = performance.now();
-
-    this.dryRunning.value = true;
-    this.dryRunAborted = false;
-    this.frameIndex.value = 0;
-    this.activeKeyframeId.value = null;
-    aurora.recording = true;
-
-    // Grab DOM elements for direct update (avoid m.redraw() per frame)
-    const timeIndicator = document.querySelector('.capture-bar-time-indicator') as HTMLElement | null;
-    const frameDuration = 1000 / Number(this.options.fps);
-    const runStart = performance.now();
-
-    try {
-      for (let i = 0; i < totalFrames; i++) {
-        if (this.dryRunAborted) break;
-
-        // Compute weather time (minute-stepped)
-        const weatherTime = totalMinutes > 0
-          ? startTime + Math.floor(i / framesPerMinute) * 60000
-          : startTime;
-
-        // 1. Update all UI to match this frame BEFORE render
-        const frame = i + 1;
-        this.frameIndex.value = frame;
-        this.updateAnimInfoDOM(frame);
-        const progressEl = document.querySelector('.capture-bar-progress');
-        if (progressEl) progressEl.textContent = `${frame}/${totalFrames}`;
-        if (timeIndicator) {
-          const range = this.dataWindowEnd - this.dataWindowStart;
-          const pos = range > 0 ? ((weatherTime - this.dataWindowStart) / range) * 100 : 0;
-          timeIndicator.style.left = `${Math.max(0, Math.min(100, pos))}%`;
-        }
-
-        // 2. Interpolate camera, set state, render, wait
-        const cam = interpolateCamera(kfs, weatherTime);
-        this.stateService.setTime(new Date(weatherTime));
-        camera.setPosition(cam.lat, cam.lon, cam.distance);
-        camera.update();
-        const snapshot = aurora.getCameraSnapshot();
-        aurora.send({ type: 'render', camera: snapshot, time: weatherTime });
-        await aurora.waitForFrameComplete();
-
-        // 3. Pace to absolute timeline
-        const targetTime = runStart + (i + 1) * frameDuration;
-        const wait = targetTime - performance.now();
-        if (wait > 0) await new Promise(r => setTimeout(r, wait));
-      }
-    } finally {
-      const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-      console.log('[capture] dry run done: %ss', elapsed);
-      aurora.recording = false;
-      this.dryRunning.value = false;
-      m.redraw();
-    }
-  }
-
-  abortDryRun(): void {
-    this.dryRunAborted = true;
-  }
+  // ── Lifecycle ───────────────────────────────────────────────────
 
   enter(): void {
     if (this.mode.value !== 'off') return;
@@ -484,40 +180,12 @@ export class CaptureService {
     // Restore last capture type from persisted options
     const lastType = this.optionsService.options.value.capture.lastCaptureType;
     if (lastType === 'animated') {
-      this.enterAnimatedMode();
+      this.animated.enter();
     } else {
-      this.captureType.value = 'simple';
+      this.animated.captureType.value = 'simple';
     }
     m.redraw();
-    // Delay so .capture-rect DOM exists after redraw
     requestAnimationFrame(() => this.requestLocationUpdate(0));
-  }
-
-  record(): void {
-    if (this.mode.value !== 'ready') return;
-    if (!this.isQueueIdle) return;
-    // In simple mode, GIF requires palette (except grayscale)
-    if (this.captureType.value === 'simple' &&
-        this.options.format === 'gif' && this.options.paletteMode !== 'grayscale' && !this.palette.value) return;
-    // Cancel pending preview capture to prevent stale exportFrame during capturing
-    if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
-    // Persist rect for next session
-    this.optionsService.update(d => { d.capture.lastRect = { ...this.rect.value }; });
-    this.mode.value = 'capturing';
-    this.frameIndex.value = 0;
-    this.aborted = false;
-    if (this.captureType.value === 'animated') {
-      this.runAnimatedRecordingLoop();
-    } else {
-      this.runRecordingLoop();
-    }
-    m.redraw();
-  }
-
-  stop(): void {
-    if (this.mode.value !== 'capturing' && this.mode.value !== 'processing') return;
-    this.aborted = true;
-    // Mode transition happens when loop detects abort
   }
 
   exit(): void {
@@ -525,16 +193,7 @@ export class CaptureService {
     if (this.mode.value === 'capturing' || this.mode.value === 'processing') this.aborted = true;
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
     if (this.locationDebounce) { clearTimeout(this.locationDebounce); this.locationDebounce = null; }
-    // Clean up animated mode state
-    this.disposeQueueWait?.();
-    this.disposeQueueWait = null;
-    this.disposeTimeClamp?.();
-    this.disposeTimeClamp = null;
-    if (this.captureType.value === 'animated') {
-      this.queueService.paused.value = false;
-    }
-    this.keyframes.value = [];
-    this.activeKeyframeId.value = null;
+    this.animated.cleanup();
     this.mode.value = 'off';
     this.frameIndex.value = 0;
     this.palette.value = null;
@@ -546,40 +205,38 @@ export class CaptureService {
     m.redraw();
   }
 
-  get canShare(): boolean {
-    if (!this.downloadBlob || !navigator.canShare) return false;
-    const file = new File([this.downloadBlob], this.downloadName, { type: this.downloadBlob.type });
-    return navigator.canShare({ files: [file] });
+  toggleCaptureType(): void {
+    if (this.mode.value !== 'ready') return;
+    this.animated.toggleType();
   }
 
-  async share(): Promise<void> {
-    if (!this.downloadBlob) return;
-    const file = new File([this.downloadBlob], this.downloadName, { type: this.downloadBlob.type });
-    await navigator.share({ files: [file] });
-  }
-
-  private buildFilename(timeMs: number): string {
-    const d = new Date(timeMs);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const dt = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}UTC`;
-    const loc = this.locationLabel.value.trim().replace(/[<>:"/\\|?*]+/g, '');
-    const ext = this.options.format;
-    return loc
-      ? `zero.hypatia-${dt}-${loc}.${ext}`
-      : `zero.hypatia-${dt}.${ext}`;
-  }
-
-  private revokeDownloadUrl(): void {
-    if (this.downloadUrl) {
-      URL.revokeObjectURL(this.downloadUrl);
-      this.downloadUrl = null;
+  record(): void {
+    if (this.mode.value !== 'ready') return;
+    if (!this.isQueueIdle) return;
+    // In simple mode, GIF requires palette (except grayscale)
+    if (this.animated.captureType.value === 'simple' &&
+        this.options.format === 'gif' && this.options.paletteMode !== 'grayscale' && !this.palette.value) return;
+    if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
+    this.optionsService.update(d => { d.capture.lastRect = { ...this.rect.value }; });
+    this.mode.value = 'capturing';
+    this.frameIndex.value = 0;
+    this.aborted = false;
+    if (this.animated.captureType.value === 'animated') {
+      this.runAnimatedRecordingLoop();
+    } else {
+      this.runSimpleRecordingLoop();
     }
-    this.downloadBlob = null;
+    m.redraw();
   }
 
-  // ── Recording loop ───────────────────────────────────────────────
+  stop(): void {
+    if (this.mode.value !== 'capturing' && this.mode.value !== 'processing') return;
+    this.aborted = true;
+  }
 
-  private async runRecordingLoop(): Promise<void> {
+  // ── Recording loops ─────────────────────────────────────────────
+
+  private async runSimpleRecordingLoop(): Promise<void> {
     const aurora = this.auroraService;
     const { format, fps: fpsStr, paletteMode } = this.options;
     const fps = Number(fpsStr);
@@ -590,7 +247,6 @@ export class CaptureService {
     aurora.recording = true;
 
     try {
-      // Worker renders all frames in a tight loop — no cross-thread round trips
       const bitmaps = await new Promise<ImageBitmap[]>(resolve => {
         aurora.onRecordProgress = (frameIndex) => {
           if (this.aborted) { resolve([]); return; }
@@ -602,25 +258,19 @@ export class CaptureService {
         aurora.send({ type: 'recordBatch', camera, time: frozenTime, fixedDtMs, totalFrames });
       });
 
-      // Abort during capturing — skip processing entirely
       if (this.aborted) {
         for (const bmp of bitmaps) bmp.close();
         this.mode.value = 'ready';
         return;
       }
 
-      // Phase 2: processing (crop + encode)
       this.mode.value = 'processing';
       this.frameIndex.value = 0;
       m.redraw();
 
       const { w: outW, h: outH } = this.getOutputDimensions();
-
-      // Build decorator for header/footer bars
       const label = this.options.label ? this.locationLabel.value : '';
-      const d = new Date(frozenTime);
-      const pad2 = (n: number) => String(n).padStart(2, '0');
-      const timestamp = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC`;
+      const timestamp = formatTimestampUTC(frozenTime);
       const logo = await loadLogo();
       const scale = outW / this.rect.value.w;
       const decorator = createDecorator(outW, outH, label, timestamp, logo, scale);
@@ -641,19 +291,11 @@ export class CaptureService {
         session.addFrame(decorated, outW, outH);
         this.frameIndex.value = i + 1;
         m.redraw();
-        // Yield each frame to keep UI responsive during encoding
         await new Promise<void>(r => setTimeout(r, 0));
       }
 
       if (!this.aborted) {
-        const blob = await session.finish();
-        this.revokeDownloadUrl();
-        this.downloadBlob = blob;
-        this.downloadUrl = URL.createObjectURL(blob);
-        this.downloadName = this.buildFilename(frozenTime);
-        const mb = blob.size / (1024 * 1024);
-        this.downloadSize = mb >= 1 ? `${mb.toFixed(1)}MB` : `${(blob.size / 1024).toFixed(0)}KB`;
-        this.mode.value = 'done';
+        this.finishRecording(await session.finish(), this.buildFilename(frozenTime));
       } else {
         this.mode.value = 'ready';
       }
@@ -665,91 +307,31 @@ export class CaptureService {
     }
   }
 
-  private buildAnimatedFilename(startMs: number, endMs: number): string {
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const fmt = (ms: number) => {
-      const d = new Date(ms);
-      return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}UTC`;
-    };
-    const loc = this.locationLabel.value.trim().replace(/[<>:"/\\|?*]+/g, '');
-    const ext = this.options.format;
-    const range = `${fmt(startMs)}-${fmt(endMs)}`;
-    return loc
-      ? `zero.hypatia-${range}-${loc}.${ext}`
-      : `zero.hypatia-${range}.${ext}`;
-  }
-
-  private static formatTimestamp(ms: number): string {
-    const d = new Date(ms);
-    const pad2 = (n: number) => String(n).padStart(2, '0');
-    return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC`;
-  }
-
   private async runAnimatedRecordingLoop(): Promise<void> {
     const aurora = this.auroraService;
-    const camera = aurora.getCamera();
-    const kfs = this.keyframes.value;
-    const { format, fps: fpsStr, paletteMode } = this.options;
-    const fps = Number(fpsStr);
-    const totalFrames = this.totalFrames.value;
-    const startTime = kfs[0]!.time;
-    const endTime = kfs[kfs.length - 1]!.time;
-    const totalMinutes = (endTime - startTime) / 60000;
-    const framesPerMinute = totalMinutes > 0 ? totalFrames / totalMinutes : totalFrames;
-
-    aurora.recording = true;
-    this.activeKeyframeId.value = null;
 
     try {
-      // Phase 1: capture bitmaps frame by frame
-      const bitmaps: ImageBitmap[] = [];
-      const frameTimes: number[] = [];
+      // Phase 1: capture bitmaps via AnimatedCapture
+      const result = await this.animated.captureFrames(() => this.aborted);
 
-      for (let i = 0; i < totalFrames; i++) {
-        if (this.aborted) break;
-
-        // Compute weather time (minute-stepped)
-        const weatherTime = totalMinutes > 0
-          ? startTime + Math.floor(i / framesPerMinute) * 60000
-          : startTime;
-
-        // Interpolate camera
-        const cam = interpolateCamera(kfs, weatherTime);
-
-        // Apply to camera and state
-        this.stateService.setTime(new Date(weatherTime));
-        camera.setPosition(cam.lat, cam.lon, cam.distance);
-        camera.update();
-
-        // Arm deferred capture, then render
-        aurora.send({ type: 'captureFrame' });
-        const snapshot = aurora.getCameraSnapshot();
-        aurora.send({ type: 'render', camera: snapshot, time: weatherTime });
-
-        const bitmap = await aurora.waitForExportFrame();
-        bitmaps.push(bitmap);
-        frameTimes.push(weatherTime);
-
-        this.frameIndex.value = i + 1;
-        m.redraw();
-      }
-
-      if (this.aborted) {
-        for (const bmp of bitmaps) bmp.close();
+      if (!result) {
         this.mode.value = 'ready';
         return;
       }
 
-      // Phase 2: processing (crop + decorate + encode)
+      // Phase 2: process (crop + decorate + encode)
       this.mode.value = 'processing';
       this.frameIndex.value = 0;
       m.redraw();
 
+      const { bitmaps, frameTimes } = result;
+      const startTime = this.animated.startTime;
+      const { format, fps: fpsStr, paletteMode } = this.options;
+      const fps = Number(fpsStr);
       const { w: outW, h: outH } = this.getOutputDimensions();
 
-      // Build decorator
       const label = this.options.label ? this.locationLabel.value : '';
-      const baseTimestamp = CaptureService.formatTimestamp(startTime);
+      const baseTimestamp = formatTimestampUTC(startTime);
       const logo = await loadLogo();
       const scale = outW / this.rect.value.w;
       const decorator = createDecorator(outW, outH, label, baseTimestamp, logo, scale);
@@ -766,7 +348,7 @@ export class CaptureService {
           break;
         }
         const rgba = this.cropBitmap(bitmaps[i]!, outW, outH);
-        const frameTs = CaptureService.formatTimestamp(frameTimes[i]!);
+        const frameTs = formatTimestampUTC(frameTimes[i]!);
         const decorated = decorator.decorate(rgba, frameTs);
         session.addFrame(decorated, outW, outH);
         this.frameIndex.value = i + 1;
@@ -775,14 +357,7 @@ export class CaptureService {
       }
 
       if (!this.aborted) {
-        const blob = await session.finish();
-        this.revokeDownloadUrl();
-        this.downloadBlob = blob;
-        this.downloadUrl = URL.createObjectURL(blob);
-        this.downloadName = this.buildAnimatedFilename(startTime, endTime);
-        const mb = blob.size / (1024 * 1024);
-        this.downloadSize = mb >= 1 ? `${mb.toFixed(1)}MB` : `${(blob.size / 1024).toFixed(0)}KB`;
-        this.mode.value = 'done';
+        this.finishRecording(await session.finish(), this.buildAnimatedFilename(startTime, this.animated.endTime));
       } else {
         this.mode.value = 'ready';
       }
@@ -792,17 +367,50 @@ export class CaptureService {
     }
   }
 
+  // ── Recording helpers ───────────────────────────────────────────
+
+  private finishRecording(blob: Blob, filename: string): void {
+    this.revokeDownloadUrl();
+    this.downloadBlob = blob;
+    this.downloadUrl = URL.createObjectURL(blob);
+    this.downloadName = filename;
+    this.downloadSize = formatFileSize(blob.size);
+    this.mode.value = 'done';
+  }
+
+  private buildFilename(timeMs: number): string {
+    const loc = this.locationLabel.value.trim().replace(/[<>:"/\\|?*]+/g, '');
+    const ext = this.options.format;
+    const dt = formatDateFilename(timeMs);
+    return loc ? `zero.hypatia-${dt}-${loc}.${ext}` : `zero.hypatia-${dt}.${ext}`;
+  }
+
+  private buildAnimatedFilename(startMs: number, endMs: number): string {
+    const loc = this.locationLabel.value.trim().replace(/[<>:"/\\|?*]+/g, '');
+    const ext = this.options.format;
+    const range = `${formatDateFilename(startMs)}-${formatDateFilename(endMs)}`;
+    return loc ? `zero.hypatia-${range}-${loc}.${ext}` : `zero.hypatia-${range}.${ext}`;
+  }
+
+  private revokeDownloadUrl(): void {
+    if (this.downloadUrl) {
+      URL.revokeObjectURL(this.downloadUrl);
+      this.downloadUrl = null;
+    }
+    this.downloadBlob = null;
+  }
+
+  // ── Frame capture & palette ─────────────────────────────────────
+
   private cropBitmap(bitmap: ImageBitmap, outW: number, outH: number): Uint8ClampedArray {
     const rect = this.rect.value;
     const dpr = window.devicePixelRatio;
-    const border = 2;  // CSS px, matches .capture-rect border width
+    const border = 2;
     let srcX = Math.round((rect.x + border) * dpr);
     let srcY = Math.round((rect.y + border) * dpr);
     let srcW = Math.round((rect.w - border * 2) * dpr);
     let srcH = Math.round((rect.h - border * 2) * dpr);
 
-    // Clamp to bitmap bounds — shouldn't happen (rect is viewport-constrained),
-    // but guards against stale bitmap after orientation change on iPad Safari
     srcX = Math.min(srcX, bitmap.width);
     srcY = Math.min(srcY, bitmap.height);
     srcW = Math.min(srcW, bitmap.width - srcX);
@@ -820,18 +428,15 @@ export class CaptureService {
 
   private getOutputDimensions(): { w: number; h: number } {
     const rect = this.rect.value;
-    const border = 2;  // CSS px, matches .capture-rect border width
+    const border = 2;
     const contentW = rect.w - border * 2;
     const contentH = rect.h - border * 2;
     if (this.options.nativeDpr) {
       const dpr = window.devicePixelRatio;
-      // Snap to even — H.264 requires even dimensions, GIF benefits too
-      return { w: Math.round(contentW * dpr) & ~1, h: Math.round(contentH * dpr) & ~1 };
+      return { w: snapEven(Math.round(contentW * dpr)), h: snapEven(Math.round(contentH * dpr)) };
     }
     return { w: contentW, h: contentH };
   }
-
-  // ── Frame capture & palette extraction ───────────────────────────
 
   requestCaptureFrame(): void {
     if (this.captureDebounce) clearTimeout(this.captureDebounce);
@@ -841,7 +446,6 @@ export class CaptureService {
     }, 150);
   }
 
-  /** Debounced geocode from rect center. Immediate when delay=0 (e.g. on enter). */
   requestLocationUpdate(delay = 1000): void {
     if (!this.options.label || !this.geocodeAvailable) return;
     if (this.locationDebounce) clearTimeout(this.locationDebounce);
@@ -877,12 +481,9 @@ export class CaptureService {
     }, delay);
   }
 
-  private paletteRetries = 0;
-
   private async onPreviewFrame(bitmap: ImageBitmap): Promise<void> {
     if (this.mode.value === 'off') return;
     const palette = await extractPalette(bitmap, this.rect.value, this.options.nativeDpr);
-    // First frame may return black (GPU not ready) — retry up to 3 times
     if (palette.every(([r, g, b]) => r === 0 && g === 0 && b === 0) && this.paletteRetries < 3) {
       this.paletteRetries++;
       this.requestCaptureFrame();
@@ -893,7 +494,7 @@ export class CaptureService {
     m.redraw();
   }
 
-  // ── Escape key ────────────────────────────────────────────────────
+  // ── UI interactions ─────────────────────────────────────────────
 
   private installEscapeHandler(): void {
     this.removeEscapeHandler();
@@ -914,17 +515,15 @@ export class CaptureService {
     }
   }
 
-  // ── Rect drag (move) ─────────────────────────────────────────────
+  async share(): Promise<void> {
+    if (!this.downloadBlob) return;
+    const file = new File([this.downloadBlob], this.downloadName, { type: this.downloadBlob.type });
+    await navigator.share({ files: [file] });
+  }
 
-  /** Measure header height from DOM so rect.y never pushes header offscreen */
   private getHeaderHeight(): number {
     const el = document.querySelector('.capture-header');
     return el ? el.getBoundingClientRect().height : 0;
-  }
-
-  private get isLocked(): boolean {
-    const m = this.mode.value;
-    return m === 'capturing' || m === 'processing' || m === 'done';
   }
 
   startMove(e: PointerEvent): void {
@@ -955,8 +554,6 @@ export class CaptureService {
     document.addEventListener('pointerup', onUp);
   }
 
-  // ── Rect resize ───────────────────────────────────────────────────
-
   startResize(e: PointerEvent, edge: Edge): void {
     if (this.isLocked) return;
     e.preventDefault();
@@ -976,7 +573,6 @@ export class CaptureService {
       const vh = window.innerHeight;
       let { x, y, w, h } = startRect;
 
-      // Horizontal edges
       if (edge.includes('e')) {
         w = Math.max(RECT_MIN_WIDTH, Math.min(vw - x, startRect.w + dx));
       }
@@ -984,8 +580,6 @@ export class CaptureService {
         x = Math.max(0, Math.min(startRect.x + dx, startRect.x + startRect.w - RECT_MIN_WIDTH));
         w = startRect.x + startRect.w - x;
       }
-
-      // Vertical edges
       if (edge.includes('s')) {
         h = Math.max(RECT_MIN_HEIGHT, Math.min(vh - y, startRect.h + dy));
       }
@@ -994,23 +588,17 @@ export class CaptureService {
         h = startRect.y + startRect.h - y;
       }
 
-      // Aspect ratio enforcement
       if (ratio !== null) {
-        const contentRatio = ratio;  // w/h ratio for content area (inside border)
+        const contentRatio = ratio;
 
         if (isCardinal) {
-          // Cardinal edge: dragged axis leads, other axis follows
           if (edge === 'e' || edge === 'w') {
-            // Width leads → compute height from width
             const contentW = w - RECT_BORDER * 2;
             h = Math.round(contentW / contentRatio) + RECT_BORDER * 2;
-            // Clamp height to viewport, adjust width if needed
             if (y + h > vh) { h = vh - y; w = Math.round((h - RECT_BORDER * 2) * contentRatio) + RECT_BORDER * 2; }
           } else {
-            // Height leads → compute width from height
             const contentH = h - RECT_BORDER * 2;
             w = Math.round(contentH * contentRatio) + RECT_BORDER * 2;
-            // Clamp width to viewport, adjust height if needed
             if (edge === 'n') {
               if (x + w > vw) { w = vw - x; h = Math.round((w - RECT_BORDER * 2) / contentRatio) + RECT_BORDER * 2; y = startRect.y + startRect.h - h; }
             } else {
@@ -1018,16 +606,13 @@ export class CaptureService {
             }
           }
         } else {
-          // Corner: width leads, height follows; anchor is opposite corner
           const contentW = w - RECT_BORDER * 2;
           h = Math.round(contentW / contentRatio) + RECT_BORDER * 2;
-          // For north corners, adjust y to keep bottom edge anchored
           if (edge === 'ne' || edge === 'nw') {
             y = startRect.y + startRect.h - h;
             if (y < minY) { y = minY; h = startRect.y + startRect.h - y; w = Math.round((h - RECT_BORDER * 2) * contentRatio) + RECT_BORDER * 2; }
           }
           if (y + h > vh) { h = vh - y; w = Math.round((h - RECT_BORDER * 2) * contentRatio) + RECT_BORDER * 2; }
-          // For west corners, adjust x to keep right edge anchored
           if (edge === 'nw' || edge === 'sw') {
             x = startRect.x + startRect.w - w;
             if (x < 0) { x = 0; w = startRect.x + startRect.w; h = Math.round((w - RECT_BORDER * 2) / contentRatio) + RECT_BORDER * 2; }
@@ -1035,8 +620,7 @@ export class CaptureService {
         }
       }
 
-      // Snap to even so output dimensions are always even (H.264 requirement)
-      this.rect.value = { x, y, w: w & ~1, h: h & ~1 };
+      this.rect.value = { x, y, w: snapEven(w), h: snapEven(h) };
       this.requestCaptureFrame();
       m.redraw();
     };

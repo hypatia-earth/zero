@@ -8,18 +8,11 @@
 import m from 'mithril';
 import type { CaptureService } from '../services/capture/capture-service';
 import type { StateService } from '../services/state-service';
+import { formatTimeHHMM, timeToPercent } from '../services/capture/helpers';
 
 interface CaptureBarAttrs {
   captureService: CaptureService;
   stateService: StateService;
-}
-
-/** Format time as HH:MM UTC */
-function fmtTime(ms: number): string {
-  const d = new Date(ms);
-  const hh = String(d.getUTCHours()).padStart(2, '0');
-  const mm = String(d.getUTCMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
 }
 
 /** Compute time from x position on track */
@@ -36,22 +29,21 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
   return {
     view({ attrs }) {
       const { captureService, stateService } = attrs;
-      const isAnimated = captureService.captureType.value === 'animated';
+      const { km, animated } = captureService;
+      const isAnimated = animated.captureType.value === 'animated';
       if (!isAnimated) return null;
 
-      const keyframes = captureService.keyframes.value;
-      const activeId = captureService.activeKeyframeId.value;
-      const start = captureService.dataWindowStart;
-      const end = captureService.dataWindowEnd;
-      const range = end - start;
+      const keyframes = km.keyframes.value;
+      const activeId = km.activeKeyframeId.value;
+      const start = km.dataWindowStart;
+      const end = km.dataWindowEnd;
       const activeKf = activeId !== null ? keyframes.find(k => k.id === activeId) : null;
 
       // Current time indicator position
       const currentTime = stateService.viewState.value.time.getTime();
-      const timePos = range > 0 ? ((currentTime - start) / range) * 100 : 0;
-      const clampedTimePos = Math.max(0, Math.min(100, timePos));
+      const clampedTimePos = timeToPercent(currentTime, start, end);
 
-      const isDryRunning = captureService.dryRunning.value;
+      const isDryRunning = animated.dryRunning.value;
       const mode = captureService.mode.value;
       const canDryRun = mode === 'ready' && keyframes.length >= 2 && !isDryRunning;
 
@@ -60,17 +52,17 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
         m('.capture-bar-buttons', [
           isDryRunning
             ? m('button.capture-bar-btn.danger', {
-                onclick: () => captureService.abortDryRun(),
+                onclick: () => animated.abortDryRun(),
                 title: 'Stop preview',
               }, '\u25A0 Abort')
             : m('button.capture-bar-btn', {
                 disabled: !canDryRun,
-                onclick: () => captureService.dryRun(),
+                onclick: () => animated.dryRun(),
                 title: 'Preview animation',
               }, '\u25B6 Dry Run'),
           !isDryRunning && activeKf && !activeKf.pinned
             ? m('button.capture-bar-btn.danger', {
-                onclick: () => captureService.deleteActiveKeyframe(),
+                onclick: () => km.deleteActive(),
                 title: 'Delete active keyframe',
               }, '\u2715 Delete')
             : null,
@@ -85,15 +77,14 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
           oncreate(vnode: m.VnodeDOM) { trackEl = vnode.dom as HTMLElement; },
           onupdate(vnode: m.VnodeDOM) { trackEl = vnode.dom as HTMLElement; },
           onclick: isDryRunning ? undefined : (e: MouseEvent) => {
-            // Only on empty track area — keyframe clicks stopPropagation
             if (!trackEl) return;
             const time = xToTime(e.clientX, trackEl, start, end);
-            captureService.addKeyframe(time);
+            km.add(time);
           },
         }, [
           // Data window edge labels
-          m('span.capture-bar-edge-label.left', fmtTime(start)),
-          m('span.capture-bar-edge-label.right', fmtTime(end)),
+          m('span.capture-bar-edge-label.left', formatTimeHHMM(start)),
+          m('span.capture-bar-edge-label.right', formatTimeHHMM(end)),
 
           // Time indicator
           m('.capture-bar-time-indicator', {
@@ -102,7 +93,7 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
 
           // Keyframe markers
           ...keyframes.map(kf => {
-            const pos = range > 0 ? ((kf.time - start) / range) * 100 : 0;
+            const pos = timeToPercent(kf.time, start, end);
             const isActive = kf.id === activeId;
 
             return m('.capture-bar-keyframe', {
@@ -113,7 +104,7 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
               style: { left: `${pos}%` },
               onclick: (e: MouseEvent) => {
                 e.stopPropagation();
-                captureService.toggleKeyframe(kf.id);
+                km.toggle(kf.id);
               },
               onpointerdown: (e: PointerEvent) => {
                 e.stopPropagation();
@@ -123,7 +114,7 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
                 const onMove = (ev: PointerEvent) => {
                   if (draggingId === null || !trackEl) return;
                   const time = xToTime(ev.clientX, trackEl, start, end);
-                  captureService.moveKeyframe(draggingId, time);
+                  km.move(draggingId, time);
                 };
 
                 const onUp = () => {
@@ -135,7 +126,7 @@ export const CaptureBar: m.ClosureComponent<CaptureBarAttrs> = () => {
                 document.addEventListener('pointermove', onMove);
                 document.addEventListener('pointerup', onUp);
               },
-            }, m('span.capture-bar-kf-label', fmtTime(kf.time)));
+            }, m('span.capture-bar-kf-label', formatTimeHHMM(kf.time)));
           }),
         ]),
       ]);

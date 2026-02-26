@@ -55,7 +55,7 @@ export const App: m.ClosureComponent = () => {
       const ready = state.complete && !state.error;
       const minimal = ready && services.stateService!.minimalUI.value;
       const captureActive = ready && services.captureService!.mode.value !== 'off';
-      const captureAnimated = captureActive && services.captureService!.captureType.value === 'animated';
+      const captureAnimated = captureActive && services.captureService!.animated.captureType.value === 'animated';
 
       return [
         m(BootstrapModal, {

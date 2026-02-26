@@ -1,10 +1,13 @@
 /**
  * Camera keyframe model for animated capture
  *
- * Defines keyframe type, creation, and interpolation.
+ * Defines keyframe type, creation, interpolation, and KeyframeManager.
  * 2 keyframes: slerp (great-circle arc).
  * 3+ keyframes: Catmull-Rom spline in Cartesian 3D.
  */
+
+import m from 'mithril';
+import { signal, type Signal } from '@preact/signals-core';
 
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
@@ -22,6 +25,17 @@ export interface InterpolatedCamera {
   lat: number;
   lon: number;
   distance: number;
+}
+
+/** Minimal camera interface — avoids importing full AuroraService */
+interface CameraProvider {
+  getCamera(): { getState(): { lat: number; lon: number; distance: number } };
+  setCameraPosition(lat: number, lon: number, distance: number): void;
+}
+
+/** Minimal time interface — avoids importing full StateService */
+interface TimeController {
+  setTime(d: Date): void;
 }
 
 let nextId = 1;
@@ -175,4 +189,105 @@ export function interpolateCamera(keyframes: CameraKeyframe[], timeMs: number): 
     return slerpPosition(keyframes[0]!, keyframes[1]!, t);
   }
   return catmullRomPosition(keyframes, timeMs);
+}
+
+// ── KeyframeManager ──────────────────────────────────────────────
+
+export class KeyframeManager {
+  readonly keyframes: Signal<CameraKeyframe[]> = signal([]);
+  readonly activeKeyframeId: Signal<number | null> = signal(null);
+  dataWindowStart = 0;
+  dataWindowEnd = 0;
+
+  private static readonly MAX = 10;
+
+  constructor(
+    private readonly cam: CameraProvider,
+    private readonly time: TimeController,
+  ) {}
+
+  /** Create pinned start/end keyframes from data window bounds */
+  initFromWindow(startMs: number, endMs: number): void {
+    this.dataWindowStart = startMs;
+    this.dataWindowEnd = endMs;
+    const state = this.cam.getCamera().getState();
+    this.keyframes.value = [
+      createKeyframe(startMs, state, true),
+      createKeyframe(endMs, state, true),
+    ];
+    this.activeKeyframeId.value = null;
+  }
+
+  /** Clear all keyframes and reset window */
+  reset(): void {
+    this.keyframes.value = [];
+    this.activeKeyframeId.value = null;
+    this.dataWindowStart = 0;
+    this.dataWindowEnd = 0;
+  }
+
+  add(timeMs: number): void {
+    const kfs = this.keyframes.value;
+    if (kfs.length >= KeyframeManager.MAX) return;
+    const state = this.cam.getCamera().getState();
+    const kf = createKeyframe(timeMs, state, false);
+    this.keyframes.value = [...kfs, kf].sort((a, b) => a.time - b.time);
+    this.activeKeyframeId.value = kf.id;
+    m.redraw();
+  }
+
+  activate(id: number): void {
+    const kf = this.keyframes.value.find(k => k.id === id);
+    if (!kf) return;
+    this.activeKeyframeId.value = id;
+    this.time.setTime(new Date(kf.time));
+    this.cam.setCameraPosition(kf.lat, kf.lon, kf.distance);
+    m.redraw();
+  }
+
+  deactivate(): void {
+    this.activeKeyframeId.value = null;
+    m.redraw();
+  }
+
+  toggle(id: number): void {
+    if (this.activeKeyframeId.value === id) {
+      this.deactivate();
+    } else {
+      this.activate(id);
+    }
+  }
+
+  move(id: number, newTimeMs: number): void {
+    const kfs = this.keyframes.value;
+    const idx = kfs.findIndex(k => k.id === id);
+    if (idx < 0) return;
+    const prevTime = idx > 0 ? kfs[idx - 1]!.time : this.dataWindowStart;
+    const nextTime = idx < kfs.length - 1 ? kfs[idx + 1]!.time : this.dataWindowEnd;
+    const clamped = Math.max(prevTime, Math.min(nextTime, newTimeMs));
+    this.keyframes.value = kfs.map(k => k.id === id ? { ...k, time: clamped } : k);
+    if (this.activeKeyframeId.value === id) {
+      this.time.setTime(new Date(clamped));
+    }
+    m.redraw();
+  }
+
+  deleteActive(): void {
+    const activeId = this.activeKeyframeId.value;
+    if (activeId === null) return;
+    const kf = this.keyframes.value.find(k => k.id === activeId);
+    if (!kf || kf.pinned) return;
+    this.keyframes.value = this.keyframes.value.filter(k => k.id !== activeId);
+    this.activeKeyframeId.value = null;
+    m.redraw();
+  }
+
+  updateActiveCamera(): void {
+    const activeId = this.activeKeyframeId.value;
+    if (activeId === null) return;
+    const state = this.cam.getCamera().getState();
+    this.keyframes.value = this.keyframes.value.map(k =>
+      k.id === activeId ? { ...k, lat: state.lat, lon: state.lon, distance: state.distance } : k
+    );
+  }
 }
