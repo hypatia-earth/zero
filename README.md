@@ -97,6 +97,10 @@ Different missions, both valuable.
 
 ## Changelog
 
+### 2026-02-27
+- **MP4 capture** - export weather animations as MP4 video with configurable bitrate, in addition to existing GIF export
+- **Keyframe editor** - animated capture mode with draggable timeline keyframes and text-based Flight Plan editor for precise camera path control
+
 ### 2026-02-22
 - **GIF capture** - record animated GIFs of the globe with configurable FPS, duration, palette modes (fast/precise/grayscale), and native DPR support. GPU readback pipeline ensures frame-accurate capture across browsers. Two-phase UI shows capture and processing progress inside the capture rect
 - **Precipitation layer** - rain, snow, freezing rain, sleet and ice pellets with advection-based interpolation: GFS wind fields drive ECMWF precipitation displacement for smooth temporal animation between hourly timesteps
