@@ -5,7 +5,7 @@ import package::aurora::shaders::projection_o1280::o1280LatLonToCell;
 import package::aurora::shaders::palette::samplePalette;
 import constants::LAYER_TEMP;
 // sampleParam_temperature_2m provided by param_gen virtual library
-import param_gen::sampleParam_temperature_2m;
+import package::param_gen::sampleParam_temperature_2m;
 
 // Texture-based colormap using shared palette array
 fn colormapTemp(tempC: f32) -> vec4f {

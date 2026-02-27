@@ -82,15 +82,18 @@ export class ShaderComposer {
     const userLayers = surfaceLayers.filter(l => !l.isBuiltIn && l.shaders?.main);
     const userLayerLib = userLayers.length > 0 ? this.generateUserLayerLib(userLayers) : '';
 
-    const virtualLibs: Record<string, () => string> = {
-      param_gen: () => paramGen,
-    };
+    // Add param_gen to weslSrc so it's in the package:: namespace
+    // (virtual libs can't resolve package:: imports back to the source tree)
+    const weslSrc = { ...mainWesl.weslSrc, 'param_gen.wesl': paramGen };
+
+    const virtualLibs: Record<string, () => string> = {};
     if (userLayerLib) {
       virtualLibs['user_layers'] = () => userLayerLib;
     }
 
     const linked = await link({
       ...mainWesl,
+      weslSrc,
       conditions,
       constants,
       virtualLibs,

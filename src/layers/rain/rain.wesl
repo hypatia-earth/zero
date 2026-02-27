@@ -8,7 +8,7 @@ import package::aurora::shaders::common::{COMMON_PI, COMMON_TAU};
 import package::aurora::shaders::palette::samplePalette;
 import constants::{LAYER_RAIN, PARAM_PRECIPITATION};
 // sampleParam_* provided by param_gen virtual library
-import param_gen::{sampleParam_precipitation_type, sampleParam_precipitation};
+import package::param_gen::{sampleParam_precipitation_type, sampleParam_precipitation};
 
 // ─── Hash ───────────────────────────────────────────────────────────────────
 
