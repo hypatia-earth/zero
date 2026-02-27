@@ -8,6 +8,7 @@
 
 import m from 'mithril';
 import type { CaptureService } from '../services/capture/capture-service';
+import { DialogService } from '../services/dialog-service';
 import { OverlayHeader } from './overlay-header';
 import { createKeyframe } from '../services/capture/keyframe';
 import { parseFlightPlan, formatFlightPlan } from '../services/capture/flight-plan';
@@ -16,14 +17,23 @@ export interface FlightPlanDialogAttrs {
   captureService: CaptureService;
 }
 
+const FP = DialogService.sizes.flightPlan;
+const RECT_ID = 'flightPlan';
+
 export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () => {
   let wasOpen = false;
   let text = '';
   let error: string | null = null;
 
-  // Drag position (absolute px)
-  let posX = 60;
-  let posY = 100;
+  // Panel position and size (absolute px)
+  let posX = 0;
+  let posY = 0;
+  let width = FP.defaultW;
+  let height = FP.defaultH;
+
+  function saveRect(): void {
+    DialogService.saveRect(RECT_ID, { x: posX, y: posY, w: width, h: height });
+  }
 
   function startDrag(e: PointerEvent): void {
     e.preventDefault();
@@ -39,6 +49,31 @@ export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () =>
     const onUp = () => {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
+      saveRect();
+    };
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  }
+
+  function startResize(e: PointerEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = width;
+    const startH = height;
+
+    const onMove = (ev: PointerEvent) => {
+      width = Math.max(FP.minW, startW + ev.clientX - startX);
+      height = Math.max(FP.minH, startH + ev.clientY - startY);
+      m.redraw();
+    };
+
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      saveRect();
     };
 
     document.addEventListener('pointermove', onMove);
@@ -51,13 +86,21 @@ export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () =>
       const km = captureService.km;
 
       if (!captureService.flightPlanOpen.value) {
-        wasOpen = false;
+        if (wasOpen) {
+          saveRect();
+          wasOpen = false;
+        }
         return null;
       }
 
-      // Import keyframes on open transition
+      // Restore rect and import keyframes on open transition
       if (!wasOpen) {
         wasOpen = true;
+        const rect = DialogService.resolveRect(RECT_ID, FP);
+        posX = rect.x;
+        posY = rect.y;
+        width = rect.w;
+        height = rect.h;
         text = formatFlightPlan(km.keyframes.value, km.wrap);
         error = null;
       }
@@ -87,24 +130,28 @@ export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () =>
         style: {
           left: `${posX}px`,
           top: `${posY}px`,
+          width: `${width}px`,
+          height: `${height}px`,
         },
         onpointerdown: (e: PointerEvent) => e.stopPropagation(),
       }, [
         m(OverlayHeader, {
           label: 'Flight Plan',
           onDrag: startDrag,
-          onClose: () => { captureService.flightPlanOpen.value = false; },
+          onClose: () => { saveRect(); captureService.flightPlanOpen.value = false; },
         }),
         m('.flight-plan-content', [
           m('textarea', {
             class: error ? 'error' : '',
-            rows: 12,
             spellcheck: false,
             value: text,
             oninput: onInput,
           }),
           error ? m('.error-message', error) : null,
         ]),
+        m('.flight-plan-resize', {
+          onpointerdown: startResize,
+        }),
       ]);
     },
   };

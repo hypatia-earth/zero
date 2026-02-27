@@ -20,6 +20,7 @@ import { loadLogo, createDecorator } from './decorate';
 import { KeyframeManager } from './keyframe';
 import { AnimatedCapture } from './animated-capture';
 import { formatTimestampUTC, formatDateFilename, formatFileSize, snapEven } from './helpers';
+import { DialogService, type OverlaySizes } from '../dialog-service';
 import type { AuroraService } from '../aurora-service';
 import type { StateService } from '../state-service';
 import type { OptionsService } from '../options-service';
@@ -30,9 +31,6 @@ import type { QueueStats } from '../../config/types';
 export type { CaptureType } from './animated-capture';
 
 const RECT_BORDER = 2;
-const RECT_DEFAULT_SIZE = 480;
-const RECT_MIN_WIDTH = 320 + RECT_BORDER * 2;
-const RECT_MIN_HEIGHT = 240 + RECT_BORDER * 2;
 
 const ASPECT_RATIOS: Record<string, number | null> = {
   'free': null,
@@ -42,45 +40,22 @@ const ASPECT_RATIOS: Record<string, number | null> = {
   '9:16': 9 / 16,
 };
 
-/**
- * Resolve initial rect from saved lastRect with fallback chain:
- * 1. Saved rect as-is (if valid size and fits viewport)
- * 2. Saved rect re-centered (if valid size but outside viewport)
- * 3. Default rect matching current aspect ratio option
- */
-function resolveInitialRect(
-  saved: { x: number; y: number; w: number; h: number } | null,
-  ratio: number | null,
-  minY: number,
-): Rect {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-
-  if (saved && saved.w >= RECT_MIN_WIDTH && saved.h >= RECT_MIN_HEIGHT) {
-    if (saved.x >= 0 && saved.y >= minY && saved.x + saved.w <= vw && saved.y + saved.h <= vh) {
-      return { ...saved };
-    }
-    const x = Math.round((vw - saved.w) / 2);
-    const y = Math.round((vh - saved.h) / 2);
-    if (x >= 0 && y >= minY && x + saved.w <= vw && y + saved.h <= vh) {
-      return { x, y, w: saved.w, h: saved.h };
-    }
-  }
-
-  let w = RECT_DEFAULT_SIZE;
+/** Compute capture OverlaySizes, adjusting defaults for aspect ratio */
+function captureSizes(ratio: number | null): OverlaySizes {
+  const base = DialogService.sizes.capture;
+  let w = base.defaultW;
   let h: number;
   if (ratio !== null) {
     h = Math.round((w - RECT_BORDER * 2) / ratio) + RECT_BORDER * 2;
-    if (h > vh - minY) {
-      h = Math.round((vh - minY) * 0.75);
+    const maxH = window.innerHeight * 0.75;
+    if (h > maxH) {
+      h = Math.round(maxH);
       w = Math.round((h - RECT_BORDER * 2) * ratio) + RECT_BORDER * 2;
     }
   } else {
     h = Math.round(w * 0.75);
   }
-  const x = Math.round((vw - w) / 2);
-  const y = Math.round((vh - h) / 2);
-  return { x, y, w, h };
+  return { ...base, defaultW: w, defaultH: h };
 }
 
 type CaptureMode = 'off' | 'ready' | 'capturing' | 'processing' | 'done';
@@ -135,9 +110,8 @@ export class CaptureService {
     this.queueStats = queueStats;
     auroraService.onExportFrame = (bitmap: ImageBitmap) => this.onPreviewFrame(bitmap);
 
-    const saved = optionsService.options.value.capture.lastRect;
-    const ratio = ASPECT_RATIOS[optionsService.options.value.capture.aspectRatio] ?? null;
-    this.rect = signal(resolveInitialRect(saved, ratio, 0));
+    const sizes = captureSizes(ASPECT_RATIOS[optionsService.options.value.capture.aspectRatio] ?? null);
+    this.rect = signal(DialogService.resolveRect('capture', sizes));
     this.totalFrames = computed(() => {
       const { duration, fps } = this.options;
       return Number(duration) * Number(fps);
@@ -174,6 +148,8 @@ export class CaptureService {
 
   enter(): void {
     if (this.mode.value !== 'off') return;
+    const sizes = captureSizes(ASPECT_RATIOS[this.optionsService.options.value.capture.aspectRatio] ?? null);
+    this.rect.value = DialogService.resolveRect('capture', sizes);
     this.mode.value = 'ready';
     this.frameIndex.value = 0;
     this.palette.value = null;
@@ -195,6 +171,7 @@ export class CaptureService {
     if (this.mode.value === 'capturing' || this.mode.value === 'processing') this.aborted = true;
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
     if (this.locationDebounce) { clearTimeout(this.locationDebounce); this.locationDebounce = null; }
+    DialogService.saveRect('capture', this.rect.value);
     this.animated.cleanup();
     this.flightPlanOpen.value = false;
     this.mode.value = 'off';
@@ -220,7 +197,7 @@ export class CaptureService {
     if (this.animated.captureType.value === 'simple' &&
         this.options.format === 'gif' && this.options.paletteMode !== 'grayscale' && !this.palette.value) return;
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
-    this.optionsService.update(d => { d.capture.lastRect = { ...this.rect.value }; });
+    DialogService.saveRect('capture', this.rect.value);
     this.mode.value = 'capturing';
     this.frameIndex.value = 0;
     this.aborted = false;
@@ -539,6 +516,7 @@ export class CaptureService {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
       this.requestLocationUpdate();
+      DialogService.saveRect('capture', this.rect.value);
     };
 
     document.addEventListener('pointermove', onMove);
@@ -565,17 +543,17 @@ export class CaptureService {
       let { x, y, w, h } = startRect;
 
       if (edge.includes('e')) {
-        w = Math.max(RECT_MIN_WIDTH, Math.min(vw - x, startRect.w + dx));
+        w = Math.max(DialogService.sizes.capture.minW, Math.min(vw - x, startRect.w + dx));
       }
       if (edge.includes('w')) {
-        x = Math.max(0, Math.min(startRect.x + dx, startRect.x + startRect.w - RECT_MIN_WIDTH));
+        x = Math.max(0, Math.min(startRect.x + dx, startRect.x + startRect.w - DialogService.sizes.capture.minW));
         w = startRect.x + startRect.w - x;
       }
       if (edge.includes('s')) {
-        h = Math.max(RECT_MIN_HEIGHT, Math.min(vh - y, startRect.h + dy));
+        h = Math.max(DialogService.sizes.capture.minH, Math.min(vh - y, startRect.h + dy));
       }
       if (edge === 'n' || edge === 'ne' || edge === 'nw') {
-        y = Math.max(minY, Math.min(startRect.y + dy, startRect.y + startRect.h - RECT_MIN_HEIGHT));
+        y = Math.max(minY, Math.min(startRect.y + dy, startRect.y + startRect.h - DialogService.sizes.capture.minH));
         h = startRect.y + startRect.h - y;
       }
 
@@ -620,6 +598,7 @@ export class CaptureService {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
       this.requestLocationUpdate();
+      DialogService.saveRect('capture', this.rect.value);
     };
 
     document.addEventListener('pointermove', onMove);
