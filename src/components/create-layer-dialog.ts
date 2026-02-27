@@ -42,6 +42,19 @@ function getSamplerName(param: string): string {
   return `sampleParam_${safeName}`;
 }
 
+/** Map param name to its .wesl module name under aurora/shaders/params/ */
+const PARAM_MODULE_MAP: Record<string, string> = {
+  cloud_cover: 'cloud_cover',
+  precipitation: 'precipitation',
+  precipitation_type: 'precipitation_type',
+  pressure_msl: 'pressure_msl',
+  temperature_2m: 'temperature_2m',
+  wind_u_component_10m: 'wind_u_10m',
+  wind_u_component_1000hPa: 'wind_u_1000hpa',
+  wind_v_component_10m: 'wind_v_10m',
+  wind_v_component_1000hPa: 'wind_v_1000hpa',
+};
+
 /** Encode TModelParam as a single string for <select> value */
 function encodeModelParam(mp: TModelParam): string {
   return `${mp.model}::${mp.param}`;
@@ -66,8 +79,13 @@ const PALETTE_OPTIONS = PALETTE_IDS.map(id => ({
 }));
 
 // Template shader for new layers
-// Placeholders: {BlendName}, {userLayerIndex}, {paletteMin}, {paletteMax}, {samplerFn}
+// Placeholders: {blendFn}, {userLayerIndex}, {paletteMin}, {paletteMax}, {samplerFn}, {paramModule}
 const SHADER_TEMPLATE = `// Custom blend function - palette visualization
+import package::aurora::shaders::params::{paramModule}::{samplerFn};
+import package::aurora::shaders::layer_helpers::{getUserLayerOpacity, getUserLayerPaletteIndex};
+import package::aurora::shaders::projection_o1280::o1280LatLonToCell;
+import package::aurora::shaders::palette::samplePalette;
+
 fn {blendFn}(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let opacity = getUserLayerOpacity({userLayerIndex}u);
   let cell = o1280LatLonToCell(lat, lon);
@@ -151,12 +169,14 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
   function updateShaderTemplate() {
     const [min, max] = state.paramMeta.range;
     const samplerFn = getSamplerName(state.modelParam.param);
+    const paramModule = PARAM_MODULE_MAP[state.modelParam.param] ?? state.modelParam.param;
 
     // Keep {userLayerIndex} and {blendFn} placeholders - replaced when index is assigned
     state.shaderCode = SHADER_TEMPLATE
       .replace(/{paletteMin}/g, min.toFixed(1))
       .replace(/{paletteMax}/g, max.toFixed(1))
-      .replace(/{samplerFn}/g, samplerFn);
+      .replace(/{samplerFn}/g, samplerFn)
+      .replace(/{paramModule}/g, paramModule);
   }
 
   /** Replace placeholders in shader code with actual values */
