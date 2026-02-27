@@ -10,15 +10,15 @@ import { getMainShaders, getPostShaders } from './shader-loader';
 import { getParamMeta, getModel, type TModel, type TModelParam } from '../config/models';
 
 // Import shader modules
-import commonCode from './shaders/common.wgsl?raw';
-import projectionO1280Code from './shaders/projection-o1280.wgsl?raw';
-import layerHelpersCode from './shaders/layer-helpers.wgsl?raw';
-import sunAtmoCode from '../layers/sun/atmo.wgsl?raw';
-import logoCode from './shaders/logo.wgsl?raw';
-import mainTemplateCode from './shaders/main-template.wgsl?raw';
-import sunPostCode from '../layers/sun/post.wgsl?raw';
-import sunCode from '../layers/sun/sun.wgsl?raw';
-import sunBlendCode from '../layers/sun/blend.wgsl?raw';
+import commonCode from './shaders/common.wesl?raw';
+import projectionO1280Code from './shaders/projection-o1280.wesl?raw';
+import layerHelpersCode from './shaders/layer-helpers.wesl?raw';
+import sunAtmoCode from '../layers/sun/atmo.wesl?raw';
+import logoCode from './shaders/logo.wesl?raw';
+import mainTemplateCode from './shaders/main-template.wesl?raw';
+import sunPostCode from '../layers/sun/post.wesl?raw';
+import sunCode from '../layers/sun/sun.wesl?raw';
+import sunBlendCode from '../layers/sun/blend.wesl?raw';
 
 export interface ComposedShaders {
   main: string;

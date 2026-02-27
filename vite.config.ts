@@ -1,4 +1,5 @@
 import { defineConfig, type Plugin, loadEnv } from 'vite';
+import viteWesl from 'wesl-plugin/vite';
 import fs from 'fs';
 import { execSync } from 'child_process';
 import { cacheHeaders } from './vite-plugins/cache-headers';
@@ -15,6 +16,7 @@ export default defineConfig(({ mode }) => {
   return {
     base: process.env.BASE_URL || '/',
     plugins: [
+      viteWesl(),
       cacheHeaders(),
       servePublicModules(),
       geonamesProxy(env),
@@ -33,6 +35,9 @@ export default defineConfig(({ mode }) => {
         key: fs.readFileSync('../certs/hypatia-key.pem'),
         cert: fs.readFileSync('../certs/hypatia.pem'),
       } : undefined,
+      fs: {
+        allow: ['..'],  // Allow serving files from parent (for npm linked packages)
+      },
     },
     build: {
       target: 'esnext',
@@ -43,6 +48,7 @@ export default defineConfig(({ mode }) => {
     },
     worker: {
       format: 'es',
+      plugins: () => [viteWesl()],
     },
   };
 });

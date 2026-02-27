@@ -12,11 +12,11 @@
  * - Day/night tinting, standard pressure highlight
  */
 
-import pressRenderCode from './render.wgsl?raw';
-import pressRegridCode from './regrid.wgsl?raw';
-import pressContourCode from './contour.wgsl?raw';
-import pressPrefixSumCode from './prefix-sum.wgsl?raw';
-import pressChaikinCode from './chaikin.wgsl?raw';
+import pressRenderCode from './render.wesl?static';
+import pressRegridCode from './regrid.wesl?static';
+import pressContourCode from './contour.wesl?static';
+import pressPrefixSumCode from './prefix-sum.wesl?static';
+import pressChaikinCode from './chaikin.wesl?static';
 import type { PressureColorOption } from '../../schemas/options.schema';
 import type { PaletteTexture } from '../../aurora/palette-texture';
 import type { PaletteId } from '../../services/palette-service';

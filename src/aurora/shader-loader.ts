@@ -13,37 +13,37 @@
  */
 
 // Earth layer
-import earthBaseShader from '../layers/earth/base.wgsl?raw';
+import earthBaseShader from '../layers/earth/base.wesl?raw';
 
 // Sun layer - multiple shaders for different passes
-import sunShader from '../layers/sun/sun.wgsl?raw';
-import sunBlendShader from '../layers/sun/blend.wgsl?raw';
-import sunAtmoShader from '../layers/sun/atmo.wgsl?raw';
-import sunPostShader from '../layers/sun/post.wgsl?raw';
+import sunShader from '../layers/sun/sun.wesl?raw';
+import sunBlendShader from '../layers/sun/blend.wesl?raw';
+import sunAtmoShader from '../layers/sun/atmo.wesl?raw';
+import sunPostShader from '../layers/sun/post.wesl?raw';
 
 // Temperature layer
-import tempShader from '../layers/temp/temp.wgsl?raw';
+import tempShader from '../layers/temp/temp.wesl?raw';
 
 // Rain layer
-import rainShader from '../layers/rain/rain.wgsl?raw';
+import rainShader from '../layers/rain/rain.wesl?raw';
 
 // Graticule layer (lat/lon grid overlay)
-import graticuleShader from '../layers/graticule/graticule.wgsl?raw';
-import graticuleTextShader from '../layers/graticule/text.wgsl?raw';
+import graticuleShader from '../layers/graticule/graticule.wesl?raw';
+import graticuleTextShader from '../layers/graticule/text.wesl?raw';
 
 // Joker layer (test layer)
-import jokerShader from '../layers/joker/joker.wgsl?raw';
+import jokerShader from '../layers/joker/joker.wesl?raw';
 
 // Wind layer (compute + render)
-import windComputeShader from '../layers/wind/compute.wgsl?raw';
-import windRenderShader from '../layers/wind/render.wgsl?raw';
+import windComputeShader from '../layers/wind/compute.wesl?static';
+import windRenderShader from '../layers/wind/render.wesl?static';
 
 // Pressure layer (compute pipeline + render)
-import pressureContourShader from '../layers/pressure/contour.wgsl?raw';
-import pressureRegridShader from '../layers/pressure/regrid.wgsl?raw';
-import pressureChaikinShader from '../layers/pressure/chaikin.wgsl?raw';
-import pressureRenderShader from '../layers/pressure/render.wgsl?raw';
-import pressurePrefixSumShader from '../layers/pressure/prefix-sum.wgsl?raw';
+import pressureContourShader from '../layers/pressure/contour.wesl?static';
+import pressureRegridShader from '../layers/pressure/regrid.wesl?static';
+import pressureChaikinShader from '../layers/pressure/chaikin.wesl?static';
+import pressureRenderShader from '../layers/pressure/render.wesl?static';
+import pressurePrefixSumShader from '../layers/pressure/prefix-sum.wesl?static';
 
 export interface LayerShaders {
   /** Main blend function shader for surface pass */

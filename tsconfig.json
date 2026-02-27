@@ -19,7 +19,7 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["vite/client", "@webgpu/types"]
+    "types": ["vite/client", "@webgpu/types", "wesl-plugin/suffixes"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

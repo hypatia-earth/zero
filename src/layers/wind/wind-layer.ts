@@ -7,8 +7,8 @@
  * - Render shader displays line segments following wind field
  */
 
-import windRenderCode from './render.wgsl?raw';
-import windComputeCode from './compute.wgsl?raw';
+import windRenderCode from './render.wesl?static';
+import windComputeCode from './compute.wesl?static';
 import { generateFibonacciSphere } from '../../utils/fibonacci-sphere';
 import { generateGaussianLUTs } from '../../utils/gaussian-grid';
 import type { LayerState } from '../../config/types';
