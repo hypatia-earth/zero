@@ -4,7 +4,7 @@
  * Uses WESL's import system, @if conditionals, and constants:: to compose
  * shaders from modular .wesl source files. Param samplers are static .wesl
  * modules in aurora/shaders/params/. Dynamic param indices are injected as
- * constants::. User layer blend functions use the user_layers virtual library.
+ * constants::. User layer blend functions are injected via virtualLibs.
  */
 
 import type { LayerDeclaration } from '../services/layer/layer-service';
@@ -80,6 +80,13 @@ export class ShaderComposer {
       LAYER_SUN_ENABLED: hasLayer('sun'),
     };
 
+    // User layer conditions (slots 0-7 + preview at 8)
+    const userLayers = surfaceLayers.filter(l => !l.isBuiltIn && l.shaders?.main);
+    for (let i = 0; i < 8; i++) {
+      conditions[`USER_LAYER_${i}_ENABLED`] = userLayers.some(l => l.userLayerIndex === i);
+    }
+    conditions['USER_LAYER_PREVIEW_ENABLED'] = userLayers.some(l => l.id === '_preview');
+
     // Compute param bindings from static registry + active layers
     this.computeParamBindings(surfaceLayers);
 
@@ -91,13 +98,31 @@ export class ShaderComposer {
       constants[constName] = activeIndex.get(paramName) ?? 0;
     }
 
-    // Generate user layer virtual library (if any custom layers)
-    const userLayers = surfaceLayers.filter(l => !l.isBuiltIn && l.shaders?.main);
-    const userLayerLib = userLayers.length > 0 ? this.generateUserLayerLib(userLayers) : '';
-
+    // Per-layer virtual modules (each user layer gets its own module)
+    // Each module gets a LAYER_INDEX const injected after imports so users write LAYER_INDEX instead of a hardcoded index
     const virtualLibs: Record<string, () => string> = {};
-    if (userLayerLib) {
-      virtualLibs['user_layers'] = () => userLayerLib;
+    for (const layer of userLayers) {
+      const idx = layer.userLayerIndex!;
+      const moduleName = layer.id === '_preview' ? 'user_layer_preview' : `user_layer_${idx}`;
+      virtualLibs[moduleName] = () => {
+        // WESL requires imports before declarations — inject const after all import lines
+        const lines = layer.shaders!.main!.split('\n');
+        const imports: string[] = [];
+        const body: string[] = [];
+        let pastImports = false;
+        for (const line of lines) {
+          const trimmed = line.trimStart();
+          if (!pastImports && (trimmed.startsWith('import ') || trimmed === '' || trimmed.startsWith('//'))) {
+            // Strip constants:: imports — LAYER_INDEX is injected as a per-module const below
+            if (trimmed.startsWith('import constants::')) continue;
+            imports.push(line);
+          } else {
+            pastImports = true;
+            body.push(line);
+          }
+        }
+        return [...imports, `const LAYER_INDEX: u32 = ${idx}u;`, '', ...body].join('\n');
+      };
     }
 
     const linked = await link({
@@ -156,16 +181,6 @@ export class ShaderComposer {
     });
   }
 
-  /** Generate virtual library for user/custom layer blend functions */
-  private generateUserLayerLib(userLayers: LayerDeclaration[]): string {
-    const parts: string[] = [];
-    for (const layer of userLayers) {
-      if (layer.shaders?.main) {
-        parts.push(layer.shaders.main);
-      }
-    }
-    return parts.join('\n');
-  }
 }
 
 /** Singleton instance */

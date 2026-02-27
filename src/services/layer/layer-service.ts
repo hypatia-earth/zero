@@ -236,6 +236,40 @@ export class LayerService {
             .map(p => ({ model: 'ecmwf_ifs', param: p }) as TModelParam);  // QC-OK: validated against published params above
         }
 
+        // Migrate old shader format: fn blendCustomN → fn blend, hardcoded indices → LAYER_INDEX
+        if (declaration.shaders?.main) {
+          let code = declaration.shaders.main;
+          // Rename old blend function (blendCustom0, blendCustom1, ..., blendPreview) → blend
+          code = code.replace(/fn\s+blend(?:Custom\d+|Preview)\s*\(/g, 'fn blend(');
+          // Replace hardcoded user layer index with LAYER_INDEX
+          code = code.replace(/getUserLayerOpacity\(\d+u\)/g, 'getUserLayerOpacity(LAYER_INDEX)');
+          code = code.replace(/getUserLayerPaletteIndex\(\d+u\)/g, 'getUserLayerPaletteIndex(LAYER_INDEX)');
+          // Migrate hardcoded palette range to getUserLayerPaletteRange(LAYER_INDEX)
+          // Pattern: (value - -40.0) / (50.0 - -40.0) → use range accessor
+          const rangePattern = /\(value\s*-\s*[-\d.]+\)\s*\/\s*\([-\d.]+\s*-\s*[-\d.]+\)/g;
+          if (rangePattern.test(code) && !code.includes('getUserLayerPaletteRange')) {
+            // Add import if not present
+            if (!code.includes('getUserLayerPaletteRange')) {
+              code = code.replace(
+                /import package::aurora::shaders::layer_helpers::\{([^}]+)\}/,
+                (_, imports: string) => {
+                  if (!imports.includes('getUserLayerPaletteRange')) {
+                    return `import package::aurora::shaders::layer_helpers::{${imports.trim()}, getUserLayerPaletteRange}`;
+                  }
+                  return _;
+                }
+              );
+            }
+            // Replace the hardcoded range math with range accessor
+            code = code.replace(
+              /let t = clamp\(\(value\s*-\s*([-\d.]+)\)\s*\/\s*\(([-\d.]+)\s*-\s*([-\d.]+)\),\s*0\.0,\s*1\.0\);/,
+              'let range = getUserLayerPaletteRange(LAYER_INDEX);\n  let t = clamp((value - range.x) / (range.y - range.x), 0.0, 1.0);'
+            );
+          }
+          declaration.shaders.main = code;
+          declaration.blendFn = 'blend';
+        }
+
         // Register with fresh index (don't trust stored index)
         const layer: LayerDeclaration = {
           ...declaration,

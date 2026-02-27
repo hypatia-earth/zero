@@ -79,7 +79,7 @@ export type AuroraRequest =
   | { type: 'resize'; width: number; height: number; dpr: number }
   | { type: 'registerUserLayer'; layer: LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
-  | { type: 'setUserLayerOptions'; layerIndex: number; enabled?: boolean; opacity?: number; paletteIndex?: number }
+  | { type: 'setUserLayerOptions'; layerIndex: number; enabled?: boolean; opacity?: number; paletteIndex?: number; paletteRange?: [number, number] }
   | { type: 'updatePalette'; layer: string; paletteId: PaletteId; range?: [number, number] }
   | { type: 'captureFrame' }
   | { type: 'recordBatch'; camera: CameraSnapshot; time: number; fixedDtMs: number; totalFrames: number }
@@ -757,7 +757,11 @@ function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerU
       rebuildParamBindings();
       writeParamSizes();
       rebindAllParamBuffers();
-      console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
+      const idx = layer.userLayerIndex;
+      const enabled = idx !== undefined ? userLayerEnabled.get(idx) : undefined;
+      const opacity = idx !== undefined ? userLayerOpacities.get(idx) : undefined;
+      const dataReady = layer.params?.every(ref => paramSlotStates.get(ref.param)?.dataReady) ?? false;
+      console.log(`[Aurora] Pipeline recreated with ${layers.length} layers (${layer.id}: idx=${idx}, enabled=${enabled}, opacity=${opacity}, dataReady=${dataReady})`);
       self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: true });
     })
     .catch((err) => {
@@ -812,6 +816,9 @@ function handleSetUserLayerOptions(data: Extract<AuroraRequest, { type: 'setUser
   }
   if (data.paletteIndex !== undefined && renderer) {
     renderer.setUserLayerPaletteIndex(data.layerIndex, data.paletteIndex);
+  }
+  if (data.paletteRange && renderer) {
+    renderer.setUserLayerPaletteRange(data.layerIndex, data.paletteRange[0], data.paletteRange[1]);
   }
 }
 

@@ -8,7 +8,7 @@ import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } fro
 import { PressureLayer } from '../layers/pressure';
 import { WindLayer } from '../layers/wind';
 import { GraticuleAnimator, GRATICULE_BUFFER_SIZE } from '../layers/graticule/graticule-animator';
-import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset, getParamDtOffset, getParamSizeOffset } from './globe-uniforms';
+import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getUserLayerPaletteRangeOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset, getParamDtOffset, getParamSizeOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
 import { createCaptureTexture, readbackFrame as readbackFrameImpl } from './capture';
@@ -87,6 +87,9 @@ export class GlobeRenderer {
   private paramBuffers = new Map<string, GPUBuffer>();
   // Current param binding config (set by recreatePipeline)
   private currentParamBindings: ParamBindingConfig[] = [];
+  // Pipeline generation counter for debugging recreation
+  private pipelineGeneration = 0;
+  private lastRenderedGeneration = 0;
   // Graticule animation
   private graticuleLinesBuffer!: GPUBuffer;
   private graticuleAnimator!: GraticuleAnimator;
@@ -403,6 +406,15 @@ export class GlobeRenderer {
   }
 
   /**
+   * Set palette data range for a user layer by user layer index
+   */
+  setUserLayerPaletteRange(layerIndex: number, min: number, max: number): void {
+    const offset = getUserLayerPaletteRangeOffset(layerIndex);
+    this.uniformView.setFloat32(offset, min, true);
+    this.uniformView.setFloat32(offset + 4, max, true);
+  }
+
+  /**
    * Recreate render pipeline with new shader code
    * Used when user layers are added/removed
    */
@@ -429,6 +441,9 @@ export class GlobeRenderer {
     // Recreate bind group layout with dynamic param entries
     this.bindGroupLayout = this.createDynamicBindGroupLayout();
 
+    // Use error scopes to catch silent WebGPU validation errors
+    this.device.pushErrorScope('validation');
+
     // Recreate main pipeline with new layout
     this.pipeline = this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
@@ -442,6 +457,14 @@ export class GlobeRenderer {
       },
     });
 
+    const mainError = await this.device.popErrorScope();
+    if (mainError) {
+      console.error('[GlobeRenderer] Main pipeline validation error:', mainError.message);
+      throw new Error(`Pipeline validation: ${mainError.message}`);
+    }
+
+    this.device.pushErrorScope('validation');
+
     // Recreate post-process pipeline
     this.postProcessPipeline = this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.postProcessBindGroupLayout] }),
@@ -450,9 +473,23 @@ export class GlobeRenderer {
       primitive: { topology: 'triangle-list' },
     });
 
-    // Recreate bind group with new layout
-    this.recreateBindGroup();
+    const postError = await this.device.popErrorScope();
+    if (postError) {
+      console.error('[GlobeRenderer] Post pipeline validation error:', postError.message);
+      throw new Error(`Post pipeline validation: ${postError.message}`);
+    }
 
+    this.pipelineGeneration++;
+    console.log(`[GlobeRenderer] Pipeline recreated (gen ${this.pipelineGeneration}, params: ${this.currentParamBindings.map(p => p.param).join(', ')})`);
+
+    // Recreate bind group with new layout
+    this.device.pushErrorScope('validation');
+    this.recreateBindGroup();
+    const bindGroupError = await this.device.popErrorScope();
+    if (bindGroupError) {
+      console.error('[GlobeRenderer] Bind group validation error:', bindGroupError.message);
+      throw new Error(`Bind group validation: ${bindGroupError.message}`);
+    }
   }
 
   /**
@@ -772,7 +809,24 @@ export class GlobeRenderer {
       this.gpuTimestamp.encodeResolve(commandEncoder);
     }
 
+    // One-shot render validation after pipeline recreation
+    const isNewPipeline = this.pipelineGeneration !== this.lastRenderedGeneration;
+    if (isNewPipeline) {
+      this.device.pushErrorScope('validation');
+    }
+
     this.device.queue.submit([commandEncoder.finish()]);
+
+    if (isNewPipeline) {
+      this.lastRenderedGeneration = this.pipelineGeneration;
+      void this.device.popErrorScope().then(err => {
+        if (err) {
+          console.error(`[GlobeRenderer] Render validation error (gen ${this.pipelineGeneration}):`, err.message);
+        } else {
+          console.log(`[GlobeRenderer] First render with gen ${this.pipelineGeneration} OK`);
+        }
+      });
+    }
 
     // Start async readback AFTER submit (critical ordering)
     if (this.gpuTimestamp) {

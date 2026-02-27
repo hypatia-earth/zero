@@ -112,6 +112,16 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['userLayerPaletteIndex6', 'vec4u'],
   ['userLayerPaletteIndex7', 'vec4u'],
 
+  // userLayerPaletteRange: 8 x vec4f = 128 bytes (16 slots x 2 floats packed as min/max pairs)
+  ['userLayerPaletteRange0', 'vec4f'],
+  ['userLayerPaletteRange1', 'vec4f'],
+  ['userLayerPaletteRange2', 'vec4f'],
+  ['userLayerPaletteRange3', 'vec4f'],
+  ['userLayerPaletteRange4', 'vec4f'],
+  ['userLayerPaletteRange5', 'vec4f'],
+  ['userLayerPaletteRange6', 'vec4f'],
+  ['userLayerPaletteRange7', 'vec4f'],
+
   // Dynamic param state (16 params max) - for per-param interpolation
   // paramLerp: 4 x vec4f = 64 bytes (lerp factors 0.0-1.0)
   ['paramLerp0', 'vec4f'],   // 528: params 0-3
@@ -228,6 +238,15 @@ export const U = GLOBE_UNIFORMS.offsets as {
   userLayerPaletteIndex5: number;
   userLayerPaletteIndex6: number;
   userLayerPaletteIndex7: number;
+  // User layer palette ranges (8 vec4fs = 16 slots x 2 floats)
+  userLayerPaletteRange0: number;
+  userLayerPaletteRange1: number;
+  userLayerPaletteRange2: number;
+  userLayerPaletteRange3: number;
+  userLayerPaletteRange4: number;
+  userLayerPaletteRange5: number;
+  userLayerPaletteRange6: number;
+  userLayerPaletteRange7: number;
   // Dynamic param state (16 params max)
   paramLerp0: number;
   paramLerp1: number;
@@ -275,6 +294,9 @@ export const getLayerPaletteRangeOffset  = (index: number) => packedVec4Offset(U
 export const getUserLayerOpacityOffset      = (index: number) => packedVec4Offset(U.userLayerOpacity0, index);
 export const getUserLayerDataReadyOffset    = (index: number) => packedVec4Offset(U.userLayerDataReady0, index);
 export const getUserLayerPaletteIndexOffset = (index: number) => packedVec4Offset(U.userLayerPaletteIndex0, index);
+
+/** User layer palette range: 2 x f32 pair per slot, packed into vec4s */
+export const getUserLayerPaletteRangeOffset = (index: number) => packedVec4Offset(U.userLayerPaletteRange0, index * 2);
 
 // Param offsets (16 slots, packed as 4 x vec4)
 export const getParamLerpOffset  = (index: number) => packedVec4Offset(U.paramLerp0, index);

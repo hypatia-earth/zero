@@ -1,24 +1,25 @@
 // Globe shader — main surface pass entry module
 // Composed by ShaderComposer via WESL link()
 
-import package::aurora::shaders::layer_helpers::{u, getLayerOpacity};
+import package::aurora::shaders::layer_helpers::{u, getLayerOpacity, getUserLayerOpacity};
 import package::aurora::shaders::common::{EARTH_RADIUS, BG_COLOR, raySphereIntersect, raySphereIntersectFar};
 import package::aurora::shaders::logo::blendLogo;
 import package::layers::graticule::graticule::blendGraticule;
 import package::layers::graticule::text::blendGraticuleText;
 
-// Conditional layer imports
-@if(LAYER_EARTH_ENABLED)
 import package::layers::earth::base::blendBasemap;
-
-@if(LAYER_TEMP_ENABLED)
 import package::layers::temp::temp::blendTemp;
-
-@if(LAYER_RAIN_ENABLED)
 import package::layers::rain::rain::blendRain;
-
-@if(LAYER_SUN_ENABLED)
 import package::layers::sun::sun::blendSun;
+import user_layer_0::blend as blendUser0;
+import user_layer_1::blend as blendUser1;
+import user_layer_2::blend as blendUser2;
+import user_layer_3::blend as blendUser3;
+import user_layer_4::blend as blendUser4;
+import user_layer_5::blend as blendUser5;
+import user_layer_6::blend as blendUser6;
+import user_layer_7::blend as blendUser7;
+import user_layer_preview::blend as blendPreview;
 
 import constants::{LAYER_EARTH, LAYER_TEMP, LAYER_RAIN, LAYER_SUN, LAYER_GRATICULE};
 
@@ -92,6 +93,26 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
 
   @if(LAYER_SUN_ENABLED)
   { if (getLayerOpacity(LAYER_SUN) > 0.0) { color = blendSun(color, fragPos.xy); } }
+
+  // User layer blend calls (slots 0-7 + preview)
+  @if(USER_LAYER_0_ENABLED)
+  { if (getUserLayerOpacity(0u) > 0.0) { color = blendUser0(color, lat, lon); } }
+  @if(USER_LAYER_1_ENABLED)
+  { if (getUserLayerOpacity(1u) > 0.0) { color = blendUser1(color, lat, lon); } }
+  @if(USER_LAYER_2_ENABLED)
+  { if (getUserLayerOpacity(2u) > 0.0) { color = blendUser2(color, lat, lon); } }
+  @if(USER_LAYER_3_ENABLED)
+  { if (getUserLayerOpacity(3u) > 0.0) { color = blendUser3(color, lat, lon); } }
+  @if(USER_LAYER_4_ENABLED)
+  { if (getUserLayerOpacity(4u) > 0.0) { color = blendUser4(color, lat, lon); } }
+  @if(USER_LAYER_5_ENABLED)
+  { if (getUserLayerOpacity(5u) > 0.0) { color = blendUser5(color, lat, lon); } }
+  @if(USER_LAYER_6_ENABLED)
+  { if (getUserLayerOpacity(6u) > 0.0) { color = blendUser6(color, lat, lon); } }
+  @if(USER_LAYER_7_ENABLED)
+  { if (getUserLayerOpacity(7u) > 0.0) { color = blendUser7(color, lat, lon); } }
+  @if(USER_LAYER_PREVIEW_ENABLED)
+  { if (getUserLayerOpacity(8u) > 0.0) { color = blendPreview(color, lat, lon); } }
 
   // Back-side rain (when no opaque surface layers are enabled)
   @if(LAYER_RAIN_ENABLED)
