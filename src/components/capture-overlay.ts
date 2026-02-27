@@ -16,6 +16,7 @@
 
 import m from 'mithril';
 import { GearIcon } from './gear-icon';
+import { OverlayHeader, isInteractive } from './overlay-header';
 import { snapEven } from '../services/capture/helpers';
 import type { CaptureService } from '../services/capture/capture-service';
 import type { DialogService } from '../services/dialog-service';
@@ -51,16 +52,6 @@ function middleTruncate(name: string, max: number): string {
   const head = name.slice(0, Math.ceil(keep / 2));
   const tail = name.slice(name.length - ext.length - Math.floor(keep / 2), name.length - ext.length);
   return head + '\u2026' + tail + ext;
-}
-
-/** Check if the event target is an interactive element (not a drag surface) */
-function isInteractive(target: EventTarget | null): boolean {
-  if (!target || !(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  if (tag === 'BUTTON' || tag === 'INPUT' || tag === 'A' || tag === 'SELECT') return true;
-  if (target.closest('button, input, a, select')) return true;
-  if (target.classList.contains('edge')) return true;
-  return false;
 }
 
 export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
@@ -130,8 +121,11 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
           },
         }, [
           // Header bar
-          m('.capture-header', [
-            m('span.capture-label', `${format.toUpperCase()} Capture`),
+          m(OverlayHeader, {
+            label: `${format.toUpperCase()} Capture`,
+            onDrag: (e: PointerEvent) => captureService.startMove(e),
+            onClose: () => captureService.exit(),
+          }, [
             // Toggle simple/animated button (ready mode only)
             isReady ? m('button.capture-type-toggle', {
               onclick: () => captureService.toggleCaptureType(),
@@ -139,7 +133,7 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
             }, isAnimated ? '\u25B6' : '\u23F1') : null,
             // Flight plan button (animated mode only)
             isAnimated ? m('button.capture-flight-plan-btn', {
-              onclick: () => dialogService.open('flight-plan'),
+              onclick: () => { captureService.flightPlanOpen.value = !captureService.flightPlanOpen.value; },
               disabled: isBusy,
               title: 'Flight Plan',
             }, '\u2708') : null,
@@ -177,9 +171,6 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
               onclick: () => dialogService.open('options', { filter: 'capture' }),
               disabled: isLocked,
             }, m(GearIcon)),
-            m('button.capture-close', {
-              onclick: () => captureService.exit(),
-            }, '\u2715'),
           ]),
 
           // Palette stripe (GIF mode only, hidden in done mode and animated mode)

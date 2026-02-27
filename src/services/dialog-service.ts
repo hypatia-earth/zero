@@ -11,18 +11,17 @@
 import m from 'mithril';
 import type { OptionFilter } from '../schemas/options.schema';
 
-export type DialogId = 'options' | 'about' | 'create-layer' | 'flight-plan';
+export type DialogId = 'options' | 'about' | 'create-layer';
 
 /** Payload types for each dialog */
 export interface DialogPayloads {
   options: { filter?: OptionFilter };
   about: { page?: string };
   'create-layer': { editLayerId?: string | null };
-  'flight-plan': Record<string, never>;
 }
 
 /** Dialogs that have a closing animation */
-const ANIMATED_DIALOGS: DialogId[] = ['options', 'about', 'create-layer', 'flight-plan'];
+const ANIMATED_DIALOGS: DialogId[] = ['options', 'about', 'create-layer'];
 const ANIMATION_DURATION = 250;
 
 /** Drag state for a dialog */

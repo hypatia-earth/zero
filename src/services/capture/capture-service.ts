@@ -100,6 +100,7 @@ export class CaptureService {
 
   readonly km: KeyframeManager;
   readonly animated: AnimatedCapture;
+  readonly flightPlanOpen: Signal<boolean> = signal(false);
 
   private readonly optionsService: OptionsService;
   private readonly stateService: StateService;
@@ -195,6 +196,7 @@ export class CaptureService {
     if (this.captureDebounce) { clearTimeout(this.captureDebounce); this.captureDebounce = null; }
     if (this.locationDebounce) { clearTimeout(this.locationDebounce); this.locationDebounce = null; }
     this.animated.cleanup();
+    this.flightPlanOpen.value = false;
     this.mode.value = 'off';
     this.frameIndex.value = 0;
     this.palette.value = null;
@@ -511,7 +513,7 @@ export class CaptureService {
   }
 
   private getHeaderHeight(): number {
-    const el = document.querySelector('.capture-header');
+    const el = document.querySelector('.overlay-header');
     return el ? el.getBoundingClientRect().height : 0;
   }
 

@@ -127,7 +127,6 @@ export const App: m.ClosureComponent = () => {
           captureAnimated && m(CaptureBar, { captureService: services.captureService!, stateService: services.stateService! }),
           captureAnimated && m(FlightPlanDialog, {
             captureService: services.captureService!,
-            dialogService: services.dialogService!,
           }),
         ] : []),
       ];

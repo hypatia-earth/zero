@@ -1,5 +1,5 @@
 /**
- * FlightPlanDialog - Text-based keyframe editor
+ * FlightPlanDialog - Text-based keyframe editor (overlay panel)
  *
  * Opens with keyframes imported from KeyframeManager, formatted as text.
  * Valid edits update KeyframeManager immediately.
@@ -8,28 +8,49 @@
 
 import m from 'mithril';
 import type { CaptureService } from '../services/capture/capture-service';
-import type { DialogService } from '../services/dialog-service';
-import { DialogHeader } from './dialog-header';
+import { OverlayHeader } from './overlay-header';
 import { createKeyframe } from '../services/capture/keyframe';
 import { parseFlightPlan, formatFlightPlan } from '../services/capture/flight-plan';
 
 export interface FlightPlanDialogAttrs {
   captureService: CaptureService;
-  dialogService: DialogService;
 }
 
 export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () => {
   let wasOpen = false;
-  let windowEl: HTMLElement | null = null;
   let text = '';
   let error: string | null = null;
 
+  // Drag position (absolute px)
+  let posX = 60;
+  let posY = 100;
+
+  function startDrag(e: PointerEvent): void {
+    e.preventDefault();
+    const startX = e.clientX - posX;
+    const startY = e.clientY - posY;
+
+    const onMove = (ev: PointerEvent) => {
+      posX = ev.clientX - startX;
+      posY = ev.clientY - startY;
+      m.redraw();
+    };
+
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+    };
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  }
+
   return {
     view({ attrs }) {
-      const { captureService, dialogService } = attrs;
+      const { captureService } = attrs;
       const km = captureService.km;
 
-      if (!dialogService.isOpen('flight-plan')) {
+      if (!captureService.flightPlanOpen.value) {
         wasOpen = false;
         return null;
       }
@@ -40,21 +61,6 @@ export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () =>
         text = formatFlightPlan(km.keyframes.value, km.wrap);
         error = null;
       }
-
-      const isFloating = dialogService.isFloating('flight-plan');
-      const isTop = dialogService.isTop('flight-plan');
-      const isDragging = dialogService.isDragging('flight-plan');
-      const dragOffset = dialogService.getDragOffset('flight-plan');
-
-      const windowStyle: Record<string, string> = {};
-      if (dragOffset.x !== 0 || dragOffset.y !== 0) {
-        windowStyle.transform = `translate(${dragOffset.x}px, ${dragOffset.y}px)`;
-      }
-
-      const floatingClass = isFloating ? (isTop ? 'floating top' : 'floating behind') : '';
-      const closingClass = dialogService.isClosing('flight-plan') ? 'closing' : '';
-
-      const close = () => dialogService.close('flight-plan');
 
       const onInput = (e: InputEvent) => {
         text = (e.target as HTMLTextAreaElement).value;
@@ -77,38 +83,27 @@ export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () =>
         }
       };
 
-      return m('div.dialog.flight-plan', { class: `${floatingClass} ${closingClass}` }, [
-        m('div.backdrop', {
-          onclick: () => {
-            if (dialogService.shouldCloseOnBackdrop('flight-plan')) {
-              close();
-            }
-          },
+      return m('.flight-plan-overlay', {
+        style: {
+          left: `${posX}px`,
+          top: `${posY}px`,
+        },
+        onpointerdown: (e: PointerEvent) => e.stopPropagation(),
+      }, [
+        m(OverlayHeader, {
+          label: 'Flight Plan',
+          onDrag: startDrag,
+          onClose: () => { captureService.flightPlanOpen.value = false; },
         }),
-        m('div.window', {
-          class: isDragging ? 'dragging' : '',
-          style: windowStyle,
-          onmousedown: () => dialogService.bringToFront('flight-plan'),
-          oncreate: (vnode) => { windowEl = vnode.dom as HTMLElement; },
-          onupdate: (vnode) => { windowEl = vnode.dom as HTMLElement; },
-        }, [
-          m(DialogHeader, {
-            dialogId: 'flight-plan',
-            title: 'Flight Plan',
-            dialogService,
-            windowEl,
-            onClose: close,
+        m('.flight-plan-content', [
+          m('textarea', {
+            class: error ? 'error' : '',
+            rows: 12,
+            spellcheck: false,
+            value: text,
+            oninput: onInput,
           }),
-          m('div.content', [
-            m('textarea', {
-              class: error ? 'error' : '',
-              rows: 12,
-              spellcheck: false,
-              value: text,
-              oninput: onInput,
-            }),
-            error ? m('div.error-message', error) : null,
-          ]),
+          error ? m('.error-message', error) : null,
         ]),
       ]);
     },

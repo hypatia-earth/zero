@@ -44,13 +44,9 @@
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
 }
 
-/* ── Header bar — floats above rect via bottom-anchoring ─────────── */
+/* ── Shared overlay header — used by capture + flight plan ────────── */
 
-.capture-header {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
+.overlay-header {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -64,7 +60,15 @@
   -webkit-user-select: none;
 }
 
-.capture-label {
+/* Position variant: capture header floats above rect */
+.capture-container > .overlay-header {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+}
+
+.overlay-label {
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-text-primary);
@@ -155,9 +159,9 @@
   cursor: not-allowed;
 }
 
-/* ── Close button ────────────────────────────────────────────────── */
+/* ── Overlay close button ────────────────────────────────────────── */
 
-.capture-close {
+.overlay-close {
   background: none;
   border: none;
   color: var(--color-text-muted);
@@ -169,7 +173,7 @@
 }
 
 @media (hover: hover) {
-  .capture-close:hover {
+  .overlay-close:hover {
     color: var(--color-text-primary);
   }
 }
@@ -408,4 +412,54 @@
 .capture-location-input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ── Flight plan overlay panel (above capture-overlay at 35) ─────── */
+
+.flight-plan-overlay {
+  position: fixed;
+  z-index: 38;
+  pointer-events: auto;
+}
+
+.flight-plan-overlay > .overlay-header {
+  border-bottom: none;
+}
+
+.flight-plan-overlay > .flight-plan-content {
+  background: rgba(20, 25, 35, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  padding: 8px;
+}
+
+.flight-plan-overlay textarea {
+  width: 100%;
+  min-width: 320px;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-family: monospace;
+  resize: vertical;
+  outline: none;
+}
+
+.flight-plan-overlay textarea:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.flight-plan-overlay textarea.error {
+  border-color: #cc4444;
+  background: rgba(204, 68, 68, 0.1);
+}
+
+.flight-plan-overlay .error-message {
+  color: #cc4444;
+  font-size: var(--font-size-xs);
+  margin-top: 4px;
 }
