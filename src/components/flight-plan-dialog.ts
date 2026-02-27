@@ -24,6 +24,7 @@ export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () =>
   let wasOpen = false;
   let text = '';
   let error: string | null = null;
+  let hasFocus = false;
 
   // Panel position and size (absolute px)
   let posX = 0;
@@ -96,6 +97,7 @@ export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () =>
       // Restore rect and import keyframes on open transition
       if (!wasOpen) {
         wasOpen = true;
+        hasFocus = false;
         const rect = DialogService.resolveRect(RECT_ID, FP);
         posX = rect.x;
         posY = rect.y;
@@ -103,6 +105,11 @@ export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () =>
         height = rect.h;
         text = formatFlightPlan(km.keyframes.value, km.wrap, km.dataWindowStart, km.dataWindowEnd);
         error = null;
+      }
+
+      // Sync back from capture bar when textarea is not focused
+      if (!hasFocus && !error) {
+        text = formatFlightPlan(km.keyframes.value, km.wrap, km.dataWindowStart, km.dataWindowEnd);
       }
 
       const onInput = (e: InputEvent) => {
@@ -146,6 +153,12 @@ export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () =>
             spellcheck: false,
             value: text,
             oninput: onInput,
+            onfocus: () => { hasFocus = true; },
+            onblur: () => {
+              hasFocus = false;
+              text = formatFlightPlan(km.keyframes.value, km.wrap, km.dataWindowStart, km.dataWindowEnd);
+              error = null;
+            },
           }),
           m('.flight-plan-status', { class: error ? 'status-error' : 'status-ok' },
             error ?? `${km.keyframes.value.length} keyframes parsed OK`,
