@@ -1,34 +1,22 @@
 /**
- * ShaderComposer - Generates WGSL shaders from LayerRegistry
+ * ShaderComposer - Composes WGSL shaders via WESL linking
  *
- * Composes shaders at runtime based on registered layers.
- * Uses main-template.wgsl as base and injects layer blend calls.
+ * Uses WESL's import system, @if conditionals, and constants:: to compose
+ * shaders from modular .wesl source files. Dynamic param bindings and
+ * samplers are injected via virtual libraries.
  */
 
 import type { LayerDeclaration, AdvectionConfig } from '../services/layer/layer-service';
-import { getMainShaders, getPostShaders } from './shader-loader';
 import { getParamMeta, getModel, type TModel, type TModelParam } from '../config/models';
+import { link } from 'wesl';
 
-// Import shader modules
-import commonCode from './shaders/common.wesl?raw';
-import projectionO1280Code from './shaders/projection-o1280.wesl?raw';
-import layerHelpersCode from './shaders/layer-helpers.wesl?raw';
-import sunAtmoCode from '../layers/sun/atmo.wesl?raw';
-import logoCode from './shaders/logo.wesl?raw';
-import mainTemplateCode from './shaders/main-template.wesl?raw';
-import sunPostCode from '../layers/sun/post.wesl?raw';
-import sunCode from '../layers/sun/sun.wesl?raw';
-import sunBlendCode from '../layers/sun/blend.wesl?raw';
+// WESL module bundles for linking
+import mainWesl from './shaders/main.wesl?link';
+import postWesl from '../layers/sun/post.wesl?link';
 
 export interface ComposedShaders {
   main: string;
   post: string;
-}
-
-/** Generated param shader code */
-interface GeneratedParamShader {
-  bindings: string;   // @group(0) @binding(...) declarations
-  samplers: string;   // sampleParam_X(cell) function code
 }
 
 /** Param binding configuration */
@@ -47,130 +35,90 @@ export let activeParamBindings: ParamBindingConfig[] = [];
 // Starting binding index for dynamic params (avoid conflicts with 0-21)
 const PARAM_BINDING_START = 50;
 
-// Map blend function names to their parameter signatures
-const BLEND_SIGNATURES: Record<string, string> = {
-  blendBasemap: '(color, hit.point)',
-  blendBase: '(color, hit.point)',
-  blendTemp: '(color, lat, lon)',
-  blendRain: '(color, lat, lon)',
-  blendSun: '(color, hit.point)',
-};
-
 export class ShaderComposer {
-  private initialized = false;
-  private mainShaders: Map<string, string> = new Map();
-  private postShaders: Map<string, string> = new Map();
-
-  /** Initialize with shader code from shader-loader */
-  init(): void {
-    if (this.initialized) return;
-    this.mainShaders = getMainShaders();
-    this.postShaders = getPostShaders();
-    this.initialized = true;
-  }
-
-  /** Compose shader from layer declarations */
-  compose(layers: LayerDeclaration[]): ComposedShaders {
-    if (!this.initialized) {
-      this.init();
-    }
-
+  /** Compose shaders from layer declarations via WESL linking */
+  async compose(layers: LayerDeclaration[]): Promise<ComposedShaders> {
     const surfaceLayers = layers.filter(l =>
       l.blendFn &&
       l.pass !== 'geometry' &&
-      l.type !== 'decoration' || l.id === 'earth'  // earth is decoration but renders on surface
+      l.type !== 'decoration' || l.id === 'earth'
     );
-    const postLayers = layers.filter(l => l.postFn);
 
-    const main = this.composeMain(surfaceLayers, layers);
-    const post = this.composePost(postLayers, layers);
+    const main = await this.composeMain(surfaceLayers, layers);
+    const post = await this.composePost(layers);
 
     return { main, post };
   }
 
-  private composeMain(surfaceLayers: LayerDeclaration[], allLayers: LayerDeclaration[]): string {
-    const parts: string[] = [];
-
-    // 1. Layer index constants (must come before layer shaders that use them)
-    const layerConstants = this.generateLayerConstants(allLayers);
-    parts.push(layerConstants);
-
-    // 2. Uniforms struct and helper functions (must come before layer shaders)
-    parts.push(layerHelpersCode);
-
-    // 3. Common utilities (ray-sphere intersection, constants)
-    parts.push(sunAtmoCode);  // Atmosphere functions needed by other shaders
-    parts.push(commonCode);
-    parts.push(projectionO1280Code);  // O1280 Gaussian grid projection
-
-    // 3. Logo shader
-    parts.push(logoCode);
-
-    // 3. Layer blend functions (sorted by render order)
-    const sortedLayers = [...surfaceLayers].sort((a, b) => (a.order) - (b.order));
-    for (const layer of sortedLayers) {
-      const shaderCode = layer.isBuiltIn
-        ? this.mainShaders.get(layer.id)!
-        : layer.shaders!.main;
-      if (shaderCode) {
-        parts.push(`// --- Layer: ${layer.id} ---`);
-        parts.push(shaderCode);
+  private async composeMain(surfaceLayers: LayerDeclaration[], allLayers: LayerDeclaration[]): Promise<string> {
+    // Build layer constants (LAYER_EARTH = 0, etc.)
+    const constants: Record<string, number> = {};
+    for (const layer of allLayers) {
+      if (layer.index !== undefined) {
+        const name = layer.id.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+        constants[`LAYER_${name}`] = layer.index;
       }
     }
 
-    // 4. Graticule shader (special - always included for back-side graticule logic)
-    const graticuleShader = this.mainShaders.get('graticule');
-    if (graticuleShader) {
-      parts.push('// --- Layer: graticule ---');
-      parts.push(graticuleShader);
+    // Build @if conditions for layer inclusion
+    const hasLayer = (id: string) => surfaceLayers.some(l => l.id === id);
+    const conditions: Record<string, boolean> = {
+      LAYER_EARTH_ENABLED: hasLayer('earth'),
+      LAYER_TEMP_ENABLED: hasLayer('temp'),
+      LAYER_RAIN_ENABLED: hasLayer('rain'),
+      LAYER_SUN_ENABLED: hasLayer('sun'),
+    };
+
+    // Generate param bindings virtual library
+    const paramGen = this.generateParamVirtualLib(surfaceLayers);
+
+    // Add param index constants
+    for (const cfg of activeParamBindings) {
+      const name = cfg.param.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+      constants[`PARAM_${name}`] = cfg.index;
     }
 
-    // 5. Generate dynamic param bindings
-    const paramShader = this.generateParamBindings(surfaceLayers);
+    // Generate user layer virtual library (if any custom layers)
+    const userLayers = surfaceLayers.filter(l => !l.isBuiltIn && l.shaders?.main);
+    const userLayerLib = userLayers.length > 0 ? this.generateUserLayerLib(userLayers) : '';
 
-    // 6. Main template with blend calls and param bindings injected
-    // Note: Layer constants are injected at the beginning of the shader (step 1)
-    const blendCalls = this.generateBlendCalls(sortedLayers);
-    const mainCode = mainTemplateCode
-      .replace('// {{SURFACE_BLEND_CALLS}} - replaced by ShaderComposer', blendCalls)
-      .replace('// {{PARAM_BINDINGS}} - Dynamic param buffer bindings (generated by ShaderComposer)', paramShader.bindings)
-      .replace('// {{PARAM_SAMPLERS}} - Dynamic param sampler functions (generated by ShaderComposer)', paramShader.samplers)
-      .replace('// {{LAYER_CONSTANTS}} - Layer index constants (generated by ShaderComposer)', '// (layer constants at top of shader)');
-    parts.push(mainCode);
+    const virtualLibs: Record<string, () => string> = {
+      param_gen: () => paramGen,
+    };
+    if (userLayerLib) {
+      virtualLibs['user_layers'] = () => userLayerLib;
+    }
 
-    return parts.join('\n\n');
+    const linked = await link({
+      ...mainWesl,
+      conditions,
+      constants,
+      virtualLibs,
+    });
+
+    return linked.dest;
   }
 
-  private composePost(_postLayers: LayerDeclaration[], allLayers: LayerDeclaration[]): string {
-    const parts: string[] = [];
+  private async composePost(allLayers: LayerDeclaration[]): Promise<string> {
+    // Post pass only needs LAYER_SUN constant
+    const constants: Record<string, number> = {};
+    for (const layer of allLayers) {
+      if (layer.index !== undefined) {
+        const name = layer.id.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+        constants[`LAYER_${name}`] = layer.index;
+      }
+    }
 
-    // 1. Layer index constants (LAYER_SUN needed for atmosphere blend)
-    const layerConstants = this.generateLayerConstants(allLayers);
-    parts.push(layerConstants);
+    const linked = await link({
+      ...postWesl,
+      constants,
+    });
 
-    // 2. Uniforms struct and helpers (from layer-helpers.wgsl)
-    parts.push(layerHelpersCode);
-
-    // Atmosphere functions
-    parts.push(sunAtmoCode);
-
-    // Common utilities
-    parts.push(commonCode);
-
-    // Sun shader (for atmosphere constants)
-    parts.push(sunCode);
-
-    // Sun blend functions (blendAtmosphereSpace, blendAtmosphereGlobe)
-    parts.push(sunBlendCode);
-
-    // Post-process main shader
-    parts.push(sunPostCode);
-
-    return parts.join('\n\n');
+    return linked.dest;
   }
 
-  /** Generate dynamic param bindings and sampler functions */
-  private generateParamBindings(layers: LayerDeclaration[]): GeneratedParamShader {
+  /** Generate WESL virtual library for dynamic param bindings and samplers */
+  private generateParamVirtualLib(layers: LayerDeclaration[]): string {
     // 1. Collect unique params from all layers
     const allParams: TModelParam[] = [];
     const seen = new Set<string>();
@@ -185,7 +133,7 @@ export class ShaderComposer {
 
     if (allParams.length === 0) {
       activeParamBindings = [];
-      return { bindings: '// No dynamic params', samplers: '// No param samplers' };
+      return '// No dynamic params\nfn _param_gen_placeholder() {}';
     }
 
     // 2. Assign indices (stable ordering by param name)
@@ -202,28 +150,42 @@ export class ShaderComposer {
     // Export for globe-renderer to use
     activeParamBindings = paramConfigs;
 
-    // 3. Generate binding declarations
-    const bindings: string[] = ['// --- Dynamic param bindings (generated) ---'];
+    // 3. Build WESL source with imports
+    const parts: string[] = [];
+
+    // Imports for helper functions used by samplers
+    parts.push('import package::aurora::shaders::layer_helpers::{isParamReady, getParamLerp, getParamSize, getParamDt};');
+
+    // Check if any param needs O1280 projection or common constants
+    const needsProjection = paramConfigs.some(c => {
+      const advection = this.getAdvectionTargets(layers).get(c.param);
+      return c.model !== 'ncep_gfs025' || advection;
+    });
+    const needsCommon = paramConfigs.some(c => c.model === 'ncep_gfs025');
+
+    if (needsProjection) {
+      parts.push('import package::aurora::shaders::projection_o1280::o1280LatLonToCell;');
+    }
+    if (needsCommon) {
+      parts.push('import package::aurora::shaders::common::{COMMON_PI, COMMON_TAU};');
+    }
+
+    parts.push('');
+
+    // 4. Generate binding declarations
     for (const cfg of paramConfigs) {
       const safeName = cfg.param.replace(/[^a-zA-Z0-9]/g, '_');
-      bindings.push(
+      parts.push(
         `@group(0) @binding(${cfg.bindingSlot}) var<storage, read> param_${safeName}: array<f32>;`
       );
     }
 
-    // 4. Collect advection targets (params that get wind-displaced sampling)
-    const advectionTargets = new Map<string, AdvectionConfig>();
-    for (const layer of layers) {
-      if (layer.advection) {
-        for (const target of layer.advection.targets) {
-          advectionTargets.set(target.param, layer.advection);
-        }
-      }
-    }
+    parts.push('');
 
-    // 5. Generate sampler functions (model-aware, advection-aware)
-    //    Wind samplers first (advected samplers call them)
-    const samplers: string[] = ['// --- Param samplers (generated) ---'];
+    // 5. Collect advection targets
+    const advectionTargets = this.getAdvectionTargets(layers);
+
+    // 6. Generate sampler functions (wind samplers first, then advected)
     const advectedSamplers: string[] = [];
 
     for (const cfg of paramConfigs) {
@@ -231,7 +193,6 @@ export class ShaderComposer {
       const advection = advectionTargets.get(cfg.param);
 
       if (advection) {
-        // Advected O1280 param — sampler takes (lat, lon), displaces by wind
         const uSafe = advection.uParam.param.replace(/[^a-zA-Z0-9]/g, '_');
         const vSafe = advection.vParam.param.replace(/[^a-zA-Z0-9]/g, '_');
         const sample = cfg.categorical
@@ -241,19 +202,15 @@ export class ShaderComposer {
   if (!isParamReady(${cfg.index}u)) { return \${RET_ZERO}; }
   let lerp = getParamLerp(${cfg.index}u);
   let size = getParamSize(${cfg.index}u);
-  // Advection wind at current position (time-interpolated)
   let windU = sampleParam_${uSafe}(lat, lon);
   let windV = sampleParam_${vSafe}(lat, lon);
-  // Displacement in radians (param's own t1-t0 spacing)
   let dt = getParamDt(${cfg.index}u);
   let R = 6371000.0;
   let cosLat = max(cos(lat), 0.01);
   let dlat = (windV * dt) / R;
   let dlon = (windU * dt) / (R * cosLat);
-  // Backward trajectory: where was t0 air?
   let cell0 = o1280LatLonToCell(lat - dlat * lerp, lon - dlon * lerp);
   let v0 = param_${safeName}[cell0];
-  // Forward trajectory: where will t1 air be?
   let cell1 = o1280LatLonToCell(lat + dlat * (1.0 - lerp), lon + dlon * (1.0 - lerp));
   let v1 = param_${safeName}[cell1 + size];`;
         advectedSamplers.push(`
@@ -268,7 +225,6 @@ fn sampleParamPair_${safeName}(lat: f32, lon: f32) -> vec3f {${advectionBody.rep
 }`);
         }
       } else if (cfg.model === 'ncep_gfs025') {
-        // Regular 0.25° grid (721 lat × 1440 lon) — sampler takes (lat, lon)
         const sample = cfg.categorical
           ? `select(v0, v1, lerp >= 0.5)`
           : `select(v0, mix(v0, v1, lerp), lerp >= 0.0)`;
@@ -283,22 +239,21 @@ fn sampleParamPair_${safeName}(lat: f32, lon: f32) -> vec3f {${advectionBody.rep
   let v0 = param_${safeName}[cell];
   let v1 = param_${safeName}[cell + getParamSize(${cfg.index}u)];
   let lerp = getParamLerp(${cfg.index}u);`;
-        samplers.push(`
+        parts.push(`
 fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {${gfsBody.replace(/\$\{RET_ZERO\}/g, '0.0')}
   return ${sample};
 }`);
         if (cfg.categorical) {
-          samplers.push(`
+          parts.push(`
 fn sampleParamPair_${safeName}(lat: f32, lon: f32) -> vec3f {${gfsBody.replace(/\$\{RET_ZERO\}/g, 'vec3f(0.0)')}
   return vec3f(v0, v1, lerp);
 }`);
         }
       } else {
-        // O1280 grid — sampler takes cell index
         const sample = cfg.categorical
           ? `select(v0, v1, lerp >= 0.5)`
           : `select(v0, mix(v0, v1, lerp), lerp >= 0.0)`;
-        samplers.push(`
+        parts.push(`
 fn sampleParam_${safeName}(cell: u32) -> f32 {
   if (!isParamReady(${cfg.index}u)) { return 0.0; }
   let v0 = param_${safeName}[cell];
@@ -307,7 +262,7 @@ fn sampleParam_${safeName}(cell: u32) -> f32 {
   return ${sample};
 }`);
         if (cfg.categorical) {
-          samplers.push(`
+          parts.push(`
 fn sampleParamPair_${safeName}(cell: u32) -> vec3f {
   if (!isParamReady(${cfg.index}u)) { return vec3f(0.0); }
   let v0 = param_${safeName}[cell];
@@ -320,83 +275,33 @@ fn sampleParamPair_${safeName}(cell: u32) -> vec3f {
     }
 
     // Advected samplers after wind samplers (dependency order)
-    samplers.push(...advectedSamplers);
+    parts.push(...advectedSamplers);
 
-    // 6. Generate param index constants (for layer shaders that need getParamDt)
-    const paramConstants: string[] = ['// --- Param index constants (generated) ---'];
-    for (const cfg of paramConfigs) {
-      const name = cfg.param.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-      paramConstants.push(`const PARAM_${name}: u32 = ${cfg.index}u;`);
-    }
-
-    return {
-      bindings: bindings.join('\n'),
-      samplers: paramConstants.join('\n') + '\n' + samplers.join('\n'),
-    };
+    return parts.join('\n');
   }
 
-  /** Generate layer index constants (LAYER_EARTH = 0u, etc.) */
-  private generateLayerConstants(layers: LayerDeclaration[]): string {
-    const constants: string[] = ['// --- Layer index constants (generated) ---'];
-
+  /** Collect advection targets from layer declarations */
+  private getAdvectionTargets(layers: LayerDeclaration[]): Map<string, AdvectionConfig> {
+    const targets = new Map<string, AdvectionConfig>();
     for (const layer of layers) {
-      if (layer.index !== undefined) {
-        const name = layer.id.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-        constants.push(`const LAYER_${name}: u32 = ${layer.index}u;`);
-      }
-    }
-
-    if (constants.length === 1) {
-      return '// No layer constants';
-    }
-
-    return constants.join('\n');
-  }
-
-  private generateBlendCalls(layers: LayerDeclaration[]): string {
-    const calls: string[] = [];
-
-    for (const layer of layers) {
-      const blendFn = layer.blendFn!;
-      const signature = layer.isBuiltIn
-        ? BLEND_SIGNATURES[blendFn]!
-        : '(color, lat, lon)';
-      const call = `color = ${blendFn}${signature};`;
-
-      // Earth basemap always renders (it's the base layer)
-      if (layer.id === 'earth') {
-        calls.push(`  ${call}`);
-      } else if (layer.isBuiltIn) {
-        const name = layer.id.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-        let guard = `getLayerOpacity(LAYER_${name}) > 0.0`;
-        // Advected layers: gate on wind param readiness (avoid rendering without displacement)
-        if (layer.advection) {
-          const uIdx = activeParamBindings.findIndex(p => p.param === layer.advection!.uParam.param);
-          const vIdx = activeParamBindings.findIndex(p => p.param === layer.advection!.vParam.param);
-          if (uIdx >= 0) guard += ` && isParamReady(${uIdx}u)`;
-          if (vIdx >= 0) guard += ` && isParamReady(${vIdx}u)`;
+      if (layer.advection) {
+        for (const target of layer.advection.targets) {
+          targets.set(target.param, layer.advection);
         }
-        calls.push(`  if (${guard}) { ${call} }`);
-      } else {
-        calls.push(`  if (getUserLayerOpacity(${layer.userLayerIndex!}u) > 0.0) { ${call} }`);
       }
     }
+    return targets;
+  }
 
-    if (calls.length === 0) {
-      return '  // No surface layers enabled';
+  /** Generate virtual library for user/custom layer blend functions */
+  private generateUserLayerLib(userLayers: LayerDeclaration[]): string {
+    const parts: string[] = [];
+    for (const layer of userLayers) {
+      if (layer.shaders?.main) {
+        parts.push(layer.shaders.main);
+      }
     }
-
-    return calls.join('\n');
-  }
-
-  /** Check if layer has main shader code available */
-  hasLayerShader(layerId: string): boolean {
-    return this.mainShaders.has(layerId);
-  }
-
-  /** Check if layer has post shader code available */
-  hasPostShader(layerId: string): boolean {
-    return this.postShaders.has(layerId);
+    return parts.join('\n');
   }
 }
 

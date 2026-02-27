@@ -4,16 +4,15 @@
 // Reads: color texture (scene without atmosphere), depth texture
 // Outputs: final color with atmosphere applied to all geometry
 
-// Uniforms struct 'u' is declared in layer-helpers.wgsl before includes
-// Bindings for post-process pass (binding(0) is in layer-helpers.wgsl)
+import package::aurora::shaders::layer_helpers::u;
+import package::layers::sun::atmo::UNIT_TO_KM;
+import package::layers::sun::blend::{blendAtmosphereSpace, blendAtmosphereGlobe, ATM_EXPOSURE};
+
+// Bindings for post-process pass (binding(0) = uniforms from layer-helpers)
 @group(0) @binding(1) var sceneColor: texture_2d<f32>;
 @group(0) @binding(2) var sceneDepth: texture_depth_2d;
 @group(0) @binding(3) var sceneSampler: sampler;
-// Atmosphere LUTs
-@group(0) @binding(4) var atm_transmittance: texture_2d<f32>;
-@group(0) @binding(5) var atm_scattering: texture_3d<f32>;
-@group(0) @binding(6) var atm_irradiance: texture_2d<f32>;
-@group(0) @binding(7) var atm_sampler: sampler;
+// Atmosphere LUT bindings (4-7) are declared in sun/blend.wesl
 
 // Fullscreen triangle vertex shader
 @vertex

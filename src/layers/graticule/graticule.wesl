@@ -1,6 +1,10 @@
 // Graticule layer - animated lat/lon graticule overlay
 // Lines are passed as uniforms for LoD animation
 
+import package::aurora::shaders::layer_helpers::{u, getLayerOpacity};
+import package::aurora::shaders::common::COMMON_PI;
+import constants::LAYER_GRATICULE;
+
 const GRATICULE_MAX_LINES: u32 = 80u;
 
 // Graticule line data from GraticuleAnimator

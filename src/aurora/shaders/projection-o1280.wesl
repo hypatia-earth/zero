@@ -1,6 +1,10 @@
 // O1280 Gaussian Grid Projection
 // Shared projection functions for ECMWF octahedral reduced Gaussian grid
-// Uses gaussianLats (2560 latitude bands) and ringOffsets LUTs
+
+import package::aurora::shaders::common::COMMON_TAU;
+
+@group(0) @binding(3) var<storage, read> gaussianLats: array<f32>;
+@group(0) @binding(4) var<storage, read> ringOffsets: array<u32>;
 
 // Binary search for Gaussian latitude ring (0-2559)
 fn o1280FindRing(lat: f32) -> u32 {

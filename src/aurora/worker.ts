@@ -429,7 +429,7 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   }
   initAnimatedOpacity();  // Initialize opacity map for all layers
   const layers = layerRegistry.getAll();
-  const composedShaders = shaderComposer.compose(layers);
+  const composedShaders = await shaderComposer.compose(layers);
 
   const graticuleLodLevels = layerRegistry.get('graticule')!.config!.lodLevels as GraticuleLodLevel[];
   const windConfig = layerRegistry.get('wind')!.config!;
@@ -504,7 +504,7 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 
   // Recreate pipeline with composed shaders (includes dynamic param bindings)
   const initLayers = layerRegistry.getAll();
-  const initShaders = shaderComposer.compose(initLayers);
+  const initShaders = await shaderComposer.compose(initLayers);
   await renderer.recreatePipeline(initShaders);
 
   // Build param binding registry from ShaderComposer (must be after compose())
@@ -751,8 +751,8 @@ function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerU
   console.log(`[Aurora] Registered user layer: ${layer.id} (index ${layer.userLayerIndex})`);
 
   const layers = layerRegistry.getAll();
-  const composedShaders = shaderComposer.compose(layers);
-  queuePipelineRecreation(composedShaders)
+  shaderComposer.compose(layers).then(composedShaders =>
+    queuePipelineRecreation(composedShaders))
     .then(() => {
       rebuildParamBindings();
       writeParamSizes();
@@ -792,8 +792,8 @@ function handleUnregisterUserLayer(data: Extract<AuroraRequest, { type: 'unregis
   console.log(`[Aurora] Unregistered user layer: ${layerId}`);
 
   const layers = layerRegistry.getAll();
-  const composedShaders = shaderComposer.compose(layers);
-  queuePipelineRecreation(composedShaders)
+  shaderComposer.compose(layers).then(composedShaders =>
+    queuePipelineRecreation(composedShaders))
     .then(() => {
       rebuildParamBindings();
       writeParamSizes();
