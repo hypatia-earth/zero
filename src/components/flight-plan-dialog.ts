@@ -101,7 +101,7 @@ export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () =>
         posY = rect.y;
         width = rect.w;
         height = rect.h;
-        text = formatFlightPlan(km.keyframes.value, km.wrap);
+        text = formatFlightPlan(km.keyframes.value, km.wrap, km.dataWindowStart, km.dataWindowEnd);
         error = null;
       }
 
@@ -147,7 +147,9 @@ export const FlightPlanDialog: m.ClosureComponent<FlightPlanDialogAttrs> = () =>
             value: text,
             oninput: onInput,
           }),
-          error ? m('.error-message', error) : null,
+          m('.flight-plan-status', { class: error ? 'status-error' : 'status-ok' },
+            error ?? `${km.keyframes.value.length} keyframes parsed OK`,
+          ),
         ]),
         m('.flight-plan-resize', {
           onpointerdown: startResize,

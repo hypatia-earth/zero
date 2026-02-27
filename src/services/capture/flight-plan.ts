@@ -1,10 +1,11 @@
 /**
  * Flight Plan parser/formatter
  *
- * Semicolon-separated format for keyframe definition:
- *   # wrap: true          → directive
- *   # comment             → ignored
- *   time; lat; lon; alt[; location]  → keyframe line
+ * Format:
+ *   #wrap=true|false                    → first line, wrap directive
+ *   # Start: <time>, End: <time>       → info line (ignored by parser)
+ *   # time; lat; lon; alt; location    → column header (ignored)
+ *   time; lat; lon; alt[; location]    → keyframe line
  *
  * Alt ↔ distance conversion (matching viewport.ts):
  *   distance = (alt + 6371) / 6371
@@ -53,7 +54,20 @@ export function parseFlightPlan(text: string, windowStart: number, windowEnd: nu
     // Comment / directive lines
     if (raw.startsWith('#')) {
       const content = raw.slice(1).trim();
-      // Directive: "key: value" (must have colon)
+      // Directive: "#wrap=value"
+      const eqMatch = content.match(/^(\w+)=(.+)$/);
+      if (eqMatch) {
+        const key = eqMatch[1]!.toLowerCase();
+        const value = eqMatch[2]!.trim().toLowerCase();
+        if (key === 'wrap') {
+          if (value !== 'true' && value !== 'false') {
+            throw new Error(`Line ${lineNum + 1}: wrap must be true or false`);
+          }
+          wrap = value === 'true';
+        }
+        continue;
+      }
+      // Legacy directive: "# key: value"
       const colonIdx = content.indexOf(':');
       if (colonIdx > 0) {
         const key = content.slice(0, colonIdx).trim().toLowerCase();
@@ -61,9 +75,8 @@ export function parseFlightPlan(text: string, windowStart: number, windowEnd: nu
         if (key === 'wrap') {
           wrap = value === 'true';
         }
-        // Unknown directives silently ignored
       }
-      // Comments (no colon, or column headers) — skip
+      // Comments, info lines, column headers — skip
       continue;
     }
 
@@ -131,13 +144,12 @@ export function parseFlightPlan(text: string, windowStart: number, windowEnd: nu
 /**
  * Format keyframes into flight plan text.
  */
-export function formatFlightPlan(keyframes: CameraKeyframe[], wrap: boolean): string {
+export function formatFlightPlan(keyframes: CameraKeyframe[], wrap: boolean, windowStart: number, windowEnd: number): string {
   const lines: string[] = [];
 
-  if (wrap) {
-    lines.push('# wrap: true');
-  }
-  lines.push('# time; lat; lon; alt');
+  lines.push(`#wrap=${wrap}`);
+  lines.push(`# Start: ${padTime(new Date(windowStart))}, End: ${padTime(new Date(windowEnd))}`);
+  lines.push('# time; lat; lon; alt; location');
 
   for (const kf of keyframes) {
     const time = padTime(new Date(kf.time));

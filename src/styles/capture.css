@@ -114,6 +114,12 @@
   transition: background 0.15s, border-color 0.15s;
 }
 
+.capture-type-toggle img {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
 @media (hover: hover) {
   .capture-type-toggle:hover {
     background: rgba(255, 255, 255, 0.2);
@@ -479,11 +485,20 @@
 
 .flight-plan-overlay textarea.error {
   border-color: #cc4444;
-  background: rgba(204, 68, 68, 0.1);
 }
 
-.flight-plan-overlay .error-message {
-  color: #cc4444;
+.flight-plan-status {
   font-size: var(--font-size-xs);
-  margin-top: 4px;
+  line-height: 1.4;
+  height: 2.8em;
+  padding: 2px 4px;
+  overflow: hidden;
+}
+
+.flight-plan-status.status-ok {
+  color: #44cc66;
+}
+
+.flight-plan-status.status-error {
+  color: #cc4444;
 }

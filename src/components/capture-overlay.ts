@@ -129,8 +129,11 @@ export const CaptureOverlay: m.ClosureComponent<CaptureOverlayAttrs> = () => {
             // Toggle simple/animated button (ready mode only)
             isReady ? m('button.capture-type-toggle', {
               onclick: () => captureService.toggleCaptureType(),
-              title: isAnimated ? 'Switch to simple capture' : 'Switch to animated capture',
-            }, isAnimated ? '\u25B6' : '\u23F1') : null,
+              title: isAnimated ? 'Switch to still capture' : 'Switch to animated capture',
+            }, m('img', {
+              src: `${import.meta.env.BASE_URL}${isAnimated ? 'icon-capture-still.svg' : 'icon-capture-animated.svg'}`,
+              alt: isAnimated ? 'Still' : 'Animated',
+            })) : null,
             // Flight plan button (animated mode only)
             isAnimated ? m('button.capture-flight-plan-btn', {
               onclick: () => { captureService.flightPlanOpen.value = !captureService.flightPlanOpen.value; },
