@@ -18,8 +18,7 @@ import {
   type ServiceContainer,
 } from './service-container';
 import { extractOptionsMeta, defaultOptions } from '../schemas/options.schema';
-import { PALETTE_IDS } from '../services/palette-service';
-import { getParamMeta } from '../config/models';
+import { buildUserLayerOptions } from '../services/layer/layer-service';
 import {
   runCapabilitiesPhase,
   runConfigPhase,
@@ -146,16 +145,7 @@ async function runBootstrapInner(
     services.auroraService.send({ type: 'registerUserLayer', layer });
     if (layer.userLayerIndex !== undefined) {
       const enabled = services.layerService!.isLayerEnabled(layer.id);
-      const paletteIndex = layer.palettes?.[0]
-        ? PALETTE_IDS.indexOf(layer.palettes[0])
-        : 0;
-      const paramName = layer.params?.[0]?.param;
-      const opts: Extract<import('../aurora/worker').AuroraRequest, { type: 'setUserLayerOptions' }> =
-        { type: 'setUserLayerOptions', layerIndex: layer.userLayerIndex, enabled, paletteIndex };
-      if (paramName) {
-        opts.paletteRange = getParamMeta(paramName).range as [number, number];
-      }
-      services.auroraService.send(opts);
+      services.auroraService.send(buildUserLayerOptions(layer, enabled));
     }
   }
 

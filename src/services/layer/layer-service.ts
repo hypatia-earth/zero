@@ -12,9 +12,11 @@ import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import { BUILT_IN_LAYERS, CUSTOM_LAYERS, type TBuiltInLayer, type TCustomLayer, type TLayerCategory } from '../../config/types';
 import type { OptionsService } from '../options-service';
 import { builtInLayers } from '../../layers';
-import { getPublishedParams, type TModel, type TModelParam } from '../../config/models';
+import { getParamMeta, getPublishedParams, type TModel, type TModelParam } from '../../config/models';
 import type { TLayer } from '../../config/types';
 import type { PaletteId } from '../palette-service';
+import { PALETTE_IDS } from '../palette-service';
+import type { AuroraRequest } from '../../aurora/worker';
 
 export type LayerType = 'decoration' | 'texture' | 'geometry' | 'solid';
 export type ComputeTrigger = 'data-ready' | 'time-change';
@@ -75,6 +77,21 @@ export function customLayerId(index: number): TCustomLayer {
 /** Type guard: narrows LayerDeclaration to one with a TBuiltInLayer id */
 export function isBuiltInLayer(layer: LayerDeclaration): layer is LayerDeclaration & { id: TBuiltInLayer } {
   return (BUILT_IN_LAYERS as readonly string[]).includes(layer.id);
+}
+
+/** Build a setUserLayerOptions message for a layer, including paletteRange from param metadata */
+export function buildUserLayerOptions(
+  layer: LayerDeclaration,
+  enabled: boolean,
+): Extract<AuroraRequest, { type: 'setUserLayerOptions' }> {
+  const paletteIndex = layer.palettes?.[0] ? PALETTE_IDS.indexOf(layer.palettes[0]) : 0;
+  const opts: Extract<AuroraRequest, { type: 'setUserLayerOptions' }> =
+    { type: 'setUserLayerOptions', layerIndex: layer.userLayerIndex!, enabled, paletteIndex };
+  const paramName = layer.params?.[0]?.param;
+  if (paramName) {
+    opts.paletteRange = getParamMeta(paramName).range as [number, number];
+  }
+  return opts;
 }
 
 // IDB constants
@@ -248,18 +265,12 @@ export class LayerService {
           // Pattern: (value - -40.0) / (50.0 - -40.0) → use range accessor
           const rangePattern = /\(value\s*-\s*[-\d.]+\)\s*\/\s*\([-\d.]+\s*-\s*[-\d.]+\)/g;
           if (rangePattern.test(code) && !code.includes('getUserLayerPaletteRange')) {
-            // Add import if not present
-            if (!code.includes('getUserLayerPaletteRange')) {
-              code = code.replace(
-                /import package::aurora::shaders::layer_helpers::\{([^}]+)\}/,
-                (_, imports: string) => {
-                  if (!imports.includes('getUserLayerPaletteRange')) {
-                    return `import package::aurora::shaders::layer_helpers::{${imports.trim()}, getUserLayerPaletteRange}`;
-                  }
-                  return _;
-                }
-              );
-            }
+            // Add import
+            code = code.replace(
+              /import package::aurora::shaders::layer_helpers::\{([^}]+)\}/,
+              (_, imports: string) =>
+                `import package::aurora::shaders::layer_helpers::{${imports.trim()}, getUserLayerPaletteRange}`
+            );
             // Replace the hardcoded range math with range accessor
             code = code.replace(
               /let t = clamp\(\(value\s*-\s*([-\d.]+)\)\s*\/\s*\(([-\d.]+)\s*-\s*([-\d.]+)\),\s*0\.0,\s*1\.0\);/,

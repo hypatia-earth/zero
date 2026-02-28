@@ -757,11 +757,7 @@ function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerU
       rebuildParamBindings();
       writeParamSizes();
       rebindAllParamBuffers();
-      const idx = layer.userLayerIndex;
-      const enabled = idx !== undefined ? userLayerEnabled.get(idx) : undefined;
-      const opacity = idx !== undefined ? userLayerOpacities.get(idx) : undefined;
-      const dataReady = layer.params?.every(ref => paramSlotStates.get(ref.param)?.dataReady) ?? false;
-      console.log(`[Aurora] Pipeline recreated with ${layers.length} layers (${layer.id}: idx=${idx}, enabled=${enabled}, opacity=${opacity}, dataReady=${dataReady})`);
+      console.log(`[Aurora] Pipeline recreated with ${layers.length} layers`);
       self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: true });
     })
     .catch((err) => {

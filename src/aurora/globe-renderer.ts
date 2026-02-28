@@ -87,9 +87,6 @@ export class GlobeRenderer {
   private paramBuffers = new Map<string, GPUBuffer>();
   // Current param binding config (set by recreatePipeline)
   private currentParamBindings: ParamBindingConfig[] = [];
-  // Pipeline generation counter for debugging recreation
-  private pipelineGeneration = 0;
-  private lastRenderedGeneration = 0;
   // Graticule animation
   private graticuleLinesBuffer!: GPUBuffer;
   private graticuleAnimator!: GraticuleAnimator;
@@ -479,9 +476,6 @@ export class GlobeRenderer {
       throw new Error(`Post pipeline validation: ${postError.message}`);
     }
 
-    this.pipelineGeneration++;
-    console.log(`[GlobeRenderer] Pipeline recreated (gen ${this.pipelineGeneration}, params: ${this.currentParamBindings.map(p => p.param).join(', ')})`);
-
     // Recreate bind group with new layout
     this.device.pushErrorScope('validation');
     this.recreateBindGroup();
@@ -809,24 +803,7 @@ export class GlobeRenderer {
       this.gpuTimestamp.encodeResolve(commandEncoder);
     }
 
-    // One-shot render validation after pipeline recreation
-    const isNewPipeline = this.pipelineGeneration !== this.lastRenderedGeneration;
-    if (isNewPipeline) {
-      this.device.pushErrorScope('validation');
-    }
-
     this.device.queue.submit([commandEncoder.finish()]);
-
-    if (isNewPipeline) {
-      this.lastRenderedGeneration = this.pipelineGeneration;
-      void this.device.popErrorScope().then(err => {
-        if (err) {
-          console.error(`[GlobeRenderer] Render validation error (gen ${this.pipelineGeneration}):`, err.message);
-        } else {
-          console.log(`[GlobeRenderer] First render with gen ${this.pipelineGeneration} OK`);
-        }
-      });
-    }
 
     // Start async readback AFTER submit (critical ordering)
     if (this.gpuTimestamp) {

@@ -10,7 +10,7 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import { customLayerId, type LayerService, type LayerDeclaration } from '../services/layer/layer-service';
+import { customLayerId, buildUserLayerOptions, type LayerService, type LayerDeclaration } from '../services/layer/layer-service';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
 import { defineLayer, withType, withUI, withParams, withPalettes, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
@@ -354,18 +354,8 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       aurora.send({ type: 'registerUserLayer', layer: suspendedLayer });
       // Restore options (enabled, palette, range)
       if (suspendedLayer.userLayerIndex !== undefined) {
-        const idx = suspendedLayer.userLayerIndex;
         const enabled = registry.isLayerEnabled(suspendedLayer.id);
-        const paletteIndex = suspendedLayer.palettes?.[0]
-          ? PALETTE_IDS.indexOf(suspendedLayer.palettes[0])
-          : 0;
-        const paramName = suspendedLayer.params?.[0]?.param;
-        const opts: Extract<import('../aurora/worker').AuroraRequest, { type: 'setUserLayerOptions' }> =
-          { type: 'setUserLayerOptions', layerIndex: idx, enabled, paletteIndex };
-        if (paramName) {
-          opts.paletteRange = getParamMeta(paramName).range as [number, number];
-        }
-        aurora.send(opts);
+        aurora.send(buildUserLayerOptions(suspendedLayer, enabled));
       }
       console.log(`[CreateLayer] Restored: ${suspendedLayer.id}`);
       suspendedLayer = null;
