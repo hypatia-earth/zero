@@ -450,7 +450,7 @@ export class CaptureService {
   }
 
   private async onPreviewFrame(bitmap: ImageBitmap): Promise<void> {
-    if (this.mode.value === 'off') return;
+    if (this.mode.value !== 'ready') return;
     const palette = await extractPalette(bitmap, this.rect.value, this.options.nativeDpr);
     if (palette.every(([r, g, b]) => r === 0 && g === 0 && b === 0) && this.paletteRetries < 3) {
       this.paletteRetries++;
