@@ -97,6 +97,13 @@ Different missions, both valuable.
 
 ## Changelog
 
+### 2026-03-01
+- **Event archives** - replay historical weather events offline via `?event=` URL parameter. Vite plugin simulates S3 bucket responses for local archives. Discovery, gap-fill, and backward-sum fallback chains work with archived data
+- **Precipitation crossfade** - smooth interpolation of precipitation type between timesteps
+- **Palette fix** - temp-hypatia palette corrected: 10°C bands, 0°C at cyan/green border
+- **Discovery fix** - use reference_time from latest.json instead of current date, enabling correct navigation in archived events
+- **Vite plugins extracted** - cache headers, geonames proxy, om-archive, serve-public-modules moved to vite-plugins/
+
 ### 2026-02-27
 - **MP4 capture** - export weather animations as MP4 video with configurable bitrate, in addition to existing GIF export
 - **Keyframe editor** - animated capture mode with draggable timeline keyframes and text-based Flight Plan editor for precise camera path control
