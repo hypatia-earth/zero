@@ -57,6 +57,14 @@ const PARAM_MODULE_MAP: Record<string, string> = {
   wind_v_component_1000hPa: 'wind_v_1000hpa',
 };
 
+/** Params whose samplers take (lat, lon) instead of (cell: u32) — advected or GFS 0.25° */
+const LATLON_SAMPLER_PARAMS = new Set([
+  'precipitation',
+  'precipitation_type',
+  'wind_u_component_1000hPa',
+  'wind_v_component_1000hPa',
+]);
+
 /** Encode TModelParam as a single string for <select> value */
 function encodeModelParam(mp: TModelParam): string {
   return `${mp.model}::${mp.param}`;
@@ -80,10 +88,12 @@ const PALETTE_OPTIONS = PALETTE_IDS.map(id => ({
   label: PALETTES[id]!.name,
 }));
 
-// Template shader for new layers
-// Only {samplerFn} and {paramModule} are template-replaced (resolved immediately when user picks a param)
+// Template shaders for new layers
+// {samplerFn} and {paramModule} are template-replaced when user picks a param
 // LAYER_INDEX is injected as a module-scoped const by ShaderComposer
-const SHADER_TEMPLATE = `// Custom blend function - palette visualization
+
+// Cell-based template: O1280 params that take (cell: u32)
+const SHADER_TEMPLATE_CELL = `// Custom blend function - palette visualization
 import package::aurora::shaders::params::{paramModule}::{samplerFn};
 import package::aurora::shaders::layer_helpers::{getUserLayerOpacity, getUserLayerPaletteIndex, getUserLayerPaletteRange};
 import package::aurora::shaders::projection_o1280::o1280LatLonToCell;
@@ -94,6 +104,24 @@ fn blend(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let opacity = getUserLayerOpacity(LAYER_INDEX);
   let cell = o1280LatLonToCell(lat, lon);
   let value = {samplerFn}(cell);
+
+  let range = getUserLayerPaletteRange(LAYER_INDEX);
+  let t = clamp((value - range.x) / (range.y - range.x), 0.0, 1.0);
+  let layerColor = samplePalette(t, getUserLayerPaletteIndex(LAYER_INDEX));
+  return vec4f(mix(color.rgb, layerColor.rgb, opacity * layerColor.a), color.a);
+}
+`;
+
+// LatLon-based template: advected/GFS params that take (lat, lon)
+const SHADER_TEMPLATE_LATLON = `// Custom blend function - palette visualization
+import package::aurora::shaders::params::{paramModule}::{samplerFn};
+import package::aurora::shaders::layer_helpers::{getUserLayerOpacity, getUserLayerPaletteIndex, getUserLayerPaletteRange};
+import package::aurora::shaders::palette::samplePalette;
+import constants::LAYER_INDEX;
+
+fn blend(color: vec4f, lat: f32, lon: f32) -> vec4f {
+  let opacity = getUserLayerOpacity(LAYER_INDEX);
+  let value = {samplerFn}(lat, lon);
 
   let range = getUserLayerPaletteRange(LAYER_INDEX);
   let t = clamp((value - range.x) / (range.y - range.x), 0.0, 1.0);
@@ -125,7 +153,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     modelParam: DEFAULT_MODEL_PARAM,
     paramMeta: getParamMeta(DEFAULT_MODEL_PARAM.param),
     paletteId: DEFAULT_PALETTE,
-    shaderCode: SHADER_TEMPLATE,
+    shaderCode: SHADER_TEMPLATE_CELL,
     order: 50,
     opacity: 0.5,
     userLayerIndex: null,
@@ -169,8 +197,11 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
   function updateShaderTemplate() {
     const samplerFn = getSamplerName(state.modelParam.param);
     const paramModule = PARAM_MODULE_MAP[state.modelParam.param] ?? state.modelParam.param;
+    const template = LATLON_SAMPLER_PARAMS.has(state.modelParam.param)
+      ? SHADER_TEMPLATE_LATLON
+      : SHADER_TEMPLATE_CELL;
 
-    state.shaderCode = SHADER_TEMPLATE
+    state.shaderCode = template
       .replace(/{samplerFn}/g, samplerFn)
       .replace(/{paramModule}/g, paramModule);
   }
