@@ -7,7 +7,7 @@
 
 import m from 'mithril';
 import { signal, effect, type Signal, type ReadonlySignal } from '@preact/signals-core';
-import { interpolateCamera, type KeyframeManager } from './keyframe';
+import { interpolateCamera, type KeyframeManager, type ZoomInterp } from './keyframe';
 import {
   timeToPercent, timeToFrame, createFrameTimeMapper,
   frameToSMPTE, formatDateCompact, formatTimeHHMM,
@@ -269,7 +269,7 @@ export class AnimatedCapture {
       }
 
       // 2. Interpolate camera, set state
-      const cam = interpolateCamera(kfs, weatherTime, this.km.wrap);
+      const cam = interpolateCamera(kfs, weatherTime, this.km.wrap, this.options.zoomInterp as ZoomInterp);
       this.stateService.setTime(new Date(weatherTime));
       camera.setPosition(cam.lat, cam.lon, cam.distance);
       camera.update();

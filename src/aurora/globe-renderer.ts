@@ -46,6 +46,7 @@ export interface GlobeUniforms {
   pressureColors: PressureColorOption;
   logoOpacity: number;       // computed from all layer opacities
   rainBackFace: number;
+  rainAnimated: boolean;
 }
 
 const POINTS_PER_TIMESTEP = 6_599_680;
@@ -580,10 +581,11 @@ export class GlobeRenderer {
 
     // Rain (dynamic: backface depends on which layers are enabled)
     view.setFloat32(O.rainBackFace, uniforms.rainBackFace, true);
-    this.rainAnimTime += this.frameDeltaMs / 1000;
+    if (uniforms.rainAnimated) this.rainAnimTime += this.frameDeltaMs / 1000;
     view.setFloat32(O.rainAnimTime, this.rainAnimTime, true);
 
-    this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
+    // Note: uniform buffer upload deferred to uploadUniforms() so callers
+    // can write param state (lerp, ready, dt) before the GPU copy.
 
     // Update graticule animation based on globe screen size
     const cameraDistance = Math.sqrt(
@@ -653,6 +655,11 @@ export class GlobeRenderer {
         paletteCount: this.paletteTexture.paletteCount,
       });
     }
+  }
+
+  /** Upload uniform buffer to GPU. Call after all setParamState/setParamDt writes. */
+  uploadUniforms(): void {
+    this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
   }
 
   render(): PassTimings {

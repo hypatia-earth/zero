@@ -85,6 +85,7 @@ async function runBootstrapInner(
   // Phase 3: Discovery
   progress.startStep('DISCOVERY');
   services.timestepService = createTimestepService(services.layerService!);
+  services.stateService!.setTimestepService(services.timestepService);
   await runDiscoveryPhase(services.timestepService, services.stateService!, progress);
 
   // Phase 4: Assets

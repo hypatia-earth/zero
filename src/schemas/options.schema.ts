@@ -705,6 +705,17 @@ export const optionsSchema = z.object({
         step: 0.05,
       }
     ),
+    animated: opt(
+      z.boolean().default(true),
+      {
+        label: 'Animate particles',
+        description: 'Animate precipitation particles',
+        group: 'layers',
+        filter: 'rain',
+        order: 12,
+        control: 'toggle',
+      }
+    ),
   }),
 
   // ----------------------------------------------------------
@@ -1017,7 +1028,7 @@ export const optionsSchema = z.object({
         description: 'Lock capture rect to aspect ratio',
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 0,
+        order: 10,
         control: 'radio',
         options: [
           { value: 'free', label: 'Free' },
@@ -1035,7 +1046,7 @@ export const optionsSchema = z.object({
         description: 'Output format for recording',
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 1,
+        order: 20,
         control: 'radio',
         options: [
           { value: 'gif', label: 'GIF' },
@@ -1050,7 +1061,7 @@ export const optionsSchema = z.object({
         description: 'MP4 encoding bitrate',
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 1.5,
+        order: 25,
         control: 'radio',
         disabledWhen: { path: 'capture.format', equals: 'gif' },
         options: [
@@ -1067,7 +1078,7 @@ export const optionsSchema = z.object({
         description: 'Recording length in seconds',
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 2,
+        order: 30,
         control: 'radio',
         options: [
           { value: '1', label: '1s' },
@@ -1086,11 +1097,28 @@ export const optionsSchema = z.object({
         description: 'Frames per second',
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 3,
+        order: 40,
         control: 'radio',
         options: [
           { value: '15', label: '15' },
           { value: '30', label: '30' },
+        ],
+      }
+    ),
+    zoomInterp: opt(
+      z.enum(['smooth', 'spline', 'linear']).default('smooth'),
+      {
+        label: 'Zoom curve',
+        description: 'Altitude interpolation between keyframes',
+        group: 'capture',
+        filter: ['global', 'capture'],
+        order: 50,
+        control: 'radio',
+        disabledWhen: { path: 'capture.lastCaptureType', equals: 'simple' },
+        options: [
+          { value: 'smooth', label: 'Smooth' },
+          { value: 'spline', label: 'Spline' },
+          { value: 'linear', label: 'Linear' },
         ],
       }
     ),
@@ -1101,7 +1129,7 @@ export const optionsSchema = z.object({
         description: `Record at device pixel resolution (${typeof window !== 'undefined' ? parseFloat(window.devicePixelRatio.toFixed(2)) : 2}× on this device)`,
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 4,
+        order: 60,
         control: 'toggle',
       }
     ),
@@ -1112,7 +1140,7 @@ export const optionsSchema = z.object({
         description: 'Color quantization strategy for GIF encoding',
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 5,
+        order: 70,
         control: 'radio',
         disabledWhen: { path: 'capture.format', equals: 'mp4' },
         options: [
@@ -1129,7 +1157,7 @@ export const optionsSchema = z.object({
         description: 'Show location label in exported media',
         group: 'capture',
         filter: ['global', 'capture'],
-        order: 6,
+        order: 80,
         control: 'toggle',
       }
     ),
@@ -1241,14 +1269,14 @@ export const defaultOptions: ZeroOptions = {
   sun: { enabled: true, opacity: 1 },
   graticule: { enabled: true, opacity: 0.9, fontSize: 12, lineWidth: 1.5 },
   temp: { enabled: true, opacity: 0.6, palette: 'temp-classic' },
-  rain: { enabled: false, opacity: 1 },
+  rain: { enabled: false, opacity: 1, animated: true },
   clouds: { enabled: false, opacity: 0.5 },
   humidity: { enabled: false, opacity: 0.6 },
   wind: { enabled: false, seedCount: 8192, opacity: 0.8, speed: 30 },
   pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
-  capture: { aspectRatio: 'free', duration: '5', fps: '15', nativeDpr: false, paletteMode: 'fast', format: 'gif', bitrate: '3', label: true, lastCaptureType: 'simple' },
+  capture: { aspectRatio: 'free', duration: '5', fps: '15', zoomInterp: 'smooth', nativeDpr: false, paletteMode: 'fast', format: 'gif', bitrate: '3', label: true, lastCaptureType: 'simple' },
   debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1', showLogo: true },
 };
 

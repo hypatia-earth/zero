@@ -11,6 +11,7 @@ import { debounceFlush } from '../utils/debounce-flush';
 import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { LayerService } from './layer/layer-service';
+import type { TimestepService } from './timestep/timestep-service';
 import { builtInLayerIds } from '../config/defaults';
 
 const DEBUG = false;
@@ -36,12 +37,20 @@ const DEFAULT_VIEW_STATE: ViewState = {
 export class StateService {
   readonly viewState = signal<ViewState>({ ...DEFAULT_VIEW_STATE });
   readonly minimalUI = signal(false);
+  readonly event: string | null = null;
 
   private urlSyncEnabled = false;
+  private hasExplicitDt = false;
   private debouncedUrlSync = debounceFlush(() => this.syncToUrl(), 300);
 
   private optionsService: OptionsService;
   private layerService: LayerService | null = null;
+  private timestepService: TimestepService | null = null;
+
+  /** Post-construction wiring for TimestepService (needed for time clamping) */
+  setTimestepService(timestepService: TimestepService): void {
+    this.timestepService = timestepService;
+  }
 
   /** Post-construction wiring for LayerService (needed for URL sync and layer sanitization) */
   setLayerService(layerService: LayerService): void {
@@ -58,6 +67,7 @@ export class StateService {
     optionsService: OptionsService
   ) {
     this.optionsService = optionsService;
+    this.event = new URLSearchParams(window.location.search).get('event');
     this.parseUrl();
 
     // Effect-based decoupling: watch options and sync URL when they change
@@ -80,11 +90,20 @@ export class StateService {
    * Logs [TimeEvent] and schedules URL sync
    */
   setTime(newTime: Date): void {
-    const oldTime = this.viewState.value.time;
-    if (oldTime.getTime() === newTime.getTime()) return;
+    // Clamp to available timestep range
+    let clamped = newTime;
+    if (this.timestepService) {
+      const firstMs = this.timestepService.toDate(this.timestepService.first()).getTime();
+      const lastMs = this.timestepService.toDate(this.timestepService.last()).getTime();
+      const ms = Math.max(firstMs, Math.min(lastMs, newTime.getTime()));
+      clamped = new Date(ms);
+    }
 
-    DEBUG && console.log(`[TimeEvent] ${fmtTime(oldTime)} => ${fmtTime(newTime)}`);
-    this.viewState.value = { ...this.viewState.value, time: newTime };
+    const oldTime = this.viewState.value.time;
+    if (oldTime.getTime() === clamped.getTime()) return;
+
+    DEBUG && console.log(`[TimeEvent] ${fmtTime(oldTime)} => ${fmtTime(clamped)}`);
+    this.viewState.value = { ...this.viewState.value, time: clamped };
     this.scheduleUrlSync();
   }
 
@@ -117,17 +136,24 @@ export class StateService {
    * - Clamps lat/lon/altitude
    * - Validates and applies layer enables from URL
    */
-  sanitize(getClosestTimestep: (time: Date) => Date): void {
+  sanitize(getClosestTimestep: (time: Date) => Date, getMiddleTimestep?: () => Date): void {
     const vs = this.viewState.value;
     const changes: string[] = [];
     const params = new URLSearchParams(window.location.search);
 
-    // Snap time to closest available timestep
-    const snappedTime = getClosestTimestep(vs.time);
+    // For archive events without explicit dt, jump to middle of archive range
     let newTime = vs.time;
-    if (snappedTime.getTime() !== vs.time.getTime()) {
-      newTime = snappedTime;
-      changes.push(`time=${fmtTime(vs.time)}=>${fmtTime(snappedTime)}`);
+    if (this.event && !this.hasExplicitDt && getMiddleTimestep) {
+      const middleTime = getMiddleTimestep();
+      newTime = middleTime;
+      changes.push(`time=archive-mid=>${fmtTime(middleTime)}`);
+    } else {
+      // Snap time to closest available timestep
+      const snappedTime = getClosestTimestep(vs.time);
+      if (snappedTime.getTime() !== vs.time.getTime()) {
+        newTime = snappedTime;
+        changes.push(`time=${fmtTime(vs.time)}=>${fmtTime(snappedTime)}`);
+      }
     }
 
     // Log changes
@@ -184,6 +210,7 @@ export class StateService {
 
     // Parse dt (time)
     const dt = params.get('dt');
+    this.hasExplicitDt = dt !== null;
     if (dt) {
       const time = this.parseDateFromUrl(dt);
       if (time) vs.time = time;
@@ -244,7 +271,8 @@ export class StateService {
     const enabledLayers = this.optionsService.getEnabledLayers();
 
     // Build URL manually to keep commas unencoded
-    let search = `?dt=${dt}&ll=${ll}&alt=${alt}`;
+    let search = this.event ? `?event=${this.event}&` : '?';
+    search += `dt=${dt}&ll=${ll}&alt=${alt}`;
     if (enabledLayers.length > 0) {
       search += `&layers=${enabledLayers.join(',')}`;
     }

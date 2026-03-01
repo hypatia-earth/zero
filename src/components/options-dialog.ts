@@ -185,7 +185,7 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
     case 'select': {
       const filteredOptions = meta.options.filter(o =>
         (!o.localhostOnly || isLocalhost) &&
-        (!o.maxCores || navigator.hardwareConcurrency >= o.maxCores)
+        (!o.maxCores || isLocalhost || navigator.hardwareConcurrency >= o.maxCores)
       );
       return m('select.select', {
         value: currentValue,

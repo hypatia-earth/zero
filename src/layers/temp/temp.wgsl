@@ -17,8 +17,8 @@ fn blendTemp(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let cell = o1280LatLonToCell(lat, lon);
   let tempC = sampleParam_temperature_2m(cell);
 
-  // Skip if no data or invalid values
-  if (tempC == 0.0 || tempC < -100.0 || tempC > 100.0) { return color; }
+  // Skip invalid values (unloaded slots guarded by isParamReady)
+  if (tempC < -100.0 || tempC > 100.0) { return color; }
 
   let tempColor = colormapTemp(tempC);
   let blendAlpha = opacity * tempColor.a;

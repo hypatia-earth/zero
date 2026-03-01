@@ -51,17 +51,19 @@
     "id": "temp-hypatia",
     "groups": ["temp"],
     "name": "Hypatia Temperature",
-    "description": "Original Hypatia gradient from purple to red",
+    "description": "Original Hypatia colors, 10°C bands, 0°C at cyan/green border",
     "interpolate": false,
     "stops": [
-      { "value": 0.00, "color": [170, 102, 170], "alpha": 255 },
-      { "value": 0.15, "color": [206, 155, 229], "alpha": 255 },
-      { "value": 0.30, "color": [118, 206, 226], "alpha": 255 },
-      { "value": 0.45, "color": [108, 239, 108], "alpha": 255 },
-      { "value": 0.55, "color": [237, 249, 108], "alpha": 255 },
-      { "value": 0.70, "color": [255, 187, 85], "alpha": 255 },
-      { "value": 0.85, "color": [251, 101, 78], "alpha": 255 },
-      { "value": 1.00, "color": [204, 64, 64], "alpha": 255 }
+      { "value": 0.000, "color": [135,  92, 165], "alpha": 255 },
+      { "value": 0.111, "color": [170, 102, 170], "alpha": 255 },
+      { "value": 0.222, "color": [206, 155, 229], "alpha": 255 },
+      { "value": 0.333, "color": [118, 206, 226], "alpha": 255 },
+      { "value": 0.444, "color": [108, 239, 108], "alpha": 255 },
+      { "value": 0.556, "color": [237, 249, 108], "alpha": 255 },
+      { "value": 0.667, "color": [255, 187,  85], "alpha": 255 },
+      { "value": 0.778, "color": [251, 101,  78], "alpha": 255 },
+      { "value": 0.889, "color": [204,  64,  64], "alpha": 255 },
+      { "value": 1.000, "color": [163,  57,  73], "alpha": 255 }
     ]
   },
 

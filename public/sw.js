@@ -12,6 +12,7 @@ const DEBUG = false;
 const CACHE_PREFIX = 'om-';
 const CACHE_VERSION = 'v3';  // Bumped for param-based caching
 const S3_HOST = 'openmeteo.s3.amazonaws.com';
+let swNoCacheLogged = false;
 
 // Log to main thread via BroadcastChannel
 const logChannel = new BroadcastChannel('sw-log');
@@ -116,6 +117,10 @@ self.addEventListener('fetch', (event) => {
 
   // Only handle Range requests to S3
   if (url.host !== S3_HOST || !rangeHeader) {
+    if (url.pathname.endsWith('.om') && !swNoCacheLogged) {
+      swNoCacheLogged = true;
+      console.log(`[SW] No caching for ${url.host}`);
+    }
     return;
   }
 

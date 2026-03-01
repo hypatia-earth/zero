@@ -12,15 +12,21 @@ const BASE_FOOTER_H = 24;
 const BASE_HEADER_FONT = 14;
 const BASE_FOOTER_FONT = 13;
 const BASE_ATTRIBUTION_FONT = 11;
-const LOGO_PATH = '/favicon-512.png';
+const LOGO_PATH = '/favicon.svg';
 
-let logoBitmapCache: Promise<ImageBitmap> | null = null;
+let logoCache: Promise<HTMLImageElement> | null = null;
 
-export function loadLogo(): Promise<ImageBitmap> {
-  if (!logoBitmapCache) {
-    logoBitmapCache = fetch(LOGO_PATH).then(r => r.blob()).then(b => createImageBitmap(b));
+/** Load brand SVG as Image element — drawn directly for vector-sharp scaling. */
+export function loadLogo(): Promise<HTMLImageElement> {
+  if (!logoCache) {
+    logoCache = new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = LOGO_PATH;
+    });
   }
-  return logoBitmapCache;
+  return logoCache;
 }
 
 export interface Decorator {
@@ -35,7 +41,7 @@ export function createDecorator(
   h: number,
   label: string,
   timestamp: string,
-  logo: ImageBitmap,
+  logo: HTMLImageElement,
   scale: number,
 ): Decorator {
   const headerH = Math.round(BASE_HEADER_H * scale) & ~1;

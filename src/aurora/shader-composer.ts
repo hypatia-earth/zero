@@ -237,9 +237,8 @@ export class ShaderComposer {
         const sample = cfg.categorical
           ? `select(v0, v1, lerp >= 0.5)`
           : `mix(v0, v1, lerp)`;
-        advectedSamplers.push(`
-fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
-  if (!isParamReady(${cfg.index}u)) { return 0.0; }
+        const advectionBody = `
+  if (!isParamReady(${cfg.index}u)) { return \${RET_ZERO}; }
   let lerp = getParamLerp(${cfg.index}u);
   let size = getParamSize(${cfg.index}u);
   // Advection wind at current position (time-interpolated)
@@ -256,17 +255,25 @@ fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
   let v0 = param_${safeName}[cell0];
   // Forward trajectory: where will t1 air be?
   let cell1 = o1280LatLonToCell(lat + dlat * (1.0 - lerp), lon + dlon * (1.0 - lerp));
-  let v1 = param_${safeName}[cell1 + size];
+  let v1 = param_${safeName}[cell1 + size];`;
+        advectedSamplers.push(`
+fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {${advectionBody.replace(/\$\{RET_ZERO\}/g, '0.0')}
   return ${sample};
 }`);
+        // Categorical pair sampler: returns (v0, v1, lerp) for crossfade
+        if (cfg.categorical) {
+          advectedSamplers.push(`
+fn sampleParamPair_${safeName}(lat: f32, lon: f32) -> vec3f {${advectionBody.replace(/\$\{RET_ZERO\}/g, 'vec3f(0.0)')}
+  return vec3f(v0, v1, lerp);
+}`);
+        }
       } else if (cfg.model === 'ncep_gfs025') {
         // Regular 0.25° grid (721 lat × 1440 lon) — sampler takes (lat, lon)
         const sample = cfg.categorical
           ? `select(v0, v1, lerp >= 0.5)`
           : `select(v0, mix(v0, v1, lerp), lerp >= 0.0)`;
-        samplers.push(`
-fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
-  if (!isParamReady(${cfg.index}u)) { return 0.0; }
+        const gfsBody = `
+  if (!isParamReady(${cfg.index}u)) { return \${RET_ZERO}; }
   let latF = (COMMON_PI * 0.5 - lat) * (720.0 / COMMON_PI);
   let lonWrap = lon - floor(lon / COMMON_TAU) * COMMON_TAU;
   let lonF = lonWrap * (1440.0 / COMMON_TAU);
@@ -275,9 +282,17 @@ fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {
   let cell = latIdx * 1440u + lonIdx;
   let v0 = param_${safeName}[cell];
   let v1 = param_${safeName}[cell + getParamSize(${cfg.index}u)];
-  let lerp = getParamLerp(${cfg.index}u);
+  let lerp = getParamLerp(${cfg.index}u);`;
+        samplers.push(`
+fn sampleParam_${safeName}(lat: f32, lon: f32) -> f32 {${gfsBody.replace(/\$\{RET_ZERO\}/g, '0.0')}
   return ${sample};
 }`);
+        if (cfg.categorical) {
+          samplers.push(`
+fn sampleParamPair_${safeName}(lat: f32, lon: f32) -> vec3f {${gfsBody.replace(/\$\{RET_ZERO\}/g, 'vec3f(0.0)')}
+  return vec3f(v0, v1, lerp);
+}`);
+        }
       } else {
         // O1280 grid — sampler takes cell index
         const sample = cfg.categorical
@@ -291,6 +306,16 @@ fn sampleParam_${safeName}(cell: u32) -> f32 {
   let lerp = getParamLerp(${cfg.index}u);
   return ${sample};
 }`);
+        if (cfg.categorical) {
+          samplers.push(`
+fn sampleParamPair_${safeName}(cell: u32) -> vec3f {
+  if (!isParamReady(${cfg.index}u)) { return vec3f(0.0); }
+  let v0 = param_${safeName}[cell];
+  let v1 = param_${safeName}[cell + getParamSize(${cfg.index}u)];
+  let lerp = getParamLerp(${cfg.index}u);
+  return vec3f(v0, v1, lerp);
+}`);
+        }
       }
     }
 

@@ -57,7 +57,7 @@ export async function discoverModel(
 
   // 2. Find first and newest runs via S3
   await onProgress?.('runs', model);
-  const { firstRun, newestRun, newestRunPrefix } = await discoverRunBounds(basePrefix, bucketRoot);
+  const { firstRun, newestRun, newestRunPrefix } = await discoverRunBounds(basePrefix, bucketRoot, completedRunTime);
   if (!firstRun) {
     throw new Error(`[Discovery] No runs found for ${model}`);
   }
@@ -101,19 +101,20 @@ export async function discoverModel(
 // S3 Listing Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function discoverRunBounds(basePrefix: string, bucketRoot: string): Promise<{
+async function discoverRunBounds(basePrefix: string, bucketRoot: string, referenceTime: Date): Promise<{
   firstRun: Date | null;
   newestRun: Date | null;
   newestRunPrefix: string | null;
 }> {
   const pad = (n: number) => n.toString().padStart(2, '0');
 
-  // List months (1-2 requests)
-  const now = new Date();
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  // List months: reference_time ± 7 days covers both live and archived data
+  const weekBefore = new Date(referenceTime.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const weekAfter = new Date(referenceTime.getTime() + 7 * 24 * 60 * 60 * 1000);
   const monthsToCheck = new Set<string>();
-  monthsToCheck.add(`${weekAgo.getUTCFullYear()}/${pad(weekAgo.getUTCMonth() + 1)}`);
-  monthsToCheck.add(`${now.getUTCFullYear()}/${pad(now.getUTCMonth() + 1)}`);
+  monthsToCheck.add(`${weekBefore.getUTCFullYear()}/${pad(weekBefore.getUTCMonth() + 1)}`);
+  monthsToCheck.add(`${referenceTime.getUTCFullYear()}/${pad(referenceTime.getUTCMonth() + 1)}`);
+  monthsToCheck.add(`${weekAfter.getUTCFullYear()}/${pad(weekAfter.getUTCMonth() + 1)}`);
 
   const dayPrefixes: string[] = [];
   for (const yearMonth of monthsToCheck) {

@@ -108,6 +108,8 @@ function slerpPosition(kf0: CameraKeyframe, kf1: CameraKeyframe, t: number): Int
 
 // ── Catmull-Rom (3+ keyframes) ───────────────────────────────────
 
+export type ZoomInterp = 'smooth' | 'spline' | 'linear';
+
 /** 1D Catmull-Rom spline value */
 function catmullRom1D(p0: number, p1: number, p2: number, p3: number, t: number): number {
   return 0.5 * (
@@ -118,7 +120,42 @@ function catmullRom1D(p0: number, p1: number, p2: number, p3: number, t: number)
   );
 }
 
-function catmullRomPosition(keyframes: CameraKeyframe[], timeMs: number, wrap: boolean): InterpolatedCamera {
+/**
+ * Monotone cubic Hermite interpolation (Fritsch-Carlson).
+ * Smooth like Catmull-Rom but prevents overshoot on plateaus/steep transitions.
+ */
+function monotoneCubic(values: number[], seg: number, t: number): number {
+  const n = values.length;
+  // Secants between consecutive points
+  const delta = (i: number) => i < n - 1 ? values[i + 1]! - values[i]! : 0;
+
+  // Tangent at each endpoint of this segment
+  const tangent = (i: number): number => {
+    if (i === 0) return delta(0);
+    if (i === n - 1) return delta(n - 2);
+    const d0 = delta(i - 1);
+    const d1 = delta(i);
+    // Different signs → flat (prevent overshoot)
+    if (d0 * d1 <= 0) return 0;
+    // Harmonic mean of secants (Fritsch-Carlson)
+    return 2 * d0 * d1 / (d0 + d1);
+  };
+
+  const y0 = values[seg]!;
+  const y1 = values[seg + 1]!;
+  const m0 = tangent(seg);
+  const m1 = tangent(seg + 1);
+
+  // Hermite basis
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * y0
+       + (t3 - 2 * t2 + t) * m0
+       + (-2 * t3 + 3 * t2) * y1
+       + (t3 - t2) * m1;
+}
+
+function catmullRomPosition(keyframes: CameraKeyframe[], timeMs: number, wrap: boolean, zoomInterp: ZoomInterp): InterpolatedCamera {
   const n = keyframes.length;
 
   // Clamp to range
@@ -156,26 +193,33 @@ function catmullRomPosition(keyframes: CameraKeyframe[], timeMs: number, wrap: b
   const p2 = latLonToCartesian(keyframes[i2]!.lat, keyframes[i2]!.lon);
   const p3 = latLonToCartesian(keyframes[i3]!.lat, keyframes[i3]!.lon);
 
-  // Catmull-Rom per component
+  // Catmull-Rom per component (lat/lon path always spline)
   const rx = catmullRom1D(p0[0], p1[0], p2[0], p3[0], t);
   const ry = catmullRom1D(p0[1], p1[1], p2[1], p3[1], t);
   const rz = catmullRom1D(p0[2], p1[2], p2[2], p3[2], t);
 
-  // Normalize back to unit sphere
   const { lat, lon } = cartesianToLatLon(rx, ry, rz);
 
-  // Distance: 1D Catmull-Rom
-  const distance = catmullRom1D(
-    keyframes[i0]!.distance, keyframes[i1]!.distance,
-    keyframes[i2]!.distance, keyframes[i3]!.distance, t
-  );
+  // Distance interpolation — per zoom curve mode
+  let distance: number;
+  if (zoomInterp === 'spline') {
+    distance = catmullRom1D(
+      keyframes[i0]!.distance, keyframes[i1]!.distance,
+      keyframes[i2]!.distance, keyframes[i3]!.distance, t
+    );
+  } else if (zoomInterp === 'linear') {
+    distance = keyframes[i1]!.distance + (keyframes[i2]!.distance - keyframes[i1]!.distance) * t;
+  } else {
+    // 'smooth' — monotone cubic (no overshoot)
+    distance = monotoneCubic(keyframes.map(kf => kf.distance), seg, t);
+  }
 
   return { lat, lon, distance };
 }
 
 // ── Public interpolation dispatch ────────────────────────────────
 
-export function interpolateCamera(keyframes: CameraKeyframe[], timeMs: number, wrap: boolean): InterpolatedCamera {
+export function interpolateCamera(keyframes: CameraKeyframe[], timeMs: number, wrap: boolean, zoomInterp: ZoomInterp = 'smooth'): InterpolatedCamera {
   if (keyframes.length === 0) {
     return { lat: 0, lon: 0, distance: 3 };
   }
@@ -188,7 +232,7 @@ export function interpolateCamera(keyframes: CameraKeyframe[], timeMs: number, w
     const t = range > 0 ? Math.max(0, Math.min(1, (timeMs - keyframes[0]!.time) / range)) : 0;
     return slerpPosition(keyframes[0]!, keyframes[1]!, t);
   }
-  return catmullRomPosition(keyframes, timeMs, wrap);
+  return catmullRomPosition(keyframes, timeMs, wrap, zoomInterp);
 }
 
 // ── KeyframeManager ──────────────────────────────────────────────

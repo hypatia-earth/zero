@@ -79,11 +79,14 @@ export class TimestepService {
   // Initialization
   // ─────────────────────────────────────────────────────────────────────────────
 
-  async initialize(onProgress?: (step: 'manifest' | 'runs' | 'cache' | 'cleanup', detail?: string) => Promise<void>): Promise<void> {
+  async initialize(onProgress?: (step: 'manifest' | 'runs' | 'cache' | 'cleanup', detail?: string) => Promise<void>, event?: string): Promise<void> {
 
     // Discover timesteps for each model
     for (const modelDef of MODELS) {
-      const result = await discoverModel(modelDef.name, modelDef.root, onProgress);
+      const root = event
+        ? `${location.origin}/om-events/${event}/${modelDef.name}`
+        : modelDef.root;
+      const result = await discoverModel(modelDef.name, root, onProgress);
       this.timestepsData[modelDef.name] = result.timesteps;
       this.variablesData[modelDef.name] = result.variables;
 
@@ -229,12 +232,13 @@ export class TimestepService {
 
   next(ts: TTimestep): TTimestep {
     const idx = this.timestepIndex[this.primaryModel].get(ts)!;
-    return this.timestepsData[this.primaryModel][idx + 1]!.timestep;
+    const data = this.timestepsData[this.primaryModel];
+    return idx < data.length - 1 ? data[idx + 1]!.timestep : ts;
   }
 
   prev(ts: TTimestep): TTimestep {
     const idx = this.timestepIndex[this.primaryModel].get(ts)!;
-    return this.timestepsData[this.primaryModel][idx - 1]!.timestep;
+    return idx > 0 ? this.timestepsData[this.primaryModel][idx - 1]!.timestep : ts;
   }
 
   adjacent(time: Date): [TTimestep, TTimestep] {
@@ -349,12 +353,13 @@ export class TimestepService {
 
   nextFor(ts: TTimestep, mp: TModelParam): TTimestep {
     const idx = this.timestepIndex[mp.model].get(ts)!;
-    return this.timestepsData[mp.model][idx + 1]!.timestep;
+    const data = this.timestepsData[mp.model];
+    return idx < data.length - 1 ? data[idx + 1]!.timestep : ts;
   }
 
   prevFor(ts: TTimestep, mp: TModelParam): TTimestep {
     const idx = this.timestepIndex[mp.model].get(ts)!;
-    return this.timestepsData[mp.model][idx - 1]!.timestep;
+    return idx > 0 ? this.timestepsData[mp.model][idx - 1]!.timestep : ts;
   }
 
   /** Get TModelParam for a param name (bridge from string-keyed internal state) */
@@ -376,6 +381,12 @@ export class TimestepService {
     const d0 = Math.abs(time.getTime() - t0Date.getTime());
     const d1 = Math.abs(time.getTime() - t1Date.getTime());
     return d0 <= d1 ? t0Date : t1Date;
+  }
+
+  getMiddleTimestep(): Date {
+    const data = this.timestepsData[this.primaryModel];
+    const midIdx = Math.floor(data.length / 2);
+    return parseTimestep(data[midIdx]!.timestep);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────

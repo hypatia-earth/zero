@@ -42,10 +42,13 @@ export async function runDiscoveryPhase(
       cleanup: 0.85,
     };
     await progress.sub(messages[step] ?? `Discovery: ${step}...`, fractions[step] ?? 0.5);  // QC-OK: future steps
-  });
+  }, stateService.event ?? undefined);
 
   // Snap time to closest available timestep and sanitize layers
   await progress.run('Synchronizing time...', 0.9, async () => {
-    stateService.sanitize((time: Date) => timestepService.getClosestTimestep(time));
+    stateService.sanitize(
+      (time: Date) => timestepService.getClosestTimestep(time),
+      () => timestepService.getMiddleTimestep()
+    );
   });
 }

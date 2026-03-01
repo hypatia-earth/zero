@@ -310,11 +310,14 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
   }
 }
 
-/** Compute lerp for a layer based on time and slot times */
+/** Compute lerp for a layer based on time and slot times.
+ *  Returns -1 if time is outside the active pair (stale slots). */
 function computeLerp(state: SlotState, timeMs: number): number {
-  if (state.t0 === state.t1) return 0;  // Single timestep mode
-  if (timeMs <= state.t0) return 0;
-  if (timeMs >= state.t1) return 1;
+  if (state.t0 === state.t1) {
+    // Single timestep: valid only at exact millisecond match
+    return timeMs === state.t0 ? 0 : -1;
+  }
+  if (timeMs < state.t0 || timeMs > state.t1) return -1;  // Outside pair range
   return (timeMs - state.t0) / (state.t1 - state.t0);
 }
 
@@ -381,6 +384,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
     rainBackFace: opts.rain.enabled && !opts.earth.enabled && !opts.temp.enabled ? 1 : 0,
+    rainAnimated: opts.rain.animated,
   };
 }
 
@@ -600,12 +604,16 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
     const state = paramSlotStates.get(param);
     if (state) {
       const lerp = state.dataReady ? computeLerp(state, time) : -1;
-      renderer!.setParamState(binding.index, lerp, state.dataReady);
+      renderer!.setParamState(binding.index, lerp, state.dataReady && lerp >= 0);
       const dtSeconds = (state.t1 - state.t0) / 1000;
       renderer!.setParamDt(binding.index, dtSeconds);
     }
   }
 
+  // DO NOT CHANGE THIS ORDER: uploadUniforms must come after setParamState/setParamDt.
+  // Moving the upload before param writes causes lerp values to lag one frame behind,
+  // producing a 1-2 frame flash of wrong timestep data on every time transition.
+  renderer!.uploadUniforms();
   const passTimings = renderer!.render();
 
   // Capture frame if pending (right after render, before next frame overwrites)
@@ -853,6 +861,8 @@ async function handleRecordBatch(data: Extract<AuroraRequest, { type: 'recordBat
       }
     }
 
+    // DO NOT CHANGE THIS ORDER — see handleRender for explanation.
+    renderer.uploadUniforms();
     renderer.render();
     const bitmap = await renderer.readbackFrame();
     bitmaps.push(bitmap);

@@ -46,11 +46,26 @@ fn sdfStar6(p: vec2f) -> f32 {
   return r - petal;
 }
 
-// ─── Palette lookup by WMO code ─────────────────────────────────────────────
+// ─── Helpers by WMO code ────────────────────────────────────────────────────
+
+fn ptypeSdf(code: u32, pn: vec2f) -> f32 {
+  switch code {
+    case 1u:       { return sdfDrop(pn); }        // rain
+    case 3u, 12u:  { return sdfDrop(pn); }        // freezing rain/drizzle
+    case 5u:       { return sdfStar6(pn); }       // snow
+    case 6u, 7u:   { return sdfStar6(pn); }       // wet snow, sleet
+    case 8u:       { return sdfDiamond(pn); }     // ice pellets
+    default:       { return sdfDisk(pn); }        // unknown/0
+  }
+}
 
 // Wet (liquid) types use LAYER_RAIN slot 0, frozen types use slot 1
 fn isFrozenType(code: u32) -> bool {
   return code == 3u || code == 5u || code == 8u || code == 12u;
+}
+
+fn ptypePalette(code: u32) -> u32 {
+  return select(getLayerPaletteIndex(LAYER_RAIN, 0u), getLayerPaletteIndex(LAYER_RAIN, 1u), isFrozenType(code));
 }
 
 // ─── Blend ──────────────────────────────────────────────────────────────────
@@ -80,25 +95,25 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let p = cellUV - particlePos;
   let pn = p / r;
 
-  // Sample ptype at particle center (not per pixel) to avoid O1280 grid clipping
+  // Sample ptype pair at particle center (not per pixel) to avoid O1280 grid clipping
   let cellCenterLat = (latIdx + particlePos.y) * COMMON_PI / gridSize;
   let cellCenterLon = (lonIdx + particlePos.x) * COMMON_TAU / lonCells;
-  let ptype = sampleParam_precipitation_type(cellCenterLat, cellCenterLon);
-  if (ptype < 0.5) { return color; }
+  let ptypePair = sampleParamPair_precipitation_type(cellCenterLat, cellCenterLon);
+  let ptype0 = ptypePair.x;
+  let ptype1 = ptypePair.y;
+  let ptypeLerp = ptypePair.z;
+  if (ptype0 < 0.5 && ptype1 < 0.5) { return color; }
   let precip = sampleParam_precipitation(cellCenterLat, cellCenterLon);
-  if (precip < u.rainMinMm) { return color; }
+  if (precip <= 0.0) { return color; }
 
-  // Shape by type
-  let code = u32(ptype + 0.5);
-  var sdf: f32;
-  switch code {
-    case 3u, 12u:  { sdf = sdfDrop(pn); }                    // freezing rain/drizzle — drop
-    case 5u:       { sdf = sdfStar6(pn); }                   // snow
-    case 6u, 7u:   { sdf = sdfStar6(pn); }                   // wet snow, sleet — star
-    case 8u:       { sdf = sdfDiamond(pn); }                 // ice pellets
-    case 1u:       { sdf = sdfDrop(pn); }                    // rain
-    default:       { sdf = sdfDisk(pn); }                    // unknown
-  }
+  // Crossfade SDF shapes between t0 and t1 types
+  // Code 0 = no type data — inherit shape, fade alpha by lerp
+  var code0 = u32(ptype0 + 0.5);
+  var code1 = u32(ptype1 + 0.5);
+  var ptypeAlpha = 1.0;
+  if (code0 == 0u && code1 != 0u) { code0 = code1; ptypeAlpha = ptypeLerp; }
+  if (code1 == 0u && code0 != 0u) { code1 = code0; ptypeAlpha = 1.0 - ptypeLerp; }
+  let sdf = mix(ptypeSdf(code0, pn), ptypeSdf(code1, pn), ptypeLerp);
   if (sdf > 0.0) { return color; }
 
   // Fade loop — reduced range so particles never vanish (avoids pop-in flicker)
@@ -109,12 +124,16 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
   let dtHours = max(getParamDt(PARAM_PRECIPITATION) / 3600.0, 1.0);
   let rateMmh = precip / dtHours;
 
-  // Palette lookup: sqrt mapping gives good spread across 0–50 mm/h range
+  // Crossfade palette colors between t0 and t1 types
   let t = sqrt(clamp(rateMmh / 50.0, 0.0, 1.0));
-  let paletteIdx = select(getLayerPaletteIndex(LAYER_RAIN, 0u), getLayerPaletteIndex(LAYER_RAIN, 1u), isFrozenType(code));
-  let pc = samplePalette(t, paletteIdx);
+  let pc0 = samplePalette(t, ptypePalette(code0));
+  let pc1 = samplePalette(t, ptypePalette(code1));
+  let pc = mix(pc0, pc1, ptypeLerp);
+
+  // Smooth fade near precipitation threshold (avoids hard pop at rainMinMm boundary)
+  let precipFade = smoothstep(0.0, u.rainMinMm, precip);
 
   // Palette provides color + intensity alpha; combine with fade and layer opacity
-  let alpha = pc.a * fadeAlpha * opacity;
+  let alpha = pc.a * fadeAlpha * opacity * ptypeAlpha * precipFade;
   return vec4f(mix(color.rgb, pc.rgb, alpha), color.a);
 }

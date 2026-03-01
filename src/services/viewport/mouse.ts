@@ -128,7 +128,8 @@ export class MouseInputHandler {
       }
 
       e.preventDefault();
-      this.callbacks.onWheelZoom(e.deltaY, this.currentMouseX, this.currentMouseY);
+      const delta = e.altKey ? e.deltaY * 0.1 : e.deltaY;
+      this.callbacks.onWheelZoom(delta, this.currentMouseX, this.currentMouseY);
     }
   }
 
