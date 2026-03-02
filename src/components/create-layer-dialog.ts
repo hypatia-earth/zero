@@ -625,23 +625,15 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                 tabs: 'false',
                 oncreate: (vnode: m.VnodeDOM) => {
                   const el = vnode.dom as HTMLElement & { source: string; project: Record<string, unknown> };
-                  // Ensure attributes are applied (Mithril may set after connectedCallback)
-                  el.setAttribute('tabs', 'false');
-                  el.setAttribute('lint', 'on');
-                  // oncreate fires after connectedCallback, so editor is already initialized.
-                  // Use project setter with weslSrc to register the file in _files map —
-                  // el.source alone doesn't create a file entry, leaving the linter with no sources.
-                  queueMicrotask(() => {
-                    const projectLib = {
+                  // Set libs for WESL linting context, then source (registers in _files as of wgsl-edit 0.0.14)
+                  el.project = {
+                    libs: [{
                       name: projectBundle.packageName ?? 'package',
                       edition: '2026_pre',
                       modules: projectBundle.weslSrc ?? {},
-                    };
-                    el.project = {
-                      weslSrc: { './main.wesl': state.shaderCode },
-                      libs: [projectLib],
-                    };
-                  });
+                    }],
+                  };
+                  el.source = state.shaderCode;
                   el.addEventListener('change', (e: Event) => {
                     const detail = (e as CustomEvent).detail;
                     if (detail?.source !== undefined) {
