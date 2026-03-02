@@ -253,6 +253,7 @@ export class LayerService {
             .map(p => ({ model: 'ecmwf_ifs', param: p }) as TModelParam);  // QC-OK: validated against published params above
         }
 
+        // TODO: Remove this migration once all users have loaded with the new format (added v0.5.14/WESL branch)
         // Migrate old shader format: fn blendCustomN → fn blend, hardcoded indices → LAYER_INDEX
         if (declaration.shaders?.main) {
           let code = declaration.shaders.main;
