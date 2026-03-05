@@ -622,7 +622,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                 'data-testid': 'layer-shader-textarea',
                 theme: 'dark',
                 lint: 'on',
-                tabs: 'false',
+                tabs: false,
                 oncreate: (vnode: m.VnodeDOM) => {
                   const el = vnode.dom as HTMLElement & { source: string; project: Record<string, unknown> };
                   // Set libs for WESL linting context, then source (registers in _files as of wgsl-edit 0.0.14)

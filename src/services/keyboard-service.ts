@@ -21,8 +21,9 @@ export class KeyboardService {
   }
 
   private handleKeydown = (e: KeyboardEvent): void => {
-    // Don't interfere with input fields
+    // Don't interfere with input fields or content-editable elements (e.g. wgsl-edit)
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if ((e.target as HTMLElement)?.isContentEditable || (e.target as HTMLElement)?.shadowRoot?.querySelector('[contenteditable]')) return;
 
     // F key: toggle fullscreen
     if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey && !e.altKey) {
