@@ -634,6 +634,13 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
                     }],
                   };
                   el.source = state.shaderCode;
+                  // Fix Shadow DOM layout: constrain editor-container height for CM6 scrolling
+                  // and replace position:sticky gutters to suppress Firefox scroll-linked warning
+                  if (el.shadowRoot) {
+                    const fix = document.createElement('style');
+                    fix.textContent = '.editor-container { height: calc(100% - 31px); overflow: hidden; } .cm-gutters { position: relative !important; }';
+                    el.shadowRoot.appendChild(fix);
+                  }
                   el.addEventListener('change', (e: Event) => {
                     const detail = (e as CustomEvent).detail;
                     if (detail?.source !== undefined) {

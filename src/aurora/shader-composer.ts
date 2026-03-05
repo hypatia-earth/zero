@@ -8,7 +8,7 @@
  */
 
 import type { LayerDeclaration } from '../services/layer/layer-service';
-import { getModel, type TModel, type TModelParam } from '../config/models';
+import { getModel, type TModel } from '../config/models';
 import { link } from 'wesl';
 
 // WESL module bundles for linking
@@ -87,15 +87,14 @@ export class ShaderComposer {
     }
     conditions['USER_LAYER_PREVIEW_ENABLED'] = userLayers.some(l => l.id === '_preview');
 
-    // Compute param bindings from static registry + active layers
-    this.computeParamBindings(surfaceLayers);
+    // Compute param bindings from full registry (all slots always active)
+    this.computeParamBindings();
 
-    // Inject PARAM_* index constants for all registered params
-    // Active params get their compact index; inactive default to 0 (tree-shaken)
+    // Inject PARAM_* index constants for all registered params (all always active)
     const activeIndex = new Map(activeParamBindings.map(cfg => [cfg.param, cfg.index]));
     for (const paramName of Object.keys(PARAM_REGISTRY)) {
       const constName = `PARAM_${paramName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
-      constants[constName] = activeIndex.get(paramName) ?? 0;
+      constants[constName] = activeIndex.get(paramName)!;
     }
 
     // Per-layer virtual modules (each user layer gets its own module)
@@ -153,32 +152,18 @@ export class ShaderComposer {
     return linked.dest;
   }
 
-  /** Compute activeParamBindings from static registry + active layer params */
-  private computeParamBindings(layers: LayerDeclaration[]): void {
-    const seen = new Set<string>();
-    const uniqueParams: TModelParam[] = [];
-    for (const layer of layers) {
-      layer.params?.forEach(ref => {
-        if (!seen.has(ref.param)) {
-          seen.add(ref.param);
-          uniqueParams.push(ref);
-        }
-      });
-    }
-
-    const sorted = [...uniqueParams].sort((a, b) => a.param.localeCompare(b.param));
-    activeParamBindings = sorted.map((mp, idx) => {
-      const entry = PARAM_REGISTRY[mp.param];
-      if (!entry) throw new Error(`Unknown param: ${mp.param} — add it to PARAM_REGISTRY`);
-      return {
-        param: mp.param,
-        model: entry.model,
-        index: idx,
-        bindingSlot: entry.bindingSlot,
-        gridPoints: getModel(entry.model).gridPoints,
-        categorical: entry.categorical,
-      };
-    });
+  /** Compute activeParamBindings from full PARAM_REGISTRY (all slots always active) */
+  private computeParamBindings(): void {
+    const sorted = Object.entries(PARAM_REGISTRY)
+      .sort(([a], [b]) => a.localeCompare(b));
+    activeParamBindings = sorted.map(([param, entry], idx) => ({
+      param,
+      model: entry.model,
+      index: idx,
+      bindingSlot: entry.bindingSlot,
+      gridPoints: getModel(entry.model).gridPoints,
+      categorical: entry.categorical,
+    }));
   }
 
 }
