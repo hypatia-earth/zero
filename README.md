@@ -24,7 +24,7 @@ This is architectural independence: the tool works offline once loaded, can be h
 ## Changelog
 
 ### 2026-03-08
-- **WESL migration** - replaced custom shader concatenation with [WESL](https://wesl.dev), a pioneer language extending WGSL with a proper module system. Includes wgsl-edit for custom weather layers with syntax checking and highlighting
+- **WESL migration** - replaced custom shader concatenation with [WESL](https://wesl-lang.dev), a pioneer language extending WGSL with a proper module system. Includes wgsl-edit for custom weather layers with syntax checking and highlighting
 
 ### 2026-03-01
 - **Event archives** - replay historical weather events offline via `?event=` URL parameter. Vite plugin simulates S3 bucket responses for local archives. Discovery, gap-fill, and backward-sum fallback chains work with archived data
