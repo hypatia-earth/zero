@@ -1,13 +1,11 @@
-# Zero
+## Zero - An Interactive 4D Weather Globe driven by WebGPU
 
-Browser-based weather visualization rendering ECMWF forecast data directly on a 3D globe using WebGPU.
+Browser-based weather visualization rendering ECMWF forecast data.
 
-<img src=".github/Pasted-image-20260222115702.png" width="800" alt="Pasted image 20260222115702">
+<img src=".github/zero.hypatia-202603071400UTC-202603082100UTC-3.gif" width="800" alt="zero.hypatia-202603071400UTC-202603082100UTC-3">
 
-**Live Demo:** [zero.hypatia.earth](http://zero.hypatia.earth)  
+**Live Demo:** [zero.hypatia.earth](http://zero.hypatia.earth)
 **Mirror:** [hypatia-earth.github.io/zero](https://hypatia-earth.github.io/zero/?dt=2025-12-26T14h00z&ll=0.0,0.0&alt=14000&layers=earth,sun,temp)
-
-## What This Is
 
 **Zero** backend. **Zero** servers. **Zero** cost.
 
@@ -19,11 +17,43 @@ Zero visualizes professional weather hazards for climate adaptation:
 
 Runs entirely in your browser. No backend, no login, no tracking.
 
-## Why It Exists
-
 As climate extremes become more frequent, understanding forecast hazards becomes survival literacy. Zero makes professional ECMWF IFS data accessible without commercial infrastructure - forkable, self-hostable, resilient.
 
 This is architectural independence: the tool works offline once loaded, can be hosted by communities, and doesn't depend on commercial service viability.
+
+## Changelog
+
+### 2026-03-08
+- **WESL migration** - replaced custom shader concatenation with [WESL](https://wesl.dev), a pioneer language extending WGSL with a proper module system. Includes wgsl-edit for custom weather layers with syntax checking and highlighting
+
+### 2026-03-01
+- **Event archives** - replay historical weather events offline via `?event=` URL parameter. Vite plugin simulates S3 bucket responses for local archives. Discovery, gap-fill, and backward-sum fallback chains work with archived data
+- **Precipitation crossfade** - smooth interpolation of precipitation type between timesteps
+- **Palette fix** - temp-hypatia palette corrected: 10°C bands, 0°C at cyan/green border
+- **Discovery fix** - use reference_time from latest.json instead of current date, enabling correct navigation in archived events
+- **Vite plugins extracted** - cache headers, geonames proxy, om-archive, serve-public-modules moved to vite-plugins/
+
+### 2026-02-27
+- **MP4 capture** - export weather animations as MP4 video with configurable bitrate, in addition to existing GIF export
+- **Keyframe editor** - animated capture mode with draggable timeline keyframes and text-based Flight Plan editor for precise camera path control
+
+### 2026-02-22
+- **GIF capture** - record animated GIFs of the globe with configurable FPS, duration, palette modes (fast/precise/grayscale), and native DPR support. GPU readback pipeline ensures frame-accurate capture across browsers. Two-phase UI shows capture and processing progress inside the capture rect
+- **Precipitation layer** - rain, snow, freezing rain, sleet and ice pellets with advection-based interpolation: GFS wind fields drive ECMWF precipitation displacement for smooth temporal animation between hourly timesteps
+- **Multi-model fusion** - introduced NCEP GFS 0.25° as second data source alongside ECMWF IFS, enabling cross-model rendering at the shader level
+- **Storage buffer packing** - t0/t1 timestep data packed into single combined buffers per parameter, working within Chrome's 10 storage buffer limit
+
+### 2026-02-19
+- **Aurora render engine** - declarative layers with runtime shader composition
+- **Custom layers** - user-defined layers with additional ECMWF parameters: clouds, precipitation
+- **Unified palette system** - shared palette texture with JSON configuration
+- **Render downscale** - option to improve mobile performance
+
+### 2026-02-08
+- **E2E test suite** - 44 Playwright tests covering all active layers (earth, sun, grid, temp, wind, pressure). Screenshot tests with 0% tolerance for visual regression, pixel tests for color accuracy.
+
+### 2026-02-04
+- **Worker-based renderer** - GPU operations moved to dedicated Web Worker via OffscreenCanvas. Eliminates main thread blocking during data loading, improving touch responsiveness on older mobile devices.
 
 ## Data Attribution
 
@@ -94,37 +124,6 @@ Combined, these make even demanding layer combinations usable on mobile devices.
 Services like Windy.com and Weather.com excel at polished UX, multi-model comparison, social features, and mobile apps. Zero focuses on hazard assessment and architectural independence for climate adaptation contexts where infrastructure matters more than feature richness.
 
 Different missions, both valuable.
-
-## Changelog
-
-### 2026-03-01
-- **Event archives** - replay historical weather events offline via `?event=` URL parameter. Vite plugin simulates S3 bucket responses for local archives. Discovery, gap-fill, and backward-sum fallback chains work with archived data
-- **Precipitation crossfade** - smooth interpolation of precipitation type between timesteps
-- **Palette fix** - temp-hypatia palette corrected: 10°C bands, 0°C at cyan/green border
-- **Discovery fix** - use reference_time from latest.json instead of current date, enabling correct navigation in archived events
-- **Vite plugins extracted** - cache headers, geonames proxy, om-archive, serve-public-modules moved to vite-plugins/
-
-### 2026-02-27
-- **MP4 capture** - export weather animations as MP4 video with configurable bitrate, in addition to existing GIF export
-- **Keyframe editor** - animated capture mode with draggable timeline keyframes and text-based Flight Plan editor for precise camera path control
-
-### 2026-02-22
-- **GIF capture** - record animated GIFs of the globe with configurable FPS, duration, palette modes (fast/precise/grayscale), and native DPR support. GPU readback pipeline ensures frame-accurate capture across browsers. Two-phase UI shows capture and processing progress inside the capture rect
-- **Precipitation layer** - rain, snow, freezing rain, sleet and ice pellets with advection-based interpolation: GFS wind fields drive ECMWF precipitation displacement for smooth temporal animation between hourly timesteps
-- **Multi-model fusion** - introduced NCEP GFS 0.25° as second data source alongside ECMWF IFS, enabling cross-model rendering at the shader level
-- **Storage buffer packing** - t0/t1 timestep data packed into single combined buffers per parameter, working within Chrome's 10 storage buffer limit
-
-### 2026-02-19
-- **Aurora render engine** - declarative layers with runtime shader composition
-- **Custom layers** - user-defined layers with additional ECMWF parameters: clouds, precipitation
-- **Unified palette system** - shared palette texture with JSON configuration
-- **Render downscale** - option to improve mobile performance
-
-### 2026-02-08
-- **E2E test suite** - 44 Playwright tests covering all active layers (earth, sun, grid, temp, wind, pressure). Screenshot tests with 0% tolerance for visual regression, pixel tests for color accuracy.
-
-### 2026-02-04
-- **Worker-based renderer** - GPU operations moved to dedicated Web Worker via OffscreenCanvas. Eliminates main thread blocking during data loading, improving touch responsiveness on older mobile devices.
 
 ## License
 
