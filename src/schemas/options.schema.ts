@@ -384,7 +384,7 @@ export const optionsSchema = z.object({
       wheel: z.object({
         zoom: z.object({
           speed: opt(
-            z.number().min(0.1).max(2.0).default(0.8),
+            z.number().min(0.1).max(2.0).default(0.3),
             {
               label: 'Zoom speed',
               description: 'Mouse wheel zoom sensitivity',
@@ -623,6 +623,37 @@ export const optionsSchema = z.object({
         max: 5,
         step: 0.5,
         uniform: { type: 'f32', pos: U.graticuleLineWidth },
+      }
+    ),
+  }),
+
+  // ----------------------------------------------------------
+  // Layer: Cities
+  // ----------------------------------------------------------
+  cities: z.object({
+    enabled: opt(
+      z.boolean().default(false),
+      {
+        label: 'Show cities',
+        description: 'Display cities with population > 100,000 on the globe',
+        group: 'layers',
+        filter: ['global', 'cities'],
+        order: 3.5,
+        control: 'toggle',
+      }
+    ),
+    opacity: opt(
+      z.number().min(0.05).max(1).default(0.8),
+      {
+        label: 'City label opacity',
+        description: 'Transparency of city labels',
+        group: 'layers',
+        filter: ['global', 'cities'],
+        order: 3.6,
+        control: 'slider',
+        min: 0.05,
+        max: 1,
+        step: 0.05,
       }
     ),
   }),
@@ -1255,7 +1286,7 @@ export const defaultOptions: ZeroOptions = {
     mouse: {
       drag: { sensitivity: 0.005, invert: false },
       wheel: {
-        zoom: { speed: 0.8, invert: false },
+        zoom: { speed: 0.3, invert: false },
         time: { invert: false },
       },
     },
@@ -1268,6 +1299,7 @@ export const defaultOptions: ZeroOptions = {
   earth: { enabled: true, opacity: 1 },
   sun: { enabled: true, opacity: 1 },
   graticule: { enabled: true, opacity: 0.9, fontSize: 12, lineWidth: 1.5 },
+  cities: { enabled: false, opacity: 0.8 },
   temp: { enabled: true, opacity: 0.6, palette: 'temp-classic' },
   rain: { enabled: false, opacity: 1, animated: true },
   clouds: { enabled: false, opacity: 0.5 },

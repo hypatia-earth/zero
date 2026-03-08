@@ -56,8 +56,7 @@ interface PressureUniforms {
 
 /** External GPU buffers provided by GlobeRenderer (Gaussian LUTs only) */
 export interface PressureExternalBuffers {
-  gaussianLats: GPUBuffer;        // 2560 latitudes
-  ringOffsets: GPUBuffer;         // 2560 ring offsets
+  gaussianGrid: GPUBuffer;        // packed lats + offsets as vec2<u32>
 }
 
 // Constants
@@ -153,8 +152,7 @@ export class PressureLayer {
         { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
         { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
         { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
       ],
     });
 
@@ -530,9 +528,8 @@ export class PressureLayer {
       entries: [
         { binding: 0, resource: { buffer: this.regridUniformBuffer } },
         { binding: 1, resource: { buffer: inputBuffer } },
-        { binding: 2, resource: { buffer: this.externalBuffers.gaussianLats } },
-        { binding: 3, resource: { buffer: this.externalBuffers.ringOffsets } },
-        { binding: 4, resource: { buffer: this.gridSlotBuffers[slotIndex]! } },
+        { binding: 2, resource: { buffer: this.externalBuffers.gaussianGrid } },
+        { binding: 3, resource: { buffer: this.gridSlotBuffers[slotIndex]! } },
       ],
     });
 

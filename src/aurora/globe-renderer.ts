@@ -8,6 +8,9 @@ import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } fro
 import { PressureLayer } from '../layers/pressure';
 import { WindLayer } from '../layers/wind';
 import { GraticuleAnimator, GRATICULE_BUFFER_SIZE } from '../layers/graticule/graticule-animator';
+import { CitiesLayer, LOOKUP_WIDTH, LOOKUP_HEIGHT } from '../layers/cities/cities-layer';
+import { CitiesAnimator } from '../layers/cities/cities-animator';
+import type { CitiesLodLevel } from '../layers/cities';
 import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getUserLayerPaletteRangeOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset, getParamDtOffset, getParamSizeOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
@@ -19,14 +22,15 @@ import type { LayerState } from '../config/types';
 import type { PressureColorOption } from '../schemas/options.schema';
 import { PALETTE_IDS, PALETTES, type PaletteId } from '../services/palette-service';
 
-// Layer indices for uniform array access (must match registration order)
+// Layer indices for uniform array access (must match registration order in BUILT_IN_LAYERS)
 export const LAYER_EARTH = 0;
 export const LAYER_SUN = 1;
 export const LAYER_GRATICULE = 2;
-export const LAYER_TEMP = 3;
-export const LAYER_RAIN = 4;
-export const LAYER_PRESSURE = 5;
-export const LAYER_WIND = 6;
+export const LAYER_CITIES = 3;
+export const LAYER_TEMP = 4;
+export const LAYER_RAIN = 5;
+export const LAYER_PRESSURE = 6;
+export const LAYER_WIND = 7;
 
 export interface GlobeUniforms {
   viewProj: Float32Array;
@@ -61,8 +65,7 @@ export class GlobeRenderer {
   private bindGroupLayout!: GPUBindGroupLayout;
   private basemapTexture!: GPUTexture;
   private basemapSampler!: GPUSampler;
-  private gaussianLatsBuffer!: GPUBuffer;
-  private ringOffsetsBuffer!: GPUBuffer;
+  private gaussianGridBuffer!: GPUBuffer;  // packed lats + offsets as vec2<u32>
   // Weather data buffers use dynamic param bindings
   private placeholderBuffer!: GPUBuffer;  // 4-byte placeholder for unbound params
   private atmosphereLUTs!: AtmosphereLUTs;
@@ -90,6 +93,13 @@ export class GlobeRenderer {
   // Graticule animation
   private graticuleLinesBuffer!: GPUBuffer;
   private graticuleAnimator!: GraticuleAnimator;
+  // Cities layer
+  private cityLookupTexture!: GPUTexture;
+  private cityDataBuffer!: GPUBuffer;  // combined cities + glyphs
+  private cityFontAtlasTexture!: GPUTexture;
+  private cityFontSampler!: GPUSampler;
+  private citiesLayer: CitiesLayer | null = null;
+  private citiesAnimator: CitiesAnimator | null = null;
   private postProcessPipeline!: GPURenderPipeline;
   private postProcessBindGroup!: GPUBindGroup;
   private postProcessBindGroupLayout!: GPUBindGroupLayout;
@@ -208,14 +218,10 @@ export class GlobeRenderer {
     });
     this.basemapSampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
 
-    // Gaussian grid LUTs
+    // Gaussian grid LUTs (packed lats + offsets as vec2<u32>)
     const numRings = 2560;
-    this.gaussianLatsBuffer = this.device.createBuffer({
-      size: numRings * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    this.ringOffsetsBuffer = this.device.createBuffer({
-      size: numRings * 4,
+    this.gaussianGridBuffer = this.device.createBuffer({
+      size: numRings * 8,  // 2 × u32 per ring
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
@@ -237,6 +243,30 @@ export class GlobeRenderer {
     const heightCss = this.canvas.height / this.dpr;
     const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightCss / fov);
     this.graticuleAnimator = new GraticuleAnimator(initialGlobeRadiusPx, graticuleLodLevels);
+
+    // Cities lookup texture (R16Uint, 2048×1024)
+    this.cityLookupTexture = this.device.createTexture({
+      size: [LOOKUP_WIDTH, LOOKUP_HEIGHT],
+      format: 'r16uint',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+
+    // Cities storage buffer (placeholder, will be resized on first LOD build)
+    this.cityDataBuffer = this.device.createBuffer({
+      size: 32,  // minimum, resized on LOD build
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Placeholder cities font atlas (1x1, replaced by loadCitiesFontAtlas)
+    this.cityFontAtlasTexture = this.device.createTexture({
+      size: [1, 1],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    this.cityFontSampler = this.device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+    });
 
     // Placeholder font atlas (1x1, will be replaced by loadFontAtlas)
     this.fontAtlasTexture = this.device.createTexture({
@@ -630,6 +660,20 @@ export class GlobeRenderer {
     const graticuleBuffer = this.graticuleAnimator.packToBuffer(globeRadiusPx, this.frameDeltaMs);
     this.device.queue.writeBuffer(this.graticuleLinesBuffer, 0, graticuleBuffer);
 
+    // Cities: font scaling based on altitude (viewport-independent)
+    // Alt <= 3000: 1.3× world-space multiplier, alt > 3000: indicators only
+    const altitudeKm = (cameraDistance - 1) * 6371;
+    const cityFontScale = altitudeKm > 3000 ? 0 : 1.3;
+    view.setFloat32(O.cityFontScale, cityFontScale, true);
+
+    // Update cities LOD animation (freeze tier in indicators-only mode)
+    if (this.citiesAnimator && cityFontScale > 0) {
+      const needsUpload = this.citiesAnimator.update(globeRadiusPx, this.frameDeltaMs);
+      if (needsUpload) {
+        this.uploadCitiesTier();
+      }
+    }
+
     // Update pressure layer based on opacity
     const pressureVisible = uniforms.layerOpacities[LAYER_PRESSURE]! > 0.01;
     this.pressureLayer.setEnabled(pressureVisible);
@@ -854,6 +898,79 @@ export class GlobeRenderer {
   }
 
   /**
+   * Load cities MSDF font atlas
+   */
+  async loadCitiesFontAtlas(imageBitmap: ImageBitmap): Promise<void> {
+    this.cityFontAtlasTexture.destroy();
+    this.cityFontAtlasTexture = this.device.createTexture({
+      size: [imageBitmap.width, imageBitmap.height],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
+    this.device.queue.copyExternalImageToTexture(
+      { source: imageBitmap },
+      { texture: this.cityFontAtlasTexture },
+      [imageBitmap.width, imageBitmap.height]
+    );
+  }
+
+  /**
+   * Initialize cities layer with pre-loaded data
+   */
+  initCities(
+    citiesDataBuffer: ArrayBuffer,
+    metricsBuffer: ArrayBuffer,
+    lodLevels: CitiesLodLevel[]
+  ): void {
+    this.citiesLayer = new CitiesLayer(citiesDataBuffer, metricsBuffer, lodLevels);
+
+    // Initialize animator
+    const distance = this.camera.getState().distance;
+    const fov = 2 * Math.atan(this.camera.getTanFov());
+    const heightCss = this.canvas.height / this.dpr;
+    const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightCss / fov);
+    this.citiesAnimator = new CitiesAnimator(this.citiesLayer, initialGlobeRadiusPx, lodLevels);
+
+    // Build initial tier
+    this.uploadCitiesTier();
+  }
+
+  /** Build and upload current cities LOD tier to GPU */
+  private uploadCitiesTier(): void {
+    if (!this.citiesLayer) return;
+
+    const tier = this.citiesLayer.currentTierIndex;
+    const data = this.citiesLayer.buildTier(tier);
+
+    // Upload lookup texture
+    this.device.queue.writeTexture(
+      { texture: this.cityLookupTexture },
+      data.lookupData.buffer as ArrayBuffer,
+      { bytesPerRow: LOOKUP_WIDTH * 2 },
+      { width: LOOKUP_WIDTH, height: LOOKUP_HEIGHT }
+    );
+
+    // Resize and upload combined city+glyph buffer
+    if (data.combinedBuffer.byteLength > this.cityDataBuffer.size) {
+      this.cityDataBuffer.destroy();
+      this.cityDataBuffer = this.device.createBuffer({
+        size: Math.max(32, data.combinedBuffer.byteLength),
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+    }
+    if (data.combinedBuffer.byteLength > 0) {
+      this.device.queue.writeBuffer(this.cityDataBuffer, 0, data.combinedBuffer);
+    }
+
+    // Write glyph offset into uniforms
+    this.uniformView.setUint32(U.cityGlyphOffset, data.glyphStartVec4, true);
+
+    // Recreate bind group with potentially new buffers
+    this.recreateBindGroup();
+  }
+
+  /**
    * Load logo texture for idle globe display
    */
   async loadLogo(imageBitmap: ImageBitmap): Promise<void> {
@@ -878,8 +995,7 @@ export class GlobeRenderer {
       { binding: 0, resource: { buffer: this.uniformBuffer } },
       { binding: 1, resource: this.basemapTexture.createView({ dimension: 'cube' }) },
       { binding: 2, resource: this.basemapSampler },
-      { binding: 3, resource: { buffer: this.gaussianLatsBuffer } },
-      { binding: 4, resource: { buffer: this.ringOffsetsBuffer } },
+      { binding: 3, resource: { buffer: this.gaussianGridBuffer } },
       // Bindings 5-6 reserved
       { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
       { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
@@ -893,10 +1009,16 @@ export class GlobeRenderer {
       { binding: 19, resource: this.logoTexture.createView() },
       { binding: 20, resource: this.logoSampler },
       { binding: 21, resource: { buffer: this.graticuleLinesBuffer } },
+      // Cities layer
+      { binding: 22, resource: this.cityLookupTexture.createView() },
+      { binding: 23, resource: { buffer: this.cityDataBuffer } },
+      { binding: 25, resource: this.cityFontAtlasTexture.createView() },
+      { binding: 26, resource: this.cityFontSampler },
     ];
 
-    // Add dynamic param buffer entries (placeholder until data loads)
+    // Add dynamic param buffer entries (placeholder until data loads, skip packed secondaries)
     for (const cfg of this.currentParamBindings) {
+      if (cfg.packed) continue;
       const buffer = this.paramBuffers.get(cfg.param) ?? this.placeholderBuffer;  // QC-OK: GPU needs valid buffer
       entries.push(
         { binding: cfg.bindingSlot, resource: { buffer } }
@@ -911,7 +1033,7 @@ export class GlobeRenderer {
    * Called when active slots change
    */
   setWindLayerBuffers(u0: GPUBuffer, v0: GPUBuffer, u1: GPUBuffer, v1: GPUBuffer): void {
-    this.windLayer.setExternalBuffers(u0, v0, u1, v1, this.gaussianLatsBuffer, this.ringOffsetsBuffer);
+    this.windLayer.setExternalBuffers(u0, v0, u1, v1, this.gaussianGridBuffer);
   }
 
   /**
@@ -957,8 +1079,7 @@ export class GlobeRenderer {
       { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: 'cube' } },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-      { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-      { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
+      { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // gaussianGrid (packed)
       // Bindings 5-6 reserved
       { binding: 7, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // transmittance
       { binding: 8, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } },  // scattering
@@ -972,10 +1093,16 @@ export class GlobeRenderer {
       { binding: 19, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // logo
       { binding: 20, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       { binding: 21, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },  // graticule lines
+      // Cities layer bindings
+      { binding: 22, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'uint' } },  // city lookup
+      { binding: 23, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // city data (labels + glyphs)
+      { binding: 25, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // city font atlas
+      { binding: 26, visibility: GPUShaderStage.FRAGMENT, sampler: {} },  // city font sampler
     ];
 
-    // Add dynamic param entries from activeParamBindings (single combined buffer per param)
+    // Add dynamic param entries from activeParamBindings (skip packed secondaries — they share binding slot)
     for (const cfg of this.currentParamBindings) {
+      if (cfg.packed) continue;
       entries.push(
         { binding: cfg.bindingSlot, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }
       );
@@ -991,8 +1118,7 @@ export class GlobeRenderer {
   initializePressureLayer(): void {
     if (!this.pressureLayer.isComputeReady()) {
       this.pressureLayer.setExternalBuffers({
-        gaussianLats: this.gaussianLatsBuffer,
-        ringOffsets: this.ringOffsetsBuffer,
+        gaussianGrid: this.gaussianGridBuffer,
       });
     }
   }
@@ -1018,8 +1144,14 @@ export class GlobeRenderer {
   }
 
   uploadGaussianLUTs(lats: Float32Array, offsets: Uint32Array): void {
-    this.device.queue.writeBuffer(this.gaussianLatsBuffer, 0, lats.buffer, lats.byteOffset, lats.byteLength);
-    this.device.queue.writeBuffer(this.ringOffsetsBuffer, 0, offsets.buffer, offsets.byteOffset, offsets.byteLength);
+    // Interleave as vec2<u32>: [latBits, offset] per ring
+    const interleaved = new Uint32Array(lats.length * 2);
+    const latBits = new Uint32Array(lats.buffer, lats.byteOffset, lats.length);
+    for (let i = 0; i < lats.length; i++) {
+      interleaved[i * 2] = latBits[i]!;
+      interleaved[i * 2 + 1] = offsets[i]!;
+    }
+    this.device.queue.writeBuffer(this.gaussianGridBuffer, 0, interleaved);
   }
 
   /**
@@ -1149,8 +1281,7 @@ export class GlobeRenderer {
   dispose(): void {
     this.uniformBuffer?.destroy();
     this.basemapTexture?.destroy();
-    this.gaussianLatsBuffer?.destroy();
-    this.ringOffsetsBuffer?.destroy();
+    this.gaussianGridBuffer?.destroy();
     this.placeholderBuffer?.destroy();
     this.fontAtlasTexture?.destroy();
     this.paletteTexture?.dispose();

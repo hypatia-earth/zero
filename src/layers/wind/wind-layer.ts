@@ -55,8 +55,7 @@ export class WindLayer {
   private windV0Buffer!: GPUBuffer;
   private windU1Buffer!: GPUBuffer;
   private windV1Buffer!: GPUBuffer;
-  private gaussianLatsBuffer!: GPUBuffer;
-  private ringOffsetsBuffer!: GPUBuffer;
+  private gaussianGridBuffer!: GPUBuffer;  // packed lats + offsets
 
   // Interpolation state
   private interpFactor = 0;
@@ -103,7 +102,7 @@ export class WindLayer {
   }
 
   private createComputePipeline(): void {
-    // Compute bind group layout: uniforms, seeds, windU0, windV0, windU1, windV1, gaussianLats, ringOffsets, linePoints
+    // Compute bind group layout: uniforms, seeds, windU0, windV0, windU1, windV1, gaussianGrid, linePoints
     this.computeBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
@@ -113,8 +112,7 @@ export class WindLayer {
         { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
         { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
         { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
       ],
     });
 
@@ -175,18 +173,18 @@ export class WindLayer {
     // Generate Gaussian grid LUTs
     const luts = generateGaussianLUTs(1280);
 
-    // Create Gaussian grid buffers
-    this.gaussianLatsBuffer = this.device.createBuffer({
-      size: luts.lats.byteLength,
+    // Create packed Gaussian grid buffer (interleaved lats + offsets as vec2<u32>)
+    const interleaved = new Uint32Array(luts.lats.length * 2);
+    const latBits = new Uint32Array(luts.lats.buffer, luts.lats.byteOffset, luts.lats.length);
+    for (let i = 0; i < luts.lats.length; i++) {
+      interleaved[i * 2] = latBits[i]!;
+      interleaved[i * 2 + 1] = luts.offsets[i]!;
+    }
+    this.gaussianGridBuffer = this.device.createBuffer({
+      size: interleaved.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(this.gaussianLatsBuffer, 0, luts.lats.buffer, luts.lats.byteOffset, luts.lats.byteLength);
-
-    this.ringOffsetsBuffer = this.device.createBuffer({
-      size: luts.offsets.byteLength,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(this.ringOffsetsBuffer, 0, luts.offsets.buffer, luts.offsets.byteOffset, luts.offsets.byteLength);
+    this.device.queue.writeBuffer(this.gaussianGridBuffer, 0, interleaved);
 
     // Initialize compute uniforms (smaller stepFactor = smoother lines)
     this.updateComputeUniforms(this.stepFactor);
@@ -201,9 +199,8 @@ export class WindLayer {
         { binding: 3, resource: { buffer: this.windV0Buffer } },
         { binding: 4, resource: { buffer: this.windU1Buffer } },
         { binding: 5, resource: { buffer: this.windV1Buffer } },
-        { binding: 6, resource: { buffer: this.gaussianLatsBuffer } },
-        { binding: 7, resource: { buffer: this.ringOffsetsBuffer } },
-        { binding: 8, resource: { buffer: this.linePointsBuffer } },
+        { binding: 6, resource: { buffer: this.gaussianGridBuffer } },
+        { binding: 7, resource: { buffer: this.linePointsBuffer } },
       ],
     });
   }
@@ -349,15 +346,14 @@ export class WindLayer {
   setExternalBuffers(
     u0: GPUBuffer, v0: GPUBuffer,
     u1: GPUBuffer, v1: GPUBuffer,
-    gaussianLats: GPUBuffer, ringOffsets: GPUBuffer
+    gaussianGrid: GPUBuffer
   ): void {
     // Store references (don't destroy - owned by LayerStore)
     this.windU0Buffer = u0;
     this.windV0Buffer = v0;
     this.windU1Buffer = u1;
     this.windV1Buffer = v1;
-    this.gaussianLatsBuffer = gaussianLats;
-    this.ringOffsetsBuffer = ringOffsets;
+    this.gaussianGridBuffer = gaussianGrid;
 
     // Mark as using external buffers (don't destroy in dispose)
     this.useExternalBuffers = true;
@@ -373,9 +369,8 @@ export class WindLayer {
         { binding: 3, resource: { buffer: this.windV0Buffer } },
         { binding: 4, resource: { buffer: this.windU1Buffer } },
         { binding: 5, resource: { buffer: this.windV1Buffer } },
-        { binding: 6, resource: { buffer: this.gaussianLatsBuffer } },
-        { binding: 7, resource: { buffer: this.ringOffsetsBuffer } },
-        { binding: 8, resource: { buffer: this.linePointsBuffer } },
+        { binding: 6, resource: { buffer: this.gaussianGridBuffer } },
+        { binding: 7, resource: { buffer: this.linePointsBuffer } },
       ],
     });
 
@@ -512,9 +507,8 @@ export class WindLayer {
         { binding: 3, resource: { buffer: this.windV0Buffer } },
         { binding: 4, resource: { buffer: this.windU1Buffer } },
         { binding: 5, resource: { buffer: this.windV1Buffer } },
-        { binding: 6, resource: { buffer: this.gaussianLatsBuffer } },
-        { binding: 7, resource: { buffer: this.ringOffsetsBuffer } },
-        { binding: 8, resource: { buffer: this.linePointsBuffer } },
+        { binding: 6, resource: { buffer: this.gaussianGridBuffer } },
+        { binding: 7, resource: { buffer: this.linePointsBuffer } },
       ],
     });
 
@@ -546,8 +540,7 @@ export class WindLayer {
       this.windV0Buffer?.destroy();
       this.windU1Buffer?.destroy();
       this.windV1Buffer?.destroy();
-      this.gaussianLatsBuffer?.destroy();
-      this.ringOffsetsBuffer?.destroy();
+      this.gaussianGridBuffer?.destroy();
     }
   }
 }

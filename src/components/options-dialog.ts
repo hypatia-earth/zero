@@ -324,6 +324,7 @@ const layerLabels: Record<string, string> = {
   humidity: 'Humidity',
   wind: 'Wind',
   pressure: 'Pressure',
+  cities: 'Cities',
 };
 
 const advancedSubgroups: Record<string, string> = {

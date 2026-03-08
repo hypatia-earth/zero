@@ -6,6 +6,7 @@ import package::aurora::shaders::common::{EARTH_RADIUS, BG_COLOR, raySphereInter
 import package::aurora::shaders::logo::blendLogo;
 import package::layers::graticule::graticule::blendGraticule;
 import package::layers::graticule::text::blendGraticuleText;
+import package::layers::cities::cities::blendCities;
 
 import package::layers::earth::base::blendBasemap;
 import package::layers::temp::temp::blendTemp;
@@ -21,7 +22,7 @@ import user_layer_6::blend as blendUser6;
 import user_layer_7::blend as blendUser7;
 import user_layer_preview::blend as blendPreview;
 
-import constants::{LAYER_EARTH, LAYER_TEMP, LAYER_RAIN, LAYER_SUN, LAYER_GRATICULE};
+import constants::{LAYER_EARTH, LAYER_TEMP, LAYER_RAIN, LAYER_SUN, LAYER_GRATICULE, LAYER_CITIES};
 
 // Atmosphere LUTs (bindings 7-10, used only in post pass but declared here for layout)
 @group(0) @binding(7) var atm_transmittance: texture_2d<f32>;
@@ -114,6 +115,10 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
   @if(USER_LAYER_PREVIEW_ENABLED)
   { if (getUserLayerOpacity(8u) > 0.0) { color = blendPreview(color, lat, lon); } }
 
+  // City labels
+  @if(LAYER_CITIES_ENABLED)
+  { if (getLayerOpacity(LAYER_CITIES) > 0.0) { color = blendCities(color, lat, lon); } }
+
   // Back-side rain (when no opaque surface layers are enabled)
   @if(LAYER_RAIN_ENABLED)
   {
@@ -139,6 +144,8 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
       let backLat = asin(farHit.point.y);
       let backLon = atan2(farHit.point.x, farHit.point.z);
       let colorBeforeBack = color;
+      @if(LAYER_CITIES_ENABLED)
+      { if (getLayerOpacity(LAYER_CITIES) > 0.0) { color = blendCities(color, backLat, backLon); } }
       color = blendGraticule(color, backLat, backLon, farHit.point);
       color = blendGraticuleText(color, backLat, backLon, farHit.point);
       color = mix(colorBeforeBack, color, backOpacity);

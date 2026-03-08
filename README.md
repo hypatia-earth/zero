@@ -24,6 +24,7 @@ This is architectural independence: the tool works offline once loaded, can be h
 ## Changelog
 
 ### 2026-03-08
+- **Cities layer** - MSDF text labels for cities >100K population on the globe, with LOD tiers, collision avoidance, and altitude-adaptive indicators
 - **WESL migration** - replaced custom shader concatenation with [WESL](https://wesl-lang.dev), a pioneer language extending WGSL with a proper module system. Includes wgsl-edit for custom weather layers with syntax checking and highlighting
 
 ### 2026-03-01

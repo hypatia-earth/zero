@@ -84,6 +84,9 @@ export async function runGpuInitPhase(
     const logo = await createImageBitmap(
       new Blob([assets.logoBuffer], { type: 'image/png' })
     );
+    const citiesFontAtlas = await createImageBitmap(
+      new Blob([assets.citiesFontBuffer], { type: 'image/png' })
+    );
 
     const auroraAssets: AuroraAssets = {
       atmosphereLUTs: {
@@ -96,6 +99,11 @@ export async function runGpuInitPhase(
       basemapFaces,
       fontAtlas,
       logo,
+      cities: {
+        data: assets.citiesDataBuffer,
+        fontAtlas: citiesFontAtlas,
+        metrics: assets.citiesMetricsBuffer,
+      },
       layerPalettes: [
         { layerIndex: layerService.getLayerIndex('temp'), slot: 0, paletteId: optionsService.options.value.temp.palette, range: [-40, 50] },
         { layerIndex: layerService.getLayerIndex('rain'), slot: 0, paletteId: 'rain-wet-intensity', range: [0, 50] },

@@ -54,7 +54,8 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['paletteCount', 'u32'],         // total palettes in texture
   ['paletteStepped', 'u32'],       // bitmask — bit i = 1 means palette i is stepped
   ['logoOpacity', 'f32'],
-  ['logoPad', 'vec2f'],            // pad for vec4 alignment
+  ['cityFontScale', 'f32'],        // 0=indicators only, 0.5-1.0=text scale
+  ['cityGlyphOffset', 'u32'],      // vec4 index where glyphs start in cityData buffer
 
   // Built-in layer palettes: 1 vec4u per layer = 4 palette slots each (16 layers)
   ['layerPalettes0', 'vec4u'],
@@ -190,7 +191,8 @@ export const U = GLOBE_UNIFORMS.offsets as {
   paletteCount: number;
   paletteStepped: number;
   logoOpacity: number;
-  logoPad: number;
+  cityFontScale: number;
+  cityGlyphOffset: number;
   // Built-in layer palettes (1 vec4u per layer = 4 palette slots each)
   layerPalettes0: number;
   layerPalettes1: number;

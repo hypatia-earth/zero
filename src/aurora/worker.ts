@@ -13,6 +13,7 @@ import type { CameraConfig } from './camera';
 import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
 import type { GraticuleLodLevel } from '../layers/graticule';
+import type { CitiesLodLevel } from '../layers/cities';
 import { LayerStore } from './layer-store';
 import type { ZeroOptions } from '../schemas/options.schema';
 import type { TBuiltInLayer, TLayer } from '../config/types';
@@ -45,6 +46,12 @@ export interface AuroraAssets {
   logo: ImageBitmap;
   // Initial palette configs per built-in layer: { layerIndex, slot, paletteId, range? }
   layerPalettes: Array<{ layerIndex: number; slot: number; paletteId: PaletteId; range?: [number, number] }>;
+  // Cities layer assets
+  cities: {
+    data: ArrayBuffer;       // en.json raw bytes
+    fontAtlas: ImageBitmap;  // inter-cities.png decoded
+    metrics: ArrayBuffer;    // inter-regular.json raw bytes
+  };
 }
 
 export interface AuroraConfig {
@@ -182,11 +189,39 @@ function writeParamSizes(): void {
   }
 }
 
+/** Wind u+v pack pairs: v is packed into u's buffer as [u_t0, v_t0, u_t1, v_t1] */
+const WIND_PACK_PAIRS: Record<string, string> = {
+  wind_v_component_1000hPa: 'wind_u_component_1000hPa',
+  wind_v_component_10m: 'wind_u_component_10m',
+};
+
 /** Create/update combined buffer for a param and bind to renderer via GPU copy */
 function updateCombinedBuffer(param: string, slot0: number, slot1: number): void {
   if (!renderer) return;
   const binding = paramBindings.get(param);
   if (!binding) return;
+
+  // If this param is a packed secondary (wind_v), update the primary's combined buffer instead
+  const primaryParam = WIND_PACK_PAIRS[param];
+  if (primaryParam) {
+    const primaryState = paramSlotStates.get(primaryParam);
+    if (primaryState?.dataReady) {
+      updateWindCombinedBuffer(primaryParam, primaryState.slot0, primaryState.slot1, param, slot0, slot1);
+    }
+    return;
+  }
+
+  // If this param is a wind primary (wind_u), check if partner is ready for packed buffer
+  const partnerParam = Object.entries(WIND_PACK_PAIRS).find(([, primary]) => primary === param)?.[0];
+  if (partnerParam) {
+    const partnerState = paramSlotStates.get(partnerParam);
+    if (partnerState?.dataReady) {
+      updateWindCombinedBuffer(param, slot0, slot1, partnerParam, partnerState.slot0, partnerState.slot1);
+      return;
+    }
+    // Partner not ready yet — fall through to build u-only buffer (partial, will be rebuilt when v arrives)
+  }
+
   const store = paramStores.get(param);
   if (!store) return;
 
@@ -217,6 +252,51 @@ function updateCombinedBuffer(param: string, slot0: number, slot1: number): void
   device.queue.submit([encoder.finish()]);
 
   renderer.setParamBuffer(param, combined);
+}
+
+/** Build packed wind buffer: [u_t0, v_t0, u_t1, v_t1] for a u+v pair */
+function updateWindCombinedBuffer(
+  uParam: string, uSlot0: number, uSlot1: number,
+  vParam: string, vSlot0: number, vSlot1: number,
+): void {
+  if (!renderer) return;
+  const uBinding = paramBindings.get(uParam);
+  if (!uBinding) return;
+
+  const uStore = paramStores.get(uParam);
+  const vStore = paramStores.get(vParam);
+  if (!uStore || !vStore) return;
+
+  const uBuf0 = uStore.getSlotBuffer(uSlot0, 0);
+  const uBuf1 = uStore.getSlotBuffer(uSlot1, 0);
+  const vBuf0 = vStore.getSlotBuffer(vSlot0, 0);
+  const vBuf1 = vStore.getSlotBuffer(vSlot1, 0);
+  if (!uBuf0 || !uBuf1 || !vBuf0 || !vBuf1) return;
+
+  const dataBytes = uBinding.gridPoints * 4;
+  const combinedSize = dataBytes * 4;  // u_t0 + v_t0 + u_t1 + v_t1
+  const device = renderer.getDevice();
+
+  let combined = paramCombinedBuffers.get(uParam);
+  if (!combined || combined.size !== combinedSize) {
+    combined?.destroy();
+    combined = device.createBuffer({
+      size: combinedSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      label: `combined-wind-${uParam}`,
+    });
+    paramCombinedBuffers.set(uParam, combined);
+  }
+
+  // GPU copy: [u_t0, v_t0, u_t1, v_t1]
+  const encoder = device.createCommandEncoder();
+  encoder.copyBufferToBuffer(uBuf0, 0, combined, 0, dataBytes);
+  encoder.copyBufferToBuffer(vBuf0, 0, combined, dataBytes, dataBytes);
+  encoder.copyBufferToBuffer(uBuf1, 0, combined, dataBytes * 2, dataBytes);
+  encoder.copyBufferToBuffer(vBuf1, 0, combined, dataBytes * 3, dataBytes);
+  device.queue.submit([encoder.finish()]);
+
+  renderer.setParamBuffer(uParam, combined);
 }
 
 // Rebind all active param buffers to renderer (after pipeline recreation)
@@ -432,6 +512,7 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   const composedShaders = await shaderComposer.compose(layers);
 
   const graticuleLodLevels = layerRegistry.get('graticule')!.config!.lodLevels as GraticuleLodLevel[];
+  const citiesLodLevels = layerRegistry.get('cities')?.config?.lodLevels as CitiesLodLevel[] | undefined;
   const windConfig = layerRegistry.get('wind')!.config!;
   const windCfg = {
     snakeLength: configValue(windConfig, 'snakeLength'),
@@ -453,7 +534,13 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   await renderer.loadBasemap(assets.basemapFaces);
   await renderer.loadFontAtlas(assets.fontAtlas);
   await renderer.loadLogo(assets.logo);
+  await renderer.loadCitiesFontAtlas(assets.cities.fontAtlas);
   renderer.uploadGaussianLUTs(assets.gaussianLats, assets.ringOffsets);
+
+  // Initialize cities layer
+  if (citiesLodLevels) {
+    renderer.initCities(assets.cities.data, assets.cities.metrics, citiesLodLevels);
+  }
 
   // Finalize renderer (creates bind groups)
   renderer.finalize();

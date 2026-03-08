@@ -28,22 +28,24 @@ export interface ParamBindingConfig {
   bindingSlot: number;
   gridPoints: number;
   categorical: boolean;  // true = nearest-neighbor temporal sampling
+  packed?: boolean;      // true = shares binding slot with partner (no own layout entry)
 }
 
 /** Active param registry - exported for globe-renderer to use */
 export let activeParamBindings: ParamBindingConfig[] = [];
 
-/** Static registry: fixed binding slots and metadata for all known params */
-const PARAM_REGISTRY: Record<string, { bindingSlot: number; model: TModel; categorical: boolean }> = {
+/** Static registry: fixed binding slots and metadata for all known params.
+ *  packWith: shares binding slot with named partner (v packed into u's buffer) */
+const PARAM_REGISTRY: Record<string, { bindingSlot: number; model: TModel; categorical: boolean; packWith?: string }> = {
   temperature_2m:              { bindingSlot: 50, model: 'ecmwf_ifs',   categorical: false },
   precipitation:               { bindingSlot: 51, model: 'ecmwf_ifs',   categorical: false },
   precipitation_type:          { bindingSlot: 52, model: 'ecmwf_ifs',   categorical: true },
   wind_u_component_1000hPa:    { bindingSlot: 53, model: 'ncep_gfs025', categorical: false },
-  wind_v_component_1000hPa:    { bindingSlot: 54, model: 'ncep_gfs025', categorical: false },
+  wind_v_component_1000hPa:    { bindingSlot: 53, model: 'ncep_gfs025', categorical: false, packWith: 'wind_u_component_1000hPa' },
   cloud_cover:                 { bindingSlot: 55, model: 'ecmwf_ifs',   categorical: false },
   pressure_msl:                { bindingSlot: 56, model: 'ecmwf_ifs',   categorical: false },
   wind_u_component_10m:        { bindingSlot: 57, model: 'ecmwf_ifs',   categorical: false },
-  wind_v_component_10m:        { bindingSlot: 58, model: 'ecmwf_ifs',   categorical: false },
+  wind_v_component_10m:        { bindingSlot: 57, model: 'ecmwf_ifs',   categorical: false, packWith: 'wind_u_component_10m' },
 };
 
 export class ShaderComposer {
@@ -78,6 +80,7 @@ export class ShaderComposer {
       LAYER_TEMP_ENABLED: hasLayer('temp'),
       LAYER_RAIN_ENABLED: hasLayer('rain'),
       LAYER_SUN_ENABLED: hasLayer('sun'),
+      LAYER_CITIES_ENABLED: allLayers.some(l => l.id === 'cities'),
     };
 
     // User layer conditions (slots 0-7 + preview at 8)
@@ -152,7 +155,9 @@ export class ShaderComposer {
     return linked.dest;
   }
 
-  /** Compute activeParamBindings from full PARAM_REGISTRY (all slots always active) */
+  /** Compute activeParamBindings from full PARAM_REGISTRY.
+   *  Params with packWith share their partner's binding slot and don't get
+   *  their own layout entry — they still get a param index for uniform lookups. */
   private computeParamBindings(): void {
     const sorted = Object.entries(PARAM_REGISTRY)
       .sort(([a], [b]) => a.localeCompare(b));
@@ -163,6 +168,7 @@ export class ShaderComposer {
       bindingSlot: entry.bindingSlot,
       gridPoints: getModel(entry.model).gridPoints,
       categorical: entry.categorical,
+      packed: !!entry.packWith,
     }));
   }
 

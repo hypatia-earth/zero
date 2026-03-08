@@ -3,8 +3,11 @@
 
 import package::aurora::shaders::common::COMMON_TAU;
 
-@group(0) @binding(3) var<storage, read> gaussianLats: array<f32>;
-@group(0) @binding(4) var<storage, read> ringOffsets: array<u32>;
+// Packed: gaussianLats (f32 bits) + ringOffsets (u32) interleaved as vec2<u32>
+@group(0) @binding(3) var<storage, read> gaussianGrid: array<vec2<u32>>;
+
+fn getGaussianLat(ring: u32) -> f32 { return bitcast<f32>(gaussianGrid[ring].x); }
+fn getRingOffset(ring: u32) -> u32  { return gaussianGrid[ring].y; }
 
 // Binary search for Gaussian latitude ring (0-2559)
 fn o1280FindRing(lat: f32) -> u32 {
@@ -12,7 +15,7 @@ fn o1280FindRing(lat: f32) -> u32 {
   var hi: u32 = 2559u;
   while (lo < hi) {
     let mid = (lo + hi) / 2u;
-    if (gaussianLats[mid] > lat) {
+    if (getGaussianLat(mid) > lat) {
       lo = mid + 1u;
     } else {
       hi = mid;
@@ -29,5 +32,5 @@ fn o1280LatLonToCell(lat: f32, lon: f32) -> u32 {
   var lonNorm = lon;
   if (lonNorm < 0.0) { lonNorm += COMMON_TAU; }
   let lonIdx = u32(floor(lonNorm / COMMON_TAU * f32(nPoints))) % nPoints;
-  return ringOffsets[ring] + lonIdx;
+  return getRingOffset(ring) + lonIdx;
 }

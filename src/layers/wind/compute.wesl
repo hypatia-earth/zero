@@ -20,9 +20,8 @@ struct LinePoint {
 @group(0) @binding(3) var<storage, read> windV0: array<f32>;  // t0 V component (m/s, northward)
 @group(0) @binding(4) var<storage, read> windU1: array<f32>;  // t1 U component
 @group(0) @binding(5) var<storage, read> windV1: array<f32>;  // t1 V component
-@group(0) @binding(6) var<storage, read> gaussianLats: array<f32>;
-@group(0) @binding(7) var<storage, read> ringOffsets: array<u32>;
-@group(0) @binding(8) var<storage, read_write> linePoints: array<LinePoint>;
+@group(0) @binding(6) var<storage, read> gaussianGrid: array<vec2<u32>>;
+@group(0) @binding(7) var<storage, read_write> linePoints: array<LinePoint>;
 
 const PI: f32 = 3.14159265359;
 const TWO_PI: f32 = 6.28318530718;
@@ -40,7 +39,7 @@ fn findRing(lat: f32) -> u32 {
   var hi: u32 = 2559u;
   while (lo < hi) {
     let mid = (lo + hi) / 2u;
-    if (gaussianLats[mid] > lat) {
+    if (bitcast<f32>(gaussianGrid[mid].x) > lat) {
       lo = mid + 1u;
     } else {
       hi = mid;
@@ -59,7 +58,7 @@ fn sampleO1280(lat: f32, lon: f32) -> vec2f {
   if (lonNorm < 0.0) { lonNorm += TWO_PI; }
   let lonIdx = u32(floor(lonNorm / TWO_PI * f32(nPoints))) % nPoints;
 
-  let cell = ringOffsets[ring] + lonIdx;
+  let cell = gaussianGrid[ring].y + lonIdx;
 
   // Sample U/V directly from data
   let u0 = windU0[cell];

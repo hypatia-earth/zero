@@ -14,9 +14,8 @@ struct RegridUniforms {
 
 @group(0) @binding(0) var<uniform> uniforms: RegridUniforms;
 @group(0) @binding(1) var<storage, read> pressureData: array<f32>;  // O1280 data
-@group(0) @binding(2) var<storage, read> gaussianLats: array<f32>;  // 2560 latitudes
-@group(0) @binding(3) var<storage, read> ringOffsets: array<u32>;   // 2560 offsets
-@group(0) @binding(4) var<storage, read_write> outputGrid: array<f32>;
+@group(0) @binding(2) var<storage, read> gaussianGrid: array<vec2<u32>>;  // packed lats + offsets
+@group(0) @binding(3) var<storage, read_write> outputGrid: array<f32>;
 
 const PI: f32 = 3.14159265359;
 const TWO_PI: f32 = 6.28318530718;
@@ -28,7 +27,7 @@ fn findRing(lat: f32) -> u32 {
   var hi: u32 = 2559u;
   while (lo < hi) {
     let mid = (lo + hi) / 2u;
-    if (gaussianLats[mid] > lat) {
+    if (bitcast<f32>(gaussianGrid[mid].x) > lat) {
       lo = mid + 1u;
     } else {
       hi = mid;
@@ -60,7 +59,7 @@ fn sampleO1280(lat: f32, lon: f32) -> f32 {
   if (lonNorm < 0.0) { lonNorm += TWO_PI; }
   let lonIdx = u32(floor(lonNorm / TWO_PI * f32(nPoints))) % nPoints;
 
-  let cell = ringOffsets[ring] + lonIdx;
+  let cell = gaussianGrid[ring].y + lonIdx;
   let index = uniforms.inputSlot * POINTS_PER_SLOT + cell;
   return pressureData[index];
 }

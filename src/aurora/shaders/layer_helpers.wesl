@@ -29,7 +29,8 @@ struct Uniforms {
   paletteCount: u32,      // total number of palettes in array
   paletteStepped: u32, // bitmask — bit i = 1 means palette i is stepped
   logoOpacity: f32,       // computed from all layer opacities
-  logoPad: vec2f,         // padding for vec4 alignment
+  cityFontScale: f32,     // 0=indicators only, 0.5-1.0=text scale
+  cityGlyphOffset: u32,   // vec4 index where glyphs start in cityData buffer
   // Built-in layer palettes: 1 vec4u per layer = 4 palette slots each
   layerPalettes: array<vec4<u32>, 16>,
   // Built-in layer palette ranges (8 slots x 2 floats packed as min/max pairs)

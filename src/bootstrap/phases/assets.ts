@@ -14,6 +14,9 @@ export interface LoadedAssets {
   gaussianLatsBuffer: ArrayBuffer;
   ringOffsetsBuffer: ArrayBuffer;
   logoBuffer: ArrayBuffer;
+  citiesDataBuffer: ArrayBuffer;
+  citiesFontBuffer: ArrayBuffer;
+  citiesMetricsBuffer: ArrayBuffer;
 }
 
 export async function runAssetsPhase(
@@ -31,6 +34,9 @@ export async function runAssetsPhase(
   let gaussianLatsBuffer!: ArrayBuffer;
   let ringOffsetsBuffer!: ArrayBuffer;
   let logoBuffer!: ArrayBuffer;
+  let citiesDataBuffer!: ArrayBuffer;
+  let citiesFontBuffer!: ArrayBuffer;
+  let citiesMetricsBuffer!: ArrayBuffer;
 
   const base = import.meta.env.BASE_URL;
   const files = [
@@ -54,6 +60,10 @@ export async function runAssetsPhase(
     { url: `${base}om1280/ring-offsets.bin`, size: 10240 },
     // 13: Logo for idle globe
     { url: `${base}images/hypatia.png`, size: 240500 },
+    // 14-16: Cities layer
+    { url: `${base}cities/en.json`, size: 300000 },
+    { url: `${base}fonts/inter-cities.png`, size: 1770000 },
+    { url: `${base}fonts/inter-regular.json`, size: 795000 },
   ];
 
   const TOTAL = files.length;
@@ -65,7 +75,8 @@ export async function runAssetsPhase(
     if (i === 9) return 'Loading WASM decoder...';
     if (i === 10) return 'Loading font atlas...';
     if (i < 13) return 'Loading grid geometry...';
-    return 'Loading logo...';
+    if (i === 13) return 'Loading logo...';
+    return 'Loading cities data...';
   };
 
   // Announce first file
@@ -80,6 +91,9 @@ export async function runAssetsPhase(
     else if (i === 11) gaussianLatsBuffer = buffer;
     else if (i === 12) ringOffsetsBuffer = buffer;
     else if (i === 13) logoBuffer = buffer;
+    else if (i === 14) citiesDataBuffer = buffer;
+    else if (i === 15) citiesFontBuffer = buffer;
+    else if (i === 16) citiesMetricsBuffer = buffer;
 
     // Announce next file (prospective)
     if (i + 1 < TOTAL) {
@@ -95,5 +109,8 @@ export async function runAssetsPhase(
     gaussianLatsBuffer,
     ringOffsetsBuffer,
     logoBuffer,
+    citiesDataBuffer,
+    citiesFontBuffer,
+    citiesMetricsBuffer,
   };
 }

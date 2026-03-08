@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
   return {
     base: process.env.BASE_URL || '/',
     plugins: [
-      viteWesl(),
+      viteWesl({ debug: true }),
       cacheHeaders(),
       servePublicModules(),
       geonamesProxy(env),
@@ -48,7 +48,7 @@ export default defineConfig(({ mode }) => {
     },
     worker: {
       format: 'es',
-      plugins: () => [viteWesl()],
+      plugins: () => [viteWesl({ debug: true })],
     },
   };
 });
