@@ -3,6 +3,13 @@
 // Params: precipitation_type (WMO code), precipitation (mm accumulation)
 // Both advected by wind. Type selects shape, rate drives palette color+alpha.
 
+import package::aurora::shaders::layer_helpers::{u, getLayerOpacity, isLayerDataReady, getLayerPaletteIndex, getParamDt};
+import package::aurora::shaders::common::{COMMON_PI, COMMON_TAU};
+import package::aurora::shaders::palette::samplePalette;
+import constants::{LAYER_RAIN, PARAM_PRECIPITATION};
+import package::aurora::shaders::params::precipitation_type::{sampleParam_precipitation_type, sampleParamPair_precipitation_type};
+import package::aurora::shaders::params::precipitation::sampleParam_precipitation;
+
 // ─── Hash ───────────────────────────────────────────────────────────────────
 
 fn rainHash1(p: vec2f) -> f32 {

@@ -1,5 +1,10 @@
 // Temperature layer - weather data visualization
-// Uses dynamic param bindings via sampleParam_temperature_2m()
+
+import package::aurora::shaders::layer_helpers::{getLayerOpacity, getLayerPaletteRange, getLayerPaletteIndex};
+import package::aurora::shaders::projection_o1280::o1280LatLonToCell;
+import package::aurora::shaders::palette::samplePalette;
+import constants::LAYER_TEMP;
+import package::aurora::shaders::params::temperature_2m::sampleParam_temperature_2m;
 
 // Texture-based colormap using shared palette array
 fn colormapTemp(tempC: f32) -> vec4f {

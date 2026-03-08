@@ -18,7 +18,7 @@ import {
   type ServiceContainer,
 } from './service-container';
 import { extractOptionsMeta, defaultOptions } from '../schemas/options.schema';
-import { PALETTE_IDS } from '../services/palette-service';
+import { buildUserLayerOptions } from '../services/layer/layer-service';
 import {
   runCapabilitiesPhase,
   runConfigPhase,
@@ -145,10 +145,7 @@ async function runBootstrapInner(
     services.auroraService.send({ type: 'registerUserLayer', layer });
     if (layer.userLayerIndex !== undefined) {
       const enabled = services.layerService!.isLayerEnabled(layer.id);
-      const paletteIndex = layer.palettes?.[0]
-        ? PALETTE_IDS.indexOf(layer.palettes[0])
-        : 0;
-      services.auroraService.send({ type: 'setUserLayerOptions', layerIndex: layer.userLayerIndex, enabled, paletteIndex });
+      services.auroraService.send(buildUserLayerOptions(layer, enabled));
     }
   }
 

@@ -1,5 +1,8 @@
 // Sun layer - sun disc and glow rendering
 
+import package::aurora::shaders::layer_helpers::{u, getLayerOpacity};
+import constants::LAYER_SUN;
+
 fn blendSun(color: vec4f, fragCoord: vec2f) -> vec4f {
   let sunOpacity = getLayerOpacity(LAYER_SUN);
   if (sunOpacity < 0.01) { return color; }

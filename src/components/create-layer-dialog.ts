@@ -10,7 +10,7 @@
 
 import m from 'mithril';
 import { effect } from '@preact/signals-core';
-import { customLayerId, type LayerService, type LayerDeclaration } from '../services/layer/layer-service';
+import { customLayerId, buildUserLayerOptions, type LayerService, type LayerDeclaration } from '../services/layer/layer-service';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
 import { defineLayer, withType, withUI, withParams, withPalettes, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
@@ -21,6 +21,8 @@ import { PALETTES, PALETTE_IDS, type PaletteId } from '../services/palette-servi
 import { PaletteComponent } from './palette-component';
 import type { ModalService } from '../services/modal-service';
 import type { SlotService } from '../services/slot-service';
+import 'wgsl-edit';
+import projectBundle from '../aurora/shaders/layer_helpers.wesl?link';
 
 interface CreateLayerDialogAttrs {
   layerRegistry: LayerService;
@@ -41,6 +43,27 @@ function getSamplerName(param: string): string {
   const safeName = param.replace(/[^a-zA-Z0-9]/g, '_');
   return `sampleParam_${safeName}`;
 }
+
+/** Map param name to its .wesl module name under aurora/shaders/params/ */
+const PARAM_MODULE_MAP: Record<string, string> = {
+  cloud_cover: 'cloud_cover',
+  precipitation: 'precipitation',
+  precipitation_type: 'precipitation_type',
+  pressure_msl: 'pressure_msl',
+  temperature_2m: 'temperature_2m',
+  wind_u_component_10m: 'wind_u_10m',
+  wind_u_component_1000hPa: 'wind_u_1000hpa',
+  wind_v_component_10m: 'wind_v_10m',
+  wind_v_component_1000hPa: 'wind_v_1000hpa',
+};
+
+/** Params whose samplers take (lat, lon) instead of (cell: u32) — advected or GFS 0.25° */
+const LATLON_SAMPLER_PARAMS = new Set([
+  'precipitation',
+  'precipitation_type',
+  'wind_u_component_1000hPa',
+  'wind_v_component_1000hPa',
+]);
 
 /** Encode TModelParam as a single string for <select> value */
 function encodeModelParam(mp: TModelParam): string {
@@ -65,16 +88,44 @@ const PALETTE_OPTIONS = PALETTE_IDS.map(id => ({
   label: PALETTES[id]!.name,
 }));
 
-// Template shader for new layers
-// Placeholders: {BlendName}, {userLayerIndex}, {paletteMin}, {paletteMax}, {samplerFn}
-const SHADER_TEMPLATE = `// Custom blend function - palette visualization
-fn {blendFn}(color: vec4f, lat: f32, lon: f32) -> vec4f {
-  let opacity = getUserLayerOpacity({userLayerIndex}u);
+// Template shaders for new layers
+// {samplerFn} and {paramModule} are template-replaced when user picks a param
+// LAYER_INDEX is injected as a module-scoped const by ShaderComposer
+
+// Cell-based template: O1280 params that take (cell: u32)
+const SHADER_TEMPLATE_CELL = `// Custom blend function - palette visualization
+import package::aurora::shaders::params::{paramModule}::{samplerFn};
+import package::aurora::shaders::layer_helpers::{getUserLayerOpacity, getUserLayerPaletteIndex, getUserLayerPaletteRange};
+import package::aurora::shaders::projection_o1280::o1280LatLonToCell;
+import package::aurora::shaders::palette::samplePalette;
+import constants::LAYER_INDEX;
+
+fn blend(color: vec4f, lat: f32, lon: f32) -> vec4f {
+  let opacity = getUserLayerOpacity(LAYER_INDEX);
   let cell = o1280LatLonToCell(lat, lon);
   let value = {samplerFn}(cell);
 
-  let t = clamp((value - {paletteMin}) / ({paletteMax} - {paletteMin}), 0.0, 1.0);
-  let layerColor = samplePalette(t, getUserLayerPaletteIndex({userLayerIndex}u));
+  let range = getUserLayerPaletteRange(LAYER_INDEX);
+  let t = clamp((value - range.x) / (range.y - range.x), 0.0, 1.0);
+  let layerColor = samplePalette(t, getUserLayerPaletteIndex(LAYER_INDEX));
+  return vec4f(mix(color.rgb, layerColor.rgb, opacity * layerColor.a), color.a);
+}
+`;
+
+// LatLon-based template: advected/GFS params that take (lat, lon)
+const SHADER_TEMPLATE_LATLON = `// Custom blend function - palette visualization
+import package::aurora::shaders::params::{paramModule}::{samplerFn};
+import package::aurora::shaders::layer_helpers::{getUserLayerOpacity, getUserLayerPaletteIndex, getUserLayerPaletteRange};
+import package::aurora::shaders::palette::samplePalette;
+import constants::LAYER_INDEX;
+
+fn blend(color: vec4f, lat: f32, lon: f32) -> vec4f {
+  let opacity = getUserLayerOpacity(LAYER_INDEX);
+  let value = {samplerFn}(lat, lon);
+
+  let range = getUserLayerPaletteRange(LAYER_INDEX);
+  let t = clamp((value - range.x) / (range.y - range.x), 0.0, 1.0);
+  let layerColor = samplePalette(t, getUserLayerPaletteIndex(LAYER_INDEX));
   return vec4f(mix(color.rgb, layerColor.rgb, opacity * layerColor.a), color.a);
 }
 `;
@@ -102,7 +153,7 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     modelParam: DEFAULT_MODEL_PARAM,
     paramMeta: getParamMeta(DEFAULT_MODEL_PARAM.param),
     paletteId: DEFAULT_PALETTE,
-    shaderCode: SHADER_TEMPLATE,
+    shaderCode: SHADER_TEMPLATE_CELL,
     order: 50,
     opacity: 0.5,
     userLayerIndex: null,
@@ -113,11 +164,6 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
   let initialized = false;
   // Track layer suspended for preview (to restore on cancel)
   let suspendedLayer: LayerDeclaration | null = null;
-
-  /** Derive blend function name from custom layer ID (e.g., custom0 → blendCustom0) */
-  function blendFnName(id: string): string {
-    return `blend${id.charAt(0).toUpperCase()}${id.slice(1)}`;
-  }
 
   function initFromLayer(registry: LayerService, layerId: TCustomLayer) {
     const layer = registry.get(layerId);
@@ -149,21 +195,15 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
   }
 
   function updateShaderTemplate() {
-    const [min, max] = state.paramMeta.range;
     const samplerFn = getSamplerName(state.modelParam.param);
+    const paramModule = PARAM_MODULE_MAP[state.modelParam.param] ?? state.modelParam.param;
+    const template = LATLON_SAMPLER_PARAMS.has(state.modelParam.param)
+      ? SHADER_TEMPLATE_LATLON
+      : SHADER_TEMPLATE_CELL;
 
-    // Keep {userLayerIndex} and {blendFn} placeholders - replaced when index is assigned
-    state.shaderCode = SHADER_TEMPLATE
-      .replace(/{paletteMin}/g, min.toFixed(1))
-      .replace(/{paletteMax}/g, max.toFixed(1))
-      .replace(/{samplerFn}/g, samplerFn);
-  }
-
-  /** Replace placeholders in shader code with actual values */
-  function finalizeShaderCode(layerId: string, index: number): string {
-    return state.shaderCode
-      .replace(/{blendFn}/g, blendFnName(layerId))
-      .replace(/{userLayerIndex}/g, String(index));
+    state.shaderCode = template
+      .replace(/{samplerFn}/g, samplerFn)
+      .replace(/{paramModule}/g, paramModule);
   }
 
   function validateAndCreate(registry: LayerService, aurora: AuroraService) {
@@ -204,12 +244,10 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       return;
     }
     const layerId = customLayerId(index);
-    const blendFn = blendFnName(layerId);
 
-    // Validate shader has blend function (after finalization)
-    const finalizedCode = finalizeShaderCode(layerId, index);
-    if (!finalizedCode.includes(`fn ${blendFn}`)) {
-      state.error = `Shader must define function: fn ${blendFn}(...)`;
+    // Validate shader has blend function
+    if (!state.shaderCode.includes('fn blend(')) {
+      state.error = 'Shader must define function: fn blend(...)';
       if (!suspendedLayer) registry.freeUserIndex(index);
       m.redraw();
       return;
@@ -230,8 +268,8 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       withParams(state.modelParam),
       withPalettes(state.paletteId),
       withOptions([]),
-      withBlend(blendFn),
-      withShader('main', finalizedCode),
+      withBlend('blend'),
+      withShader('main', state.shaderCode),
       withRender({ pass: 'surface', order: state.order }),
     );
 
@@ -246,9 +284,10 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
     // Send to worker for shader recompilation
     aurora.send({ type: 'registerUserLayer', layer });
-    // Enable and set initial opacity + palette (worker defaults to disabled)
+    // Enable and set initial opacity + palette + range (worker defaults to disabled)
     const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
-    aurora.send({ type: 'setUserLayerOptions', layerIndex: index, enabled: true, opacity: state.opacity, paletteIndex });
+    const [rangeMin, rangeMax] = state.paramMeta.range;
+    aurora.send({ type: 'setUserLayerOptions', layerIndex: index, enabled: true, opacity: state.opacity, paletteIndex, paletteRange: [rangeMin, rangeMax] });
 
     console.log(`[CreateLayer] Saved: ${layerId} "${state.displayName}" (index ${index})`);
     suspendedLayer = null;  // Don't restore old layer - new one saved
@@ -267,9 +306,6 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       return;
     }
 
-    // Use preview-specific blend function name
-    const blendFn = 'blendPreview';
-
     // If editing existing layer, unregister it from worker to avoid duplicate blend function
     if (state.layerId) {
       const existingLayer = registry.get(state.layerId);
@@ -279,28 +315,25 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       }
     }
 
-    // Finalize shader code with preview blend name and index (8 = preview slot)
-    const previewIndex = 8;
-    const finalizedCode = state.shaderCode
-      .replace(/{blendFn}/g, blendFn)
-      .replace(/{userLayerIndex}/g, String(previewIndex));
-
     // Validate shader has blend function
-    if (!finalizedCode.includes(`fn ${blendFn}`)) {
-      state.error = `Shader must define function: fn ${blendFn}(...)`;
+    if (!state.shaderCode.includes('fn blend(')) {
+      state.error = 'Shader must define function: fn blend(...)';
       state.tryPhase = 'idle';
       m.redraw();
       return;
     }
 
-    // Create preview layer declaration
+    // Preview uses slot 8 — ShaderComposer wraps it as user_layer_preview module
+    const previewIndex = 8;
+
+    // Create preview layer declaration (shader code used as-is, no string replacement)
     const declaration = defineLayer('_preview',
       withType('texture'),
       withUI('Preview', 'Preview', 'custom'),
       withParams(state.modelParam),
-      withOptions([]),  // Preview has no options
-      withBlend(blendFn),
-      withShader('main', finalizedCode),
+      withOptions([]),
+      withBlend('blend'),
+      withShader('main', state.shaderCode),
       withRender({ pass: 'surface', order: state.order }),
     );
 
@@ -309,9 +342,10 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
     // Send to worker for shader recompilation
     aurora.send({ type: 'registerUserLayer', layer });
-    // Enable and set opacity + palette (worker defaults to disabled)
+    // Enable and set opacity + palette + range (worker defaults to disabled)
     const paletteIndex = PALETTE_IDS.indexOf(state.paletteId);
-    aurora.send({ type: 'setUserLayerOptions', layerIndex: previewIndex, enabled: true, opacity: state.opacity, paletteIndex });
+    const [rangeMin, rangeMax] = state.paramMeta.range;
+    aurora.send({ type: 'setUserLayerOptions', layerIndex: previewIndex, enabled: true, opacity: state.opacity, paletteIndex, paletteRange: [rangeMin, rangeMax] });
 
     console.log(`[CreateLayer] Preview: "${state.displayName}" param=${state.modelParam.model}/${state.modelParam.param} palette=${state.paletteId} (index ${previewIndex})`);
     m.redraw();  // Update UI (enables Save button)
@@ -349,6 +383,11 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
     // Restore suspended layer if user cancels during edit
     if (suspendedLayer) {
       aurora.send({ type: 'registerUserLayer', layer: suspendedLayer });
+      // Restore options (enabled, palette, range)
+      if (suspendedLayer.userLayerIndex !== undefined) {
+        const enabled = registry.isLayerEnabled(suspendedLayer.id);
+        aurora.send(buildUserLayerOptions(suspendedLayer, enabled));
+      }
       console.log(`[CreateLayer] Restored: ${suspendedLayer.id}`);
       suspendedLayer = null;
     }
@@ -578,13 +617,43 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
 
             // Shader code
             m('.field.shader', [
-              m('label', 'Blend Shader (WGSL)'),
-              m('textarea', {
+              m('label', 'Blend Shader (WGSL/WESL)'),
+              m('wgsl-edit', {
                 'data-testid': 'layer-shader-textarea',
-                value: state.shaderCode,
-                oninput: (e: Event) => {
-                  state.shaderCode = (e.target as HTMLTextAreaElement).value;
-                  state.error = null;
+                theme: 'dark',
+                lint: 'on',
+                tabs: false,
+                oncreate: (vnode: m.VnodeDOM) => {
+                  const el = vnode.dom as HTMLElement & { source: string; project: Record<string, unknown> };
+                  // Set libs for WESL linting context, then source (registers in _files as of wgsl-edit 0.0.14)
+                  el.project = {
+                    libs: [{
+                      name: projectBundle.packageName ?? 'package',
+                      edition: '2026_pre',
+                      modules: projectBundle.weslSrc ?? {},
+                    }],
+                  };
+                  el.source = state.shaderCode;
+                  // Fix Shadow DOM layout: constrain editor-container height for CM6 scrolling
+                  // and replace position:sticky gutters to suppress Firefox scroll-linked warning
+                  if (el.shadowRoot) {
+                    const fix = document.createElement('style');
+                    fix.textContent = '.editor-container { height: calc(100% - 31px); overflow: hidden; } .cm-gutters { position: relative !important; }';
+                    el.shadowRoot.appendChild(fix);
+                  }
+                  el.addEventListener('change', (e: Event) => {
+                    const detail = (e as CustomEvent).detail;
+                    if (detail?.source !== undefined) {
+                      state.shaderCode = detail.source;
+                      state.error = null;
+                    }
+                  });
+                },
+                onupdate: (vnode: m.VnodeDOM) => {
+                  const el = vnode.dom as HTMLElement & { source: string };
+                  if (el.source !== state.shaderCode) {
+                    el.source = state.shaderCode;
+                  }
                 },
               }),
             ]),

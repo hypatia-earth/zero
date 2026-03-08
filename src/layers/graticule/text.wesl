@@ -1,6 +1,11 @@
 // Graticule text labels - MSDF text at graticule line intersections
 // Renders coordinate labels (e.g., "15N", "45W") on the globe surface
 
+import package::aurora::shaders::layer_helpers::{u, getLayerOpacity};
+import package::aurora::shaders::common::COMMON_PI;
+import package::layers::graticule::graticule::{graticuleLines, getGraticuleLonDeg, getGraticuleLonOpacity, getGraticuleLatDeg, getGraticuleLatOpacity};
+import constants::LAYER_GRATICULE;
+
 // Font atlas binding
 @group(0) @binding(11) var fontAtlas: texture_2d<f32>;
 @group(0) @binding(12) var fontSampler: sampler;

@@ -39,6 +39,8 @@ struct Uniforms {
   userLayerDataReady: array<vec4<u32>, 8>, // 32 data ready flags
   // User layer palette indices (32 slots)
   userLayerPaletteIndex: array<vec4<u32>, 8>,
+  // User layer palette ranges (16 slots x 2 floats packed as min/max pairs)
+  userLayerPaletteRange: array<vec4<f32>, 8>,
   // Dynamic param state (16 params max) - for per-param interpolation
   paramLerp: array<vec4<f32>, 4>,          // 16 lerp factors (0.0-1.0)
   paramReady: array<vec4<u32>, 4>,         // 16 data ready flags
@@ -59,6 +61,13 @@ struct Uniforms {
 fn getUserLayerOpacity(index: u32) -> f32          { return u.userLayerOpacity[index / 4u][index % 4u]; }
 fn getUserLayerDataReady(index: u32) -> bool       { return u.userLayerDataReady[index / 4u][index % 4u] != 0u; }
 fn getUserLayerPaletteIndex(index: u32) -> u32     { return u.userLayerPaletteIndex[index / 4u][index % 4u]; }
+
+// User layer palette range: min/max pair packed into vec4 (16 slots)
+fn getUserLayerPaletteRange(index: u32) -> vec2f {
+  let v = u.userLayerPaletteRange[index / 2u];
+  if (index % 2u == 0u) { return v.xy; }
+  return v.zw;
+}
 
 // Built-in layer accessors (16 slots)
 fn getLayerOpacity(index: u32) -> f32              { return u.layerOpacity[index / 4u][index % 4u]; }

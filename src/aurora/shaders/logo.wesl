@@ -1,5 +1,10 @@
 // Logo layer - displays Hypatia logo as screen-space sprite when all layers are off
 
+import package::aurora::shaders::layer_helpers::u;
+
+@group(0) @binding(19) var logoTexture: texture_2d<f32>;
+@group(0) @binding(20) var logoSampler: sampler;
+
 fn blendLogo(color: vec4f, fragPos: vec2f) -> vec4f {
   // Logo opacity computed in JS from all layer opacities
   if (u.logoOpacity < 0.01) {

@@ -1,5 +1,5 @@
 import { defineLayer, withType, withUI, withParams, withOptions, withPalettes, withBlend, withRender, withShader, asBuiltIn } from '../../services/layer/builder';
-import shaderCode from './temp.wgsl?raw';
+import shaderCode from './temp.wesl?raw';
 
 export const layer = defineLayer('temp',
   withType('texture'),

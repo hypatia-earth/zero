@@ -79,7 +79,7 @@ export type AuroraRequest =
   | { type: 'resize'; width: number; height: number; dpr: number }
   | { type: 'registerUserLayer'; layer: LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
-  | { type: 'setUserLayerOptions'; layerIndex: number; enabled?: boolean; opacity?: number; paletteIndex?: number }
+  | { type: 'setUserLayerOptions'; layerIndex: number; enabled?: boolean; opacity?: number; paletteIndex?: number; paletteRange?: [number, number] }
   | { type: 'updatePalette'; layer: string; paletteId: PaletteId; range?: [number, number] }
   | { type: 'captureFrame' }
   | { type: 'recordBatch'; camera: CameraSnapshot; time: number; fixedDtMs: number; totalFrames: number }
@@ -429,7 +429,7 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   }
   initAnimatedOpacity();  // Initialize opacity map for all layers
   const layers = layerRegistry.getAll();
-  const composedShaders = shaderComposer.compose(layers);
+  const composedShaders = await shaderComposer.compose(layers);
 
   const graticuleLodLevels = layerRegistry.get('graticule')!.config!.lodLevels as GraticuleLodLevel[];
   const windConfig = layerRegistry.get('wind')!.config!;
@@ -504,7 +504,7 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 
   // Recreate pipeline with composed shaders (includes dynamic param bindings)
   const initLayers = layerRegistry.getAll();
-  const initShaders = shaderComposer.compose(initLayers);
+  const initShaders = await shaderComposer.compose(initLayers);
   await renderer.recreatePipeline(initShaders);
 
   // Build param binding registry from ShaderComposer (must be after compose())
@@ -733,7 +733,7 @@ function handleDeactivateSlots(data: Extract<AuroraRequest, { type: 'deactivateS
   }
 }
 
-function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerUserLayer' }>): void {
+async function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerUserLayer' }>): Promise<void> {
   const { layer } = data;
   if (!layerRegistry || !renderer) {
     console.warn('[Aurora] Cannot register user layer: not initialized');
@@ -750,29 +750,28 @@ function handleRegisterUserLayer(data: Extract<AuroraRequest, { type: 'registerU
 
   console.log(`[Aurora] Registered user layer: ${layer.id} (index ${layer.userLayerIndex})`);
 
-  const layers = layerRegistry.getAll();
-  const composedShaders = shaderComposer.compose(layers);
-  queuePipelineRecreation(composedShaders)
-    .then(() => {
-      rebuildParamBindings();
-      writeParamSizes();
-      rebindAllParamBuffers();
-      console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
-      self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: true });
-    })
-    .catch((err) => {
-      layerRegistry!.unregister(layer.id);
-      if (layer.userLayerIndex !== undefined) {
-        userLayerOpacities.delete(layer.userLayerIndex);
-        userLayerEnabled.delete(layer.userLayerIndex);
-      }
-      const message = err instanceof Error ? err.message : String(err);
-      console.error('[Aurora] Shader compilation failed:', message);
-      self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: false, error: message });
-    });
+  try {
+    const layers = layerRegistry.getAll();
+    const composedShaders = await shaderComposer.compose(layers);
+    await queuePipelineRecreation(composedShaders);
+    rebuildParamBindings();
+    writeParamSizes();
+    rebindAllParamBuffers();
+    console.log(`[Aurora] Pipeline recreated with ${layers.length} layers`);
+    self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: true });
+  } catch (err) {
+    layerRegistry!.unregister(layer.id);
+    if (layer.userLayerIndex !== undefined) {
+      userLayerOpacities.delete(layer.userLayerIndex);
+      userLayerEnabled.delete(layer.userLayerIndex);
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[Aurora] Shader compilation failed:', message);
+    self.postMessage({ type: 'userLayerResult', layerId: layer.id, success: false, error: message });
+  }
 }
 
-function handleUnregisterUserLayer(data: Extract<AuroraRequest, { type: 'unregisterUserLayer' }>): void {
+async function handleUnregisterUserLayer(data: Extract<AuroraRequest, { type: 'unregisterUserLayer' }>): Promise<void> {
   const layerId = data.layerId as TLayer ;  // QC-OK: message boundary, validated by sender
   if (!layerRegistry || !renderer) {
     console.warn('[Aurora] Cannot unregister user layer: not initialized');
@@ -791,16 +790,17 @@ function handleUnregisterUserLayer(data: Extract<AuroraRequest, { type: 'unregis
 
   console.log(`[Aurora] Unregistered user layer: ${layerId}`);
 
-  const layers = layerRegistry.getAll();
-  const composedShaders = shaderComposer.compose(layers);
-  queuePipelineRecreation(composedShaders)
-    .then(() => {
-      rebuildParamBindings();
-      writeParamSizes();
-      rebindAllParamBuffers();
-      console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
-    })
-    .catch((err) => console.error('[Aurora] Pipeline recreation failed:', err));
+  try {
+    const layers = layerRegistry.getAll();
+    const composedShaders = await shaderComposer.compose(layers);
+    await queuePipelineRecreation(composedShaders);
+    rebuildParamBindings();
+    writeParamSizes();
+    rebindAllParamBuffers();
+    console.log('[Aurora] Pipeline recreated with', layers.length, 'layers');
+  } catch (err) {
+    console.error('[Aurora] Pipeline recreation failed:', err);
+  }
 }
 
 function handleSetUserLayerOptions(data: Extract<AuroraRequest, { type: 'setUserLayerOptions' }>): void {
@@ -812,6 +812,9 @@ function handleSetUserLayerOptions(data: Extract<AuroraRequest, { type: 'setUser
   }
   if (data.paletteIndex !== undefined && renderer) {
     renderer.setUserLayerPaletteIndex(data.layerIndex, data.paletteIndex);
+  }
+  if (data.paletteRange && renderer) {
+    renderer.setUserLayerPaletteRange(data.layerIndex, data.paletteRange[0], data.paletteRange[1]);
   }
 }
 
