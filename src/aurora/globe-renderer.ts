@@ -29,8 +29,9 @@ export const LAYER_GRATICULE = 2;
 export const LAYER_CITIES = 3;
 export const LAYER_TEMP = 4;
 export const LAYER_RAIN = 5;
-export const LAYER_PRESSURE = 6;
-export const LAYER_WIND = 7;
+export const LAYER_CLOUDS = 6;
+export const LAYER_PRESSURE = 7;
+export const LAYER_WIND = 8;
 
 export interface GlobeUniforms {
   viewProj: Float32Array;

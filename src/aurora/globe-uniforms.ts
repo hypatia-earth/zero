@@ -36,9 +36,9 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['sunGlowColorPad', 'f32'],      // 172
 
   // Built-in layer opacity array (16 slots = 4 x vec4f)
-  // Indices: earth=0, sun=1, grid=2, temp=3, rain=4, pressure=5, wind=6
-  ['layerOpacity0', 'vec4f'],      // 192: layers 0-3 (earth, sun, grid, temp)
-  ['layerOpacity1', 'vec4f'],      // 208: layers 4-7 (rain, pressure, wind, -)
+  // Indices: earth=0, sun=1, graticule=2, cities=3, temp=4, rain=5, clouds=6, pressure=7, wind=8
+  ['layerOpacity0', 'vec4f'],      // 176: layers 0-3 (earth, sun, graticule, cities)
+  ['layerOpacity1', 'vec4f'],      // 192: layers 4-7 (temp, rain, clouds, pressure)
   ['layerOpacity2', 'vec4f'],      // 224: layers 8-11 (reserved)
   ['layerOpacity3', 'vec4f'],      // 240: layers 12-15 (reserved)
 
@@ -155,6 +155,16 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['rainMinMm', 'f32'],          // minimum precipitation (mm) to render
   ['rainBackFace', 'f32'],       // 1.0 = render rain on back hemisphere
   ['rainAnimTime', 'f32'],       // accumulated animation time (seconds, from frameDelta)
+
+  // Cloud layer uniforms
+  ['cloudsBrightness', 'f32'],      // base cloud brightness (white point)
+  ['cloudsShadowStrength', 'f32'],  // shadow-edge darkening factor
+  ['cloudsEdgeBrightness', 'f32'],  // sun-facing edge brightness boost
+  ['cloudsCoverageMin', 'f32'],     // coverage % threshold below which = "no cloud"
+  ['cloudsNoiseStrength', 'f32'],   // Perlin brightness modulation amplitude
+  ['cloudsNoiseSpeed', 'f32'],      // noise drift oscillation speed
+  ['cloudsWarmthTint', 'f32'],      // golden hour tint strength (0 = none, 1 = full)
+  ['cloudsEdgeSteps', 'f32'],       // edge detection depth (1-5 cells)
 ]);
 
 // Strongly typed offsets - TypeScript knows all field names exist
@@ -275,6 +285,15 @@ export const U = GLOBE_UNIFORMS.offsets as {
   rainMinMm: number;
   rainBackFace: number;
   rainAnimTime: number;
+  // Cloud layer uniforms
+  cloudsBrightness: number;
+  cloudsShadowStrength: number;
+  cloudsEdgeBrightness: number;
+  cloudsCoverageMin: number;
+  cloudsNoiseStrength: number;
+  cloudsNoiseSpeed: number;
+  cloudsWarmthTint: number;
+  cloudsEdgeSteps: number;
 };
 
 /** Byte offset of component `index` within a packed vec4 array starting at `base` */

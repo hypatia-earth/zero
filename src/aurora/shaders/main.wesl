@@ -11,6 +11,7 @@ import package::layers::cities::cities::blendCities;
 import package::layers::earth::base::blendBasemap;
 import package::layers::temp::temp::blendTemp;
 import package::layers::rain::rain::blendRain;
+import package::layers::clouds::clouds::blendClouds;
 import package::layers::sun::sun::blendSun;
 import user_layer_0::blend as blendUser0;
 import user_layer_1::blend as blendUser1;
@@ -22,7 +23,7 @@ import user_layer_6::blend as blendUser6;
 import user_layer_7::blend as blendUser7;
 import user_layer_preview::blend as blendPreview;
 
-import constants::{LAYER_EARTH, LAYER_TEMP, LAYER_RAIN, LAYER_SUN, LAYER_GRATICULE, LAYER_CITIES};
+import constants::{LAYER_EARTH, LAYER_TEMP, LAYER_RAIN, LAYER_CLOUDS, LAYER_SUN, LAYER_GRATICULE, LAYER_CITIES};
 
 // Atmosphere LUTs (bindings 7-10, used only in post pass but declared here for layout)
 @group(0) @binding(7) var atm_transmittance: texture_2d<f32>;
@@ -91,6 +92,9 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
 
   @if(LAYER_RAIN_ENABLED)
   { if (getLayerOpacity(LAYER_RAIN) > 0.0) { color = blendRain(color, lat, lon); } }
+
+  @if(LAYER_CLOUDS_ENABLED)
+  { if (getLayerOpacity(LAYER_CLOUDS) > 0.0) { color = blendClouds(color, lat, lon); } }
 
   @if(LAYER_SUN_ENABLED)
   { if (getLayerOpacity(LAYER_SUN) > 0.0) { color = blendSun(color, fragPos.xy); } }

@@ -12,11 +12,12 @@ import { layer as graticuleLayer } from './graticule';
 import { layer as citiesLayer } from './cities';
 import { layer as tempLayer } from './temp';
 import { layer as rainLayer } from './rain';
+import { layer as cloudsLayer } from './clouds';
 import { layer as pressureLayer } from './pressure';
 import { layer as windLayer } from './wind';
 
 // Re-export for consumers
-export { earthLayer, sunLayer, graticuleLayer, citiesLayer, tempLayer, rainLayer, pressureLayer, windLayer };
+export { earthLayer, sunLayer, graticuleLayer, citiesLayer, tempLayer, rainLayer, cloudsLayer, pressureLayer, windLayer };
 
 /** All built-in layer declarations */
 export const builtInLayers = [
@@ -26,6 +27,7 @@ export const builtInLayers = [
   citiesLayer,
   tempLayer,
   rainLayer,
+  cloudsLayer,
   pressureLayer,
   windLayer,
 ];

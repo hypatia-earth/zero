@@ -87,6 +87,7 @@ export class ShaderComposer {
       LAYER_RAIN_ENABLED: hasLayer('rain'),
       LAYER_SUN_ENABLED: hasLayer('sun'),
       LAYER_CITIES_ENABLED: allLayers.some(l => l.id === 'cities'),
+      LAYER_CLOUDS_ENABLED: hasLayer('clouds'),
     };
 
     // User layer conditions (slots 0-7 + preview at 8)

@@ -24,6 +24,7 @@ This is architectural independence: the tool works offline once loaded, can be h
 ## Changelog
 
 ### 2026-03-10
+- **Cloud layer** - data-driven cloud visualization using ECMWF cloud cover with sun-edge shading, Perlin noise texture, wind-driven drift, and limb darkening
 - **Hybrid param bindings** - main surface pass now uses both storage buffers and textures for weather params, solving Chrome's 8-storage-buffer limit. Added texture infrastructure for niche layers (sea ice, ocean temp, wet bulb stubs)
 - **Fix** - pressure isobar spacing change no longer crashes (missing palette entries in bind group on buffer resize)
 
