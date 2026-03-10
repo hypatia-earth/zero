@@ -146,11 +146,18 @@ const paramSlotStates = new Map<string, SlotState>();
 interface ParamBinding {
   index: number;          // 0, 1, 2, ...
   gridPoints: number;     // grid point count for combined buffer offset
+  bindingType: 'storage' | 'texture';
 }
 const paramBindings = new Map<string, ParamBinding>();
 
 // Combined param buffers (t0+t1 packed into single GPU buffer per param)
 const paramCombinedBuffers = new Map<string, GPUBuffer>();
+
+// Combined param textures (t0+t1 packed vertically into single GPU texture per texture-backed param)
+const paramCombinedTextures = new Map<string, GPUTexture>();
+
+/** Texture width for texture-backed params (4096 texels = one row) */
+const PARAM_TEX_WIDTH = 4096;
 
 // Find which layer uses a given param (from layerRegistry)
 function findLayerForParam(param: string): string | undefined {
@@ -177,6 +184,7 @@ function rebuildParamBindings(): void {
     paramBindings.set(cfg.param, {
       index: cfg.index,
       gridPoints: cfg.gridPoints,
+      bindingType: cfg.bindingType,
     });
   }
 }
@@ -190,40 +198,51 @@ function writeParamSizes(): void {
 }
 
 /** Wind u+v pack pairs: v is packed into u's buffer as [u_t0, v_t0, u_t1, v_t1] */
-const WIND_PACK_PAIRS: Record<string, string> = {
+/** Pack pairs: secondary → primary. Buffer layout: [primary_t0, secondary_t0, primary_t1, secondary_t1] */
+const PACK_PAIRS: Record<string, string> = {
   wind_v_component_1000hPa: 'wind_u_component_1000hPa',
-  wind_v_component_10m: 'wind_u_component_10m',
+  precipitation_type: 'precipitation',
 };
 
-/** Create/update combined buffer for a param and bind to renderer via GPU copy */
-function updateCombinedBuffer(param: string, slot0: number, slot1: number): void {
+/** Create/update combined buffer/texture for a param and bind to renderer via GPU copy */
+function updateCombinedParam(param: string, slot0: number, slot1: number): void {
   if (!renderer) return;
   const binding = paramBindings.get(param);
   if (!binding) return;
 
-  // If this param is a packed secondary (wind_v), update the primary's combined buffer instead
-  const primaryParam = WIND_PACK_PAIRS[param];
+  // If this param is a packed secondary, update the primary's combined buffer instead
+  const primaryParam = PACK_PAIRS[param];
   if (primaryParam) {
     const primaryState = paramSlotStates.get(primaryParam);
     if (primaryState?.dataReady) {
-      updateWindCombinedBuffer(primaryParam, primaryState.slot0, primaryState.slot1, param, slot0, slot1);
+      updatePackedCombinedBuffer(primaryParam, primaryState.slot0, primaryState.slot1, param, slot0, slot1);
     }
     return;
   }
 
-  // If this param is a wind primary (wind_u), check if partner is ready for packed buffer
-  const partnerParam = Object.entries(WIND_PACK_PAIRS).find(([, primary]) => primary === param)?.[0];
+  // If this param is a pack primary, check if partner is ready for packed buffer
+  const partnerParam = Object.entries(PACK_PAIRS).find(([, primary]) => primary === param)?.[0];
   if (partnerParam) {
     const partnerState = paramSlotStates.get(partnerParam);
     if (partnerState?.dataReady) {
-      updateWindCombinedBuffer(param, slot0, slot1, partnerParam, partnerState.slot0, partnerState.slot1);
+      updatePackedCombinedBuffer(param, slot0, slot1, partnerParam, partnerState.slot0, partnerState.slot1);
       return;
     }
-    // Partner not ready yet — fall through to build u-only buffer (partial, will be rebuilt when v arrives)
+    // Partner not ready yet — fall through to build primary-only buffer (partial, will be rebuilt when partner arrives)
   }
 
+  // Route to texture or buffer path based on binding type
+  if (binding.bindingType === 'texture') {
+    updateCombinedTexture(param, slot0, slot1, binding);
+  } else {
+    updateCombinedBuffer(param, slot0, slot1, binding);
+  }
+}
+
+/** Create/update combined storage buffer [t0, t1] for a storage-backed param */
+function updateCombinedBuffer(param: string, slot0: number, slot1: number, binding: ParamBinding): void {
   const store = paramStores.get(param);
-  if (!store) return;
+  if (!store || !renderer) return;
 
   const buffer0 = store.getSlotBuffer(slot0, 0);
   const buffer1 = store.getSlotBuffer(slot1, 0);
@@ -254,8 +273,53 @@ function updateCombinedBuffer(param: string, slot0: number, slot1: number): void
   renderer.setParamBuffer(param, combined);
 }
 
+/** Create/update combined texture (t0+t1 packed vertically) for a texture-backed param */
+function updateCombinedTexture(param: string, slot0: number, slot1: number, binding: ParamBinding): void {
+  const store = paramStores.get(param);
+  if (!store || !renderer) return;
+
+  const buffer0 = store.getSlotBuffer(slot0, 0);
+  const buffer1 = store.getSlotBuffer(slot1, 0);
+  if (!buffer0 || !buffer1) return;
+
+  const gp = binding.gridPoints;
+  const texHeight = Math.ceil(gp / PARAM_TEX_WIDTH);
+  const combinedHeight = texHeight * 2;  // t0 + t1 stacked vertically
+  const device = renderer.getDevice();
+
+  // Create or reuse combined texture
+  let combined = paramCombinedTextures.get(param);
+  if (!combined || combined.height !== combinedHeight) {
+    combined?.destroy();
+    combined = device.createTexture({
+      size: [PARAM_TEX_WIDTH, combinedHeight],
+      format: 'r32float',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+      label: `combined-tex-${param}`,
+    });
+    paramCombinedTextures.set(param, combined);
+  }
+
+  // Copy from slot buffers to texture rows via copyBufferToTexture
+  const bytesPerRow = PARAM_TEX_WIDTH * 4;
+  const encoder = device.createCommandEncoder();
+  encoder.copyBufferToTexture(
+    { buffer: buffer0, bytesPerRow, rowsPerImage: texHeight },
+    { texture: combined, origin: [0, 0, 0] },
+    { width: PARAM_TEX_WIDTH, height: texHeight },
+  );
+  encoder.copyBufferToTexture(
+    { buffer: buffer1, bytesPerRow, rowsPerImage: texHeight },
+    { texture: combined, origin: [0, texHeight, 0] },
+    { width: PARAM_TEX_WIDTH, height: texHeight },
+  );
+  device.queue.submit([encoder.finish()]);
+
+  renderer.setParamTexture(param, combined);
+}
+
 /** Build packed wind buffer: [u_t0, v_t0, u_t1, v_t1] for a u+v pair */
-function updateWindCombinedBuffer(
+function updatePackedCombinedBuffer(
   uParam: string, uSlot0: number, uSlot1: number,
   vParam: string, vSlot0: number, vSlot1: number,
 ): void {
@@ -304,7 +368,7 @@ function rebindAllParamBuffers(): void {
   if (!renderer) return;
   for (const [param, state] of paramSlotStates) {
     if (!state.dataReady) continue;
-    updateCombinedBuffer(param, state.slot0, state.slot1);
+    updateCombinedParam(param, state.slot0, state.slot1);
   }
 }
 
@@ -809,8 +873,8 @@ function handleActivateSlots(data: Extract<AuroraRequest, { type: 'activateSlots
     }
   }
 
-  // Combined buffer for fragment shader param bindings
-  updateCombinedBuffer(param, slot0, slot1);
+  // Combined buffer/texture for fragment shader param bindings
+  updateCombinedParam(param, slot0, slot1);
 }
 
 function handleDeactivateSlots(data: Extract<AuroraRequest, { type: 'deactivateSlots' }>): void {
@@ -968,6 +1032,10 @@ function handleCleanup(): void {
     buffer.destroy();
   }
   paramCombinedBuffers.clear();
+  for (const texture of paramCombinedTextures.values()) {
+    texture.destroy();
+  }
+  paramCombinedTextures.clear();
 
   for (const store of paramStores.values()) {
     store.dispose();

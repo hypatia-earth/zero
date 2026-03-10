@@ -88,6 +88,9 @@ export class GlobeRenderer {
   private windLayer!: WindLayer;
   // Dynamic param buffers (keyed by param name) — combined t0+t1 buffers
   private paramBuffers = new Map<string, GPUBuffer>();
+  // Dynamic param textures (keyed by param name) — combined t0+t1 textures for texture-backed params
+  private paramTextures = new Map<string, GPUTexture>();
+  private placeholderParamTexture!: GPUTexture;
   // Current param binding config (set by recreatePipeline)
   private currentParamBindings: ParamBindingConfig[] = [];
   // Graticule animation
@@ -225,10 +228,17 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    // Placeholder buffer for unbound dynamic params
+    // Placeholder buffer for unbound dynamic params (storage)
     this.placeholderBuffer = this.device.createBuffer({
       size: 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Placeholder texture for unbound dynamic params (texture)
+    this.placeholderParamTexture = this.device.createTexture({
+      size: [1, 1],
+      format: 'r32float',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
 
     // Graticule lines buffer for animated LoD
@@ -1016,13 +1026,20 @@ export class GlobeRenderer {
       { binding: 26, resource: this.cityFontSampler },
     ];
 
-    // Add dynamic param buffer entries (placeholder until data loads, skip packed secondaries)
+    // Add dynamic param entries (placeholder until data loads, skip packed secondaries)
     for (const cfg of this.currentParamBindings) {
       if (cfg.packed) continue;
-      const buffer = this.paramBuffers.get(cfg.param) ?? this.placeholderBuffer;  // QC-OK: GPU needs valid buffer
-      entries.push(
-        { binding: cfg.bindingSlot, resource: { buffer } }
-      );
+      if (cfg.bindingType === 'texture') {
+        const texture = this.paramTextures.get(cfg.param) ?? this.placeholderParamTexture;  // QC-OK: GPU needs valid texture
+        entries.push(
+          { binding: cfg.bindingSlot, resource: texture.createView() }
+        );
+      } else {
+        const buffer = this.paramBuffers.get(cfg.param) ?? this.placeholderBuffer;  // QC-OK: GPU needs valid buffer
+        entries.push(
+          { binding: cfg.bindingSlot, resource: { buffer } }
+        );
+      }
     }
 
     this.bindGroup = this.device.createBindGroup({ layout: bindGroupLayout, entries });
@@ -1042,6 +1059,15 @@ export class GlobeRenderer {
    */
   setParamBuffer(param: string, buffer: GPUBuffer): void {
     this.paramBuffers.set(param, buffer);
+    this.recreateBindGroup();
+  }
+
+  /**
+   * Set combined param texture (t0+t1 packed vertically) for bind group creation
+   * Called when active slots change for a texture-backed param
+   */
+  setParamTexture(param: string, texture: GPUTexture): void {
+    this.paramTextures.set(param, texture);
     this.recreateBindGroup();
   }
 
@@ -1103,9 +1129,15 @@ export class GlobeRenderer {
     // Add dynamic param entries from activeParamBindings (skip packed secondaries — they share binding slot)
     for (const cfg of this.currentParamBindings) {
       if (cfg.packed) continue;
-      entries.push(
-        { binding: cfg.bindingSlot, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }
-      );
+      if (cfg.bindingType === 'texture') {
+        entries.push(
+          { binding: cfg.bindingSlot, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } }
+        );
+      } else {
+        entries.push(
+          { binding: cfg.bindingSlot, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }
+        );
+      }
     }
 
     return this.device.createBindGroupLayout({ entries });

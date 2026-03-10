@@ -26,6 +26,7 @@ export interface ParamBindingConfig {
   model: TModel;
   index: number;
   bindingSlot: number;
+  bindingType: 'storage' | 'texture';
   gridPoints: number;
   categorical: boolean;  // true = nearest-neighbor temporal sampling
   packed?: boolean;      // true = shares binding slot with partner (no own layout entry)
@@ -35,17 +36,22 @@ export interface ParamBindingConfig {
 export let activeParamBindings: ParamBindingConfig[] = [];
 
 /** Static registry: fixed binding slots and metadata for all known params.
- *  packWith: shares binding slot with named partner (v packed into u's buffer) */
-const PARAM_REGISTRY: Record<string, { bindingSlot: number; model: TModel; categorical: boolean; packWith?: string }> = {
+ *  packWith: shares binding slot with named partner (v packed into u's buffer)
+ *  bindingType: 'storage' (default) or 'texture' — determines bind group layout entry type */
+interface ParamRegistryEntry { bindingSlot: number; bindingType?: 'storage' | 'texture'; model: TModel; categorical: boolean; packWith?: string }
+const PARAM_REGISTRY: Record<string, ParamRegistryEntry> = {
   temperature_2m:              { bindingSlot: 50, model: 'ecmwf_ifs',   categorical: false },
   precipitation:               { bindingSlot: 51, model: 'ecmwf_ifs',   categorical: false },
-  precipitation_type:          { bindingSlot: 52, model: 'ecmwf_ifs',   categorical: true },
+  precipitation_type:          { bindingSlot: 51, model: 'ecmwf_ifs',   categorical: true, packWith: 'precipitation' },
   wind_u_component_1000hPa:    { bindingSlot: 53, model: 'ncep_gfs025', categorical: false },
   wind_v_component_1000hPa:    { bindingSlot: 53, model: 'ncep_gfs025', categorical: false, packWith: 'wind_u_component_1000hPa' },
   cloud_cover:                 { bindingSlot: 55, model: 'ecmwf_ifs',   categorical: false },
-  pressure_msl:                { bindingSlot: 56, model: 'ecmwf_ifs',   categorical: false },
-  wind_u_component_10m:        { bindingSlot: 57, model: 'ecmwf_ifs',   categorical: false },
-  wind_v_component_10m:        { bindingSlot: 57, model: 'ecmwf_ifs',   categorical: false, packWith: 'wind_u_component_10m' },
+  // pressure_msl, wind_u/v_10m: removed from main surface pass (not sampled in fragment shader)
+  // Data still fetched via withParams() in layer declarations; consumed by autonomous compute pipelines only
+  // --- Texture-backed params (niche layers, binding 60+) ---
+  sea_ice_concentration:       { bindingSlot: 60, bindingType: 'texture', model: 'ecmwf_ifs', categorical: false },
+  sea_surface_temperature:     { bindingSlot: 61, bindingType: 'texture', model: 'ecmwf_ifs', categorical: false },
+  dewpoint_2m:                 { bindingSlot: 62, bindingType: 'texture', model: 'ecmwf_ifs', categorical: false },
 };
 
 export class ShaderComposer {
@@ -166,6 +172,7 @@ export class ShaderComposer {
       model: entry.model,
       index: idx,
       bindingSlot: entry.bindingSlot,
+      bindingType: entry.bindingType ?? 'storage',
       gridPoints: getModel(entry.model).gridPoints,
       categorical: entry.categorical,
       packed: !!entry.packWith,

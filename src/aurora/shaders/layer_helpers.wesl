@@ -87,3 +87,16 @@ fn getParamLerp(index: u32) -> f32                 { return u.paramLerp[index / 
 fn isParamReady(index: u32) -> bool                { return u.paramReady[index / 4u][index % 4u] != 0u; }
 fn getParamDt(index: u32) -> f32                   { return u.paramDt[index / 4u][index % 4u]; }
 fn getParamSize(index: u32) -> u32                 { return u.paramSize[index / 4u][index % 4u]; }
+
+// Texture param helpers — must match PARAM_TEX_WIDTH in worker.ts
+const PARAM_TEX_WIDTH: u32 = 4096u;
+
+fn sampleTexParam(tex: texture_2d<f32>, paramIndex: u32, cell: u32) -> f32 {
+  let gp = getParamSize(paramIndex);
+  let texHeight = (gp + PARAM_TEX_WIDTH - 1u) / PARAM_TEX_WIDTH;
+  let coord = vec2u(cell % PARAM_TEX_WIDTH, cell / PARAM_TEX_WIDTH);
+  let v0 = textureLoad(tex, coord, 0).r;
+  let v1 = textureLoad(tex, coord + vec2u(0u, texHeight), 0).r;
+  let lerp = getParamLerp(paramIndex);
+  return select(v0, mix(v0, v1, lerp), lerp >= 0.0);
+}

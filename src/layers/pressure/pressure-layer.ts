@@ -493,6 +493,8 @@ export class PressureLayer {
         entries: [
           { binding: 0, resource: { buffer: this.renderUniformBuffer } },
           { binding: 1, resource: { buffer: this.vertexBuffer } },
+          { binding: 2, resource: this.paletteTexture.texture.createView() },
+          { binding: 3, resource: this.paletteTexture.sampler },
         ],
       });
 
