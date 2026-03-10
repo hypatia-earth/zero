@@ -57,12 +57,13 @@ export function extractPalette(
   bitmap: ImageBitmap,
   rect: { x: number; y: number; w: number; h: number },
   nativeDpr: boolean,
+  pxScale?: number,
 ): number[][] {
-  const dpr = window.devicePixelRatio;
-  let srcX = Math.round(rect.x * dpr);
-  let srcY = Math.round(rect.y * dpr);
-  let srcW = Math.round(rect.w * dpr);
-  let srcH = Math.round(rect.h * dpr);
+  const scale = pxScale ?? window.devicePixelRatio;
+  let srcX = Math.round(rect.x * scale);
+  let srcY = Math.round(rect.y * scale);
+  let srcW = Math.round(rect.w * scale);
+  let srcH = Math.round(rect.h * scale);
 
   // Clamp to bitmap bounds — shouldn't happen (rect is viewport-constrained),
   // but guards against stale bitmap after orientation change on iPad Safari
@@ -71,8 +72,8 @@ export function extractPalette(
   srcW = Math.min(srcW, bitmap.width - srcX);
   srcH = Math.min(srcH, bitmap.height - srcY);
 
-  const outW = nativeDpr ? srcW : Math.round(srcW / dpr);
-  const outH = nativeDpr ? srcH : Math.round(srcH / dpr);
+  const outW = nativeDpr ? srcW : Math.round(srcW / scale);
+  const outH = nativeDpr ? srcH : Math.round(srcH / scale);
 
   const canvas = new OffscreenCanvas(outW, outH);
   const ctx = canvas.getContext('2d')!;

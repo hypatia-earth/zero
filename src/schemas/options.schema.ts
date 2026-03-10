@@ -8,13 +8,12 @@
 import { z } from 'zod';
 import type { TLayer } from '../config/types';
 import { getPaletteIdsEnum } from '../services/palette-service';
-import { U } from '../aurora/globe-uniforms';
 
 // ============================================================
 // UI Metadata Types
 // ============================================================
 
-type ControlType = 'toggle' | 'slider' | 'select' | 'radio' | 'pressure-colors' | 'layer-toggle';
+type ControlType = 'toggle' | 'slider' | 'select' | 'radio' | 'color-chips' | 'pressure-colors' | 'layer-toggle';
 
 /** Impact level for option changes */
 type OptionImpact = 'uniform' | 'recreate';
@@ -64,6 +63,11 @@ interface RadioMeta extends UIMetadata {
   options: { value: string | number; label: string; localhostOnly?: boolean; minBufferSizeMB?: number }[];
 }
 
+interface ColorChipsMeta extends UIMetadata {
+  control: 'color-chips';
+  options: { value: string; label: string; color: string }[];
+}
+
 interface PressureColorsMeta extends UIMetadata {
   control: 'pressure-colors';
 }
@@ -73,7 +77,7 @@ interface LayerToggleMeta extends UIMetadata {
   layerId: string;  // For CSS color variable lookup
 }
 
-type OptionMeta = SliderMeta | SelectMeta | ToggleMeta | RadioMeta | PressureColorsMeta | LayerToggleMeta;
+type OptionMeta = SliderMeta | SelectMeta | ToggleMeta | RadioMeta | ColorChipsMeta | PressureColorsMeta | LayerToggleMeta;
 
 /** Helper to attach metadata to Zod schema */
 function opt<T extends z.ZodTypeAny>(schema: T, meta: OptionMeta): T & { _meta: OptionMeta } {
@@ -607,7 +611,7 @@ export const optionsSchema = z.object({
         min: 8,
         max: 24,
         step: 1,
-        uniform: { type: 'f32', pos: U.graticuleFontSize },
+        // No uniform: here — scaled to render pixels manually in worker.ts
       }
     ),
     lineWidth: opt(
@@ -622,7 +626,7 @@ export const optionsSchema = z.object({
         min: 1,
         max: 5,
         step: 0.5,
-        uniform: { type: 'f32', pos: U.graticuleLineWidth },
+        // No uniform: here — scaled to render pixels manually in worker.ts
       }
     ),
   }),
@@ -654,6 +658,23 @@ export const optionsSchema = z.object({
         min: 0.05,
         max: 1,
         step: 0.05,
+      }
+    ),
+    color: opt(
+      z.enum(['white', 'black', 'darkred', 'gold']).default('white'),
+      {
+        label: 'Label color',
+        description: 'Color of city labels and indicators',
+        group: 'layers',
+        filter: ['global', 'cities'],
+        order: 3.7,
+        control: 'color-chips',
+        options: [
+          { value: 'white', label: 'White', color: '#ffffff' },
+          { value: 'black', label: 'Black', color: '#000000' },
+          { value: 'darkred', label: 'Dark Red', color: '#8c0d0d' },
+          { value: 'gold', label: 'Gold', color: '#d9a621' },
+        ],
       }
     ),
   }),
@@ -1299,7 +1320,7 @@ export const defaultOptions: ZeroOptions = {
   earth: { enabled: true, opacity: 1 },
   sun: { enabled: true, opacity: 1 },
   graticule: { enabled: true, opacity: 0.9, fontSize: 12, lineWidth: 1.5 },
-  cities: { enabled: false, opacity: 0.8 },
+  cities: { enabled: false, opacity: 0.8, color: 'white' },
   temp: { enabled: true, opacity: 0.6, palette: 'temp-classic' },
   rain: { enabled: false, opacity: 1, animated: true },
   clouds: { enabled: false, opacity: 0.5 },

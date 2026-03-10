@@ -230,7 +230,7 @@ export function createAuroraService(
 
       await new Promise<void>((resolve) => {
         onReady = () => resolve();
-        send({ type: 'init', canvas: offscreen, width, height, dpr: window.devicePixelRatio, config, assets }, transferables);
+        send({ type: 'init', canvas: offscreen, width, height, cssHeight: canvas!.clientHeight, dpr: window.devicePixelRatio, config, assets }, transferables);
       });
 
       // Create camera
@@ -275,7 +275,7 @@ export function createAuroraService(
         const w = Math.round(canvas!.clientWidth * window.devicePixelRatio / d);
         const h = Math.round(canvas!.clientHeight * window.devicePixelRatio / d);
         camera!.setAspect(canvas!.clientWidth, canvas!.clientHeight);
-        send({ type: 'resize', width: w, height: h, dpr: window.devicePixelRatio });
+        send({ type: 'resize', width: w, height: h, cssHeight: canvas!.clientHeight, dpr: window.devicePixelRatio });
         perfService.setScreen(canvas!.clientWidth, canvas!.clientHeight);
       };
       const resizeObserver = new ResizeObserver(sendResize);
@@ -300,12 +300,17 @@ export function createAuroraService(
       window.addEventListener('beforeunload', () => this.cleanup());
       window.addEventListener('pagehide', () => this.cleanup());
 
-      // Debug: 'p' key pauses rendering (localhost only)
+      // Debug hotkeys (localhost only)
       if (location.hostname === 'localhost') {
         window.addEventListener('keydown', (e) => {
-          if (e.key === 'p' && !e.metaKey && !e.ctrlKey) {
+          if (e.metaKey || e.ctrlKey) return;
+          if (e.key === 'p') {
             paused = !paused;
             console.log(`[Aurora] Rendering ${paused ? 'PAUSED' : 'RESUMED'}`);
+          }
+          if (e.key === '1' || e.key === '2' || e.key === '4') {
+            optionsService.update(d => { d.debug.renderScale = e.key as '1' | '2' | '4'; });
+            console.log(`[Aurora] Render scale: ${e.key}x`);
           }
         });
       }

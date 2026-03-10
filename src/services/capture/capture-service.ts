@@ -367,12 +367,13 @@ export class CaptureService {
 
   private cropBitmap(bitmap: ImageBitmap, outW: number, outH: number): Uint8ClampedArray {
     const rect = this.rect.value;
-    const dpr = window.devicePixelRatio;
+    const downscale = parseInt(this.optionsService.options.value.debug.renderScale, 10);
+    const scale = window.devicePixelRatio / downscale;
     const border = 2;
-    let srcX = Math.round((rect.x + border) * dpr);
-    let srcY = Math.round((rect.y + border) * dpr);
-    let srcW = Math.round((rect.w - border * 2) * dpr);
-    let srcH = Math.round((rect.h - border * 2) * dpr);
+    let srcX = Math.round((rect.x + border) * scale);
+    let srcY = Math.round((rect.y + border) * scale);
+    let srcW = Math.round((rect.w - border * 2) * scale);
+    let srcH = Math.round((rect.h - border * 2) * scale);
 
     srcX = Math.min(srcX, bitmap.width);
     srcY = Math.min(srcY, bitmap.height);
@@ -395,8 +396,9 @@ export class CaptureService {
     const contentW = rect.w - border * 2;
     const contentH = rect.h - border * 2;
     if (this.options.nativeDpr) {
-      const dpr = window.devicePixelRatio;
-      return { w: snapEven(Math.round(contentW * dpr)), h: snapEven(Math.round(contentH * dpr)) };
+      const downscale = parseInt(this.optionsService.options.value.debug.renderScale, 10);
+      const scale = window.devicePixelRatio / downscale;
+      return { w: snapEven(Math.round(contentW * scale)), h: snapEven(Math.round(contentH * scale)) };
     }
     return { w: contentW, h: contentH };
   }
@@ -451,7 +453,9 @@ export class CaptureService {
 
   private async onPreviewFrame(bitmap: ImageBitmap): Promise<void> {
     if (this.mode.value !== 'ready') return;
-    const palette = await extractPalette(bitmap, this.rect.value, this.options.nativeDpr);
+    const downscale = parseInt(this.optionsService.options.value.debug.renderScale, 10);
+    const pxScale = window.devicePixelRatio / downscale;
+    const palette = await extractPalette(bitmap, this.rect.value, this.options.nativeDpr, pxScale);
     if (palette.every(([r, g, b]) => r === 0 && g === 0 && b === 0) && this.paletteRetries < 3) {
       this.paletteRetries++;
       this.requestCaptureFrame();

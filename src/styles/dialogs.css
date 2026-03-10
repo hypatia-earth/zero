@@ -763,6 +763,33 @@
   border-color: var(--color-primary);
 }
 
+/* Standalone color chips (reusable) */
+.dialog.options .color-chips {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.dialog.options .color-chip {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+@media (hover: hover) {
+  .dialog.options .color-chip:hover {
+    transform: scale(1.1);
+  }
+}
+
+.dialog.options .color-chip.selected {
+  border-color: var(--color-primary);
+}
+
 .pressure-color-control .gradient-preview {
   height: 24px;
   border-radius: 4px;

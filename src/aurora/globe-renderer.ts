@@ -132,10 +132,12 @@ export class GlobeRenderer {
   // (Chrome workers may lack it, Safari may differ). Used to convert device-pixel
   // canvas dimensions to CSS pixels for graticule LoD thresholds.
   dpr: number;
+  cssHeight: number;
 
-  constructor(private canvas: HTMLCanvasElement | OffscreenCanvas, cameraConfig?: CameraConfig, dpr = 1) {
+  constructor(private canvas: HTMLCanvasElement | OffscreenCanvas, cameraConfig?: CameraConfig, dpr = 1, cssHeight = 0) {
     this.camera = new Camera({ lat: 30, lon: 0, distance: 3 }, cameraConfig);
     this.dpr = dpr;
+    this.cssHeight = cssHeight || (canvas as HTMLCanvasElement).clientHeight || canvas.height / dpr;
   }
 
   async initialize(
@@ -202,7 +204,7 @@ export class GlobeRenderer {
 
     this.context = this.canvas.getContext('webgpu')!;
     this.format = navigator.gpu.getPreferredCanvasFormat();
-    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST });
+    this.context.configure({ device: this.device, format: this.format, alphaMode: 'opaque', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST });
 
     // Create GPU timestamp helper if supported
     if (hasTimestampQuery) {
@@ -666,8 +668,7 @@ export class GlobeRenderer {
       uniforms.eyePosition[2]! ** 2
     );
     const fov = 2 * Math.atan(uniforms.tanFov);
-    const heightCss = uniforms.resolution[1]! / this.dpr;
-    const globeRadiusPx = Math.asin(1 / cameraDistance) * (heightCss / fov);
+    const globeRadiusPx = Math.asin(1 / cameraDistance) * (this.cssHeight / fov);
     const graticuleBuffer = this.graticuleAnimator.packToBuffer(globeRadiusPx, this.frameDeltaMs);
     this.device.queue.writeBuffer(this.graticuleLinesBuffer, 0, graticuleBuffer);
 
@@ -676,6 +677,7 @@ export class GlobeRenderer {
     const altitudeKm = (cameraDistance - 1) * 6371;
     const cityFontScale = altitudeKm > 3000 ? 0 : 1.3;
     view.setFloat32(O.cityFontScale, cityFontScale, true);
+    view.setFloat32(O.globeRadiusPx, globeRadiusPx, true);
 
     // Update cities LOD animation (freeze tier in indicators-only mode)
     if (this.citiesAnimator && cityFontScale > 0) {

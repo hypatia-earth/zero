@@ -19,14 +19,15 @@ const DISTANCE_RANGE: f32 = 4.0;
 const GLYPH_WIDTH: f32 = 0.85;        // Horizontal spacing between glyphs
 const GLYPH_WIDTH_LETTER: f32 = 1.02; // Extra spacing before direction letter (GLYPH_WIDTH * 1.2)
 const LINE_HEIGHT: f32 = 1.3;         // Vertical spacing between rows
-const MARGIN_X: f32 = 0.4;            // Horizontal margin from grid line
-const MARGIN_Y: f32 = 0.5;            // Vertical margin from grid line
+const MARGIN_X: f32 = 0.08;           // Horizontal margin from grid line (0.4 / 5)
+const MARGIN_Y: f32 = 0.1;            // Vertical margin from grid line (0.5 / 5)
 const OFFSET_X: f32 = 0.5;            // X shift for alignment
 const OFFSET_Y_NORTH: f32 = 0.5;      // Y shift for N hemisphere
 const OFFSET_Y_SOUTH: f32 = -1.0;     // Y shift for S hemisphere
 const CHAR_COUNT_OFFSET: f32 = 0.2;   // Extra offset for character count calc
 const TEXT_OPACITY: f32 = 0.9;        // Label opacity
 const WORLD_SCALE: f32 = 3.0;         // Font size world scale multiplier
+const NUDGE: f32 = 0.15;             // Alignment nudge: N shifts up, E shifts right
 
 // Glyph atlas positions: vec4(x, y, width, height)
 const GLYPH_N_POS: vec4f = vec4f(22.0, 84.0, 18.0, 26.0);
@@ -211,15 +212,11 @@ fn blendGraticuleText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4
   var lonDeg = degrees(lon);
   if (lonDeg < 0.0) { lonDeg += 360.0; }
 
-  // Globe-space metrics (font size fixed on globe surface)
-  let fontSizeWorld = u.graticuleFontSize * 0.002;  // graticuleFontSize in globe units
+  // Constant screen-size text: fontSizeWorld scales with distance like line width
   let dist = length(hitPoint - u.eyePosition);
   let worldUnitsPerPixel = (2.0 * u.tanFov * dist) / u.resolution.y;
-
-  // Clamp font size when zoomed in past threshold
-  let globeRadiusPx = 1.0 / worldUnitsPerPixel;  // EARTH_RADIUS = 1
-  let fontScale = min(1.0, u.graticuleLabelMaxRadius / globeRadiusPx);
-  let screenPxRange = (fontSizeWorld * fontScale / worldUnitsPerPixel) / DISTANCE_RANGE;
+  let fontSizeWorld = u.graticuleFontSize * worldUnitsPerPixel;
+  let screenPxRange = u.graticuleFontSize / DISTANCE_RANGE;
 
   // Find nearest graticule intersection from animated line positions
   let nearestLatInfo = findNearestLat(latDeg);
@@ -233,7 +230,7 @@ fn blendGraticuleText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4
   let dLon = lonDeg - nearestLon;
   let lonScale = max(cos(lat), 0.01);
   let degToRad = COMMON_PI / 180.0;
-  let scaledFontSize = fontSizeWorld * fontScale;
+  let scaledFontSize = fontSizeWorld;
   let glyphUV = vec2f(
     (dLon * degToRad * lonScale) / scaledFontSize,
     -(dLat * degToRad) / scaledFontSize
@@ -261,13 +258,15 @@ fn blendGraticuleText(color: vec4f, lat: f32, lon: f32, hitPoint: vec3f) -> vec4
 
   // Y offset based on hemisphere (computed once)
   let yOffset = select(OFFSET_Y_SOUTH, OFFSET_Y_NORTH, isNorth);
-  let baseY = glyphUV.y - select(MARGIN_Y + LINE_HEIGHT, -MARGIN_Y, isNorth) + yOffset;
+  let yNudge = select(0.0, NUDGE, isNorth);
+  let baseY = glyphUV.y - select(MARGIN_Y + LINE_HEIGHT, -MARGIN_Y, isNorth) + yOffset + yNudge;
 
   var opacity = 0.0;
 
+  let xNudge = select(0.0, -NUDGE, isEast);
   if (isEast) {
     // East: left-aligned
-    let startX = glyphUV.x - MARGIN_X - OFFSET_X;
+    let startX = glyphUV.x - MARGIN_X - OFFSET_X + xNudge;
     opacity = max(opacity, renderLatRow(latTens, latOnes, isNorth, startX, baseY, screenPxRange));
     opacity = max(opacity, renderLonRow(lonHundreds, lonTens, lonOnes, isEast, startX, baseY + LINE_HEIGHT, screenPxRange));
   } else {

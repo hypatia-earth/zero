@@ -83,7 +83,8 @@ fn blendRain(color: vec4f, lat: f32, lon: f32) -> vec4f {
 
   // Fixed grid from default zoom (particles anchored to globe surface)
   let fov = 2.0 * atan(u.tanFov);
-  let refRadiusPx = asin(1.0 / 3.2) * u.resolution.y / fov;
+  let camDist = length(u.eyePosition);
+  let refRadiusPx = u.globeRadiusPx * asin(1.0 / 3.2) / asin(1.0 / camDist);
   let cellSidePx = 1.0 / sqrt(u.rainDensity);
   let gridSize = max(floor(2.0 * refRadiusPx / cellSidePx), 1.0);
   let latIdx = floor(lat * gridSize / COMMON_PI);

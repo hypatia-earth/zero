@@ -56,6 +56,10 @@ export const GLOBE_UNIFORMS: StructLayout = layoutStruct([
   ['logoOpacity', 'f32'],
   ['cityFontScale', 'f32'],        // 0=indicators only, 0.5-1.0=text scale
   ['cityGlyphOffset', 'u32'],      // vec4 index where glyphs start in cityData buffer
+  ['globeRadiusPx', 'f32'],        // earth apparent radius in CSS pixels (renderScale-independent)
+  ['cityColorR', 'f32'],           // city label/indicator color (RGB)
+  ['cityColorG', 'f32'],
+  ['cityColorB', 'f32'],
 
   // Built-in layer palettes: 1 vec4u per layer = 4 palette slots each (16 layers)
   ['layerPalettes0', 'vec4u'],
@@ -203,6 +207,10 @@ export const U = GLOBE_UNIFORMS.offsets as {
   logoOpacity: number;
   cityFontScale: number;
   cityGlyphOffset: number;
+  globeRadiusPx: number;
+  cityColorR: number;
+  cityColorG: number;
+  cityColorB: number;
   // Built-in layer palettes (1 vec4u per layer = 4 palette slots each)
   layerPalettes0: number;
   layerPalettes1: number;

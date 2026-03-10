@@ -226,6 +226,18 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
       ]);
     }
 
+    case 'color-chips': {
+      return m('div.color-chips', meta.options.map((o: { value: string; color: string }) =>
+        m('button.color-chip', {
+          key: o.value,
+          class: currentValue === o.value ? 'selected' : '',
+          style: { backgroundColor: o.color },
+          title: o.value,
+          onclick: () => setOptionValue(optionsService, path, o.value),
+        })
+      ));
+    }
+
     case 'pressure-colors':
       // Handled by special case before switch
       return null;

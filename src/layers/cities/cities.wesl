@@ -97,16 +97,18 @@ fn blendCities(color: vec4f, lat: f32, lon: f32) -> vec4f {
     if (indLonOff > -bigHalf && indLonOff < bigHalf &&
         dLat > -bigHalf && dLat < bigHalf) {
       let alpha = layerOpacity * city.opacity;
-      return vec4f(mix(color.rgb, vec3f(1.0), alpha), color.a);
+      let cc = vec3f(u.cityColorR, u.cityColorG, u.cityColorB);
+      return vec4f(mix(color.rgb, cc, alpha), color.a);
     }
     return color;
   }
 
   // Small indicator with labels
+  let cityColor = vec3f(u.cityColorR, u.cityColorG, u.cityColorB);
   if (indLonOff > -indicatorHalf && indLonOff < indicatorHalf &&
       dLat > -indicatorHalf && dLat < indicatorHalf) {
     let alpha = layerOpacity * city.opacity;
-    return vec4f(mix(color.rgb, vec3f(1.0), alpha), color.a);
+    return vec4f(mix(color.rgb, cityColor, alpha), color.a);
   }
 
   let scaledFontSize = city.fontSize * fontScale;
@@ -134,7 +136,6 @@ fn blendCities(color: vec4f, lat: f32, lon: f32) -> vec4f {
 
   // Walk glyphs to find which one we're over
   var textAlpha = 0.0;
-  var haloAlpha = 0.0;
 
   for (var i = 0u; i < city.glyphCount; i++) {
     let g = getGlyph(city.glyphOffset + i);
@@ -161,25 +162,15 @@ fn blendCities(color: vec4f, lat: f32, lon: f32) -> vec4f {
     let sd = msdfMedian(msdf.r, msdf.g, msdf.b);
     let screenPxDist = screenPxRange * (sd - 0.5);
 
-    // Fill (sharp text)
+    // Fill
     let fill = clamp(screenPxDist + 0.5, 0.0, 1.0);
     textAlpha = max(textAlpha, fill);
-
-    // Halo (dark outline for readability)
-    let halo = clamp(screenPxDist + 2.5, 0.0, 1.0);
-    haloAlpha = max(haloAlpha, halo);
   }
 
-  if (haloAlpha < 0.01) { return color; }
+  if (textAlpha < 0.01) { return color; }
 
   let alpha = layerOpacity * city.opacity;
-
-  // Composite: halo (dark) under text (white)
-  let haloColor = vec3f(0.0, 0.0, 0.0);
-  let textColor = vec3f(1.0, 1.0, 1.0);
-
-  var result = mix(color.rgb, haloColor, haloAlpha * 0.7 * alpha);
-  result = mix(result, textColor, textAlpha * alpha);
+  let result = mix(color.rgb, cityColor, textAlpha * alpha);
 
   return vec4f(result, color.a);
 }

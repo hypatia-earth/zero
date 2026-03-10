@@ -31,6 +31,10 @@ struct Uniforms {
   logoOpacity: f32,       // computed from all layer opacities
   cityFontScale: f32,     // 0=indicators only, 0.5-1.0=text scale
   cityGlyphOffset: u32,   // vec4 index where glyphs start in cityData buffer
+  globeRadiusPx: f32,     // earth apparent radius in CSS pixels
+  cityColorR: f32,        // city label/indicator color (RGB)
+  cityColorG: f32,
+  cityColorB: f32,
   // Built-in layer palettes: 1 vec4u per layer = 4 palette slots each
   layerPalettes: array<vec4<u32>, 16>,
   // Built-in layer palette ranges (8 slots x 2 floats packed as min/max pairs)
