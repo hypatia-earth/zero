@@ -277,6 +277,11 @@ export class StateService {
       search += `&layers=${enabledLayers.join(',')}`;
     }
 
+    // Preserve perftest param
+    if (new URLSearchParams(location.search).has('perftest')) {
+      search += '&perftest';
+    }
+
     window.history.replaceState(null, '', search);
   }
 

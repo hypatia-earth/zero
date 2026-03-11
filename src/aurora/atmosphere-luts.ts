@@ -13,14 +13,12 @@ const DEBUG = false;
 export interface AtmosphereLUTs {
   transmittance: GPUTexture;
   scattering: GPUTexture;
-  irradiance: GPUTexture;
   sampler: GPUSampler;
 }
 
 export interface AtmosphereLUTData {
   transmittance: ArrayBuffer;
   scattering: ArrayBuffer;
-  irradiance: ArrayBuffer;
 }
 
 // LUT dimensions (must match precomputed data and shader constants)
@@ -30,9 +28,6 @@ const SCATTERING_R = 32;
 const SCATTERING_MU = 128;
 const SCATTERING_MU_S = 32;
 const SCATTERING_NU = 8;
-const IRRADIANCE_WIDTH = 64;
-const IRRADIANCE_HEIGHT = 16;
-
 /**
  * Create atmosphere LUT textures from pre-loaded data
  */
@@ -75,19 +70,6 @@ export function createAtmosphereLUTs(
     { width: scatteringWidth, height: scatteringHeight, depthOrArrayLayers: scatteringDepth }
   );
 
-  // Create irradiance texture (2D, 64x16)
-  const irradiance = device.createTexture({
-    size: [IRRADIANCE_WIDTH, IRRADIANCE_HEIGHT],
-    format,
-    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-  });
-  device.queue.writeTexture(
-    { texture: irradiance },
-    data.irradiance,
-    { bytesPerRow: IRRADIANCE_WIDTH * bytesPerPixel },
-    { width: IRRADIANCE_WIDTH, height: IRRADIANCE_HEIGHT }
-  );
-
   // Create linear sampler for LUT interpolation
   const sampler = device.createSampler({
     magFilter: 'linear',
@@ -99,5 +81,5 @@ export function createAtmosphereLUTs(
 
   DEBUG && console.log(`[Atmosphere] LUTs created (${useFloat16 ? 'float16' : 'float32'})`);
 
-  return { transmittance, scattering, irradiance, sampler };
+  return { transmittance, scattering, sampler };
 }

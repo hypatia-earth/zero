@@ -9,8 +9,7 @@ import constants::LAYER_SUN;
 // Atmosphere LUTs (declared here for post pass; main pass doesn't use this module)
 @group(0) @binding(4) var atm_transmittance: texture_2d<f32>;
 @group(0) @binding(5) var atm_scattering: texture_3d<f32>;
-@group(0) @binding(6) var atm_irradiance: texture_2d<f32>;
-@group(0) @binding(7) var atm_sampler: sampler;
+@group(0) @binding(6) var atm_sampler: sampler;
 
 // Atmosphere tuning params
 const ATM_EXPOSURE: f32 = 5.0;            // Tone mapping exposure (higher = brighter)

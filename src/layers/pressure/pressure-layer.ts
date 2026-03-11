@@ -52,6 +52,7 @@ interface PressureUniforms {
   eyePosition: [number, number, number];
   sunDirection: [number, number, number];
   opacity: number;
+  backfaceCull: boolean;
 }
 
 /** External GPU buffers provided by GlobeRenderer (Gaussian LUTs only) */
@@ -895,6 +896,7 @@ export class PressureLayer {
       uintView[40] = this.paletteTexture.getPaletteIndex('pressure-gradient');
     }
     uintView[41] = this.paletteTexture.paletteCount;
+    uintView[42] = uniforms.backfaceCull ? 1 : 0;
 
     this.device.queue.writeBuffer(this.renderUniformBuffer, 0, uniformData);
   }

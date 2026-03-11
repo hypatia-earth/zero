@@ -35,7 +35,6 @@ export interface AuroraAssets {
   atmosphereLUTs: {
     transmittance: ArrayBuffer;
     scattering: ArrayBuffer;
-    irradiance: ArrayBuffer;
   };
   // Gaussian grid lookup tables
   gaussianLats: Float32Array;

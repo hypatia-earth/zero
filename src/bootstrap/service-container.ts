@@ -23,6 +23,7 @@ import { KeyboardService } from '../services/keyboard-service';
 import { PerfService } from '../services/perf-service';
 import { LayerService } from '../services/layer/layer-service';
 import { CaptureService } from '../services/capture/capture-service';
+import { TestPerformanceService } from '../services/test-performance-service';
 import type { Signal } from '@preact/signals-core';
 import type { QueueStats } from '../config/types';
 
@@ -56,6 +57,9 @@ export interface ServiceContainer {
 
   // Camera capture
   captureService: CaptureService;
+
+  // Performance testing
+  testPerformanceService: TestPerformanceService;
 }
 
 /**

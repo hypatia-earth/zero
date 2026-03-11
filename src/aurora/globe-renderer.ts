@@ -378,8 +378,7 @@ export class GlobeRenderer {
         // Atmosphere LUTs
         { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // transmittance
         { binding: 5, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } },  // scattering
-        { binding: 6, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // irradiance
-        { binding: 7, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        { binding: 6, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       ],
     });
 
@@ -591,8 +590,7 @@ export class GlobeRenderer {
         { binding: 3, resource: this.colorSampler },
         { binding: 4, resource: this.atmosphereLUTs.transmittance.createView() },
         { binding: 5, resource: this.atmosphereLUTs.scattering.createView() },
-        { binding: 6, resource: this.atmosphereLUTs.irradiance.createView() },
-        { binding: 7, resource: this.atmosphereLUTs.sampler },
+        { binding: 6, resource: this.atmosphereLUTs.sampler },
       ],
     });
   }
@@ -692,6 +690,9 @@ export class GlobeRenderer {
     this.pressureLayer.setEnabled(pressureVisible);
 
     if (pressureVisible) {
+      const hasOpaqueGlobe = uniforms.layerOpacities[LAYER_EARTH]! > 0.01
+        || uniforms.layerOpacities[LAYER_TEMP]! > 0.01
+        || uniforms.layerOpacities[LAYER_SUN]! > 0.01;
       this.pressureLayer.updateUniforms({
         viewProj: uniforms.viewProj,
         eyePosition: [
@@ -705,6 +706,7 @@ export class GlobeRenderer {
           uniforms.sunDirection[2]!,
         ],
         opacity: uniforms.layerOpacities[LAYER_PRESSURE]!,
+        backfaceCull: hasOpaqueGlobe,
       }, uniforms.pressureColors);
     }
 
@@ -1009,11 +1011,7 @@ export class GlobeRenderer {
       { binding: 1, resource: this.basemapTexture.createView({ dimension: 'cube' }) },
       { binding: 2, resource: this.basemapSampler },
       { binding: 3, resource: { buffer: this.gaussianGridBuffer } },
-      // Bindings 5-6 reserved
-      { binding: 7, resource: this.atmosphereLUTs.transmittance.createView() },
-      { binding: 8, resource: this.atmosphereLUTs.scattering.createView() },
-      { binding: 9, resource: this.atmosphereLUTs.irradiance.createView() },
-      { binding: 10, resource: this.atmosphereLUTs.sampler },
+      // Bindings 5-10 available
       { binding: 11, resource: this.fontAtlasTexture.createView() },
       { binding: 12, resource: this.fontAtlasSampler },
       { binding: 13, resource: this.paletteTexture.texture.createView() },
@@ -1109,11 +1107,7 @@ export class GlobeRenderer {
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: 'cube' } },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },  // gaussianGrid (packed)
-      // Bindings 5-6 reserved
-      { binding: 7, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // transmittance
-      { binding: 8, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '3d' } },  // scattering
-      { binding: 9, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // irradiance
-      { binding: 10, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+      // Bindings 5-10 available
       { binding: 11, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // font atlas
       { binding: 12, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       { binding: 13, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },  // palette array

@@ -8,8 +8,6 @@ const SCATTERING_TEXTURE_R_SIZE: i32 = 32;
 const SCATTERING_TEXTURE_MU_SIZE: i32 = 128;
 const SCATTERING_TEXTURE_MU_S_SIZE: i32 = 32;
 const SCATTERING_TEXTURE_NU_SIZE: i32 = 8;
-const IRRADIANCE_TEXTURE_WIDTH: i32 = 64;
-const IRRADIANCE_TEXTURE_HEIGHT: i32 = 16;
 
 // Physical constants
 const ATM_PI: f32 = 3.14159265358979323846;
@@ -32,8 +30,6 @@ const UNIT_TO_KM: f32 = 6360.0;
 const RAYLEIGH_SCATTERING: vec3f = vec3f(0.005802, 0.013558, 0.033100);
 const MIE_SCATTERING: vec3f = vec3f(0.003996, 0.003996, 0.003996);
 const MIE_PHASE_G: f32 = 0.8;
-const SOLAR_IRRADIANCE: vec3f = vec3f(1.474000, 1.850400, 1.911980);
-const SUN_ANGULAR_RADIUS: f32 = 0.004675;
 const MU_S_MIN: f32 = -0.207912;
 
 // Helper functions
@@ -80,37 +76,6 @@ fn SampleTransmittanceLUT(
 ) -> vec3f {
   let uv = MapToTransmittanceTexture(r, mu);
   return textureSampleLevel(transmittance_texture, lut_sampler, uv, 0.0).rgb;
-}
-
-fn GetTransmittance(
-  transmittance_texture: texture_2d<f32>,
-  lut_sampler: sampler,
-  r: f32, mu: f32, d: f32, ray_r_mu_intersects_ground: bool
-) -> vec3f {
-  let r_d = ClampRadius(sqrt(d * d + 2.0 * r * mu * d + r * r));
-  let mu_d = ClampCosine((r * mu + d) / r_d);
-
-  if (ray_r_mu_intersects_ground) {
-    return min(
-      SampleTransmittanceLUT(transmittance_texture, lut_sampler, r_d, -mu_d) /
-      SampleTransmittanceLUT(transmittance_texture, lut_sampler, r, -mu),
-      vec3f(1.0));
-  }
-  return min(
-    SampleTransmittanceLUT(transmittance_texture, lut_sampler, r, mu) /
-    SampleTransmittanceLUT(transmittance_texture, lut_sampler, r_d, mu_d),
-    vec3f(1.0));
-}
-
-fn GetTransmittanceToSun(
-  transmittance_texture: texture_2d<f32>,
-  lut_sampler: sampler,
-  r: f32, mu_s: f32
-) -> vec3f {
-  let sin_theta_h = EARTH_RADIUS_KM / r;
-  let cos_theta_h = -sqrt(max(1.0 - sin_theta_h * sin_theta_h, 0.0));
-  return SampleTransmittanceLUT(transmittance_texture, lut_sampler, r, mu_s) *
-    smoothstep(-sin_theta_h * SUN_ANGULAR_RADIUS, sin_theta_h * SUN_ANGULAR_RADIUS, mu_s - cos_theta_h);
 }
 
 // Phase functions
@@ -244,60 +209,3 @@ fn GetSkyRadiance(
   return SkySample(radiance, transmittance);
 }
 
-// Aerial perspective - scattering along ray to a point
-fn GetSkyRadianceToPoint(
-  transmittance_texture: texture_2d<f32>,
-  scattering_texture: texture_3d<f32>,
-  lut_sampler: sampler,
-  camera_km: vec3f,
-  point_km: vec3f,
-  sun_direction: vec3f
-) -> SkySample {
-  let view_ray = normalize(point_km - camera_km);
-  var local_camera = camera_km;
-  var r = length(local_camera);
-  var rmu = dot(local_camera, view_ray);
-
-  let distance_to_top = -rmu - sqrt(max(0.0, rmu * rmu - r * r + TOP_RADIUS_KM * TOP_RADIUS_KM));
-  if (distance_to_top > 0.0) {
-    local_camera = local_camera + view_ray * distance_to_top;
-    r = TOP_RADIUS_KM;
-    rmu += distance_to_top;
-  }
-
-  let mu = rmu / r;
-  let mu_s = dot(local_camera, sun_direction) / r;
-  let nu = dot(view_ray, sun_direction);
-  let d = length(point_km - local_camera);
-  let ray_r_mu_intersects_ground = RayIntersectsGround(r, mu);
-
-  let transmittance = GetTransmittance(transmittance_texture, lut_sampler, r, mu, d, ray_r_mu_intersects_ground);
-
-  var scatter_result = GetCombinedScattering(
-    scattering_texture, lut_sampler, r, mu, mu_s, nu, ray_r_mu_intersects_ground);
-
-  let r_p = ClampRadius(sqrt(d * d + 2.0 * r * mu * d + r * r));
-  let mu_p = (r * mu + d) / r_p;
-  let mu_s_p = (r * mu_s + d * nu) / r_p;
-
-  let scatter_p = GetCombinedScattering(
-    scattering_texture, lut_sampler, r_p, mu_p, mu_s_p, nu, ray_r_mu_intersects_ground);
-
-  scatter_result.scattering -= transmittance * scatter_p.scattering;
-  scatter_result.single_mie -= transmittance * scatter_p.single_mie;
-  scatter_result.single_mie *= smoothstep(0.0, 0.01, mu_s);
-
-  let radiance = scatter_result.scattering * RayleighPhaseFunction(nu) +
-    scatter_result.single_mie * MiePhaseFunction(MIE_PHASE_G, nu);
-
-  return SkySample(radiance, transmittance);
-}
-
-// Get solar radiance (for sun disk)
-fn GetSolarRadiance() -> vec3f {
-  return SOLAR_IRRADIANCE / (ATM_PI * SUN_ANGULAR_RADIUS * SUN_ANGULAR_RADIUS);
-}
-
-// Spectral radiance to luminance conversion
-const SKY_SPECTRAL_RADIANCE_TO_LUMINANCE: vec3f = vec3f(114974.916437, 71305.954816, 65310.548555);
-const SUN_SPECTRAL_RADIANCE_TO_LUMINANCE: vec3f = vec3f(98242.786222, 69954.398112, 66475.012354);

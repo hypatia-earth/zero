@@ -25,6 +25,7 @@ struct Uniforms {
   color2: vec4<f32>,        // gradient: high
   paletteIndex: u32,        // row index in palette texture array
   paletteCount: u32,        // total palettes in texture
+  backfaceCull: u32,        // 1 = skip back-hemisphere vertices
 }
 
 struct VertexOutput {
@@ -49,10 +50,20 @@ fn vertexMain(@builtin(vertex_index) idx: u32) -> VertexOutput {
   let vertex = vertices[idx];
 
   var out: VertexOutput;
-  out.position = uniforms.viewProj * vec4<f32>(vertex.xyz, 1.0);
   out.worldPos = vertex.xyz;
   out.pressure = vertex.w;
   out.segmentIdx = idx / 2u;  // 2 vertices per segment
+
+  // Backface cull: skip vertices on the far side of the globe
+  // when opaque texture layers are active (earth, temp, sun).
+  // When no texture layers, show all lines on the wireframe globe.
+  let viewDot = dot(normalize(vertex.xyz), normalize(uniforms.eyePosition));
+  if (uniforms.backfaceCull == 1u && viewDot < -0.1) {
+    out.position = vec4<f32>(0.0, 0.0, 2.0, 1.0);
+  } else {
+    out.position = uniforms.viewProj * vec4<f32>(vertex.xyz, 1.0);
+  }
+
   return out;
 }
 
