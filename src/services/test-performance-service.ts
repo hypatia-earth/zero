@@ -105,6 +105,7 @@ export class TestPerformanceService {
       d.debug.showPerfPanel = true;
       d.debug.fpsLimit = 'off';
       d.debug.renderScale = '1';
+      d.gpu.timeslotsPerLayer = '2';
     });
 
     // Wait for perf panel to have valid data (renderer running)
