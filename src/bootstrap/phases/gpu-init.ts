@@ -92,7 +92,6 @@ export async function runGpuInitPhase(
       atmosphereLUTs: {
         transmittance: assets.lutBuffers[0]!,
         scattering: assets.lutBuffers[1]!,
-        irradiance: assets.lutBuffers[2]!,
       },
       gaussianLats,
       ringOffsets,

@@ -220,7 +220,6 @@ export function createAuroraService(
         offscreen,
         assets.atmosphereLUTs.transmittance,
         assets.atmosphereLUTs.scattering,
-        assets.atmosphereLUTs.irradiance,
         assets.gaussianLats.buffer,
         assets.ringOffsets.buffer,
         ...assets.basemapFaces,

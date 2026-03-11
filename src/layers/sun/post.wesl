@@ -12,7 +12,7 @@ import package::layers::sun::blend::{blendAtmosphereSpace, blendAtmosphereGlobe,
 @group(0) @binding(1) var sceneColor: texture_2d<f32>;
 @group(0) @binding(2) var sceneDepth: texture_depth_2d;
 @group(0) @binding(3) var sceneSampler: sampler;
-// Atmosphere LUT bindings (4-7) are declared in sun/blend.wesl
+// Atmosphere LUT bindings (4-6) are declared in sun/blend.wesl
 
 // Fullscreen triangle vertex shader
 @vertex

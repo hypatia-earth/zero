@@ -25,12 +25,6 @@ import user_layer_preview::blend as blendPreview;
 
 import constants::{LAYER_EARTH, LAYER_TEMP, LAYER_RAIN, LAYER_CLOUDS, LAYER_SUN, LAYER_GRATICULE, LAYER_CITIES};
 
-// Atmosphere LUTs (bindings 7-10, used only in post pass but declared here for layout)
-@group(0) @binding(7) var atm_transmittance: texture_2d<f32>;
-@group(0) @binding(8) var atm_scattering: texture_3d<f32>;
-@group(0) @binding(9) var atm_irradiance: texture_2d<f32>;
-@group(0) @binding(10) var atm_sampler: sampler;
-
 // Fullscreen triangle vertex shader
 @vertex
 fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f {

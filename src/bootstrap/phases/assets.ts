@@ -40,27 +40,26 @@ export async function runAssetsPhase(
 
   const base = import.meta.env.BASE_URL;
   const files = [
-    // 0-2: Atmosphere LUTs
+    // 0-1: Atmosphere LUTs
     { url: `${base}atmosphere/transmittance${suffix}.dat`, size: f16 ? 131072 : 262144 },
     { url: `${base}atmosphere/scattering${suffix}.dat`, size: f16 ? 8388608 : 16777216 },
-    { url: `${base}atmosphere/irradiance${suffix}.dat`, size: f16 ? 8192 : 16384 },
-    // 3-8: Basemap faces
+    // 2-7: Basemap faces
     { url: `${base}images/basemaps/rtopo2/px.png`, size: 111244 },
     { url: `${base}images/basemaps/rtopo2/nx.png`, size: 78946 },
     { url: `${base}images/basemaps/rtopo2/py.png`, size: 215476 },
     { url: `${base}images/basemaps/rtopo2/ny.png`, size: 292274 },
     { url: `${base}images/basemaps/rtopo2/pz.png`, size: 85084 },
     { url: `${base}images/basemaps/rtopo2/nz.png`, size: 59133 },
-    // 9: WASM decoder
+    // 8: WASM decoder
     { url: `${base}om-decoder.wasm`, size: 2107564 },
-    // 10: Font atlas
+    // 9: Font atlas
     { url: `${base}fonts/plex-mono.png`, size: 15926 },
-    // 11-12: Gaussian grid LUTs
+    // 10-11: Gaussian grid LUTs
     { url: `${base}om1280/gaussian-lats.bin`, size: 10240 },
     { url: `${base}om1280/ring-offsets.bin`, size: 10240 },
-    // 13: Logo for idle globe
+    // 12: Logo for idle globe
     { url: `${base}images/hypatia.png`, size: 240500 },
-    // 14-16: Cities layer
+    // 13-15: Cities layer
     { url: `${base}cities/en.json`, size: 300000 },
     { url: `${base}fonts/inter-cities.png`, size: 1770000 },
     { url: `${base}fonts/inter-regular.json`, size: 795000 },
@@ -70,12 +69,12 @@ export async function runAssetsPhase(
 
   // Prospective messages for each file group
   const getNextMessage = (i: number): string => {
-    if (i < 3) return 'Loading atmosphere textures...';
-    if (i < 9) return 'Loading basemap textures...';
-    if (i === 9) return 'Loading WASM decoder...';
-    if (i === 10) return 'Loading font atlas...';
-    if (i < 13) return 'Loading grid geometry...';
-    if (i === 13) return 'Loading logo...';
+    if (i < 2) return 'Loading atmosphere textures...';
+    if (i < 8) return 'Loading basemap textures...';
+    if (i === 8) return 'Loading WASM decoder...';
+    if (i === 9) return 'Loading font atlas...';
+    if (i < 12) return 'Loading grid geometry...';
+    if (i === 12) return 'Loading logo...';
     return 'Loading cities data...';
   };
 
@@ -84,16 +83,16 @@ export async function runAssetsPhase(
 
   await queueService.submitFileOrders(files, async (i, buffer) => {
     // Collect buffers
-    if (i < 3) lutBuffers.push(buffer);
-    else if (i < 9) basemapBuffers.push(buffer);
-    else if (i === 9) wasmBuffer = buffer;
-    else if (i === 10) fontBuffer = buffer;
-    else if (i === 11) gaussianLatsBuffer = buffer;
-    else if (i === 12) ringOffsetsBuffer = buffer;
-    else if (i === 13) logoBuffer = buffer;
-    else if (i === 14) citiesDataBuffer = buffer;
-    else if (i === 15) citiesFontBuffer = buffer;
-    else if (i === 16) citiesMetricsBuffer = buffer;
+    if (i < 2) lutBuffers.push(buffer);
+    else if (i < 8) basemapBuffers.push(buffer);
+    else if (i === 8) wasmBuffer = buffer;
+    else if (i === 9) fontBuffer = buffer;
+    else if (i === 10) gaussianLatsBuffer = buffer;
+    else if (i === 11) ringOffsetsBuffer = buffer;
+    else if (i === 12) logoBuffer = buffer;
+    else if (i === 13) citiesDataBuffer = buffer;
+    else if (i === 14) citiesFontBuffer = buffer;
+    else if (i === 15) citiesMetricsBuffer = buffer;
 
     // Announce next file (prospective)
     if (i + 1 < TOTAL) {
