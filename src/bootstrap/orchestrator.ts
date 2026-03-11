@@ -29,6 +29,7 @@ import {
   runActivatePhase,
 } from './phases';
 import type { ConfigService } from '../services/config-service';
+import { TestPerformanceService } from '../services/test-performance-service';
 
 /**
  * Run the full bootstrap sequence
@@ -175,6 +176,15 @@ async function runBootstrapInner(
 
   sendBeacon(services.configService!, 'ok', bootSeconds);
 
+  // Performance test service
+  const testPerfService = new TestPerformanceService(
+    foundation.optionsService,
+    services.auroraService
+  );
+  (services as any).testPerformanceService = testPerfService;
+  // Delay to let UI mount and perf panel render after bootstrap dialog closes
+  setTimeout(() => testPerfService.autoRun(), 1000);
+
   // Expose for debugging
   exposeDebugServices(services as ServiceContainer);
 }
@@ -226,6 +236,7 @@ export function exposeDebugServices(services: ServiceContainer): void {
     perfService: services.perfService,
     layerService: services.layerService,
     captureService: services.captureService,
+    testPerformanceService: services.testPerformanceService,
     camera: services.auroraService?.getCamera(),
     schema: { extractOptionsMeta, defaultOptions },
   };

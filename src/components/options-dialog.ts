@@ -609,6 +609,18 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
               m('button.btn.btn-danger', {
                 onclick: async () => { await nuke(); location.href = '/'; }
               }, 'Nuke'),
+            ]),
+            m('h3', { style: 'margin-top: 16px' }, 'Performance'),
+            m('span.hint', 'Run GPU benchmark across all layers and zoom levels.'),
+            m('div.actions', [
+              m('button.btn', {
+                onclick: () => {
+                  const event = new URLSearchParams(location.search).get('event');
+                  const params = new URLSearchParams({ perftest: '' });
+                  if (event) params.set('event', event);
+                  location.href = `/?${params}`;
+                }
+              }, 'Run GPU Test'),
             ])
           ]) : null,
 

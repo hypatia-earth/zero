@@ -35,6 +35,12 @@ export default defineConfig({
         ...devices['Desktop Firefox'],
         viewport: { width: 1280, height: 960 },
         deviceScaleFactor: 1,
+        launchOptions: {
+          firefoxUserPrefs: {
+            'dom.storageManager.prompt.testing': true,
+            'dom.storageManager.prompt.testing.allow': true,
+          },
+        },
       },
     },
   ],
