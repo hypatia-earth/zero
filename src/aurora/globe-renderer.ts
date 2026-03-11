@@ -690,6 +690,9 @@ export class GlobeRenderer {
     this.pressureLayer.setEnabled(pressureVisible);
 
     if (pressureVisible) {
+      const hasOpaqueGlobe = uniforms.layerOpacities[LAYER_EARTH]! > 0.01
+        || uniforms.layerOpacities[LAYER_TEMP]! > 0.01
+        || uniforms.layerOpacities[LAYER_SUN]! > 0.01;
       this.pressureLayer.updateUniforms({
         viewProj: uniforms.viewProj,
         eyePosition: [
@@ -703,6 +706,7 @@ export class GlobeRenderer {
           uniforms.sunDirection[2]!,
         ],
         opacity: uniforms.layerOpacities[LAYER_PRESSURE]!,
+        backfaceCull: hasOpaqueGlobe,
       }, uniforms.pressureColors);
     }
 
