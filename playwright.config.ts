@@ -29,6 +29,14 @@ export default defineConfig({
         } : {},
       },
     },
+    {
+      name: 'firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        viewport: { width: 1280, height: 960 },
+        deviceScaleFactor: 1,
+      },
+    },
   ],
   webServer: {
     command: 'npm run dev',

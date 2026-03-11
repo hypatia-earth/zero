@@ -40,6 +40,26 @@ export const BG: RGB = [22, 22, 22];
 // Zero Test API
 // ============================================================
 
+export interface PerfMetrics {
+  fps: number;
+  frameMs: number;
+  p1: number;
+  p2: number;
+  p3: number;
+  dropped: number;
+  globePx: number;
+}
+
+export interface PerfEnvironment {
+  browser: string;
+  viewport: { width: number; height: number };
+  devicePixelRatio: number;
+  renderScale: string;
+  fpsLimit: string;
+  canvasSize: { width: number; height: number };
+  gpu: string;
+}
+
 export interface ZeroTestAPI {
   SlotService: {
     /** Inject test data. For multi-slab layers (wind), pass array of Float32Arrays. */
@@ -67,6 +87,12 @@ export interface ZeroTestAPI {
   Canvas: {
     readPixel(x: number, y: number): Promise<Pixel>;
     readCenterPixel(): Promise<Pixel>;
+  };
+  PerfService: {
+    /** Read current perf panel metrics (60-frame averages) */
+    readMetrics(): Promise<PerfMetrics>;
+    /** Read environment info: browser, viewport, DPR, renderScale, fpsLimit, canvas size, GPU */
+    readEnvironment(): Promise<PerfEnvironment>;
   };
   Schema: {
     getMutations(skipPaths: string[]): Promise<Record<string, unknown>>;
@@ -222,6 +248,42 @@ export function createZeroAPI(page: Page): ZeroTestAPI {
           return { width: canvas.width, height: canvas.height };
         });
         return this.readPixel(Math.floor(width / 2), Math.floor(height / 2));
+      },
+    },
+
+    PerfService: {
+      async readMetrics(): Promise<PerfMetrics> {
+        return page.evaluate(() => {
+          const panel = document.querySelector('.perf.panel')!;
+          const text = (cls: string) => panel.querySelector(`.${cls}`)?.textContent?.trim() ?? '';
+          return {
+            fps: parseFloat(text('perf-fps')),
+            frameMs: parseFloat(text('perf-frame')),
+            p1: parseFloat(text('perf-pass1')),
+            p2: parseFloat(text('perf-pass2')),
+            p3: parseFloat(text('perf-pass3')),
+            dropped: parseFloat(text('perf-dropped')),
+            globePx: parseFloat(text('perf-globe')),
+          };
+        });
+      },
+
+      async readEnvironment(): Promise<PerfEnvironment> {
+        return page.evaluate(() => {
+          const h = (window as any).__hypatia;
+          const opts = h.optionsService.options;
+          const canvas = document.querySelector('canvas')!;
+          const adapter = h.auroraService.adapter ?? h.auroraService.gpu?.adapter;
+          return {
+            browser: navigator.userAgent,
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+            devicePixelRatio: window.devicePixelRatio,
+            renderScale: opts.debug.renderScale,
+            fpsLimit: opts.debug.fpsLimit,
+            canvasSize: { width: canvas.width, height: canvas.height },
+            gpu: (adapter as GPUAdapter)?.info?.device ?? 'unknown',
+          };
+        });
       },
     },
 
