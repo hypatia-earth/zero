@@ -206,6 +206,8 @@ export class TestPerformanceService {
     // Hide overlay during measurement to prevent browser throttling rAF
     if (this.overlay) this.overlay.style.display = 'none';
     this.setLayers(layers);
+    // Reset rolling averages so settle period fills with fresh samples only
+    this.auroraService.resetPerfStats();
     await this.settle();
     const metrics = this.readMetrics();
     if (this.overlay) this.overlay.style.display = '';

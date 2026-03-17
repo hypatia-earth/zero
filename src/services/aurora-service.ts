@@ -47,6 +47,9 @@ function createRollingAvg(size: number) {
       if (values.length === 0) return 0;
       return values.reduce((a, b) => a + b, 0) / values.length;
     },
+    clear() {
+      values.length = 0;
+    },
   };
 }
 
@@ -71,6 +74,7 @@ export interface AuroraService {
   send(msg: AuroraRequest, transfer?: Transferable[]): void;
   waitForFrameComplete(): Promise<void>;
   waitForExportFrame(): Promise<ImageBitmap>;
+  resetPerfStats(): void;
 }
 
 export function createAuroraService(
@@ -430,6 +434,15 @@ export function createAuroraService(
       return new Promise(resolve => {
         exportFrameResolve = resolve;
       });
+    },
+
+    resetPerfStats(): void {
+      frameIntervals.clear();
+      frameTimes.clear();
+      pass1Times.clear();
+      pass2Times.clear();
+      pass3Times.clear();
+      perfFrameCount = 0;
     },
 
     cleanup(): void {

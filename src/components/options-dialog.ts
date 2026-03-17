@@ -610,18 +610,17 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
                 onclick: async () => { await nuke(); location.href = '/'; }
               }, 'Nuke'),
             ]),
-            m('h3', { style: 'margin-top: 16px' }, 'Performance'),
-            m('span.hint', 'Run GPU benchmark across all layers and zoom levels.'),
-            m('div.actions', [
-              m('button.btn.btn-danger', {
-                onclick: () => {
-                  const event = new URLSearchParams(location.search).get('event');
-                  const params = new URLSearchParams({ perftest: '' });
-                  if (event) params.set('event', event);
-                  location.href = `/?${params}`;
-                }
-              }, 'Run GPU Test'),
-            ])
+            location.hostname === 'localhost' ? [
+              m('h3', { style: 'margin-top: 16px' }, 'Performance'),
+              m('span.hint', 'Run GPU benchmark across all layers and zoom levels.'),
+              m('div.actions', [
+                m('button.btn.btn-danger', {
+                  onclick: () => {
+                    location.href = '/?event=2026-03-01--2026-03-01&perftest';
+                  }
+                }, 'Run GPU Test'),
+              ]),
+            ] : null
           ]) : null,
 
           // Advanced group (only in global view)
