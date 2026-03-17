@@ -8,7 +8,7 @@ import path from 'path';
  * so Zero's discovery service can load archived weather events during development.
  */
 export function omArchive(): Plugin | null {
-  const archiveDir = path.resolve('../om-events');
+  const archiveDir = path.resolve('../blobs/om-events');
   if (!fs.existsSync(archiveDir)) return null;
 
   const events = fs.readdirSync(archiveDir).filter(name =>
