@@ -2,8 +2,8 @@
  * Precipitation: Backward Sum Analysis Skip
  *
  * Verifies that backward-sum params (precipitation) are correctly skipped
- * at analysis (T+0) timesteps, while non-backward-sum params (precipitation_type)
- * are fetched normally at those same timesteps.
+ * at analysis (T+0) timesteps. Both precipitation and snowfall_water_equivalent
+ * are backward-sum params and behave identically at analysis timesteps.
  *
  * Background:
  *   NWP models output precipitation as backward accumulation sums.
@@ -67,7 +67,7 @@ test.describe('precipitation backward sum', () => {
     expect(result.diffHours).toBe(6);
   });
 
-  test('precipitation uses fallback URL at analysis, same count as precipitation_type', async ({ page }) => {
+  test('both precip params use fallback URL at analysis timesteps', async ({ page }) => {
     await page.goto('/?layers=earth,rain');
     await waitForAppReady(page);
 
@@ -76,28 +76,22 @@ test.describe('precipitation backward sum', () => {
       const data: any[] = ts.timestepsData.ecmwf_ifs;
 
       // Find an analysis timestep and center the window on it.
-      // This guarantees the window includes at least one analysis timestep.
       const analysisEntry = data.find((t: any) => t.isAnalysis);
       if (!analysisEntry) return { error: 'no analysis timesteps in data' };
 
-      // Parse the analysis timestep to a Date for getWindowTasks
       const tsStr: string = analysisEntry.timestep;
       const date = tsStr.split('T');
       const time = new Date(`${date[0]}T${date[1].slice(0, 2)}:${date[1].slice(2)}:00Z`);
 
-      // Build tasks centered on an analysis timestep
       const { tasks } = ts.getWindowTasks(time, 16, ['rain']);
 
       const precipTasks = tasks.filter((t: any) => t.modelParam.param === 'precipitation');
-      const ptypeTasks = tasks.filter((t: any) => t.modelParam.param === 'precipitation_type');
+      const snowTasks = tasks.filter((t: any) => t.modelParam.param === 'snowfall_water_equivalent');
 
-      // At the analysis timestep: precipitation should use fallbackUrl (previous run),
-      // precipitation_type should use the normal URL (same run)
       const centeredTs = analysisEntry.timestep;
       const precipAtCentered = precipTasks.find((t: any) => t.timestep === centeredTs);
-      const ptypeAtCentered = ptypeTasks.find((t: any) => t.timestep === centeredTs);
+      const snowAtCentered = snowTasks.find((t: any) => t.timestep === centeredTs);
 
-      // The fallback URL should point to a different run (previous run prefix)
       const normalUrl = analysisEntry.url;
       const fallbackUrl = analysisEntry.fallbackUrl;
 
@@ -106,27 +100,24 @@ test.describe('precipitation backward sum', () => {
         hasFallbackUrl: !!fallbackUrl,
         fallbackDiffersFromNormal: fallbackUrl !== normalUrl,
         precipHasTask: !!precipAtCentered,
-        ptypeHasTask: !!ptypeAtCentered,
+        snowHasTask: !!snowAtCentered,
         precipUsesRemappedUrl: precipAtCentered?.url === fallbackUrl,
-        ptypeUsesNormalUrl: ptypeAtCentered?.url === normalUrl,
+        snowUsesRemappedUrl: snowAtCentered?.url === fallbackUrl,
         precipTaskCount: precipTasks.length,
-        ptypeTaskCount: ptypeTasks.length,
+        snowTaskCount: snowTasks.length,
       };
     });
 
-    // Must have analysis timesteps to test
     expect(result).not.toHaveProperty('error');
-    // Fallback URL exists and differs from normal URL
     expect(result.hasFallbackUrl).toBe(true);
     expect(result.fallbackDiffersFromNormal).toBe(true);
-    // Both params have tasks at the analysis timestep (no skip)
+    // Both backward-sum params use fallback URL at analysis
     expect(result.precipHasTask).toBe(true);
-    expect(result.ptypeHasTask).toBe(true);
-    // Precipitation uses remapped URL, precipitation_type uses normal
+    expect(result.snowHasTask).toBe(true);
     expect(result.precipUsesRemappedUrl).toBe(true);
-    expect(result.ptypeUsesNormalUrl).toBe(true);
-    // Same task count — no gaps
-    expect(result.precipTaskCount).toBe(result.ptypeTaskCount);
+    expect(result.snowUsesRemappedUrl).toBe(true);
+    // Same task count — both are backward-sum
+    expect(result.precipTaskCount).toBe(result.snowTaskCount);
   });
 
   test('backwardSum flag set on precipitation param metadata', async ({ page }) => {

@@ -48,7 +48,7 @@ function getSamplerName(param: string): string {
 const PARAM_MODULE_MAP: Record<string, string> = {
   cloud_cover: 'cloud_cover',
   precipitation: 'precipitation',
-  precipitation_type: 'precipitation_type',
+  snowfall_water_equivalent: 'snowfall_water_equivalent',
   pressure_msl: 'pressure_msl',
   temperature_2m: 'temperature_2m',
   wind_u_component_10m: 'wind_u_10m',
@@ -60,7 +60,7 @@ const PARAM_MODULE_MAP: Record<string, string> = {
 /** Params whose samplers take (lat, lon) instead of (cell: u32) — advected or GFS 0.25° */
 const LATLON_SAMPLER_PARAMS = new Set([
   'precipitation',
-  'precipitation_type',
+  'snowfall_water_equivalent',
   'wind_u_component_1000hPa',
   'wind_v_component_1000hPa',
 ]);

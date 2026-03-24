@@ -200,7 +200,7 @@ function writeParamSizes(): void {
 /** Pack pairs: secondary → primary. Buffer layout: [primary_t0, secondary_t0, primary_t1, secondary_t1] */
 const PACK_PAIRS: Record<string, string> = {
   wind_v_component_1000hPa: 'wind_u_component_1000hPa',
-  precipitation_type: 'precipitation',
+  snowfall_water_equivalent: 'precipitation',
 };
 
 /** Create/update combined buffer/texture for a param and bind to renderer via GPU copy */

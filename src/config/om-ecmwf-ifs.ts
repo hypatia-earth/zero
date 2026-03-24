@@ -39,11 +39,11 @@ export const ECMWF_IFS = {
       description: 'Total precipitation (backward accumulation)',
       published: true, layers: ['rain'], backwardSum: true,
     },
-    precipitation_type: {
-      label: 'Precip Type', unit: 'WMO code', range: [0, 12] as [number, number],
-      palette: 'rain-frozen-intensity' as PaletteId, sizeEstimate: 800_000,
-      description: 'WMO precipitation type code (rain, snow, freezing rain, etc.)',
-      published: true, layers: ['rain'], categorical: true,
+    snowfall_water_equivalent: {
+      label: 'Snowfall', unit: 'mm', range: [0, 50] as [number, number],
+      palette: 'rain-frozen-intensity' as PaletteId, sizeEstimate: 200_000,
+      description: 'Snowfall water equivalent (backward accumulation)',
+      published: true, layers: ['rain'], backwardSum: true,
     },
     cloud_cover: {
       label: 'Cloud Cover', unit: '%', range: [0, 100] as [number, number],

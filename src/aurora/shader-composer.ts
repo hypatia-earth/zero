@@ -42,7 +42,7 @@ interface ParamRegistryEntry { bindingSlot: number; bindingType?: 'storage' | 't
 const PARAM_REGISTRY: Record<string, ParamRegistryEntry> = {
   temperature_2m:              { bindingSlot: 50, model: 'ecmwf_ifs',   categorical: false },
   precipitation:               { bindingSlot: 51, model: 'ecmwf_ifs',   categorical: false },
-  precipitation_type:          { bindingSlot: 51, model: 'ecmwf_ifs',   categorical: true, packWith: 'precipitation' },
+  snowfall_water_equivalent:   { bindingSlot: 51, model: 'ecmwf_ifs',   categorical: false, packWith: 'precipitation' },
   wind_u_component_1000hPa:    { bindingSlot: 53, model: 'ncep_gfs025', categorical: false },
   wind_v_component_1000hPa:    { bindingSlot: 53, model: 'ncep_gfs025', categorical: false, packWith: 'wind_u_component_1000hPa' },
   cloud_cover:                 { bindingSlot: 55, model: 'ecmwf_ifs',   categorical: false },

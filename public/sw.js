@@ -26,7 +26,7 @@ const FUTURE_MAX_AGE = 7 * 24 * 3600 * 1000; // 7 days in ms (data immutable per
 // Valid param names for caching — must match published params in src/config/param-metadata.ts
 const VALID_PARAMS = [
   'temperature_2m',
-  'precipitation_type',
+  'snowfall_water_equivalent',
   'cloud_cover',
   'wind_u_component_10m',
   'wind_v_component_10m',
