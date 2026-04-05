@@ -8,20 +8,20 @@ export type Sample = { timestamp: number; bytes: number };
  * Calculate bytes/sec from time-windowed samples
  * Requires at least 2 samples and 0.5s duration for stable measurement
  */
-export function calcBandwidth(samples: Sample[], windowMs = 10000): number | undefined {
+export function calcBandwidth(samples: Sample[], windowMs = 10000): number {
   const cutoff = performance.now() - windowMs;
   const recent = samples.filter(s => s.timestamp >= cutoff);
-  if (recent.length < 2) return undefined;
+  if (recent.length < 2) return NaN;
   const duration = (performance.now() - recent[0]!.timestamp) / 1000;
-  if (duration < 0.5) return undefined;
+  if (duration < 0.5) return NaN;
   return recent.reduce((sum, s) => sum + s.bytes, 0) / duration;
 }
 
 /**
  * Calculate ETA from remaining bytes and rate
  */
-export function calcEta(bytesRemaining: number, bytesPerSec?: number): number | undefined {
-  return bytesPerSec ? bytesRemaining / bytesPerSec : undefined;
+export function calcEta(bytesRemaining: number, bytesPerSec: number): number {
+  return bytesPerSec ? bytesRemaining / bytesPerSec : NaN;
 }
 
 /**

@@ -96,7 +96,8 @@ async function runBootstrapInner(
     services.optionsService!,
     services.stateService!,
     services.timestepService,
-    services.layerService!
+    services.layerService!,
+    services.perfService!
   );
   const assets = await runAssetsPhase(services.queueService, services.capabilitiesService!, progress);
 

@@ -15,20 +15,21 @@ const DEBUG = false;
 const formatStats = (s: QueueStats) =>
   `${(s.bytesQueued / 1024 / 1024).toFixed(1)}MB queued, ` +
   `${s.bytesPerSec ? (s.bytesPerSec / 1024 / 1024).toFixed(1) : '?'}MB/s, ` +
-  `ETA ${s.etaSeconds?.toFixed(0) ?? '?'}s`;  // QC-OK: ETA unknown
+  `ETA ${isNaN(s.etaSeconds) ? '?' : s.etaSeconds.toFixed(0)}s`;
 
 export class QueueStatsTracker {
   readonly stats = signal<QueueStats>({
     bytesQueued: 0,
     bytesCompleted: 0,
-    bytesPerSec: undefined,
-    etaSeconds: undefined,
+    bytesPerSec: NaN,
+    etaSeconds: NaN,
     itemsQueued: 0,
+    slowInFlight: 0,
     status: 'idle',
   });
 
   // Bandwidth measurement
-  private samples: Sample[] = [];
+  private _samples: Sample[] = [];
 
   // Compression ratio learning (rolling average)
   private compressionRatio = 1.0;
@@ -52,8 +53,8 @@ export class QueueStatsTracker {
     if (this.batchStartTime === 0) {
       this.batchStartTime = performance.now();
     }
-    this.samples.push({ timestamp: performance.now(), bytes });
-    this.samples = pruneSamples(this.samples);
+    this._samples.push({ timestamp: performance.now(), bytes });
+    this._samples = pruneSamples(this._samples);
   }
 
   /** Learn compression ratio from completed download */
@@ -70,9 +71,10 @@ export class QueueStatsTracker {
     inFlightCount: number,
     inFlightBytes: number,
     itemsQueued: number,
+    slowInFlight: number,
     onBatchComplete?: () => void
   ): void {
-    const bytesPerSec = calcBandwidth(this.samples);
+    const bytesPerSec = calcBandwidth(this._samples);
 
     // Estimate remaining bytes from old path (submitTimestepOrders)
     const oldPathPending = this.pendingExpectedBytes * this.compressionRatio;
@@ -97,6 +99,7 @@ export class QueueStatsTracker {
       bytesPerSec,
       etaSeconds: calcEta(bytesQueued, bytesPerSec),
       itemsQueued,
+      slowInFlight,
       status: newStatus,
     };
 
@@ -125,7 +128,7 @@ export class QueueStatsTracker {
 
   /** Full reset (for clearAllPending) */
   reset(): void {
-    this.samples = [];
+    this._samples = [];
     this.compressionRatio = 1.0;
     this.compressionSamples = 0;
     this.pendingExpectedBytes = 0;
@@ -137,9 +140,10 @@ export class QueueStatsTracker {
     this.stats.value = {
       bytesQueued: 0,
       bytesCompleted: 0,
-      bytesPerSec: undefined,
-      etaSeconds: undefined,
+      bytesPerSec: NaN,
+      etaSeconds: NaN,
       itemsQueued: 0,
+      slowInFlight: 0,
       status: 'idle',
     };
   }

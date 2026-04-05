@@ -120,9 +120,10 @@ export function createQueueService(
   optionsService: OptionsService,
   stateService: StateService,
   timestepService: TimestepService,
-  layerService: LayerService
+  layerService: LayerService,
+  perfService: PerfService
 ): QueueService {
-  return new QueueService(omService, optionsService, stateService, timestepService, layerService);
+  return new QueueService(omService, optionsService, stateService, timestepService, layerService, perfService);
 }
 
 // AuroraService is created via createAuroraService from aurora-service.ts

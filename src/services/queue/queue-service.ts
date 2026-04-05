@@ -11,11 +11,13 @@ import type { FileOrder, IQueueService, TimestepOrder, OmSlice, QueueTask, TLaye
 import { fetchStreaming } from '../../utils/fetch';
 import { sortByTimestep } from './sorter';
 import { QueueStatsTracker } from './stats';
+import { AdaptiveConcurrency } from './adaptive-concurrency';
 import type { OmService } from './om-service';
 import type { OptionsService } from '../options-service';
 import type { StateService } from '../state-service';
 import type { TimestepService } from '../timestep/timestep-service';
 import type { LayerService } from '../layer/layer-service';
+import type { PerfService } from '../perf-service';
 import type { SlotService } from '../slot-service';
 
 const DEBUG = false;
@@ -43,6 +45,7 @@ interface InFlightTask {
 export class QueueService implements IQueueService {
   // Stats tracking (bandwidth, ETA, compression learning)
   private readonly statsTracker = new QueueStatsTracker();
+  private readonly adaptive: AdaptiveConcurrency;
   readonly queueStats = this.statsTracker.stats;
 
   /** When true, reactive effect skips — no new downloads or evictions */
@@ -85,8 +88,11 @@ export class QueueService implements IQueueService {
     private optionsService: OptionsService,
     private stateService: StateService,
     private timestepService: TimestepService,
-    private layerService: LayerService
-  ) {}
+    private layerService: LayerService,
+    private perfService: PerfService
+  ) {
+    this.adaptive = new AdaptiveConcurrency(optionsService);
+  }
 
   /** Set SlotService reference (avoids circular dependency) */
   setSlotService(ss: SlotService): void {
@@ -303,12 +309,19 @@ export class QueueService implements IQueueService {
       .reduce((sum, { task }) => sum + (task.sizeEstimate || 0), 0);
     const itemsQueued = this.taskQueue.length + this.inFlight.size
       + this.timestepQueue.length + (this.currentlyFetching ? 1 : 0);
+    let slowInFlight = 0;
+    for (const { task } of this.inFlight.values()) {
+      if (!task.isFast) slowInFlight++;
+    }
+    const workers = parseInt(this.optionsService.options.value.gpu.workerPoolSize, 10);
+    this.perfService.setPool(slowInFlight, workers);
     this.statsTracker.update(
       this.taskQueue,
       this.inFlight.size,
       inFlightBytes,
       itemsQueued,
-      () => this.refreshAllCacheStates()
+      slowInFlight,
+      () => { this.adaptive.reset(); this.refreshAllCacheStates(); }
     );
   }
 
@@ -400,7 +413,7 @@ export class QueueService implements IQueueService {
       if (task.isFast) {
         // Fast tasks always start
         this.startTask(task);
-      } else if (slowInFlight < 2) {
+      } else if (slowInFlight < this.adaptive.getMaxSlow()) {
         // Slow task, network slot available
         this.startTask(task);
         slowInFlight++;
@@ -445,6 +458,7 @@ export class QueueService implements IQueueService {
       },
       (bytes) => {
         // Progress callback - update bandwidth stats
+        if (!task.isFast) this.adaptive.onChunk(bytes);
         this.onChunk(bytes);
       },
       abortController.signal
@@ -465,7 +479,13 @@ export class QueueService implements IQueueService {
 
   /** Handle task completion */
   private onTaskComplete(key: string): void {
+    const completed = this.inFlight.get(key);
     this.inFlight.delete(key);
+
+    // Feed adaptive concurrency controller
+    if (completed && !completed.task.isFast) {
+      this.adaptive.onSlowTaskComplete();
+    }
 
     // Process more from queue
     const params = this.qsParams.value;
@@ -519,5 +539,7 @@ export class QueueService implements IQueueService {
     this.taskQueue = [];
 
     this.statsTracker.reset();
+    this.adaptive.reset();
+    this.adaptive.dispose();
   }
 }

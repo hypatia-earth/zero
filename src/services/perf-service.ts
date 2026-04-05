@@ -82,8 +82,8 @@ export class PerfService {
     if (this.els!.slots) this.els!.slots.textContent = `${count}`;
   }
 
-  setPool(count: number): void {
+  setPool(downloads: number, workers: number): void {
     if (!this.ensureElements()) return;
-    if (this.els!.pool) this.els!.pool.textContent = `${count}`;
+    if (this.els!.pool) this.els!.pool.textContent = `${downloads}/${workers}`;
   }
 }

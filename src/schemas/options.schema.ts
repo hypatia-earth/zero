@@ -270,6 +270,34 @@ export const optionsSchema = z.object({
         ],
       }
     ),
+    minDownloads: opt(
+      z.number().min(2).max(8).default(4),
+      {
+        label: 'Min parallel downloads',
+        description: 'Starting concurrent network requests',
+        group: 'performance',
+        filter: ['global', 'gpu', 'queue'],
+        order: 4.1,
+        control: 'slider',
+        min: 2,
+        max: 8,
+        step: 1,
+      }
+    ),
+    maxDownloads: opt(
+      z.number().min(8).max(16).default(12),
+      {
+        label: 'Max parallel downloads',
+        description: 'Upper limit for adaptive concurrency',
+        group: 'performance',
+        filter: ['global', 'gpu', 'queue'],
+        order: 4.2,
+        control: 'slider',
+        min: 8,
+        max: 16,
+        step: 1,
+      }
+    ),
   }),
 
   // ----------------------------------------------------------
@@ -1297,7 +1325,7 @@ export type ZeroOptions = z.infer<typeof optionsSchema>;
 export const defaultOptions: ZeroOptions = {
   _version: 1,
   interface: { autocloseModal: true },
-  gpu: { timeslotsPerLayer: '4', showGpuStats: false, workerPoolSize: '4' },
+  gpu: { timeslotsPerLayer: '4', showGpuStats: false, workerPoolSize: '4', minDownloads: 4, maxDownloads: 12 },
   viewport: {
     physicsModel: 'inertia',
     mass: 5,

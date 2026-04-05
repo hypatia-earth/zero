@@ -74,9 +74,10 @@ export interface FileOrder {
 export interface QueueStats {
   bytesQueued: number;
   bytesCompleted: number;
-  bytesPerSec: number | undefined;
-  etaSeconds: number | undefined;
+  bytesPerSec: number;
+  etaSeconds: number;
   itemsQueued: number;
+  slowInFlight: number;
   status: 'idle' | 'downloading';
 }
 

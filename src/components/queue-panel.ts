@@ -25,7 +25,7 @@ export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = () => {
   const update = throttle((
     dom: HTMLElement,
     queuedBytes: number,
-    etaSeconds: number | undefined,
+    etaSeconds: number,
     gpuAllocated: number | undefined,
     gpuCapacity: number | undefined,
   ) => {
@@ -40,7 +40,7 @@ export const QueuePanel: m.ClosureComponent<QueuePanelAttrs> = () => {
       dlInfo.textContent = 'idle';
     } else {
       let eta: string;
-      if (etaSeconds === undefined) {
+      if (isNaN(etaSeconds)) {
         eta = '?s';
       } else if (etaSeconds < 60) {
         eta = `${Math.round(etaSeconds)}s`;
