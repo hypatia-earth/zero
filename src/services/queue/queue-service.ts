@@ -36,10 +36,18 @@ interface QueuedTimestepOrder {
   onPreflight: (actualBytes: number) => void;
 }
 
-/** In-flight task with abort controller */
+/** In-flight task with abort controller (reactive path) */
 interface InFlightTask {
   task: QueueTask;
   abortController: AbortController;
+}
+
+/** In-flight bootstrap-path record: owns per-task bytes + abort. */
+interface BootstrapInFlight {
+  queued: QueuedTimestepOrder;
+  abort: AbortController;
+  expectedBytes: number;   // actual size from preflight (0 until preflight returns)
+  actualBytes: number;     // accumulated from onChunk
 }
 
 export class QueueService implements IQueueService {
@@ -51,13 +59,21 @@ export class QueueService implements IQueueService {
   /** When true, reactive effect skips — no new downloads or evictions */
   readonly paused = signal(false);
 
-  // Timestep queue (replaceable)
+  // Bootstrap path: imperative, ordered, awaitable.
+  // Used by slotService.initialize() to preload priority timesteps before the
+  // reactive effect takes over (initReactive's isFirstRun guard suppresses the
+  // first signal firing). Entry point: submitTimestepOrders().
   private timestepQueue: QueuedTimestepOrder[] = [];
-  private currentlyFetching: TimestepOrder | null = null;
-  private currentAbortController: AbortController | null = null;
+  private bootstrapInFlight: Map<string, BootstrapInFlight> = new Map(); // key: `${param}:${timestep}`
   private processingPromise: Promise<void> | null = null;
 
-  // Reactive queue (Phase 3)
+  // File-order path (assets phase): sequential, one active fetch at a time.
+  private fileActiveExpected = 0;
+  private fileActiveActual = 0;
+
+  // Reactive path (Phase 3): signal-driven, deduplicated, window-scoped.
+  // Responds to time/layer/slot changes via onParamChange; aborts tasks that
+  // fall outside the current data window. Entry point: the effect in initReactive().
   private taskQueue: QueueTask[] = [];
   private inFlight: Map<string, InFlightTask> = new Map(); // key: `${param}:${timestep}:${slabIndex}`
   private slotService: SlotService | null = null;
@@ -158,29 +174,28 @@ export class QueueService implements IQueueService {
   }
 
   /**
-   * Submit timestep orders for processing via OmService
-   * Replaces any pending orders with new ones (current fetch continues)
-   * Orders are processed in array order (caller should sort by priority)
-   * No batched preflight - uses size estimates for instant queue start
+   * Submit timestep orders for processing via OmService.
+   * Bootstrap path: parallel fetches (up to minDownloads), map-tracked in-flight.
+   * Replaces pending orders for this param; in-flight fetches that aren't in the
+   * new order set are aborted. Orders processed in array order (caller sorts).
+   * No batched preflight - uses size estimates for instant queue start.
    */
   async submitTimestepOrders(
     orders: TimestepOrder[],
     onSlice: (order: TimestepOrder, slice: OmSlice) => void | Promise<void>,
     onPreflight?: (order: TimestepOrder, actualBytes: number) => void
   ): Promise<void> {
-    // Check if current fetch should be aborted (not in new orders)
-    if (this.currentlyFetching && this.currentAbortController) {
-      const keepCurrent = orders.some(o => o.timestep === this.currentlyFetching!.timestep);
-      if (!keepCurrent) {
-        console.log(`[Queue] Aborting: ${this.currentlyFetching.timestep.slice(5, 13)}`);
-        this.currentAbortController.abort();
+    // Abort in-flight fetches whose (param, timestep) isn't in the new order set.
+    const keepKeys = new Set(orders.map(o => `${o.param}:${o.timestep}`));
+    for (const [key, rec] of this.bootstrapInFlight) {
+      if (!keepKeys.has(key)) {
+        console.log(`[Queue] Aborting: ${rec.queued.order.timestep.slice(5, 13)} (${rec.queued.order.param})`);
+        rec.abort.abort();
       }
     }
 
-    // Filter out the currently fetching order (if same param AND timestep in new orders)
-    const newOrders = this.currentlyFetching
-      ? orders.filter(o => !(o.timestep === this.currentlyFetching!.timestep && o.param === this.currentlyFetching!.param))
-      : orders;
+    // Drop orders that are already in-flight (any slot) so we don't re-enqueue them.
+    const newOrders = orders.filter(o => !this.bootstrapInFlight.has(`${o.param}:${o.timestep}`));
 
     // Get param(s) being submitted - keep other params' pending orders
     const submittedParams = new Set(newOrders.map(o => o.param));
@@ -196,10 +211,10 @@ export class QueueService implements IQueueService {
         estimatedBytes,
         onSlice,
         onPreflight: (actualBytes: number) => {
-          // Transfer from pending to active tracking
+          // Transfer this order's share from pending to active tracking
           this.statsTracker.pendingExpectedBytes -= estimatedBytes;
-          this.statsTracker.activeExpectedBytes = actualBytes;
-          this.statsTracker.activeActualBytes = 0;
+          const rec = this.bootstrapInFlight.get(`${order.param}:${order.timestep}`);
+          if (rec) rec.expectedBytes = actualBytes;
           this.updateStats();
           onPreflight?.(order, actualBytes);
         },
@@ -236,43 +251,68 @@ export class QueueService implements IQueueService {
     return this.processingPromise;
   }
 
-  /** Process timestep queue sequentially */
+  /** Process timestep queue with parallel downloads (up to minDownloads concurrency).
+   *  Per task: own abort + byte record, learn compression on completion, isolate errors. */
   private async processTimestepQueue(): Promise<void> {
-    while (this.timestepQueue.length > 0) {
+    // Effective concurrency = min(minDownloads, workerPoolSize): the worker pool
+    // is an implicit ceiling because every fetch needs a decode worker, and
+    // extra fetches stall inside WorkerPool waiting for one.
+    const concurrency = this.optionsService.options.value.gpu.minDownloads;
+    const running = new Set<Promise<void>>();
+
+    const startNext = (): void => {
+      if (this.timestepQueue.length === 0) return;
       const next = this.timestepQueue.shift()!;
-      this.currentlyFetching = next.order;
-      this.currentAbortController = new AbortController();
+      const order = next.order;
+      const key = `${order.param}:${order.timestep}`;
+      const rec: BootstrapInFlight = {
+        queued: next,
+        abort: new AbortController(),
+        expectedBytes: 0,
+        actualBytes: 0,
+      };
+      this.bootstrapInFlight.set(key, rec);
 
-      const omParam = next.order.modelParam.param;
-
-      try {
-        await this.omService.fetch(
-          next.order.url,
-          omParam,
-          (info) => {
-            // Preflight done - report actual size for ETA correction
-            next.onPreflight(info.totalBytes);
-          },
-          async (slice) => { await next.onSlice(next.order, slice); },
-          (bytes) => {
-            this.onChunk(bytes);
-          },
-          this.currentAbortController.signal
-        );
-      } catch (err) {
-        // Ignore abort errors, rethrow others
-        if (err instanceof Error && err.name === 'AbortError') {
-          console.log(`[Queue] Aborted: ${next.order.timestep.slice(5, 13)}`);
-        } else {
-          throw err;
+      const task = (async () => {
+        try {
+          await this.omService.fetch(
+            order.url,
+            order.modelParam.param,
+            (info) => { next.onPreflight(info.totalBytes); },
+            async (slice) => { await next.onSlice(order, slice); },
+            (bytes) => {
+              rec.actualBytes += bytes;
+              this.onChunk(bytes);
+            },
+            rec.abort.signal,
+          );
+          // Successful completion — feed compression learning with this task's actuals.
+          this.statsTracker.learnCompressionRatio(rec.expectedBytes, rec.actualBytes);
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') {
+            console.log(`[Queue] Aborted: ${fmt(order.timestep)} (${P(order.param)})`);
+          } else {
+            // Isolate error: log and move on so siblings keep running.
+            console.error(`[Queue] Error fetching ${P(order.param)} ${fmt(order.timestep)}:`, err);
+          }
+        } finally {
+          this.bootstrapInFlight.delete(key);
         }
-      }
+      })();
 
-      // Reset active tracking
-      this.statsTracker.activeExpectedBytes = 0;
-      this.statsTracker.activeActualBytes = 0;
-      this.currentlyFetching = null;
-      this.currentAbortController = null;
+      running.add(task);
+      task.then(() => {
+        running.delete(task);
+        startNext();
+      });
+    };
+
+    // Fill initial slots
+    for (let i = 0; i < concurrency; i++) startNext();
+
+    // Wait for all tasks (including ones spawned via startNext chaining) to finish.
+    while (running.size > 0) {
+      await Promise.race(running);
     }
 
     this.processingPromise = null;
@@ -282,19 +322,22 @@ export class QueueService implements IQueueService {
   private async fetchWithProgress(order: FileOrder): Promise<ArrayBuffer> {
     // Start tracking this file
     this.statsTracker.pendingExpectedBytes -= order.size;
-    this.statsTracker.activeExpectedBytes = order.size;
-    this.statsTracker.activeActualBytes = 0;
+    this.fileActiveExpected = order.size;
+    this.fileActiveActual = 0;
 
     const buffer = await fetchStreaming(
       order.url,
       {},
-      (bytes) => this.onChunk(bytes)
+      (bytes) => {
+        this.fileActiveActual += bytes;
+        this.onChunk(bytes);
+      },
     );
 
     // File complete - learn compression ratio
-    this.statsTracker.learnCompressionRatio(this.statsTracker.activeExpectedBytes, this.statsTracker.activeActualBytes);
-    this.statsTracker.activeExpectedBytes = 0;
-    this.statsTracker.activeActualBytes = 0;
+    this.statsTracker.learnCompressionRatio(this.fileActiveExpected, this.fileActiveActual);
+    this.fileActiveExpected = 0;
+    this.fileActiveActual = 0;
 
     return buffer;
   }
@@ -308,10 +351,17 @@ export class QueueService implements IQueueService {
     const inFlightBytes = Array.from(this.inFlight.values())
       .reduce((sum, { task }) => sum + (task.sizeEstimate || 0), 0);
     const itemsQueued = this.taskQueue.length + this.inFlight.size
-      + this.timestepQueue.length + (this.currentlyFetching ? 1 : 0);
+      + this.timestepQueue.length + this.bootstrapInFlight.size;
     let slowInFlight = 0;
     for (const { task } of this.inFlight.values()) {
       if (!task.isFast) slowInFlight++;
+    }
+    // Aggregate old-path active bytes across bootstrap map + file fetch scalars.
+    let oldActiveExpected = this.fileActiveExpected;
+    let oldActiveActual = this.fileActiveActual;
+    for (const rec of this.bootstrapInFlight.values()) {
+      oldActiveExpected += rec.expectedBytes;
+      oldActiveActual += rec.actualBytes;
     }
     const workers = parseInt(this.optionsService.options.value.gpu.workerPoolSize, 10);
     this.perfService.setPool(slowInFlight, workers);
@@ -321,7 +371,9 @@ export class QueueService implements IQueueService {
       inFlightBytes,
       itemsQueued,
       slowInFlight,
-      () => { this.adaptive.reset(); this.refreshAllCacheStates(); }
+      oldActiveExpected,
+      oldActiveActual,
+      () => { this.adaptive.reset(); this.refreshAllCacheStates(); },
     );
   }
 

@@ -362,10 +362,10 @@ export class SlotService {
     }
 
     const total = allOrders.length;
-    let orderIndex = 0;
+    let completed = 0;
 
-    if (onProgress && allOrders.length > 0) {
-      await onProgress(allOrders[0]!.param, 0, total);
+    if (onProgress && total > 0) {
+      await onProgress(`Loading weather data 0/${total}`, 0, total);
     }
 
     await this.queueService.submitTimestepOrders(
@@ -386,10 +386,9 @@ export class SlotService {
             ps.markLoaded(order.timestep, result.slotIndex, dataLength);
           }
 
-          orderIndex++;
-          const nextOrder = allOrders[orderIndex];
-          if (nextOrder && onProgress) {
-            await onProgress(nextOrder.param, orderIndex, total);
+          completed++;
+          if (onProgress) {
+            await onProgress(`Loading weather data ${completed}/${total}`, completed, total);
           }
         }
       },

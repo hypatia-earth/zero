@@ -35,19 +35,17 @@ export class QueueStatsTracker {
   private compressionRatio = 1.0;
   private compressionSamples = 0;
 
-  // Active download tracking (old path)
+  // Pending estimate for the bootstrap path (sum of sizeEstimates in timestepQueue).
+  // Caller (queue-service) writes this; stats only reads.
   pendingExpectedBytes = 0;
-  activeExpectedBytes = 0;
-  activeActualBytes = 0;
   private totalBytesCompleted = 0;
 
   // Batch stats (reset when new orders arrive after idle)
   private batchStartTime = 0;
   private batchBytesCompleted = 0;
 
-  /** Called for each chunk received */
+  /** Called for each chunk received (any path) — bandwidth + totals. */
   onChunk(bytes: number): void {
-    this.activeActualBytes += bytes;
     this.totalBytesCompleted += bytes;
     this.batchBytesCompleted += bytes;
     if (this.batchStartTime === 0) {
@@ -65,20 +63,24 @@ export class QueueStatsTracker {
     this.compressionRatio += (ratio - this.compressionRatio) / this.compressionSamples;
   }
 
-  /** Update stats signal with current queue state */
+  /** Update stats signal with current queue state.
+   * oldActiveExpected/oldActiveActual are caller-supplied aggregates across all
+   * in-flight bootstrap/file fetches (queue-service owns the per-task records). */
   update(
     taskQueue: QueueTask[],
     inFlightCount: number,
     inFlightBytes: number,
     itemsQueued: number,
     slowInFlight: number,
+    oldActiveExpected: number,
+    oldActiveActual: number,
     onBatchComplete?: () => void
   ): void {
     const bytesPerSec = calcBandwidth(this._samples);
 
-    // Estimate remaining bytes from old path (submitTimestepOrders)
+    // Estimate remaining bytes from old path (submitTimestepOrders + file orders)
     const oldPathPending = this.pendingExpectedBytes * this.compressionRatio;
-    const oldPathActive = (this.activeExpectedBytes * this.compressionRatio) - this.activeActualBytes;
+    const oldPathActive = (oldActiveExpected * this.compressionRatio) - oldActiveActual;
 
     // Estimate remaining bytes from reactive path (taskQueue + inFlight)
     const queuedBytes = taskQueue.reduce((sum, t) => sum + (t.sizeEstimate || 0), 0);
@@ -119,21 +121,12 @@ export class QueueStatsTracker {
     DEBUG && console.log('[Queue]', formatStats(this.stats.value));
   }
 
-  /** Reset active download state after file complete */
-  resetActiveDownload(): void {
-    this.learnCompressionRatio(this.activeExpectedBytes, this.activeActualBytes);
-    this.activeExpectedBytes = 0;
-    this.activeActualBytes = 0;
-  }
-
   /** Full reset (for clearAllPending) */
   reset(): void {
     this._samples = [];
     this.compressionRatio = 1.0;
     this.compressionSamples = 0;
     this.pendingExpectedBytes = 0;
-    this.activeExpectedBytes = 0;
-    this.activeActualBytes = 0;
     this.totalBytesCompleted = 0;
     this.batchStartTime = 0;
     this.batchBytesCompleted = 0;
