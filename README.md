@@ -23,6 +23,10 @@ This is architectural independence: the tool works offline once loaded, can be h
 
 ## Changelog
 
+### 2026-04-22
+- **Adaptive parallel downloads** - queue probes for the optimal number of concurrent network fetches, finding the sweet spot between bandwidth saturation and connection overhead. Perf panel `pool X/Y` shows live slow-task count. Min/Max download options configurable
+- **Faster initial load** - bootstrap now fetches priority timesteps in parallel (up to Min Downloads, default 4) instead of sequentially; in-flight fetches properly abort when you scrub time mid-load
+
 ### 2026-03-24
 - **Precipitation param migration** - replaced `precipitation_type` (WMO codes) with `snowfall_water_equivalent` for rain/snow discrimination. Snow fraction derived from snowfall/precipitation ratio with threshold selection (no shape blending)
 
