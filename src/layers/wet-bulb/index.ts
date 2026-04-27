@@ -1,6 +1,6 @@
 /**
  * Wet Bulb Layer — Stub validating mixed storage+texture param access
- * Reads temperature_2m (storage) + dewpoint_2m (texture) in one blend function.
+ * Reads temperature_2m (storage) + dew_point_2m (texture) in one blend function.
  * Dev-only layer (not in BUILT_IN_LAYERS).
  */
 
@@ -13,7 +13,7 @@ export const layer = defineLayer('wet-bulb' as TLayer,
   withUI('Wet Bulb', 'Wet Bulb', 'weather'),
   withParams(
     { model: 'ecmwf_ifs', param: 'temperature_2m' },
-    { model: 'ecmwf_ifs', param: 'dewpoint_2m' },
+    { model: 'ecmwf_ifs', param: 'dew_point_2m' },
   ),
   withPalettes('simple-gradient'),
   withBlend('blendWetBulb'),

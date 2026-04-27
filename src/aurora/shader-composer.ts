@@ -51,7 +51,7 @@ const PARAM_REGISTRY: Record<string, ParamRegistryEntry> = {
   // --- Texture-backed params (niche layers, binding 60+) ---
   sea_ice_concentration:       { bindingSlot: 60, bindingType: 'texture', model: 'ecmwf_ifs', categorical: false },
   sea_surface_temperature:     { bindingSlot: 61, bindingType: 'texture', model: 'ecmwf_ifs', categorical: false },
-  dewpoint_2m:                 { bindingSlot: 62, bindingType: 'texture', model: 'ecmwf_ifs', categorical: false },
+  dew_point_2m:                { bindingSlot: 62, bindingType: 'texture', model: 'ecmwf_ifs', categorical: false },
 };
 
 export class ShaderComposer {

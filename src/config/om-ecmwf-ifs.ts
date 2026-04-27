@@ -81,7 +81,7 @@ export const ECMWF_IFS = {
       description: 'Sea surface temperature (stub — texture param validation)',
       layers: ['ocean-temp'],
     },
-    dewpoint_2m: {
+    dew_point_2m: {
       label: 'Dewpoint (2m)', unit: '°C', range: [-40, 35] as [number, number],
       palette: 'simple-gradient' as PaletteId, sizeEstimate: 3_500_000,
       description: 'Dewpoint temperature at 2m (stub — texture param validation)',
