@@ -1,7 +1,10 @@
 import { defineConfig, type Plugin, loadEnv } from 'vite';
 import viteWesl from 'wesl-plugin/vite';
 import fs from 'fs';
+import path from 'path';
 import { execSync } from 'child_process';
+
+const certsDir = path.resolve(__dirname, '../../certs');
 import { cacheHeaders } from './vite-plugins/cache-headers';
 import { servePublicModules } from './vite-plugins/serve-public-modules';
 import { geonamesProxy } from './vite-plugins/geonames-proxy';
@@ -31,9 +34,9 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       strictPort: true,
       // Allows build without certs
-      https: fs.existsSync('../certs/hypatia-key.pem') ? {
-        key: fs.readFileSync('../certs/hypatia-key.pem'),
-        cert: fs.readFileSync('../certs/hypatia.pem'),
+      https: fs.existsSync(path.join(certsDir, 'hypatia-key.pem')) ? {
+        key: fs.readFileSync(path.join(certsDir, 'hypatia-key.pem')),
+        cert: fs.readFileSync(path.join(certsDir, 'hypatia.pem')),
       } : undefined,
       fs: {
         allow: ['..'],  // Allow serving files from parent (for npm linked packages)
