@@ -2,7 +2,7 @@
 
 live : https://zero.hypatia.earth
 development: https://localhost:5173
-docs: ../docs/zero/zero--index.md   // (Obsidian Vault)
+docs: ../../docs/zero/zero--index.md   // (Obsidian Vault, via hypatia/docs symlink)
 mirror : https://github.com/hypatia-earth/zero
 
 ## Important Zero Concepts
