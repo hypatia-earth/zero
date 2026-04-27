@@ -616,7 +616,8 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
               m('div.actions', [
                 m('button.btn.btn-danger', {
                   onclick: () => {
-                    location.href = '/?event=2026-03-01--2026-03-01&perftest';
+                    const today = new Date().toISOString().slice(0, 10);
+                    location.href = `/?event=${today}--${today}&perftest`;
                   }
                 }, 'Run GPU Test'),
               ]),
