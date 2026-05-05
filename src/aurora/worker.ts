@@ -190,6 +190,17 @@ function applyPressureOptions(patch: Partial<PressureHostOpts>): void {
   pressureOpts = { ...pressureOpts, ...patch };
 }
 
+/** Rain sub-shape the host drives today (only the per-frame animated toggle;
+ *  the rest of the rain surface is enabled/opacity/palette which flow through
+ *  setLayerOpacity + updatePalette respectively). */
+type RainHostOpts = { animated: boolean };
+
+let rainOpts: RainHostOpts = { animated: true };
+
+function applyRainOptions(patch: Partial<RainHostOpts>): void {
+  rainOpts = { ...rainOpts, ...patch };
+}
+
 // Layer registry (for declarative mode)
 let layerRegistry: LayerService | null = null;
 
@@ -616,7 +627,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
     rainBackFace: opts.rain.enabled && !opts.earth.enabled && !opts.temp.enabled ? 1 : 0,
-    rainAnimated: opts.rain.animated,
+    rainAnimated: rainOpts.animated,
   };
 }
 
@@ -814,6 +825,9 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
     smoothing: currentOptions.pressure.smoothing,
     colors: currentOptions.pressure.colors,
   });
+
+  // Mirror rain.animated into rainOpts (per-frame uniform read).
+  applyRainOptions({ animated: currentOptions.rain.animated });
 }
 
 async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): Promise<void> {
@@ -1189,6 +1203,9 @@ function handleSetLayerOptions(data: Extract<AuroraRequest, { type: 'setLayerOpt
       return;
     case 'pressure':
       applyPressureOptions(data.opts as Partial<PressureHostOpts>);
+      return;
+    case 'rain':
+      applyRainOptions(data.opts as Partial<RainHostOpts>);
       return;
     default:
       throw new Error(`Sub-B Phase 5: setLayerOptions('${data.id}') handler not yet wired (layer not migrated)`);
