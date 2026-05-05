@@ -18,6 +18,16 @@ import { Camera } from '../aurora/camera';
 import { setupViewport } from './viewport/viewport';
 import type { PaletteId } from './palette-service';
 import type { EngineOpts } from '../aurora/types/options';
+import type { ZeroOptions } from '../schemas/options.schema';
+
+/** Host-side named→RGB mapping for cities label color. Aurora consumes the
+ *  pre-translated triplet via setLayerOptions('cities', {color:[r,g,b]}). */
+const CITY_COLORS_RGB: Record<ZeroOptions['cities']['color'], [number, number, number]> = {
+  white:   [1, 1, 1],
+  black:   [0, 0, 0],
+  darkred: [0.55, 0.05, 0.05],
+  gold:    [0.85, 0.65, 0.13],
+};
 
 /** Type guard: value is an object with a palette ID field */
 function hasPaletteField(val: unknown): val is { palette: PaletteId } {
@@ -256,12 +266,14 @@ export function createAuroraService(
       const initOpts = optionsService.options.value;
       send({ type: 'options', value: initOpts });
 
-      // Sub-B Phase 5 UI migration: graticule has its UI bind-points migrated
-      // to setLayerOptions. Worker no longer mirrors graticule out of the bulk
-      // 'options' message; this dispatch is the sole apply path.
+      // Sub-B Phase 5 UI migration: typed-setter dispatch for migrated layers.
+      // Worker no longer mirrors these out of the bulk 'options' message.
       send({ type: 'setLayerOptions', id: 'graticule', opts: {
         fontSize: initOpts.graticule.fontSize,
         lineWidth: initOpts.graticule.lineWidth,
+      } });
+      send({ type: 'setLayerOptions', id: 'cities', opts: {
+        color: CITY_COLORS_RGB[initOpts.cities.color],
       } });
 
       // Forward options updates to worker
@@ -289,6 +301,11 @@ export function createAuroraService(
             send({ type: 'setLayerOptions', id: 'graticule', opts: {
               fontSize: opts.graticule.fontSize,
               lineWidth: opts.graticule.lineWidth,
+            } });
+          }
+          if (opts.cities.color !== lastOptions.cities.color) {
+            send({ type: 'setLayerOptions', id: 'cities', opts: {
+              color: CITY_COLORS_RGB[opts.cities.color],
             } });
           }
           lastOptions = opts;

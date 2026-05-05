@@ -798,19 +798,8 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
     const view = renderer.getUniformView();
     writeOptionUniforms(view, currentOptions);
 
-    // Graticule has migrated — host dispatches setLayerOptions('graticule',...)
+    // graticule + cities have migrated — host dispatches typed setLayerOptions
     // directly. No bulk-channel mirror here.
-
-    // City label color — host-side named→RGB mapping until UI migrates to
-    // sending pre-translated RGB via setLayerOptions('cities', {color:[r,g,b]}).
-    const cityColors = {
-      white: [1, 1, 1],
-      black: [0, 0, 0],
-      darkred: [0.55, 0.05, 0.05],
-      gold: [0.85, 0.65, 0.13],
-    } as const;
-    const cc = cityColors[currentOptions.cities.color] ?? cityColors.white;
-    applyCitiesOptions({ color: [cc[0]!, cc[1]!, cc[2]!] });
   }
 
   // Mirror wind into windOpts. applyWindOptions decides whether to call
