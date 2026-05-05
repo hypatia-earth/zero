@@ -5,7 +5,7 @@
  * Builds lookup texture, city buffer, and glyph buffer for the shader.
  */
 
-import type { CitiesLodLevel } from './index';
+import type { CitiesLodLevel } from './cities-aurora-layer';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

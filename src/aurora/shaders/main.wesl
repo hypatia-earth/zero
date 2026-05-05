@@ -6,7 +6,7 @@ import package::aurora::shaders::common::{EARTH_RADIUS, BG_COLOR, raySphereInter
 import package::aurora::shaders::logo::blendLogo;
 import package::aurora::built_ins::graticule::graticule::blendGraticule;
 import package::aurora::built_ins::graticule::text::blendGraticuleText;
-import package::layers::cities::cities::blendCities;
+import package::aurora::built_ins::cities::cities::blendCities;
 
 import package::layers::earth::base::blendBasemap;
 import package::layers::temp::temp::blendTemp;

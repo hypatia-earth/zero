@@ -1,11 +1,5 @@
 import { defineLayer, withType, withUI, withOptions, withBlend, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
 
-export interface CitiesLodLevel {
-  minPopulation: number;   // minimum population to show at this LoD
-  zoomInPx: number;        // enter this LoD when globeRadiusPx >= this
-  zoomOutPx: number;       // leave this LoD when globeRadiusPx <= this
-}
-
 export const layer = defineLayer('cities',
   withType('decoration'),
   withUI('Cities', 'Cities', 'reference'),

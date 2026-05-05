@@ -6,7 +6,7 @@
  */
 
 import { CitiesLayer } from './cities-layer';
-import type { CitiesLodLevel } from './index';
+import type { CitiesLodLevel } from './cities-aurora-layer';
 
 const TRANSITION_DURATION = 1000; // ms
 

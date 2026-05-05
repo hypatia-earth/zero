@@ -9,9 +9,8 @@ import { PressureLayer } from '../layers/pressure';
 import { WindLayer } from '../layers/wind';
 import { GRATICULE_BUFFER_SIZE } from './built_ins/graticule/graticule-animator';
 import { GraticuleLayer, type GraticuleLodLevel } from './built_ins/graticule/graticule-layer';
-import { CitiesLayer, LOOKUP_WIDTH, LOOKUP_HEIGHT } from '../layers/cities/cities-layer';
-import { CitiesAnimator } from '../layers/cities/cities-animator';
-import type { CitiesLodLevel } from '../layers/cities';
+import { LOOKUP_WIDTH, LOOKUP_HEIGHT } from './built_ins/cities/cities-layer';
+import { CitiesAuroraLayer, type CitiesLodLevel, type CitiesAuroraLayerHost } from './built_ins/cities/cities-aurora-layer';
 import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getUserLayerPaletteRangeOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset, getParamDtOffset, getParamSizeOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
@@ -104,8 +103,6 @@ export class GlobeRenderer {
   private cityDataBuffer!: GPUBuffer;  // combined cities + glyphs
   private cityFontAtlasTexture!: GPUTexture;
   private cityFontSampler!: GPUSampler;
-  private citiesLayer: CitiesLayer | null = null;
-  private citiesAnimator: CitiesAnimator | null = null;
   private postProcessPipeline!: GPURenderPipeline;
   private postProcessBindGroup!: GPUBindGroup;
   private postProcessBindGroupLayout!: GPUBindGroupLayout;
@@ -698,13 +695,8 @@ export class GlobeRenderer {
     view.setFloat32(O.cityFontScale, cityFontScale, true);
     view.setFloat32(O.globeRadiusPx, globeRadiusPx, true);
 
-    // Update cities LOD animation (freeze tier in indicators-only mode)
-    if (this.citiesAnimator && cityFontScale > 0) {
-      const needsUpload = this.citiesAnimator.update(globeRadiusPx, this.frameDeltaMs);
-      if (needsUpload) {
-        this.uploadCitiesTier();
-      }
-    }
+    // Cities LoD update is handled by CitiesAuroraLayer via the registry's
+    // updateAll dispatch in render() — no direct call here.
 
     // Update pressure layer based on opacity
     const pressureVisible = uniforms.layerOpacities[LAYER_PRESSURE]! > 0.01;
@@ -971,58 +963,34 @@ export class GlobeRenderer {
   }
 
   /**
-   * Initialize cities layer with pre-loaded data
+   * Initialize cities AuroraLayer with pre-loaded data and register it.
+   * Bind group entries for cityLookupTexture/cityDataBuffer/font atlas/sampler
+   * stay host-owned (still part of the main bind group); the layer drives writes
+   * and resizes through the host handle.
    */
   initCities(
     citiesDataBuffer: ArrayBuffer,
     metricsBuffer: ArrayBuffer,
     lodLevels: CitiesLodLevel[]
   ): void {
-    this.citiesLayer = new CitiesLayer(citiesDataBuffer, metricsBuffer, lodLevels);
-
-    // Initialize animator
     const distance = this.camera.getState().distance;
     const fov = 2 * Math.atan(this.camera.getTanFov());
     const heightCss = this.canvas.height / this.dpr;
     const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightCss / fov);
-    this.citiesAnimator = new CitiesAnimator(this.citiesLayer, initialGlobeRadiusPx, lodLevels);
 
-    // Build initial tier
-    this.uploadCitiesTier();
-  }
+    const renderer = this;
+    const host: CitiesAuroraLayerHost = {
+      get cityLookupTexture() { return renderer.cityLookupTexture; },
+      get cityDataBuffer() { return renderer.cityDataBuffer; },
+      setCityDataBuffer(buf: GPUBuffer) { renderer.cityDataBuffer = buf; },
+      uniformView: this.uniformView,
+      recreateBindGroup() { renderer.recreateBindGroup(); },
+    };
 
-  /** Build and upload current cities LOD tier to GPU */
-  private uploadCitiesTier(): void {
-    if (!this.citiesLayer) return;
-
-    const tier = this.citiesLayer.currentTierIndex;
-    const data = this.citiesLayer.buildTier(tier);
-
-    // Upload lookup texture
-    this.device.queue.writeTexture(
-      { texture: this.cityLookupTexture },
-      data.lookupData.buffer as ArrayBuffer,
-      { bytesPerRow: LOOKUP_WIDTH * 2 },
-      { width: LOOKUP_WIDTH, height: LOOKUP_HEIGHT }
+    this.layerRegistry.register(
+      new CitiesAuroraLayer(initialGlobeRadiusPx, lodLevels, citiesDataBuffer, metricsBuffer, host),
+      this.getLayerContext(),
     );
-
-    // Resize and upload combined city+glyph buffer
-    if (data.combinedBuffer.byteLength > this.cityDataBuffer.size) {
-      this.cityDataBuffer.destroy();
-      this.cityDataBuffer = this.device.createBuffer({
-        size: Math.max(32, data.combinedBuffer.byteLength),
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-      });
-    }
-    if (data.combinedBuffer.byteLength > 0) {
-      this.device.queue.writeBuffer(this.cityDataBuffer, 0, data.combinedBuffer);
-    }
-
-    // Write glyph offset into uniforms
-    this.uniformView.setUint32(U.cityGlyphOffset, data.glyphStartVec4, true);
-
-    // Recreate bind group with potentially new buffers
-    this.recreateBindGroup();
   }
 
   /**
