@@ -153,6 +153,22 @@ function applyCitiesOptions(opts: CitiesHostOpts): void {
   view.setFloat32(U.cityColorB, opts.color[2], true);
 }
 
+/** Wind sub-shape the host drives today (snakeLength/lineWidth/etc. are
+ *  Phase 6 catalog-inversion concerns). */
+type WindHostOpts = { seedCount: number; speed: number };
+
+let windOpts: WindHostOpts = { seedCount: 0, speed: 0 };
+
+function applyWindOptions(patch: Partial<WindHostOpts>): void {
+  const prev = windOpts;
+  windOpts = { ...prev, ...patch };
+  // Recreate seed buffers only when seedCount actually changes — matches the
+  // previous prevOptions guard. Skipped before renderer init.
+  if (renderer && patch.seedCount !== undefined && patch.seedCount !== prev.seedCount) {
+    renderer.setWindSeedCount(patch.seedCount);
+  }
+}
+
 // Layer registry (for declarative mode)
 let layerRegistry: LayerService | null = null;
 
@@ -568,7 +584,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     layerDataReady: buildLayerDataReady(),
     // Wind/pressure have separate render passes with special state
     windLerp: computeLerp(getLayerSlotState('wind')!, time.getTime()),
-    windAnimSpeed: opts.wind.speed,
+    windAnimSpeed: windOpts.speed,
     windState: {
       mode: getLayerSlotState('wind')!.dataReady ? 'pair' : 'loading',
       lerp: computeLerp(getLayerSlotState('wind')!, time.getTime()),
@@ -614,6 +630,10 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 
   // Seed aurora-side engine state from init config.
   applyEngineOpts({ timeslotsPerLayer: config.timeslotsPerLayer });
+
+  // Seed wind state from init config so the first bulk-options seedCount mirror
+  // matches and skips the redundant setWindSeedCount call.
+  windOpts = { ...windOpts, seedCount: config.windLineCount };
 
   // Create and initialize renderer
   // Pass dpr from main thread — workers may not have devicePixelRatio (Chrome)
@@ -709,7 +729,6 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 }
 
 function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void {
-  const prevOptions = currentOptions;
   currentOptions = data.value;
 
   // Mirror engine-relevant ZeroOptions fields into engineOpts so the bulk
@@ -758,10 +777,13 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
     applyCitiesOptions({ color: [cc[0]!, cc[1]!, cc[2]!] });
   }
 
-  // React to options that require buffer recreation
-  if (prevOptions && currentOptions.wind.seedCount !== prevOptions.wind.seedCount) {
-    renderer!.setWindSeedCount(currentOptions.wind.seedCount);
-  }
+  // Mirror wind into windOpts. applyWindOptions decides whether to call
+  // renderer.setWindSeedCount based on the previous value, so the explicit
+  // prevOptions guard isn't needed here.
+  applyWindOptions({
+    seedCount: currentOptions.wind.seedCount,
+    speed: currentOptions.wind.speed,
+  });
 }
 
 async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): Promise<void> {
@@ -1129,6 +1151,9 @@ function handleSetLayerOptions(data: Extract<AuroraRequest, { type: 'setLayerOpt
       return;
     case 'cities':
       applyCitiesOptions(data.opts as CitiesHostOpts);
+      return;
+    case 'wind':
+      applyWindOptions(data.opts as Partial<WindHostOpts>);
       return;
     default:
       throw new Error(`Sub-B Phase 5: setLayerOptions('${data.id}') handler not yet wired (layer not migrated)`);
