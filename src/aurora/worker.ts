@@ -494,6 +494,14 @@ function applyLayerOpacity(id: string, value: number): void {
   targetOpacities.set(id, value);
 }
 
+/** A built-in layer counts as visible for cross-layer decisions (logo overlay,
+ *  rain backface, pressure compute-skip) when its user-intended target opacity
+ *  is non-zero. The host pre-multiplies enabled→opacity-or-zero into target
+ *  via setLayerOpacity / bulk mirror, so this derives uniformly. */
+function isLayerEnabled(id: string): boolean {
+  return (targetOpacities.get(id) ?? 0) > 0;
+}
+
 
 /** Update animated opacities toward targets (exponential decay) */
 function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
@@ -626,18 +634,17 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     logoOpacity: opts.debug.showLogo && !isAnyLayerEnabled()
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
-    rainBackFace: opts.rain.enabled && !opts.earth.enabled && !opts.temp.enabled ? 1 : 0,
+    rainBackFace: isLayerEnabled('rain') && !isLayerEnabled('earth') && !isLayerEnabled('temp') ? 1 : 0,
     rainAnimated: rainOpts.animated,
   };
 }
 
 /** Check if any layer is enabled (for logo suppression) */
 function isAnyLayerEnabled(): boolean {
-  if (!currentOptions || !layerRegistry) return false;
+  if (!layerRegistry) return false;
   for (const layer of layerRegistry.getAll()) {
     if (isBuiltInLayer(layer)) {
-      const layerOpts = currentOptions[layer.id];  // narrowed to TBuiltInLayer by type guard
-      if (layerOpts && 'enabled' in layerOpts && layerOpts.enabled) return true;
+      if (isLayerEnabled(layer.id)) return true;
     } else {
       const idx = layer.userLayerIndex!;
       if (userLayerEnabled.get(idx)) return true;
@@ -834,7 +841,6 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
   if (!canvas || !renderer) return;
   const t0 = performance.now();
   const { camera, time } = data;
-  const opts = currentOptions!;
 
   // Compute delta time and update animated opacities
   const dt = lastFrameTime > 0 ? (t0 - lastFrameTime) / 1000 : 0;
@@ -859,10 +865,10 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
   }
 
   // Recompute pressure contours when time, spacing, or smoothing changes.
-  // `enabled` still comes from currentOptions.pressure (compute-skip gate);
-  // it leaves with the schema in Phase 9 cleanup.
+  // The compute-skip gate now reads aurora's own targetOpacities via
+  // isLayerEnabled instead of currentOptions.pressure.enabled.
   const pressureState = getLayerSlotState('pressure');
-  if (opts.pressure.enabled && pressureState?.dataReady) {
+  if (isLayerEnabled('pressure') && pressureState?.dataReady) {
     const currentMinute = Math.floor(time / 60000);
     if (currentMinute !== lastPressureMinute || needsContourRecompute) {
       lastPressureMinute = currentMinute;
