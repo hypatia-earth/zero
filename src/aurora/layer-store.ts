@@ -10,7 +10,8 @@
  * - No 201MB binding size limit
  */
 
-import type { TTimestep, SlabConfig } from '../config/types';
+import type { TTimestep } from './types/timestep';
+import type { SlabConfig } from './types/slab-config';
 
 export interface LayerStoreConfig {
   layerId: string;

@@ -4,6 +4,7 @@
 
 import type { Signal } from '@preact/signals-core';
 import type { TModelParam } from './models';
+import type { TTimestep } from '../aurora/types/timestep';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Layer definitions
@@ -29,8 +30,8 @@ export const LAYER_CATEGORY_LABELS: Record<TLayerCategory, string> = {
 };
 
 
-/** Branded timestep string, format: "YYYY-MM-DDTHHMM" (e.g., "2025-12-13T0600") */
-export type TTimestep = string & { readonly __brand: 'timestep' };
+/** Branded timestep string — re-exported from aurora for host callers. */
+export type { TTimestep } from '../aurora/types/timestep';
 
 /** Timestep with metadata from discovery */
 export interface Timestep {
@@ -120,11 +121,8 @@ export interface IOmService {
   ): Promise<Float32Array>;
 }
 
-/** GPU buffer slab definition for weather layers */
-export interface SlabConfig {
-  name: string;   // e.g., 'data', 'u', 'v', 'raw', 'grid'
-  sizeMB: number; // Size in megabytes
-}
+/** GPU buffer slab definition — re-exported from aurora for host callers. */
+export type { SlabConfig } from '../aurora/types/slab-config';
 
 export interface ParamLink {
   param: string;  // Display name (e.g., "U component", "V component")
