@@ -4,8 +4,8 @@
 import package::aurora::shaders::layer_helpers::{u, getLayerOpacity, getUserLayerOpacity};
 import package::aurora::shaders::common::{EARTH_RADIUS, BG_COLOR, raySphereIntersect, raySphereIntersectFar};
 import package::aurora::shaders::logo::blendLogo;
-import package::layers::graticule::graticule::blendGraticule;
-import package::layers::graticule::text::blendGraticuleText;
+import package::aurora::built_ins::graticule::graticule::blendGraticule;
+import package::aurora::built_ins::graticule::text::blendGraticuleText;
 import package::layers::cities::cities::blendCities;
 
 import package::layers::earth::base::blendBasemap;

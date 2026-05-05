@@ -3,7 +3,7 @@
 
 import package::aurora::shaders::layer_helpers::{u, getLayerOpacity};
 import package::aurora::shaders::common::COMMON_PI;
-import package::layers::graticule::graticule::{graticuleLines, getGraticuleLonDeg, getGraticuleLonOpacity, getGraticuleLatDeg, getGraticuleLatOpacity};
+import package::aurora::built_ins::graticule::graticule::{graticuleLines, getGraticuleLonDeg, getGraticuleLonOpacity, getGraticuleLatDeg, getGraticuleLatOpacity};
 import constants::LAYER_GRATICULE;
 
 // Font atlas binding

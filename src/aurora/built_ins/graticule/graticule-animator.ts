@@ -5,7 +5,7 @@
  * LoD level changes based on altitude with hysteresis.
  */
 
-import type { GraticuleLodLevel } from './index';
+import type { GraticuleLodLevel } from './graticule-layer';
 
 const DEBUG = false;
 

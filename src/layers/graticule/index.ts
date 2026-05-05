@@ -1,12 +1,6 @@
 import { defineLayer, withType, withUI, withOptions, withBlend, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
 import { U } from '../../aurora/globe-uniforms';
 
-export interface GraticuleLodLevel {
-  spacing: number;     // degrees between graticule lines (same for lon/lat)
-  zoomInPx: number;    // enter this LoD when globeRadiusPx >= this
-  zoomOutPx: number;   // leave this LoD when globeRadiusPx <= this
-}
-
 export const layer = defineLayer('graticule',
   withType('decoration'),
   withUI('Grid', 'Grid', 'reference'),

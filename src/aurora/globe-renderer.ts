@@ -7,7 +7,8 @@ import { type ComposedShaders, activeParamBindings, type ParamBindingConfig } fr
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 import { PressureLayer } from '../layers/pressure';
 import { WindLayer } from '../layers/wind';
-import { GraticuleAnimator, GRATICULE_BUFFER_SIZE } from '../layers/graticule/graticule-animator';
+import { GRATICULE_BUFFER_SIZE } from './built_ins/graticule/graticule-animator';
+import { GraticuleLayer, type GraticuleLodLevel } from './built_ins/graticule/graticule-layer';
 import { CitiesLayer, LOOKUP_WIDTH, LOOKUP_HEIGHT } from '../layers/cities/cities-layer';
 import { CitiesAnimator } from '../layers/cities/cities-animator';
 import type { CitiesLodLevel } from '../layers/cities';
@@ -96,9 +97,8 @@ export class GlobeRenderer {
   private placeholderParamTexture!: GPUTexture;
   // Current param binding config (set by recreatePipeline)
   private currentParamBindings: ParamBindingConfig[] = [];
-  // Graticule animation
+  // Graticule animation (lines buffer is bound at @binding(21); the layer plugin writes it)
   private graticuleLinesBuffer!: GPUBuffer;
-  private graticuleAnimator!: GraticuleAnimator;
   // Cities layer
   private cityLookupTexture!: GPUTexture;
   private cityDataBuffer!: GPUBuffer;  // combined cities + glyphs
@@ -154,7 +154,7 @@ export class GlobeRenderer {
     requestedSlots: number,
     windLineCount: number,
     composedShaders: ComposedShaders,
-    graticuleLodLevels: Array<{ spacing: number; zoomInPx: number; zoomOutPx: number }>,
+    graticuleLodLevels: GraticuleLodLevel[],
     windConfig: { snakeLength: number; lineWidth: number; segmentsPerLine: number; stepFactor: number; radius: number }
   ): Promise<void> {
     const shaderCode = composedShaders.main;
@@ -260,13 +260,6 @@ export class GlobeRenderer {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Graticule animator for LoD transitions (initialize at correct LoD for globe screen size)
-    const distance = this.camera.getState().distance;
-    const fov = 2 * Math.atan(this.camera.getTanFov());
-    const heightCss = this.canvas.height / this.dpr;
-    const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightCss / fov);
-    this.graticuleAnimator = new GraticuleAnimator(initialGlobeRadiusPx, graticuleLodLevels);
-
     // Cities lookup texture (R16Uint, 2048×1024)
     this.cityLookupTexture = this.device.createTexture({
       size: [LOOKUP_WIDTH, LOOKUP_HEIGHT],
@@ -304,6 +297,18 @@ export class GlobeRenderer {
 
     // Shared palette texture array (256×N, one row per palette)
     this.paletteTexture = new PaletteTexture(this.device);
+
+    // Register built-in graticule layer (initialize at correct LoD for globe screen size)
+    {
+      const distance = this.camera.getState().distance;
+      const fov = 2 * Math.atan(this.camera.getTanFov());
+      const heightCss = this.canvas.height / this.dpr;
+      const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightCss / fov);
+      this.layerRegistry.register(
+        new GraticuleLayer(initialGlobeRadiusPx, graticuleLodLevels, this.graticuleLinesBuffer),
+        this.getLayerContext(),
+      );
+    }
 
     // Initialize palette uniforms
     this.uniformView.setUint32(U.paletteCount, this.paletteTexture.paletteCount, true);
@@ -683,8 +688,8 @@ export class GlobeRenderer {
     const fov = 2 * Math.atan(uniforms.tanFov);
     const globeRadiusPx = Math.asin(1 / cameraDistance) * (this.cssHeight / fov);
     this.currentGlobeRadiusPx = globeRadiusPx;
-    const graticuleBuffer = this.graticuleAnimator.packToBuffer(globeRadiusPx, this.frameDeltaMs);
-    this.device.queue.writeBuffer(this.graticuleLinesBuffer, 0, graticuleBuffer);
+    // Graticule lines buffer is now written by GraticuleLayer.update() via the registry's
+    // updateAll dispatch in render() — no direct call here.
 
     // Cities: font scaling based on altitude (viewport-independent)
     // Alt <= 3000: 1.3× world-space multiplier, alt > 3000: indicators only

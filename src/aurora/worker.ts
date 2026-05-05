@@ -12,7 +12,7 @@
 import type { CameraConfig } from './camera';
 import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
-import type { GraticuleLodLevel } from '../layers/graticule';
+import type { GraticuleLodLevel } from './built_ins/graticule/graticule-layer';
 import type { CitiesLodLevel } from '../layers/cities';
 import { LayerStore } from './layer-store';
 import type { ZeroOptions } from '../schemas/options.schema';
