@@ -279,6 +279,14 @@ export function createAuroraService(
         seedCount: initOpts.wind.seedCount,
         speed: initOpts.wind.speed,
       } });
+      send({ type: 'setLayerOptions', id: 'pressure', opts: {
+        spacing: parseInt(initOpts.pressure.spacing, 10),
+        smoothing: initOpts.pressure.smoothing,
+        colors: initOpts.pressure.colors,
+      } });
+      send({ type: 'setLayerOptions', id: 'rain', opts: {
+        animated: initOpts.rain.animated,
+      } });
 
       // Forward options updates to worker
       let lastOptions = initOpts;
@@ -317,6 +325,20 @@ export function createAuroraService(
             send({ type: 'setLayerOptions', id: 'wind', opts: {
               seedCount: opts.wind.seedCount,
               speed: opts.wind.speed,
+            } });
+          }
+          if (opts.pressure.spacing !== lastOptions.pressure.spacing
+            || opts.pressure.smoothing !== lastOptions.pressure.smoothing
+            || opts.pressure.colors !== lastOptions.pressure.colors) {
+            send({ type: 'setLayerOptions', id: 'pressure', opts: {
+              spacing: parseInt(opts.pressure.spacing, 10),
+              smoothing: opts.pressure.smoothing,
+              colors: opts.pressure.colors,
+            } });
+          }
+          if (opts.rain.animated !== lastOptions.rain.animated) {
+            send({ type: 'setLayerOptions', id: 'rain', opts: {
+              animated: opts.rain.animated,
             } });
           }
           lastOptions = opts;

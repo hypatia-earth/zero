@@ -804,17 +804,7 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
 
   // wind has migrated — host dispatches setLayerOptions('wind',...) directly.
 
-  // Mirror pressure into pressureOpts. handleRender reads from here
-  // (spacing/smoothing trigger contour recompute; colors flow into
-  // buildUniforms).
-  applyPressureOptions({
-    spacing: parseInt(currentOptions.pressure.spacing, 10),
-    smoothing: currentOptions.pressure.smoothing,
-    colors: currentOptions.pressure.colors,
-  });
-
-  // Mirror rain.animated into rainOpts (per-frame uniform read).
-  applyRainOptions({ animated: currentOptions.rain.animated });
+  // pressure + rain have migrated — host dispatches setLayerOptions directly.
 }
 
 async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): Promise<void> {
