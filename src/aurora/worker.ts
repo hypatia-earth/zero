@@ -23,7 +23,7 @@ import type { PaletteId } from '../services/palette-service';
 import { writeConfigUniforms, writeOptionUniforms } from './uniform-writer';
 import { U } from './globe-uniforms';
 import { createCaptureHandler } from './capture';
-import type { EngineOpts } from './types/options';
+import type { EngineOpts, GraticuleOpts } from './types/options';
 
 // ============================================================
 // Asset types for worker transfer
@@ -126,6 +126,19 @@ let engineOpts: EngineOpts = {
 
 function applyEngineOpts(patch: Partial<EngineOpts>): void {
   engineOpts = { ...engineOpts, ...patch };
+}
+
+// Per-layer option appliers (Sub-B Phase 5). Each layer migration adds its own
+// helper here; bulk handleOptions and the typed setLayerOptions dispatch both
+// route through the same helper so legacy and new channels stay in sync.
+
+/** Graticule sub-shape the host actually drives today (lodLevels stays
+ *  layer-internal until the catalog inversion in Phase 6). */
+type GraticuleHostOpts = Pick<GraticuleOpts, 'fontSize' | 'lineWidth'>;
+
+function applyGraticuleOptions(opts: GraticuleHostOpts): void {
+  if (!renderer) return;
+  renderer.setGraticuleOptions(opts.fontSize, opts.lineWidth);
 }
 
 // Layer registry (for declarative mode)
@@ -693,7 +706,12 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
 
     // Graticule fontSize/lineWidth (CSS pixels) flow into GraticuleLayer.onOptionsChanged;
     // the layer applies frame.dpr each tick to write render-pixel uniforms.
-    renderer.setGraticuleOptions(currentOptions.graticule.fontSize, currentOptions.graticule.lineWidth);
+    // Routed through applyGraticuleOptions so the bulk channel and the typed
+    // setLayerOptions converge on one helper.
+    applyGraticuleOptions({
+      fontSize: currentOptions.graticule.fontSize,
+      lineWidth: currentOptions.graticule.lineWidth,
+    });
 
     // City label color
     const cityColors = {
@@ -1073,7 +1091,13 @@ function handleSetLayerOpacity(data: Extract<AuroraRequest, { type: 'setLayerOpa
 }
 
 function handleSetLayerOptions(data: Extract<AuroraRequest, { type: 'setLayerOptions' }>): void {
-  throw new Error(`Sub-B Phase 5: setLayerOptions('${data.id}') handler not yet wired (layer not migrated)`);
+  switch (data.id) {
+    case 'graticule':
+      applyGraticuleOptions(data.opts as GraticuleHostOpts);
+      return;
+    default:
+      throw new Error(`Sub-B Phase 5: setLayerOptions('${data.id}') handler not yet wired (layer not migrated)`);
+  }
 }
 
 function handleCleanup(): void {

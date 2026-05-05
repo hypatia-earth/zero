@@ -65,6 +65,8 @@ export interface AuroraService {
   updatePalette(layer: string, paletteId: PaletteId): void;
   /** Sub-B Phase 5 typed setter — patch aurora's engine-wide options. */
   setEngineOptions(patch: Partial<EngineOpts>): void;
+  /** Sub-B Phase 5 typed setter — opts shape narrowed by id at the call site. */
+  setLayerOptions(id: string, opts: unknown): void;
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
@@ -344,6 +346,10 @@ export function createAuroraService(
 
     setEngineOptions(patch: Partial<EngineOpts>): void {
       send({ type: 'setEngineOptions', patch });
+    },
+
+    setLayerOptions(id: string, opts: unknown): void {
+      send({ type: 'setLayerOptions', id, opts });
     },
 
     start(): void {
