@@ -67,6 +67,8 @@ export interface AuroraService {
   setEngineOptions(patch: Partial<EngineOpts>): void;
   /** Sub-B Phase 5 typed setter — opts shape narrowed by id at the call site. */
   setLayerOptions(id: string, opts: unknown): void;
+  /** Sub-B Phase 5 typed setter — pre-gated opacity 0..1 (host pre-multiplies enabled). */
+  setLayerOpacity(id: string, value: number): void;
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
@@ -350,6 +352,10 @@ export function createAuroraService(
 
     setLayerOptions(id: string, opts: unknown): void {
       send({ type: 'setLayerOptions', id, opts });
+    },
+
+    setLayerOpacity(id: string, value: number): void {
+      send({ type: 'setLayerOpacity', id, value });
     },
 
     start(): void {

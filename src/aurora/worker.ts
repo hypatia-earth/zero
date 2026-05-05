@@ -411,6 +411,13 @@ let lastSmoothing = 'light';
 // Animated opacity state (smooth transitions ~100ms)
 // Keyed by layer id, initialized from layer registry
 const animatedOpacity = new Map<string, number>();
+
+// User-intended (sans data-ready gating) target opacity per built-in layer id.
+// Populated by either the bulk 'options' channel (host pre-multiplies enabled
+// → opacity-or-zero) or 'setLayerOpacity' typed messages. updateAnimatedOpacities
+// reads from here and applies the data-ready / data-window gating.
+const targetOpacities = new Map<string, number>();
+
 let lastFrameTime = 0;
 
 /** Initialize animated opacity for all registered layers */
@@ -423,11 +430,14 @@ function initAnimatedOpacity(): void {
   }
 }
 
+function applyLayerOpacity(id: string, value: number): void {
+  targetOpacities.set(id, value);
+}
+
 
 /** Update animated opacities toward targets (exponential decay) */
 function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
-  const opts = currentOptions;
-  if (!opts || !layerRegistry) return;
+  if (!layerRegistry) return;
 
   const animMs = defaultConfig.render.opacityAnimationMs;
   const rate = 1000 / animMs;
@@ -451,29 +461,28 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
 
   // Iterate all registered layers
   for (const layer of layerRegistry.getAll()) {
-    let enabled: boolean;
-    let opacity: number;
-
+    // Source the pre-gating user-intended opacity. For built-ins it comes from
+    // targetOpacities (driven by bulk channel mirror or setLayerOpacity); for
+    // user layers it stays on the dedicated user-layer state maps.
+    let userTarget: number;
     if (isBuiltInLayer(layer)) {
-      // Built-in layers: get from Zod-validated options
-      const layerOpts = opts[layer.id];  // narrowed to TBuiltInLayer by type guard
-      if (!layerOpts || !('enabled' in layerOpts)) continue;
-      enabled = layerOpts.enabled;
-      opacity = layerOpts.opacity;
+      const t = targetOpacities.get(layer.id);
+      if (t === undefined) continue;  // before first options/setter delivery
+      userTarget = t;
     } else {
-      // User layers: enabled and opacity from state maps (set on registration)
       const idx = layer.userLayerIndex!;
-      enabled = userLayerEnabled.get(idx)!;
-      opacity = userLayerOpacities.get(idx)!;
+      const enabled = userLayerEnabled.get(idx)!;
+      userTarget = enabled ? userLayerOpacities.get(idx)! : 0;
     }
 
-    // Calculate target opacity
+    // Apply data-ready / data-window gate uniformly. Data layers (texture/
+    // geometry) require valid data; non-data layers (graticule, cities, sun)
+    // bypass the gate.
     let target = 0;
-    if (enabled) {
-      // Data layers (texture/geometry) require data ready check
+    if (userTarget > 0) {
       const needsData = layer.type === 'texture' || layer.type === 'geometry';
       if (!needsData || isDataReady(layer.id)) {
-        target = opacity;
+        target = userTarget;
       }
     }
 
@@ -698,6 +707,18 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
   applyEngineOpts({
     timeslotsPerLayer: parseInt(currentOptions.gpu.timeslotsPerLayer, 10),
   });
+
+  // Mirror per-built-in opacity (host pre-multiplies enabled → opacity-or-zero)
+  // into targetOpacities. setLayerOpacity writes here directly; updateAnimated-
+  // Opacities reads here and applies the data-ready gate.
+  if (layerRegistry) {
+    for (const layer of layerRegistry.getAll()) {
+      if (!isBuiltInLayer(layer)) continue;
+      const layerOpts = currentOptions[layer.id];
+      if (!layerOpts || !('enabled' in layerOpts)) continue;
+      applyLayerOpacity(layer.id, layerOpts.enabled ? layerOpts.opacity : 0);
+    }
+  }
 
   // Write option uniforms declaratively
   if (renderer) {
@@ -1087,7 +1108,7 @@ function handleSetEngineOptions(data: Extract<AuroraRequest, { type: 'setEngineO
 }
 
 function handleSetLayerOpacity(data: Extract<AuroraRequest, { type: 'setLayerOpacity' }>): void {
-  throw new Error(`Sub-B Phase 5: setLayerOpacity('${data.id}') handler not yet wired (layer not migrated)`);
+  applyLayerOpacity(data.id, data.value);
 }
 
 function handleSetLayerOptions(data: Extract<AuroraRequest, { type: 'setLayerOptions' }>): void {
