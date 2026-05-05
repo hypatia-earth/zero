@@ -37,6 +37,23 @@ import { createLayerAdapter, type OptionsAdapter } from '../services/aurora-opti
  *  the matching ZeroOptions schema fields. */
 const AURORA_CATALOG_LAYERS = new Set<string>(['graticule']);
 
+/** Delete aurora-db so a Reset All actually resets aurora-owned options
+ *  (post-Phase-C, aurora-db is authoritative for migrated layers). The
+ *  worker keeps the DB open so deleteDatabase fires `onblocked` rather
+ *  than resolving — the page reload that follows closes the connection,
+ *  so we proceed regardless. */
+function deleteAuroraDb(): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const req = indexedDB.deleteDatabase('aurora-db');
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => {
+      console.warn('[Reset] aurora-db delete blocked — proceeding; reload will close the connection');
+      resolve();
+    };
+  });
+}
+
 /** Build a `${layerId}.${key}` → descriptor map for Phase-C-migrated layers,
  *  for fast path lookup inside renderOption. Recomputed per-dialog-render
  *  is cheap (catalog walks five entries). */
@@ -689,8 +706,11 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: i
             m('span.hint', 'Will restart the application.'),
             m('div.actions', [
               m('button.btn.btn-danger', {
-                onclick: () => {
+                onclick: async () => {
                   optionsService.reset();
+                  // Phase C+: aurora-db is authoritative for migrated layer
+                  // options. Clear it so reset reaches every store.
+                  await deleteAuroraDb();
                   location.href = '/';
                 }
               }, 'Reset All'),

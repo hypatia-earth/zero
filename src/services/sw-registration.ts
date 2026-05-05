@@ -204,6 +204,15 @@ export async function nuke(): Promise<void> {
       const req = indexedDB.deleteDatabase(db.name!);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
+      // Aurora's worker keeps `aurora-db` open; deleteDatabase fires
+      // `onblocked` instead of resolving while that connection lives.
+      // The reload that follows nuke() closes the worker, after which the
+      // pending delete completes — we resolve here so the caller can
+      // proceed to the navigation step.
+      req.onblocked = () => {
+        console.warn(`[Nuke] Delete blocked (open connection): ${db.name} — proceeding; reload will close it`);
+        resolve();
+      };
     });
   }));
   // Unregister SW and clear caches
