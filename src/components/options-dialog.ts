@@ -30,13 +30,22 @@ import { PressureColorControl } from './pressure-color-control';
 import { DialogHeader } from './dialog-header';
 import { getLayerOptionsCatalog } from '../aurora/options/catalog';
 import type { OptionDescriptor } from '../aurora/types/options-descriptor';
-import { createLayerAdapter, type OptionsAdapter } from '../services/aurora-options-adapters';
+import { createLayerAdapter, createEngineAdapter, type OptionsAdapter } from '../services/aurora-options-adapters';
 import { CITY_COLORS_RGB } from '../utils/cities-colors';
+import { getEngineOptionsCatalog } from '../aurora/options/catalog';
 
 /** Phases C+D — graticule, cities, wind, pressure, and rain bind through
  *  the aurora catalog/adapter path. Phase E adds opacity descriptors;
  *  Phase F deletes the matching ZeroOptions schema fields. */
 const AURORA_CATALOG_LAYERS = new Set<string>(['graticule', 'cities', 'wind', 'pressure', 'rain']);
+
+/** Phase E1 — schema-path → engine-descriptor-key for migrated engine
+ *  options. Schema still carries the option (orphan after Phase E1; Phase
+ *  F drops it). Aurora-db is the authoritative store. */
+const AURORA_ENGINE_PATHS: Record<string, string> = {
+  'gpu.timeslotsPerLayer': 'timeslotsPerLayer',
+  'debug.showLogo': 'showLogo',
+};
 
 /** Delete aurora-db so a Reset All actually resets aurora-owned options
  *  (post-Phase-C, aurora-db is authoritative for migrated layers). The
@@ -55,14 +64,26 @@ function deleteAuroraDb(): Promise<void> {
   });
 }
 
-/** Build a `${layerId}.${key}` → descriptor map for Phase-C-migrated layers,
- *  for fast path lookup inside renderOption. Recomputed per-dialog-render
- *  is cheap (catalog walks five entries). */
+/** Build a `${layerId}.${key}` → descriptor map for catalog-migrated
+ *  layers, for fast path lookup inside renderOption. Recomputed per
+ *  dialog instance — catalog walk is cheap (five entries). */
 function buildAuroraDescriptorMap(): Map<string, OptionDescriptor> {
   const out = new Map<string, OptionDescriptor>();
   for (const entry of getLayerOptionsCatalog()) {
     if (!AURORA_CATALOG_LAYERS.has(entry.id)) continue;
     for (const d of entry.options) out.set(`${entry.id}.${d.key}`, d);
+  }
+  return out;
+}
+
+/** Build a schema-path → engine-descriptor map for Phase-E1-migrated
+ *  engine options. */
+function buildEngineDescriptorMap(): Map<string, OptionDescriptor> {
+  const out = new Map<string, OptionDescriptor>();
+  const byKey = new Map(getEngineOptionsCatalog().map(d => [d.key, d]));
+  for (const [path, key] of Object.entries(AURORA_ENGINE_PATHS)) {
+    const d = byKey.get(key);
+    if (d) out.set(path, d);
   }
   return out;
 }
@@ -365,24 +386,39 @@ function renderAuroraControl(
 
   let control: m.Children;
 
-  // Enum descriptors render as radio groups regardless of `kind` —
-  // schema's labels (e.g. '8K', '16K') win over raw values.
+  // Enum descriptors render as radio or select based on the schema's
+  // control hint (transitional — Phase F drops the schema, descriptors
+  // will then need to carry the hint themselves).
   if (descriptor.enum) {
-    control = m('div.radio-group', descriptor.enum.map(o => {
-      const selected = value === o.value;
-      return m('label.radio', {
-        key: String(o.value),
-        class: selected ? 'selected' : '',
-      }, [
-        m('input[type=radio]', {
-          name: `${descriptor.layerId ?? 'engine'}.${descriptor.key}`,
-          value: String(o.value),
-          checked: selected,
-          onchange: () => adapter.write(descriptor, o.value),
-        }),
-        m('span', labelForEnumValue(opt, o.value, descriptor.unit)),
-      ]);
-    }));
+    if (opt.meta.control === 'select') {
+      control = m('select.select', {
+        value: String(value),
+        onchange: (e: Event) => {
+          const next = (e.target as HTMLSelectElement).value;
+          // Coerce back to descriptor's value type using the enum.
+          const match = descriptor.enum!.find(o => String(o.value) === next);
+          if (match) adapter.write(descriptor, match.value);
+        },
+      }, descriptor.enum.map(o =>
+        m('option', { value: String(o.value), key: String(o.value) }, labelForEnumValue(opt, o.value, descriptor.unit))
+      ));
+    } else {
+      control = m('div.radio-group', descriptor.enum.map(o => {
+        const selected = value === o.value;
+        return m('label.radio', {
+          key: String(o.value),
+          class: selected ? 'selected' : '',
+        }, [
+          m('input[type=radio]', {
+            name: `${descriptor.layerId ?? 'engine'}.${descriptor.key}`,
+            value: String(o.value),
+            checked: selected,
+            onchange: () => adapter.write(descriptor, o.value),
+          }),
+          m('span', labelForEnumValue(opt, o.value, descriptor.unit)),
+        ]);
+      }));
+    }
   } else switch (descriptor.kind) {
     case 'number':
     case 'integer': {
@@ -467,12 +503,18 @@ function renderOption(
   optionsService: OptionsService,
   paletteService: PaletteService,
   auroraDescByPath: Map<string, OptionDescriptor>,
+  engineDescByPath: Map<string, OptionDescriptor>,
   layerAdapter: OptionsAdapter,
+  engineAdapter: OptionsAdapter,
 ): m.Children {
-  // Phase C — aurora-owned descriptor takes the catalog+adapter path.
-  const auroraDescriptor = auroraDescByPath.get(opt.path);
-  if (auroraDescriptor) {
-    return renderAuroraControl(opt, auroraDescriptor, layerAdapter);
+  // Phases C-E1 — aurora-owned descriptor takes the catalog+adapter path.
+  const layerDescriptor = auroraDescByPath.get(opt.path);
+  if (layerDescriptor) {
+    return renderAuroraControl(opt, layerDescriptor, layerAdapter);
+  }
+  const engineDescriptor = engineDescByPath.get(opt.path);
+  if (engineDescriptor) {
+    return renderAuroraControl(opt, engineDescriptor, engineAdapter);
   }
 
   const currentValue = getByPath(options, opt.path);
@@ -549,10 +591,12 @@ function renderGroup(
   paletteService: PaletteService,
   showAdvancedOptions: boolean,
   auroraDescByPath: Map<string, OptionDescriptor>,
+  engineDescByPath: Map<string, OptionDescriptor>,
   layerAdapter: OptionsAdapter,
+  engineAdapter: OptionsAdapter,
   skipGroupHeader: boolean = false
 ): m.Children {
-  const ro = (opt: FlatOption) => renderOption(opt, options, optionsService, paletteService, auroraDescByPath, layerAdapter);
+  const ro = (opt: FlatOption) => renderOption(opt, options, optionsService, paletteService, auroraDescByPath, engineDescByPath, layerAdapter, engineAdapter);
   const group = optionGroups[groupId as keyof typeof optionGroups];
   if (!group) return null;
 
@@ -658,10 +702,12 @@ export interface OptionsDialogAttrs {
 
 export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: initialAttrs }) => {
   let windowEl: HTMLElement | null = null;
-  // Built once per dialog instance — descriptors are stable, so is the
-  // adapter (closure over auroraService.optionsMirror).
+  // Built once per dialog instance — descriptors and adapters are
+  // stable closures over auroraService.optionsMirror.
   const auroraDescByPath = buildAuroraDescriptorMap();
+  const engineDescByPath = buildEngineDescriptorMap();
   const layerAdapter = createLayerAdapter(initialAttrs.auroraService);
+  const engineAdapter = createEngineAdapter(initialAttrs.auroraService);
 
   return {
     view({ attrs }) {
@@ -761,7 +807,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: i
           ...sortedGroupIds.map(groupId => {
             const groupOpts = filteredGroups[groupId];
             if (!groupOpts) return null;
-            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, showAdvanced, auroraDescByPath, layerAdapter, !!filter && filter !== 'global');
+            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, showAdvanced, auroraDescByPath, engineDescByPath, layerAdapter, engineAdapter, !!filter && filter !== 'global');
           }).filter(Boolean),
 
           // Danger zone (only in global view)
@@ -820,7 +866,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: i
 
           // Advanced group (only in global view)
           (!filter || filter === 'global') && showAdvanced && advancedGroup
-            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, true, auroraDescByPath, layerAdapter)
+            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, true, auroraDescByPath, engineDescByPath, layerAdapter, engineAdapter)
             : null
         ].filter(Boolean)),
         m('div.footer', [

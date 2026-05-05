@@ -271,13 +271,10 @@ export function createAuroraService(
       // dispatches through setEngineOptions / setLayerOpacity / setLayerOptions.
       const initOpts = optionsService.options.value;
 
-      send({ type: 'setEngineOptions', patch: {
-        timeslotsPerLayer: parseInt(initOpts.gpu.timeslotsPerLayer, 10),
-        showLogo: initOpts.debug.showLogo,
-      } });
-      // Phases C/D — graticule, cities, wind, pressure, and rain now flow
-      // exclusively through aurora-db + the dialog's layer adapter. The
-      // host no longer re-dispatches them at init or on options.value diff.
+      // Phases C/D/E1 — graticule, cities, wind, pressure, rain, and the
+      // engine options (timeslotsPerLayer, showLogo) now flow exclusively
+      // through aurora-db + the dialog's layer/engine adapters. The host
+      // no longer re-dispatches any of them at init or on options.value diff.
 
       // Initial setLayerOpacity for every built-in. Host pre-multiplies the
       // toggle (enabled→0) so aurora gets one number per layer.
@@ -317,14 +314,7 @@ export function createAuroraService(
               send({ type: 'setLayerOpacity', id, value: cur.enabled ? cur.opacity : 0 });
             }
           }
-          // Engine options
-          if (opts.gpu.timeslotsPerLayer !== lastOptions.gpu.timeslotsPerLayer
-            || opts.debug.showLogo !== lastOptions.debug.showLogo) {
-            send({ type: 'setEngineOptions', patch: {
-              timeslotsPerLayer: parseInt(opts.gpu.timeslotsPerLayer, 10),
-              showLogo: opts.debug.showLogo,
-            } });
-          }
+          // Engine options now flow through engineAdapter (Phase E1).
           lastOptions = opts;
         }
       });

@@ -91,7 +91,11 @@ export class AuroraOptions {
 
   /**
    * Open IDB, load persisted blob (if any), apply migrations, merge with
-   * defaults and per-init seeds. Merge precedence: defaults < persisted < seeds.
+   * defaults and per-init seeds. Merge precedence: defaults < seeds < persisted.
+   * Persisted (aurora-db) wins so post-Phase-D/E user writes survive reload —
+   * the host's seeds are now stale optionsService values for migrated fields,
+   * but aurora-db has the user's actual choices. Seeds remain useful as
+   * first-run fallbacks for fields aurora's descriptor defaults can't supply.
    * Must be awaited before any `read`/`update*` call.
    */
   async init(seeds: AuroraOptionsInitSeeds): Promise<void> {
@@ -99,11 +103,11 @@ export class AuroraOptions {
     const stored = await getFromStore<PersistedOptions>(db, OPTIONS_STORE, OPTIONS_KEY);
     const persisted: AuroraOptionsBlob | null = stored ? migrate(stored).options : null;
 
-    // Merge precedence: defaults < persisted < seeds.
+    // Merge precedence: defaults < seeds < persisted.
     const engine: EngineOpts = {
       ...this.defaults.engine,
-      ...persisted?.engine,
       ...seeds.engine,
+      ...persisted?.engine,
     };
 
     const layers: Record<string, LayerEntry> = {};
@@ -123,8 +127,9 @@ export class AuroraOptions {
       const def = this.defaults.layers[id];
       const per = persisted?.layers[id];
       const seed = seeds.layers?.[id];
-      const opacity = seed?.opacity ?? per?.opacity ?? def?.opacity ?? 0;
-      const opts = mergeOpts(mergeOpts(def?.opts, per?.opts), seed?.opts);
+      // Persisted wins (Phase D/E1 reload-persistence — see init() docstring).
+      const opacity = per?.opacity ?? seed?.opacity ?? def?.opacity ?? 0;
+      const opts = mergeOpts(mergeOpts(def?.opts, seed?.opts), per?.opts);
       layers[id] = { opacity, opts: opts ?? {} };
     }
 

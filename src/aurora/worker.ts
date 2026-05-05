@@ -663,9 +663,17 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   const layers = layerRegistry.getAll();
   const composedShaders = await shaderComposer.compose(layers);
 
+  // Phase E1: aurora-db is authoritative for buffer-sizing options. The
+  // host-supplied config.{timeslotsPerLayer,windLineCount} now serve as
+  // first-run fallbacks via init seeds; persisted aurora-db wins for
+  // subsequent reloads. Use options.read() for downstream allocation.
+  const initEngine = options.read().engine;
+  const initWindSeedCount = (options.read().layers.wind?.opts as { seedCount?: number } | undefined)?.seedCount
+    ?? config.windLineCount;
+
   await renderer.initialize(
-    config.timeslotsPerLayer,
-    config.windLineCount,
+    initEngine.timeslotsPerLayer,
+    initWindSeedCount,
     composedShaders,
   );
 
@@ -708,7 +716,7 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
     const store = new LayerStore(device, {
       layerId: paramCfg.param,
       slabs: [{ name: 'data', sizeMB: paramCfg.sizeMB }],
-      timeslots: config.timeslotsPerLayer,
+      timeslots: initEngine.timeslotsPerLayer,
     });
     store.initialize();
     paramStores.set(paramCfg.param, store);
