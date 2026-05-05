@@ -20,7 +20,7 @@ import type { AuroraDataEvent, AuroraLayerContext, AuroraLayerFrame } from './ty
 
 // Re-export for consumers
 export type { PassTimings } from './gpu-timestamp';
-import type { LayerState } from '../config/types';
+import type { LayerState } from './types/layer-state';
 import { PRESSURE_COLOR_DEFAULT, type PressureColorOption } from '../schemas/options.schema';
 import { PALETTE_IDS, PALETTES, type PaletteId } from '../services/palette-service';
 
@@ -723,15 +723,10 @@ export class GlobeRenderer {
     // Graticule lines buffer is now written by GraticuleLayer.update() via the registry's
     // updateAll dispatch in render() — no direct call here.
 
-    // Cities: font scaling based on altitude (viewport-independent)
-    // Alt <= 3000: 1.3× world-space multiplier, alt > 3000: indicators only
-    const altitudeKm = (cameraDistance - 1) * 6371;
-    const cityFontScale = altitudeKm > 3000 ? 0 : 1.3;
-    view.setFloat32(O.cityFontScale, cityFontScale, true);
     view.setFloat32(O.globeRadiusPx, globeRadiusPx, true);
 
-    // Cities LoD update is handled by CitiesAuroraLayer via the registry's
-    // updateAll dispatch in render() — no direct call here.
+    // Cities: cityFontScale uniform + LoD update both handled by CitiesAuroraLayer
+    // via the registry's updateAll dispatch in render() — no direct call here.
 
     // Pressure: setEnabled/updateUniforms run inside PressureAuroraLayer.update()
     // via the registry's updateAll dispatch. Capture per-frame inputs the host
@@ -766,9 +761,13 @@ export class GlobeRenderer {
       dataReady: false,
       frameDeltaMs: this.frameDeltaMs,
       globeRadiusPx: this.currentGlobeRadiusPx,
+      dpr: this.canvas.height / this.cssHeight,
       time: new Date(),
     };
     this.layerRegistry.updateAll(layerFrame);
+    // Flush any uniformView writes layers performed during updateAll (e.g.
+    // cityFontScale) before the GPU consumes the buffer in subsequent passes.
+    this.uploadUniforms();
 
     // PASS 1: Render globe to offscreen textures (no atmosphere)
     // Use timestampWrites for GPU timing (spec-compliant approach)
@@ -1044,6 +1043,14 @@ export class GlobeRenderer {
    */
   setWindSeedCount(seedCount: number): void {
     this.layerRegistry.onOptionsChanged('wind', { seedCount }, this.getLayerContext());
+  }
+
+  /**
+   * Set graticule label font size and line width (CSS pixels).
+   * The layer multiplies by frame.dpr each frame to write render-pixel uniforms.
+   */
+  setGraticuleOptions(fontSize: number, lineWidth: number): void {
+    this.layerRegistry.onOptionsChanged('graticule', { fontSize, lineWidth }, this.getLayerContext());
   }
 
   /**

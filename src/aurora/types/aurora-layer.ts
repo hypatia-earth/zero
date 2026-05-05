@@ -30,6 +30,8 @@ export interface AuroraLayerFrame {
   dataReady: boolean;
   frameDeltaMs: number;
   globeRadiusPx: number;
+  /** Device pixel ratio (render pixels per CSS pixel). For screen-space sizing. */
+  dpr: number;
   time: Date;
 }
 

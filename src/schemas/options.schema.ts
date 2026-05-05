@@ -639,7 +639,8 @@ export const optionsSchema = z.object({
         min: 8,
         max: 24,
         step: 1,
-        // No uniform: here — scaled to render pixels manually in worker.ts
+        // No uniform: here — GraticuleLayer.onOptionsChanged caches the CSS-pixel
+        // value and writes (value × frame.dpr) to U.graticuleFontSize each frame.
       }
     ),
     lineWidth: opt(
@@ -654,7 +655,8 @@ export const optionsSchema = z.object({
         min: 1,
         max: 5,
         step: 0.5,
-        // No uniform: here — scaled to render pixels manually in worker.ts
+        // No uniform: here — GraticuleLayer.onOptionsChanged caches the CSS-pixel
+        // value and writes (value × frame.dpr) to U.graticuleLineWidth each frame.
       }
     ),
   }),

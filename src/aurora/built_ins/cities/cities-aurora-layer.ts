@@ -85,14 +85,18 @@ export class CitiesAuroraLayer implements AuroraLayer {
   }
 
   update(frame: AuroraLayerFrame): void {
-    // Gate on altitude — at high altitude we render indicators only, freeze tier.
+    // Altitude gate — at high altitude we render indicators only and freeze the LoD tier.
+    // The cityFontScale uniform doubles as a shader-side gate (0 = indicators only, 1.3 = labels).
     const cameraDistance = Math.hypot(
       frame.eyePosition[0]!,
       frame.eyePosition[1]!,
       frame.eyePosition[2]!,
     );
     const altitudeKm = (cameraDistance - 1) * EARTH_RADIUS_KM;
-    if (altitudeKm > ALT_THRESHOLD_KM) return;
+    const cityFontScale = altitudeKm > ALT_THRESHOLD_KM ? 0 : 1.3;
+    this.host.uniformView.setFloat32(U.cityFontScale, cityFontScale, true);
+
+    if (cityFontScale === 0) return;
 
     if (this.animator.update(frame.globeRadiusPx, frame.frameDeltaMs)) {
       this.uploadTier();

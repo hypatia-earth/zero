@@ -44,14 +44,8 @@ export interface Timestep {
   fallbackUrl?: string;
 }
 
-/** Layer data state for interpolation */
-export type TLayerMode = 'loading' | 'single' | 'pair';
-
-export interface LayerState {
-  mode: TLayerMode;
-  lerp: number;      // 0-1 interpolation factor (only valid in 'pair' mode)
-  time: Date;        // current view time
-}
+/** Layer data state for interpolation — lives in aurora; re-exported here for host callers. */
+export type { TLayerMode, LayerState } from '../aurora/types/layer-state';
 
 /** Task for QueueService to execute */
 export interface QueueTask {

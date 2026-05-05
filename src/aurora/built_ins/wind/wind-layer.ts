@@ -9,9 +9,9 @@
 
 import windRenderCode from './render.wesl?static';
 import windComputeCode from './compute.wesl?static';
-import { generateFibonacciSphere } from '../../../utils/fibonacci-sphere';
-import { generateGaussianLUTs } from '../../../utils/gaussian-grid';
-import type { LayerState } from '../../../config/types';
+import { generateFibonacciSphere } from '../../utils/fibonacci-sphere';
+import { generateGaussianLUTs } from '../../utils/gaussian-grid';
+import type { LayerState } from '../../types/layer-state';
 import type { PaletteTexture } from '../../palette-texture';
 
 const DEBUG = false;

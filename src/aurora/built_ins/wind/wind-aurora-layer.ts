@@ -21,7 +21,7 @@ import type {
   AuroraLayerContext,
   AuroraLayerFrame,
 } from '../../types/aurora-layer';
-import type { LayerState } from '../../../config/types';
+import type { LayerState } from '../../types/layer-state';
 
 export interface WindAuroraLayerConfig {
   snakeLength: number;

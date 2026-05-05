@@ -5,8 +5,8 @@
  * the shared lines buffer (binding 21). Render path is composed via main.wesl's
  * blendGraticule; this plugin only contributes initialize + update.
  *
- * Phase 2 of aurora-autarky Sub-A. fontSize/lineWidth uniforms still written by
- * host worker; moves into onOptionsChanged in a later phase.
+ * fontSize/lineWidth (CSS pixels) flow in via onOptionsChanged; update() applies
+ * frame.dpr to write the GPU uniforms in render-pixel units each frame.
  */
 
 import { GraticuleAnimator } from './graticule-animator';
@@ -40,6 +40,12 @@ export class GraticuleLayer implements AuroraLayer {
 
   private animator!: GraticuleAnimator;
   private device!: GPUDevice;
+  private uniformView!: DataView;
+
+  // CSS-pixel option values cached from onOptionsChanged; multiplied by frame.dpr
+  // each tick to write render-pixel uniforms the shader consumes.
+  private fontSizeCss = 0;
+  private lineWidthCss = 0;
 
   constructor(
     private readonly initialGlobeRadiusPx: number,
@@ -48,6 +54,7 @@ export class GraticuleLayer implements AuroraLayer {
 
   initialize(ctx: AuroraLayerContext): void {
     this.device = ctx.device;
+    this.uniformView = ctx.uniformView;
     this.animator = new GraticuleAnimator(this.initialGlobeRadiusPx, GRATICULE_DEFAULT_LOD_LEVELS);
     // Aurora-internal uniform: written once at registration (was host's writeConfigUniforms).
     ctx.uniformView.setFloat32(U.graticuleLabelMaxRadius, LABEL_MAX_RADIUS_PX, true);
@@ -57,9 +64,13 @@ export class GraticuleLayer implements AuroraLayer {
     // Graticule has no data buffers
   }
 
-  onOptionsChanged(_ctx: AuroraLayerContext, _options: Record<string, unknown>): void {
-    // Phase 2: fontSize/lineWidth still flow through host worker uniform writes.
-    // Will move here in a later phase.
+  onOptionsChanged(_ctx: AuroraLayerContext, options: Record<string, unknown>): void {
+    if ('fontSize' in options && typeof options.fontSize === 'number') {
+      this.fontSizeCss = options.fontSize;
+    }
+    if ('lineWidth' in options && typeof options.lineWidth === 'number') {
+      this.lineWidthCss = options.lineWidth;
+    }
   }
 
   compute(_frame: AuroraLayerFrame): boolean {
@@ -69,6 +80,9 @@ export class GraticuleLayer implements AuroraLayer {
   update(frame: AuroraLayerFrame): void {
     const buf = this.animator.packToBuffer(frame.globeRadiusPx, frame.frameDeltaMs);
     this.device.queue.writeBuffer(this.linesBuffer, 0, buf);
+    // Shader consumes render-pixel sizes (it scales by worldUnitsPerPixel ∝ 1/render-resolution).
+    this.uniformView.setFloat32(U.graticuleFontSize, this.fontSizeCss * frame.dpr, true);
+    this.uniformView.setFloat32(U.graticuleLineWidth, this.lineWidthCss * frame.dpr, true);
   }
 
   render(_frame: AuroraLayerFrame, _pass: GPURenderPassEncoder): void {

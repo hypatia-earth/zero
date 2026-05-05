@@ -655,15 +655,14 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
   const prevOptions = currentOptions;
   currentOptions = data.value;
 
-  // Write option uniforms declaratively (graticuleFontSize, graticuleLineWidth, etc.)
+  // Write option uniforms declaratively
   if (renderer) {
     const view = renderer.getUniformView();
     writeOptionUniforms(view, currentOptions);
 
-    // Both multiply by worldUnitsPerPixel (∝ 1/resolution.y) in shader, so must be in render pixels
-    const pxRatio = canvas!.height / renderer.cssHeight;
-    view.setFloat32(U.graticuleFontSize, currentOptions.graticule.fontSize * pxRatio, true);
-    view.setFloat32(U.graticuleLineWidth, currentOptions.graticule.lineWidth * pxRatio, true);
+    // Graticule fontSize/lineWidth (CSS pixels) flow into GraticuleLayer.onOptionsChanged;
+    // the layer applies frame.dpr each tick to write render-pixel uniforms.
+    renderer.setGraticuleOptions(currentOptions.graticule.fontSize, currentOptions.graticule.lineWidth);
 
     // City label color
     const cityColors = {
@@ -790,13 +789,7 @@ function handleResize(data: Extract<AuroraRequest, { type: 'resize' }>): void {
   renderer.cssHeight = data.cssHeight;
   renderer.resize(data.width, data.height);
 
-  // Rewrite scaled uniforms with updated render dimensions
-  if (currentOptions) {
-    const view = renderer.getUniformView();
-    const pxRatio = canvas.height / renderer.cssHeight;
-    view.setFloat32(U.graticuleFontSize, currentOptions.graticule.fontSize * pxRatio, true);
-    view.setFloat32(U.graticuleLineWidth, currentOptions.graticule.lineWidth * pxRatio, true);
-  }
+  // No explicit reapply — GraticuleLayer.update reads frame.dpr each tick.
 }
 
 function handleUploadData(data: Extract<AuroraRequest, { type: 'uploadData' }>): void {
