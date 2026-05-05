@@ -781,17 +781,8 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
     showLogo: currentOptions.debug.showLogo,
   });
 
-  // Mirror per-built-in opacity (host pre-multiplies enabled → opacity-or-zero)
-  // into targetOpacities. setLayerOpacity writes here directly; updateAnimated-
-  // Opacities reads here and applies the data-ready gate.
-  if (layerRegistry) {
-    for (const layer of layerRegistry.getAll()) {
-      if (!isBuiltInLayer(layer)) continue;
-      const layerOpts = currentOptions[layer.id];
-      if (!layerOpts || !('enabled' in layerOpts)) continue;
-      applyLayerOpacity(layer.id, layerOpts.enabled ? layerOpts.opacity : 0);
-    }
-  }
+  // Per-built-in opacity has migrated — host dispatches setLayerOpacity
+  // directly, with the enabled→0 pre-multiplication applied host-side.
 
   // Write option uniforms declaratively
   if (renderer) {

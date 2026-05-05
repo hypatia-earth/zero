@@ -29,6 +29,11 @@ const CITY_COLORS_RGB: Record<ZeroOptions['cities']['color'], [number, number, n
   gold:    [0.85, 0.65, 0.13],
 };
 
+/** Built-in layer ids whose UI bind-points drive aurora-side opacity. Excludes
+ *  'humidity' from BUILT_IN_LAYERS because it has a ZeroOptions section but no
+ *  registered layer folder — it'd be a no-op dispatch. */
+const OPACITY_BUILT_INS = ['earth', 'sun', 'graticule', 'cities', 'temp', 'rain', 'clouds', 'pressure', 'wind'] as const;
+
 /** Type guard: value is an object with a palette ID field */
 function hasPaletteField(val: unknown): val is { palette: PaletteId } {
   return typeof val === 'object' && val !== null && 'palette' in val && typeof val.palette === 'string';
@@ -288,6 +293,13 @@ export function createAuroraService(
         animated: initOpts.rain.animated,
       } });
 
+      // Initial setLayerOpacity for every built-in. Host pre-multiplies the
+      // toggle (enabled→0) so aurora gets one number per layer.
+      for (const id of OPACITY_BUILT_INS) {
+        const layerOpts = initOpts[id];
+        send({ type: 'setLayerOpacity', id, value: layerOpts.enabled ? layerOpts.opacity : 0 });
+      }
+
       // Forward options updates to worker
       let lastOptions = initOpts;
       const lastPalettes = new Map<string, string>();
@@ -340,6 +352,15 @@ export function createAuroraService(
             send({ type: 'setLayerOptions', id: 'rain', opts: {
               animated: opts.rain.animated,
             } });
+          }
+          // Dispatch setLayerOpacity per built-in when its enabled or opacity
+          // changed. Host pre-multiplies enabled→0.
+          for (const id of OPACITY_BUILT_INS) {
+            const cur = opts[id];
+            const prev = lastOptions[id];
+            if (cur.enabled !== prev.enabled || cur.opacity !== prev.opacity) {
+              send({ type: 'setLayerOpacity', id, value: cur.enabled ? cur.opacity : 0 });
+            }
           }
           lastOptions = opts;
           send({ type: 'options', value: opts });
