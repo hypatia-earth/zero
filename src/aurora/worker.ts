@@ -141,6 +141,18 @@ function applyGraticuleOptions(opts: GraticuleHostOpts): void {
   renderer.setGraticuleOptions(opts.fontSize, opts.lineWidth);
 }
 
+/** Cities sub-shape the host drives today. Color is an RGB triplet (0..1) —
+ *  the host owns named-color → RGB translation; aurora stays neutral. */
+type CitiesHostOpts = { color: [number, number, number] };
+
+function applyCitiesOptions(opts: CitiesHostOpts): void {
+  if (!renderer) return;
+  const view = renderer.getUniformView();
+  view.setFloat32(U.cityColorR, opts.color[0], true);
+  view.setFloat32(U.cityColorG, opts.color[1], true);
+  view.setFloat32(U.cityColorB, opts.color[2], true);
+}
+
 // Layer registry (for declarative mode)
 let layerRegistry: LayerService | null = null;
 
@@ -734,7 +746,8 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
       lineWidth: currentOptions.graticule.lineWidth,
     });
 
-    // City label color
+    // City label color — host-side named→RGB mapping until UI migrates to
+    // sending pre-translated RGB via setLayerOptions('cities', {color:[r,g,b]}).
     const cityColors = {
       white: [1, 1, 1],
       black: [0, 0, 0],
@@ -742,9 +755,7 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
       gold: [0.85, 0.65, 0.13],
     } as const;
     const cc = cityColors[currentOptions.cities.color] ?? cityColors.white;
-    view.setFloat32(U.cityColorR, cc[0], true);
-    view.setFloat32(U.cityColorG, cc[1], true);
-    view.setFloat32(U.cityColorB, cc[2], true);
+    applyCitiesOptions({ color: [cc[0]!, cc[1]!, cc[2]!] });
   }
 
   // React to options that require buffer recreation
@@ -1115,6 +1126,9 @@ function handleSetLayerOptions(data: Extract<AuroraRequest, { type: 'setLayerOpt
   switch (data.id) {
     case 'graticule':
       applyGraticuleOptions(data.opts as GraticuleHostOpts);
+      return;
+    case 'cities':
+      applyCitiesOptions(data.opts as CitiesHostOpts);
       return;
     default:
       throw new Error(`Sub-B Phase 5: setLayerOptions('${data.id}') handler not yet wired (layer not migrated)`);
