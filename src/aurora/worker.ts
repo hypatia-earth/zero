@@ -802,13 +802,7 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
     // directly. No bulk-channel mirror here.
   }
 
-  // Mirror wind into windOpts. applyWindOptions decides whether to call
-  // renderer.setWindSeedCount based on the previous value, so the explicit
-  // prevOptions guard isn't needed here.
-  applyWindOptions({
-    seedCount: currentOptions.wind.seedCount,
-    speed: currentOptions.wind.speed,
-  });
+  // wind has migrated — host dispatches setLayerOptions('wind',...) directly.
 
   // Mirror pressure into pressureOpts. handleRender reads from here
   // (spacing/smoothing trigger contour recompute; colors flow into

@@ -275,6 +275,10 @@ export function createAuroraService(
       send({ type: 'setLayerOptions', id: 'cities', opts: {
         color: CITY_COLORS_RGB[initOpts.cities.color],
       } });
+      send({ type: 'setLayerOptions', id: 'wind', opts: {
+        seedCount: initOpts.wind.seedCount,
+        speed: initOpts.wind.speed,
+      } });
 
       // Forward options updates to worker
       let lastOptions = initOpts;
@@ -306,6 +310,13 @@ export function createAuroraService(
           if (opts.cities.color !== lastOptions.cities.color) {
             send({ type: 'setLayerOptions', id: 'cities', opts: {
               color: CITY_COLORS_RGB[opts.cities.color],
+            } });
+          }
+          if (opts.wind.seedCount !== lastOptions.wind.seedCount
+            || opts.wind.speed !== lastOptions.wind.speed) {
+            send({ type: 'setLayerOptions', id: 'wind', opts: {
+              seedCount: opts.wind.seedCount,
+              speed: opts.wind.speed,
             } });
           }
           lastOptions = opts;
