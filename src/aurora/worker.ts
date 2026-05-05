@@ -13,7 +13,8 @@ import type { CameraConfig } from './camera';
 import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from './built_ins/pressure/pressure-layer';
 import { LayerStore } from './layer-store';
-import type { ZeroOptions } from '../schemas/options.schema';
+import type { ZeroOptions, PressureColorOption } from '../schemas/options.schema';
+import { PRESSURE_COLOR_DEFAULT } from '../schemas/options.schema';
 import type { TBuiltInLayer, TLayer } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import { getSunDirection } from '../utils/sun-position';
@@ -167,6 +168,26 @@ function applyWindOptions(patch: Partial<WindHostOpts>): void {
   if (renderer && patch.seedCount !== undefined && patch.seedCount !== prev.seedCount) {
     renderer.setWindSeedCount(patch.seedCount);
   }
+}
+
+/** Pressure sub-shape the host drives today. `colors` is the host's
+ *  PressureColorOption discriminated union — the type itself moves into
+ *  aurora/types/ during Phase 9 cleanup, alongside removing the host-schema
+ *  import in globe-renderer. */
+type PressureHostOpts = {
+  spacing: number;       // hPa (parsed from string at the adapter)
+  smoothing: 'none' | 'light';
+  colors: PressureColorOption;
+};
+
+let pressureOpts: PressureHostOpts = {
+  spacing: 4,
+  smoothing: 'light',
+  colors: PRESSURE_COLOR_DEFAULT,
+};
+
+function applyPressureOptions(patch: Partial<PressureHostOpts>): void {
+  pressureOpts = { ...pressureOpts, ...patch };
 }
 
 // Layer registry (for declarative mode)
@@ -590,7 +611,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
       lerp: computeLerp(getLayerSlotState('wind')!, time.getTime()),
       time,
     },
-    pressureColors: opts.pressure.colors,
+    pressureColors: pressureOpts.colors,
     logoOpacity: opts.debug.showLogo && !isAnyLayerEnabled()
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
@@ -784,6 +805,15 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
     seedCount: currentOptions.wind.seedCount,
     speed: currentOptions.wind.speed,
   });
+
+  // Mirror pressure into pressureOpts. handleRender reads from here
+  // (spacing/smoothing trigger contour recompute; colors flow into
+  // buildUniforms).
+  applyPressureOptions({
+    spacing: parseInt(currentOptions.pressure.spacing, 10),
+    smoothing: currentOptions.pressure.smoothing,
+    colors: currentOptions.pressure.colors,
+  });
 }
 
 async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): Promise<void> {
@@ -798,7 +828,7 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
   updateAnimatedOpacities(dt, time);
 
   // Update isobar spacing if changed
-  const newSpacing = parseInt(opts.pressure.spacing, 10);
+  const newSpacing = pressureOpts.spacing;
   let needsContourRecompute = false;
   if (newSpacing !== lastPressureSpacing) {
     lastPressureSpacing = newSpacing;
@@ -808,13 +838,15 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
   }
 
   // Check if smoothing changed
-  const newSmoothing = opts.pressure.smoothing;
+  const newSmoothing = pressureOpts.smoothing;
   if (newSmoothing !== lastSmoothing) {
     lastSmoothing = newSmoothing;
     needsContourRecompute = true;
   }
 
-  // Recompute pressure contours when time, spacing, or smoothing changes
+  // Recompute pressure contours when time, spacing, or smoothing changes.
+  // `enabled` still comes from currentOptions.pressure (compute-skip gate);
+  // it leaves with the schema in Phase 9 cleanup.
   const pressureState = getLayerSlotState('pressure');
   if (opts.pressure.enabled && pressureState?.dataReady) {
     const currentMinute = Math.floor(time / 60000);
@@ -822,7 +854,7 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
       lastPressureMinute = currentMinute;
       // Map smoothing option to Chaikin iterations: none=0, light=1
       const smoothingMap: Record<string, number> = { none: 0, light: 1 };
-      const smoothingIterations = smoothingMap[opts.pressure.smoothing]!;
+      const smoothingIterations = smoothingMap[pressureOpts.smoothing]!;
       const lerp = computeLerp(pressureState, time);
       renderer!.runPressureContour(
         pressureState.slot0,
@@ -1154,6 +1186,9 @@ function handleSetLayerOptions(data: Extract<AuroraRequest, { type: 'setLayerOpt
       return;
     case 'wind':
       applyWindOptions(data.opts as Partial<WindHostOpts>);
+      return;
+    case 'pressure':
+      applyPressureOptions(data.opts as Partial<PressureHostOpts>);
       return;
     default:
       throw new Error(`Sub-B Phase 5: setLayerOptions('${data.id}') handler not yet wired (layer not migrated)`);
