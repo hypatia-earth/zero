@@ -69,6 +69,7 @@ export const App: m.ClosureComponent = () => {
             paletteService: services.paletteService!,
             dialogService: services.dialogService!,
             configService: services.configService!,
+            auroraService: services.auroraService!,
           }),
           m(AboutDialog, {
             aboutService: services.aboutService!,

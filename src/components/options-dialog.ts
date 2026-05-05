@@ -22,11 +22,32 @@ import type { PaletteService } from '../services/palette-service';
 import { getByPath } from '../utils/object';
 import type { ConfigService } from '../services/config-service';
 import type { DialogService } from '../services/dialog-service';
+import type { AuroraService } from '../services/aurora-service';
 import { clearCache, nuke } from '../services/sw-registration';
 import { RadioPaletteControl } from './radio-palette-control';
 import { isPaletteId } from '../services/palette-service';
 import { PressureColorControl } from './pressure-color-control';
 import { DialogHeader } from './dialog-header';
+import { getLayerOptionsCatalog } from '../aurora/options/catalog';
+import type { OptionDescriptor } from '../aurora/types/options-descriptor';
+import { createLayerAdapter, type OptionsAdapter } from '../services/aurora-options-adapters';
+
+/** Phase C — only graticule is migrated from schema-driven binding to
+ *  catalog+adapter binding. Phases D/E expand this set; Phase F deletes
+ *  the matching ZeroOptions schema fields. */
+const AURORA_CATALOG_LAYERS = new Set<string>(['graticule']);
+
+/** Build a `${layerId}.${key}` → descriptor map for Phase-C-migrated layers,
+ *  for fast path lookup inside renderOption. Recomputed per-dialog-render
+ *  is cheap (catalog walks five entries). */
+function buildAuroraDescriptorMap(): Map<string, OptionDescriptor> {
+  const out = new Map<string, OptionDescriptor>();
+  for (const entry of getLayerOptionsCatalog()) {
+    if (!AURORA_CATALOG_LAYERS.has(entry.id)) continue;
+    for (const d of entry.options) out.set(`${entry.id}.${d.key}`, d);
+  }
+  return out;
+}
 
 // ============================================================
 // Type guard for slider formatting
@@ -291,7 +312,72 @@ function renderPrefetchSizeEstimate(options: ZeroOptions): m.Children {
   ]);
 }
 
-function renderOption(opt: FlatOption, options: ZeroOptions, optionsService: OptionsService, paletteService: PaletteService): m.Children {
+/** Aurora-catalog-driven control. One generic control per `kind`; shared
+ *  row chrome (label, hint, reset) matches the schema-driven path so the
+ *  pilot looks identical. Graticule (Phase C) needs only kind: 'number'. */
+function renderAuroraControl(
+  opt: FlatOption,
+  descriptor: OptionDescriptor,
+  adapter: OptionsAdapter,
+): m.Children {
+  const value = adapter.read(descriptor);
+  const modified = value !== descriptor.default;
+
+  let control: m.Children;
+  switch (descriptor.kind) {
+    case 'number':
+    case 'integer': {
+      const min = descriptor.min!;
+      const max = descriptor.max!;
+      const step = descriptor.step!;
+      control = m('div.slider', [
+        m('input[type=range]', {
+          min, max, step,
+          value: value as number,
+          oninput: (e: Event) => {
+            const next = parseFloat((e.target as HTMLInputElement).value);
+            adapter.write(descriptor, next);
+          },
+        }),
+        m('span.value', formatValue(value as number, { min, max, step })),
+      ]);
+      break;
+    }
+    default:
+      // Phases D/E add boolean/enum/rgb/pressureColors controls.
+      control = m('span.value', `(${descriptor.kind} not yet implemented)`);
+  }
+
+  return m('div.row', { key: opt.path, 'data-testid': opt.path }, [
+    m('div.info', [
+      m('label.label', opt.meta.label),
+      opt.meta.description ? m('span.hint', opt.meta.description) : null,
+    ].filter(Boolean)),
+    m('div.controls', [
+      m('button.reset', {
+        title: 'Reset to default',
+        onclick: () => adapter.write(descriptor, descriptor.default),
+        style: { visibility: modified ? 'visible' : 'hidden' },
+      }, '↺'),
+      control,
+    ]),
+  ]);
+}
+
+function renderOption(
+  opt: FlatOption,
+  options: ZeroOptions,
+  optionsService: OptionsService,
+  paletteService: PaletteService,
+  auroraDescByPath: Map<string, OptionDescriptor>,
+  layerAdapter: OptionsAdapter,
+): m.Children {
+  // Phase C — aurora-owned descriptor takes the catalog+adapter path.
+  const auroraDescriptor = auroraDescByPath.get(opt.path);
+  if (auroraDescriptor) {
+    return renderAuroraControl(opt, auroraDescriptor, layerAdapter);
+  }
+
   const currentValue = getByPath(options, opt.path);
   const modified = isModified(opt.path, currentValue);
   const isPalette = opt.path.endsWith('.palette');
@@ -365,8 +451,11 @@ function renderGroup(
   optionsService: OptionsService,
   paletteService: PaletteService,
   showAdvancedOptions: boolean,
+  auroraDescByPath: Map<string, OptionDescriptor>,
+  layerAdapter: OptionsAdapter,
   skipGroupHeader: boolean = false
 ): m.Children {
+  const ro = (opt: FlatOption) => renderOption(opt, options, optionsService, paletteService, auroraDescByPath, layerAdapter);
   const group = optionGroups[groupId as keyof typeof optionGroups];
   if (!group) return null;
 
@@ -399,7 +488,7 @@ function renderGroup(
       ...Array.from(byLayer.entries()).map(([layerId, opts]) => {
         return m('div.subsection', { key: layerId }, [
           m('h4.title', { key: `${layerId}_title` }, layerLabels[layerId] || layerId),
-          ...opts.map(opt => renderOption(opt, options, optionsService, paletteService))
+          ...opts.map(ro)
         ].filter(Boolean));
       })
     ].filter(Boolean));
@@ -425,7 +514,7 @@ function renderGroup(
       ...sortedSubgroups.map(([subgroupKey, opts]) =>
         m('div.subsection', { key: subgroupKey }, [
           m('h4.title', { key: `${subgroupKey}_title` }, advancedSubgroups[subgroupKey] || subgroupKey),
-          ...opts.map(opt => renderOption(opt, options, optionsService, paletteService))
+          ...opts.map(ro)
         ])
       )
     ].filter(Boolean));
@@ -446,7 +535,7 @@ function renderGroup(
     return m('div.section', { key: groupId }, [
       !skipGroupHeader ? m('h3.title', { key: '_title' }, group.label) : null,
       !skipGroupHeader && group.description ? m('p.description', { key: '_desc' }, group.description) : null,
-      ...filteredOptions.map(opt => renderOption(opt, options, optionsService, paletteService)),
+      ...filteredOptions.map(ro),
       prefetchEnabled ? renderPrefetchSizeEstimate(options) : null,
     ].filter(Boolean));
   }
@@ -454,7 +543,7 @@ function renderGroup(
   return m('div.section', { key: groupId }, [
     !skipGroupHeader ? m('h3.title', { key: '_title' }, group.label) : null,
     !skipGroupHeader && group.description ? m('p.description', { key: '_desc' }, group.description) : null,
-    ...visibleOptions.map(opt => renderOption(opt, options, optionsService, paletteService))
+    ...visibleOptions.map(ro)
   ].filter(Boolean));
 }
 
@@ -467,10 +556,15 @@ export interface OptionsDialogAttrs {
   paletteService: PaletteService;
   dialogService: DialogService;
   configService: ConfigService;
+  auroraService: AuroraService;
 }
 
-export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
+export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: initialAttrs }) => {
   let windowEl: HTMLElement | null = null;
+  // Built once per dialog instance — descriptors are stable, so is the
+  // adapter (closure over auroraService.optionsMirror).
+  const auroraDescByPath = buildAuroraDescriptorMap();
+  const layerAdapter = createLayerAdapter(initialAttrs.auroraService);
 
   return {
     view({ attrs }) {
@@ -570,7 +664,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
           ...sortedGroupIds.map(groupId => {
             const groupOpts = filteredGroups[groupId];
             if (!groupOpts) return null;
-            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, showAdvanced, !!filter && filter !== 'global');
+            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, showAdvanced, auroraDescByPath, layerAdapter, !!filter && filter !== 'global');
           }).filter(Boolean),
 
           // Danger zone (only in global view)
@@ -626,7 +720,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = () => {
 
           // Advanced group (only in global view)
           (!filter || filter === 'global') && showAdvanced && advancedGroup
-            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, true)
+            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, true, auroraDescByPath, layerAdapter)
             : null
         ].filter(Boolean)),
         m('div.footer', [

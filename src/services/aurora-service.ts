@@ -285,10 +285,9 @@ export function createAuroraService(
         timeslotsPerLayer: parseInt(initOpts.gpu.timeslotsPerLayer, 10),
         showLogo: initOpts.debug.showLogo,
       } });
-      send({ type: 'setLayerOptions', id: 'graticule', opts: {
-        fontSize: initOpts.graticule.fontSize,
-        lineWidth: initOpts.graticule.lineWidth,
-      } });
+      // Phase C — graticule's fontSize/lineWidth now flow exclusively
+      // through aurora-db + the dialog's layer adapter. The host no longer
+      // re-dispatches them at init or on options.value diff.
       send({ type: 'setLayerOptions', id: 'cities', opts: {
         color: CITY_COLORS_RGB[initOpts.cities.color],
       } });
@@ -333,12 +332,8 @@ export function createAuroraService(
           }
           // Typed-setter dispatch for migrated layers (their fields are no
           // longer applied from the bulk channel on the worker side).
-          if (opts.graticule !== lastOptions.graticule) {
-            send({ type: 'setLayerOptions', id: 'graticule', opts: {
-              fontSize: opts.graticule.fontSize,
-              lineWidth: opts.graticule.lineWidth,
-            } });
-          }
+          // Phase C: graticule.fontSize/lineWidth removed — dialog's
+          // layerAdapter is now the only writer for those fields.
           if (opts.cities.color !== lastOptions.cities.color) {
             send({ type: 'setLayerOptions', id: 'cities', opts: {
               color: CITY_COLORS_RGB[opts.cities.color],
