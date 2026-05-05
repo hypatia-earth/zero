@@ -31,11 +31,12 @@ import { DialogHeader } from './dialog-header';
 import { getLayerOptionsCatalog } from '../aurora/options/catalog';
 import type { OptionDescriptor } from '../aurora/types/options-descriptor';
 import { createLayerAdapter, type OptionsAdapter } from '../services/aurora-options-adapters';
+import { CITY_COLORS_RGB } from '../utils/cities-colors';
 
-/** Phase C — only graticule is migrated from schema-driven binding to
- *  catalog+adapter binding. Phases D/E expand this set; Phase F deletes
- *  the matching ZeroOptions schema fields. */
-const AURORA_CATALOG_LAYERS = new Set<string>(['graticule']);
+/** Phases C+D — graticule, cities, wind, pressure, and rain bind through
+ *  the aurora catalog/adapter path. Phase E adds opacity descriptors;
+ *  Phase F deletes the matching ZeroOptions schema fields. */
+const AURORA_CATALOG_LAYERS = new Set<string>(['graticule', 'cities', 'wind', 'pressure', 'rain']);
 
 /** Delete aurora-db so a Reset All actually resets aurora-owned options
  *  (post-Phase-C, aurora-db is authoritative for migrated layers). The
@@ -329,19 +330,60 @@ function renderPrefetchSizeEstimate(options: ZeroOptions): m.Children {
   ]);
 }
 
+/** Cheap deep equality for descriptor defaults — covers arrays/objects
+ *  (cities color triplet, pressure colors discriminated union) without a
+ *  utility import. JSON-stringify is fine for the descriptor-shape values
+ *  we author (no functions, no cycles). */
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** Look up a label hint in the schema meta for a descriptor enum value.
+ *  Schema and descriptor types may diverge (e.g. pressure.spacing schema
+ *  has `'4'`, descriptor has `4`), so coerce via String() when matching.
+ *  Falls back to the value itself when no schema meta options exist. */
+function labelForEnumValue(opt: FlatOption, value: unknown, unit?: string): string {
+  const opts = (opt.meta as { options?: { value: unknown; label: string }[] }).options;
+  if (opts) {
+    const match = opts.find(o => String(o.value) === String(value));
+    if (match) return match.label;
+  }
+  return unit ? `${value} ${unit}` : String(value);
+}
+
 /** Aurora-catalog-driven control. One generic control per `kind`; shared
  *  row chrome (label, hint, reset) matches the schema-driven path so the
- *  pilot looks identical. Graticule (Phase C) needs only kind: 'number'. */
+ *  pilot looks identical. */
 function renderAuroraControl(
   opt: FlatOption,
   descriptor: OptionDescriptor,
   adapter: OptionsAdapter,
 ): m.Children {
   const value = adapter.read(descriptor);
-  const modified = value !== descriptor.default;
+  const modified = !deepEqual(value, descriptor.default);
 
   let control: m.Children;
-  switch (descriptor.kind) {
+
+  // Enum descriptors render as radio groups regardless of `kind` —
+  // schema's labels (e.g. '8K', '16K') win over raw values.
+  if (descriptor.enum) {
+    control = m('div.radio-group', descriptor.enum.map(o => {
+      const selected = value === o.value;
+      return m('label.radio', {
+        key: String(o.value),
+        class: selected ? 'selected' : '',
+      }, [
+        m('input[type=radio]', {
+          name: `${descriptor.layerId ?? 'engine'}.${descriptor.key}`,
+          value: String(o.value),
+          checked: selected,
+          onchange: () => adapter.write(descriptor, o.value),
+        }),
+        m('span', labelForEnumValue(opt, o.value, descriptor.unit)),
+      ]);
+    }));
+  } else switch (descriptor.kind) {
     case 'number':
     case 'integer': {
       const min = descriptor.min!;
@@ -360,8 +402,46 @@ function renderAuroraControl(
       ]);
       break;
     }
+
+    case 'boolean': {
+      control = m('label.toggle', [
+        m('input[type=checkbox]', {
+          checked: value as boolean,
+          onchange: (e: Event) => adapter.write(descriptor, (e.target as HTMLInputElement).checked),
+        }),
+        m('span.track'),
+      ]);
+      break;
+    }
+
+    case 'rgb': {
+      // Cities color chips. Aurora persists the RGB triplet; presentation
+      // (named chips, hex previews) is host-side via schema meta + the
+      // CITY_COLORS_RGB dictionary. Phase F shrinks the schema; descriptor
+      // will then need to carry chip metadata itself.
+      const chipOpts = (opt.meta as { options?: { value: keyof typeof CITY_COLORS_RGB; label: string; color: string }[] }).options;
+      const rgb = value as [number, number, number];
+      control = m('div.color-chips', chipOpts?.map(o =>
+        m('button.color-chip', {
+          key: o.value,
+          class: deepEqual(rgb, CITY_COLORS_RGB[o.value]) ? 'selected' : '',
+          style: { backgroundColor: o.color },
+          title: o.label,
+          onclick: () => adapter.write(descriptor, CITY_COLORS_RGB[o.value]),
+        })
+      ));
+      break;
+    }
+
+    case 'pressureColors': {
+      control = m(PressureColorControl, {
+        value: value as PressureColorOption,
+        onChange: (v: PressureColorOption) => adapter.write(descriptor, v),
+      });
+      break;
+    }
+
     default:
-      // Phases D/E add boolean/enum/rgb/pressureColors controls.
       control = m('span.value', `(${descriptor.kind} not yet implemented)`);
   }
 

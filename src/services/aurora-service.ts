@@ -18,16 +18,6 @@ import { Camera } from '../aurora/camera';
 import { setupViewport } from './viewport/viewport';
 import type { PaletteId } from './palette-service';
 import type { EngineOpts, AuroraOptions as AuroraOptionsBlob } from '../aurora/types/options';
-import type { ZeroOptions } from '../schemas/options.schema';
-
-/** Host-side named→RGB mapping for cities label color. Aurora consumes the
- *  pre-translated triplet via setLayerOptions('cities', {color:[r,g,b]}). */
-const CITY_COLORS_RGB: Record<ZeroOptions['cities']['color'], [number, number, number]> = {
-  white:   [1, 1, 1],
-  black:   [0, 0, 0],
-  darkred: [0.55, 0.05, 0.05],
-  gold:    [0.85, 0.65, 0.13],
-};
 
 /** Built-in layer ids whose UI bind-points drive aurora-side opacity. Excludes
  *  'humidity' from BUILT_IN_LAYERS because it has a ZeroOptions section but no
@@ -285,24 +275,9 @@ export function createAuroraService(
         timeslotsPerLayer: parseInt(initOpts.gpu.timeslotsPerLayer, 10),
         showLogo: initOpts.debug.showLogo,
       } });
-      // Phase C — graticule's fontSize/lineWidth now flow exclusively
-      // through aurora-db + the dialog's layer adapter. The host no longer
-      // re-dispatches them at init or on options.value diff.
-      send({ type: 'setLayerOptions', id: 'cities', opts: {
-        color: CITY_COLORS_RGB[initOpts.cities.color],
-      } });
-      send({ type: 'setLayerOptions', id: 'wind', opts: {
-        seedCount: initOpts.wind.seedCount,
-        speed: initOpts.wind.speed,
-      } });
-      send({ type: 'setLayerOptions', id: 'pressure', opts: {
-        spacing: parseInt(initOpts.pressure.spacing, 10),
-        smoothing: initOpts.pressure.smoothing,
-        colors: initOpts.pressure.colors,
-      } });
-      send({ type: 'setLayerOptions', id: 'rain', opts: {
-        animated: initOpts.rain.animated,
-      } });
+      // Phases C/D — graticule, cities, wind, pressure, and rain now flow
+      // exclusively through aurora-db + the dialog's layer adapter. The
+      // host no longer re-dispatches them at init or on options.value diff.
 
       // Initial setLayerOpacity for every built-in. Host pre-multiplies the
       // toggle (enabled→0) so aurora gets one number per layer.
@@ -330,36 +305,9 @@ export function createAuroraService(
               send({ type: 'updatePalette', layer: group, paletteId: layerOpts.palette });
             }
           }
-          // Typed-setter dispatch for migrated layers (their fields are no
-          // longer applied from the bulk channel on the worker side).
-          // Phase C: graticule.fontSize/lineWidth removed — dialog's
-          // layerAdapter is now the only writer for those fields.
-          if (opts.cities.color !== lastOptions.cities.color) {
-            send({ type: 'setLayerOptions', id: 'cities', opts: {
-              color: CITY_COLORS_RGB[opts.cities.color],
-            } });
-          }
-          if (opts.wind.seedCount !== lastOptions.wind.seedCount
-            || opts.wind.speed !== lastOptions.wind.speed) {
-            send({ type: 'setLayerOptions', id: 'wind', opts: {
-              seedCount: opts.wind.seedCount,
-              speed: opts.wind.speed,
-            } });
-          }
-          if (opts.pressure.spacing !== lastOptions.pressure.spacing
-            || opts.pressure.smoothing !== lastOptions.pressure.smoothing
-            || opts.pressure.colors !== lastOptions.pressure.colors) {
-            send({ type: 'setLayerOptions', id: 'pressure', opts: {
-              spacing: parseInt(opts.pressure.spacing, 10),
-              smoothing: opts.pressure.smoothing,
-              colors: opts.pressure.colors,
-            } });
-          }
-          if (opts.rain.animated !== lastOptions.rain.animated) {
-            send({ type: 'setLayerOptions', id: 'rain', opts: {
-              animated: opts.rain.animated,
-            } });
-          }
+          // Phases C/D removed all per-field diff dispatches — graticule,
+          // cities, wind, pressure, and rain now write through the dialog's
+          // layerAdapter directly. Opacity stays on the host until Phase E.
           // Dispatch setLayerOpacity per built-in when its enabled or opacity
           // changed. Host pre-multiplies enabled→0.
           for (const id of OPACITY_BUILT_INS) {
