@@ -15,6 +15,8 @@ import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteI
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
 import { createCaptureTexture, readbackFrame as readbackFrameImpl } from './capture';
+import { AuroraLayerRegistry } from './aurora-layer-registry';
+import type { AuroraLayerContext, AuroraLayerFrame } from './types/aurora-layer';
 
 // Re-export for consumers
 export type { PassTimings } from './gpu-timestamp';
@@ -127,6 +129,14 @@ export class GlobeRenderer {
 
   // Suppress errors during intentional page unload
   private isDestroying = false;
+
+  // Aurora layer registry — Phase 1 of aurora-autarky Sub-A. Empty until Phase 2+.
+  private layerRegistry = new AuroraLayerRegistry();
+  // Per-frame state references captured in updateUniforms() for layer dispatch in render()
+  private currentViewProj!: Float32Array;
+  private currentEyePosition!: Float32Array;
+  private currentSunDirection!: Float32Array;
+  private currentGlobeRadiusPx = 0;
 
   // Device pixel ratio from main thread — workers can't reliably read devicePixelRatio
   // (Chrome workers may lack it, Safari may differ). Used to convert device-pixel
@@ -611,6 +621,11 @@ export class GlobeRenderer {
     }
     this.lastFrameTime = now;
 
+    // Cache frame-state references for plugin dispatch in render()
+    this.currentViewProj = uniforms.viewProj;
+    this.currentEyePosition = uniforms.eyePosition;
+    this.currentSunDirection = uniforms.sunDirection;
+
     const view = this.uniformView;
     const O = U; // Offsets from layout
 
@@ -667,6 +682,7 @@ export class GlobeRenderer {
     );
     const fov = 2 * Math.atan(uniforms.tanFov);
     const globeRadiusPx = Math.asin(1 / cameraDistance) * (this.cssHeight / fov);
+    this.currentGlobeRadiusPx = globeRadiusPx;
     const graticuleBuffer = this.graticuleAnimator.packToBuffer(globeRadiusPx, this.frameDeltaMs);
     this.device.queue.writeBuffer(this.graticuleLinesBuffer, 0, graticuleBuffer);
 
@@ -756,6 +772,22 @@ export class GlobeRenderer {
     if (this.isDestroying) return { pass1Ms: NaN, pass2Ms: NaN, pass3Ms: NaN };
     const commandEncoder = this.device.createCommandEncoder();
 
+    // Aurora layer frame (Phase 1: registry empty so all dispatch is no-op).
+    // opacity/dataReady are placeholders; per-layer resolution lands when real
+    // layers register in Phase 2+.
+    const layerFrame: AuroraLayerFrame = {
+      commandEncoder,
+      viewProj: this.currentViewProj,
+      eyePosition: this.currentEyePosition,
+      sunDirection: this.currentSunDirection,
+      opacity: 0,
+      dataReady: false,
+      frameDeltaMs: this.frameDeltaMs,
+      globeRadiusPx: this.currentGlobeRadiusPx,
+      time: new Date(),
+    };
+    this.layerRegistry.updateAll(layerFrame);
+
     // PASS 1: Render globe to offscreen textures (no atmosphere)
     // Use timestampWrites for GPU timing (spec-compliant approach)
     const globePassDescriptor: GPURenderPassDescriptor = {
@@ -790,6 +822,7 @@ export class GlobeRenderer {
     if (hasWind) {
       this.windLayer.runCompute(commandEncoder);
     }
+    this.layerRegistry.computeAll(layerFrame);
 
     // PASS 2: Geometry layers (pressure contours, wind, etc.)
     // Renders to same color/depth textures, depth-tested against globe
@@ -824,6 +857,8 @@ export class GlobeRenderer {
     if (hasWind) {
       this.windLayer.render(geometryPass);
     }
+
+    this.layerRegistry.renderAll(layerFrame, geometryPass);
 
     geometryPass.end();
 
@@ -1307,7 +1342,24 @@ export class GlobeRenderer {
     this.pressureLayer.setVertexCount(totalVertices);
   }
 
+  /** Aurora layer registry — Phase 1: empty. Real layers register here from Phase 2 onward. */
+  getLayerRegistry(): AuroraLayerRegistry {
+    return this.layerRegistry;
+  }
+
+  /** Build an AuroraLayerContext for register/onDataChanged/onOptionsChanged calls. */
+  getLayerContext(): AuroraLayerContext {
+    return {
+      device: this.device,
+      format: this.format,
+      paletteTexture: this.paletteTexture,
+      gaussianGridBuffer: this.gaussianGridBuffer,
+      uniformBuffer: this.uniformBuffer,
+    };
+  }
+
   dispose(): void {
+    this.layerRegistry.disposeAll();
     this.uniformBuffer?.destroy();
     this.basemapTexture?.destroy();
     this.gaussianGridBuffer?.destroy();

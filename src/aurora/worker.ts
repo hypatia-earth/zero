@@ -892,6 +892,11 @@ function handleActivateSlots(data: Extract<AuroraRequest, { type: 'activateSlots
     }
   }
 
+  // Aurora layer registry dispatch (Phase 1: registry empty, no-op).
+  // Built-in layers absorb into AuroraLayer instances from Phase 2 onward and the
+  // if/else branches above shrink as each layer migrates.
+  renderer!.getLayerRegistry().onDataChanged(layerId, [], renderer!.getLayerContext());
+
   // Combined buffer/texture for fragment shader param bindings
   updateCombinedParam(param, slot0, slot1);
 }
