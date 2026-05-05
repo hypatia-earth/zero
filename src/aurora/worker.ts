@@ -798,14 +798,8 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
     const view = renderer.getUniformView();
     writeOptionUniforms(view, currentOptions);
 
-    // Graticule fontSize/lineWidth (CSS pixels) flow into GraticuleLayer.onOptionsChanged;
-    // the layer applies frame.dpr each tick to write render-pixel uniforms.
-    // Routed through applyGraticuleOptions so the bulk channel and the typed
-    // setLayerOptions converge on one helper.
-    applyGraticuleOptions({
-      fontSize: currentOptions.graticule.fontSize,
-      lineWidth: currentOptions.graticule.lineWidth,
-    });
+    // Graticule has migrated — host dispatches setLayerOptions('graticule',...)
+    // directly. No bulk-channel mirror here.
 
     // City label color — host-side named→RGB mapping until UI migrates to
     // sending pre-translated RGB via setLayerOptions('cities', {color:[r,g,b]}).

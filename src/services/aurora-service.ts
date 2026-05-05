@@ -251,11 +251,21 @@ export function createAuroraService(
       // Set up camera controls
       viewport = setupViewport(canvas, camera, stateService, configService, optionsService);
 
-      // Send initial options
-      send({ type: 'options', value: optionsService.options.value });
+      // Send initial options (bulk legacy channel — shrinks per-layer as
+      // typed-setter UI migration progresses).
+      const initOpts = optionsService.options.value;
+      send({ type: 'options', value: initOpts });
+
+      // Sub-B Phase 5 UI migration: graticule has its UI bind-points migrated
+      // to setLayerOptions. Worker no longer mirrors graticule out of the bulk
+      // 'options' message; this dispatch is the sole apply path.
+      send({ type: 'setLayerOptions', id: 'graticule', opts: {
+        fontSize: initOpts.graticule.fontSize,
+        lineWidth: initOpts.graticule.lineWidth,
+      } });
 
       // Forward options updates to worker
-      let lastOptions = optionsService.options.value;
+      let lastOptions = initOpts;
       const lastPalettes = new Map<string, string>();
       // Seed last palettes from initial options
       for (const [group, layerOpts] of Object.entries(lastOptions)) {
@@ -272,6 +282,14 @@ export function createAuroraService(
               lastPalettes.set(group, layerOpts.palette);
               send({ type: 'updatePalette', layer: group, paletteId: layerOpts.palette });
             }
+          }
+          // Typed-setter dispatch for migrated layers (their fields are no
+          // longer applied from the bulk channel on the worker side).
+          if (opts.graticule !== lastOptions.graticule) {
+            send({ type: 'setLayerOptions', id: 'graticule', opts: {
+              fontSize: opts.graticule.fontSize,
+              lineWidth: opts.graticule.lineWidth,
+            } });
           }
           lastOptions = opts;
           send({ type: 'options', value: opts });
