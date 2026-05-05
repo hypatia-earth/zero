@@ -75,12 +75,15 @@ export interface CameraSnapshot {
 }
 
 export type AuroraRequest =
-  | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; cssHeight: number; dpr: number; config: AuroraConfig; assets: AuroraAssets }
+  | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; cssHeight: number; dpr: number; config: AuroraConfig; assets: AuroraAssets; initialLayerOpacities: Record<string, number> }
   // Sub-B Phase 5 typed setters — host dispatches via these for every
   // aurora-relevant option. The bulk legacy 'options' channel was retired
   // once every layer's UI bind-points migrated.
   | { type: 'setEngineOptions'; patch: Partial<EngineOpts> }
   | { type: 'setLayerOpacity'; id: string; value: number }
+  // Phase E2 — enabled is host-owned (URL-backed) and not persisted in
+  // aurora-db. Worker keeps an in-memory map and multiplies at render time.
+  | { type: 'setLayerEnabled'; id: string; value: boolean }
   | { type: 'setLayerOptions'; id: string; opts: unknown }
   // Wipes aurora-db's persisted options blob and resets in-memory to defaults.
   // Host dispatches this when the user clicks Nuke; host first clears its own
@@ -184,6 +187,11 @@ function applyLayerSideEffects(id: string, prev: { opts: unknown } | undefined, 
     // pressure / rain: read at render time, no immediate side-effect needed.
   }
 }
+
+// Phase E2 — host-owned `enabled` per built-in layer. Not persisted in
+// aurora-db (URL is the source of truth). Defaults to true on miss so a
+// pre-Phase-E2 worker (no setLayerEnabled dispatched) renders as before.
+const layerEnabled = new Map<string, boolean>();
 
 // Layer registry (for declarative mode)
 let layerRegistry: LayerService | null = null;
@@ -510,7 +518,11 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
     if (isBuiltInLayer(layer)) {
       const entry = options.read().layers[layer.id];
       if (!entry) continue;  // before first options/setter delivery
-      userTarget = entry.opacity;
+      // Phase E2 — built-ins now follow the user-layer pattern: stored
+      // opacity is the user's *intended* value; multiply by the host-
+      // owned `enabled` flag at render time.
+      const enabled = layerEnabled.get(layer.id) ?? true;
+      userTarget = enabled ? entry.opacity : 0;
     } else {
       const idx = layer.userLayerIndex!;
       const enabled = userLayerEnabled.get(idx)!;
@@ -642,11 +654,20 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   canvas.height = data.height;
 
   // Open aurora-db, load any persisted blob, merge with this run's host-config
-  // seeds (timeslotsPerLayer + windLineCount). After this await, options.read()
-  // is valid for the rest of init and every subsequent frame.
+  // seeds (timeslotsPerLayer + windLineCount + per-layer opacity). After this
+  // await, options.read() is valid for the rest of init and every subsequent
+  // frame. Phase E2 — host seeds initialLayerOpacities so first-run users
+  // (or post-migration v2 blobs) get zero-db's intended opacity into aurora-db.
+  // Persisted aurora-db wins over seeds on subsequent reloads.
+  const seedLayers: Record<string, { opacity?: number; opts?: Record<string, unknown> }> = {};
+  for (const [id, op] of Object.entries(data.initialLayerOpacities)) {
+    seedLayers[id] = { opacity: op };
+  }
+  seedLayers.wind = { ...seedLayers.wind, opts: { seedCount: config.windLineCount } };
+
   await options.init({
     engine: { timeslotsPerLayer: config.timeslotsPerLayer },
-    layers: { wind: { opts: { seedCount: config.windLineCount } } },
+    layers: seedLayers,
   });
 
   // Create and initialize renderer
@@ -1127,6 +1148,10 @@ function handleSetLayerOpacity(data: Extract<AuroraRequest, { type: 'setLayerOpa
   postOptionsChanged();
 }
 
+function handleSetLayerEnabled(data: Extract<AuroraRequest, { type: 'setLayerEnabled' }>): void {
+  layerEnabled.set(data.id, data.value);
+}
+
 const KNOWN_LAYER_IDS = new Set(['graticule', 'cities', 'wind', 'pressure', 'rain']);
 
 function handleSetLayerOptions(data: Extract<AuroraRequest, { type: 'setLayerOptions' }>): void {
@@ -1193,6 +1218,7 @@ const handlers: { [K in AuroraRequest['type']]: MessageHandler<K> } = {
   init: handleInit,
   setEngineOptions: handleSetEngineOptions,
   setLayerOpacity: handleSetLayerOpacity,
+  setLayerEnabled: handleSetLayerEnabled,
   setLayerOptions: handleSetLayerOptions,
   nukeOptions: handleNukeOptions,
   render: handleRender,

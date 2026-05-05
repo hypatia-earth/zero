@@ -35,9 +35,13 @@ import { CITY_COLORS_RGB } from '../utils/cities-colors';
 import { getEngineOptionsCatalog } from '../aurora/options/catalog';
 
 /** Phases C+D — graticule, cities, wind, pressure, and rain bind through
- *  the aurora catalog/adapter path. Phase E adds opacity descriptors;
- *  Phase F deletes the matching ZeroOptions schema fields. */
+ *  the aurora catalog/adapter path for non-opacity fields. */
 const AURORA_CATALOG_LAYERS = new Set<string>(['graticule', 'cities', 'wind', 'pressure', 'rain']);
+
+/** Phase E2 — every built-in's opacity slider routes through layerAdapter.
+ *  Synthesized descriptors (vs. catalog-authored) because Phase 6 hasn't
+ *  promoted earth/sun/temp/clouds/etc. into the layer catalog yet. */
+const OPACITY_LAYER_IDS = ['earth', 'sun', 'graticule', 'cities', 'temp', 'rain', 'clouds', 'pressure', 'wind'] as const;
 
 /** Phase E1 — schema-path → engine-descriptor-key for migrated engine
  *  options. Schema still carries the option (orphan after Phase E1; Phase
@@ -66,12 +70,28 @@ function deleteAuroraDb(): Promise<void> {
 
 /** Build a `${layerId}.${key}` → descriptor map for catalog-migrated
  *  layers, for fast path lookup inside renderOption. Recomputed per
- *  dialog instance — catalog walk is cheap (five entries). */
+ *  dialog instance — catalog walk is cheap. */
 function buildAuroraDescriptorMap(): Map<string, OptionDescriptor> {
   const out = new Map<string, OptionDescriptor>();
   for (const entry of getLayerOptionsCatalog()) {
     if (!AURORA_CATALOG_LAYERS.has(entry.id)) continue;
     for (const d of entry.options) out.set(`${entry.id}.${d.key}`, d);
+  }
+  // Phase E2 — synthesize one opacity descriptor per built-in. Defaults
+  // pulled from schema (transitional; Phase 6 catalog migration / Phase F
+  // schema shrink moves authoritative defaults aurora-side).
+  const schemaDefaults = defaultOptions as Record<string, { opacity?: number }>;
+  for (const id of OPACITY_LAYER_IDS) {
+    out.set(`${id}.opacity`, {
+      scope: 'layer',
+      layerId: id,
+      key: 'opacity',
+      kind: 'number',
+      default: schemaDefaults[id]?.opacity ?? 0.8,
+      min: 0.05,
+      max: 1,
+      step: 0.05,
+    });
   }
   return out;
 }

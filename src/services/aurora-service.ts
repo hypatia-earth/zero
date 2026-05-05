@@ -72,8 +72,12 @@ export interface AuroraService {
   setEngineOptions(patch: Partial<EngineOpts>): void;
   /** Sub-B Phase 5 typed setter — opts shape narrowed by id at the call site. */
   setLayerOptions(id: string, opts: unknown): void;
-  /** Sub-B Phase 5 typed setter — pre-gated opacity 0..1 (host pre-multiplies enabled). */
+  /** Sub-B Phase 5 typed setter — opacity 0..1 (intended; the worker
+   *  multiplies by `enabled` at render time post-Phase-E2). */
   setLayerOpacity(id: string, value: number): void;
+  /** Phase E2 — host-owned `enabled` flag per built-in. Worker stores
+   *  in-memory and multiplies at render. Not persisted in aurora-db. */
+  setLayerEnabled(id: string, value: boolean): void;
   /** Phase B host mirror — populated from the worker's `'ready'` payload and
    *  refreshed on every `'optionsChanged'` echo. `null` until init resolves. */
   optionsMirror: Signal<AuroraOptionsBlob | null>;
@@ -253,9 +257,17 @@ export function createAuroraService(
         assets.logo,
       ];
 
+      // Phase E2 — opacity seeds for the worker's first init() merge.
+      // Once aurora-db is populated, persisted wins over seeds; this
+      // path migrates pre-Phase-E2 zero-db opacities into aurora-db.
+      const initialLayerOpacities: Record<string, number> = {};
+      for (const id of OPACITY_BUILT_INS) {
+        initialLayerOpacities[id] = optionsService.options.value[id].opacity;
+      }
+
       await new Promise<void>((resolve) => {
         onReady = () => resolve();
-        send({ type: 'init', canvas: offscreen, width, height, cssHeight: canvas!.clientHeight, dpr: window.devicePixelRatio, config, assets }, transferables);
+        send({ type: 'init', canvas: offscreen, width, height, cssHeight: canvas!.clientHeight, dpr: window.devicePixelRatio, config, assets, initialLayerOpacities }, transferables);
       });
 
       // Create camera
@@ -276,11 +288,11 @@ export function createAuroraService(
       // through aurora-db + the dialog's layer/engine adapters. The host
       // no longer re-dispatches any of them at init or on options.value diff.
 
-      // Initial setLayerOpacity for every built-in. Host pre-multiplies the
-      // toggle (enabled→0) so aurora gets one number per layer.
+      // Phase E2 — `enabled` is host-owned (URL-backed). Dispatch initial
+      // values per built-in. Opacity is seeded into the init message above
+      // (intended values, not pre-multiplied).
       for (const id of OPACITY_BUILT_INS) {
-        const layerOpts = initOpts[id];
-        send({ type: 'setLayerOpacity', id, value: layerOpts.enabled ? layerOpts.opacity : 0 });
+        send({ type: 'setLayerEnabled', id, value: initOpts[id].enabled });
       }
 
       // Forward options updates to worker
@@ -302,19 +314,16 @@ export function createAuroraService(
               send({ type: 'updatePalette', layer: group, paletteId: layerOpts.palette });
             }
           }
-          // Phases C/D removed all per-field diff dispatches — graticule,
-          // cities, wind, pressure, and rain now write through the dialog's
-          // layerAdapter directly. Opacity stays on the host until Phase E.
-          // Dispatch setLayerOpacity per built-in when its enabled or opacity
-          // changed. Host pre-multiplies enabled→0.
+          // Phases C/D/E1 removed all per-field diff dispatches except
+          // `enabled` — opacity now flows from the dialog's layerAdapter
+          // directly to aurora-db; engine options flow via engineAdapter.
+          // The toggle still lives in zero-db/URL though, so the host
+          // bridges enabled flips into setLayerEnabled here.
           for (const id of OPACITY_BUILT_INS) {
-            const cur = opts[id];
-            const prev = lastOptions[id];
-            if (cur.enabled !== prev.enabled || cur.opacity !== prev.opacity) {
-              send({ type: 'setLayerOpacity', id, value: cur.enabled ? cur.opacity : 0 });
+            if (opts[id].enabled !== lastOptions[id].enabled) {
+              send({ type: 'setLayerEnabled', id, value: opts[id].enabled });
             }
           }
-          // Engine options now flow through engineAdapter (Phase E1).
           lastOptions = opts;
         }
       });
@@ -397,6 +406,10 @@ export function createAuroraService(
 
     setLayerOpacity(id: string, value: number): void {
       send({ type: 'setLayerOpacity', id, value });
+    },
+
+    setLayerEnabled(id: string, value: boolean): void {
+      send({ type: 'setLayerEnabled', id, value });
     },
 
     start(): void {
