@@ -23,6 +23,7 @@ import type { PaletteId } from '../services/palette-service';
 import { writeConfigUniforms, writeOptionUniforms } from './uniform-writer';
 import { U } from './globe-uniforms';
 import { createCaptureHandler } from './capture';
+import type { EngineOpts } from './types/options';
 
 // ============================================================
 // Asset types for worker transfer
@@ -75,6 +76,12 @@ export interface CameraSnapshot {
 export type AuroraRequest =
   | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; cssHeight: number; dpr: number; config: AuroraConfig; assets: AuroraAssets }
   | { type: 'options'; value: ZeroOptions }
+  // Sub-B Phase 5 typed setters — per-layer UI migration replaces the bulk
+  // 'options' channel. Until a layer migrates its handler stays a stub that
+  // throws so any premature usage surfaces loudly.
+  | { type: 'setEngineOptions'; patch: Partial<EngineOpts> }
+  | { type: 'setLayerOpacity'; id: string; value: number }
+  | { type: 'setLayerOptions'; id: string; opts: unknown }
   // Param-centric API
   | { type: 'uploadData'; param: string; slotIndex: number; data: Float32Array }
   | { type: 'activateSlots'; param: string; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
@@ -1028,6 +1035,24 @@ async function handleRecordBatch(data: Extract<AuroraRequest, { type: 'recordBat
   (self as unknown as Worker).postMessage(msg, bitmaps);
 }
 
+// ============================================================
+// Sub-B Phase 5 typed setters — per-layer migration drops these stubs and
+// wires the typed mutator path. Each call here means a UI bind-point sent the
+// new typed message before its layer migrated; throw loudly so we notice.
+// ============================================================
+
+function handleSetEngineOptions(_data: Extract<AuroraRequest, { type: 'setEngineOptions' }>): void {
+  throw new Error('Sub-B Phase 5: setEngineOptions handler not yet wired (engine-option migration pending)');
+}
+
+function handleSetLayerOpacity(data: Extract<AuroraRequest, { type: 'setLayerOpacity' }>): void {
+  throw new Error(`Sub-B Phase 5: setLayerOpacity('${data.id}') handler not yet wired (layer not migrated)`);
+}
+
+function handleSetLayerOptions(data: Extract<AuroraRequest, { type: 'setLayerOptions' }>): void {
+  throw new Error(`Sub-B Phase 5: setLayerOptions('${data.id}') handler not yet wired (layer not migrated)`);
+}
+
 function handleCleanup(): void {
   for (const buffer of paramCombinedBuffers.values()) {
     buffer.destroy();
@@ -1068,6 +1093,9 @@ type MessageHandler<T extends AuroraRequest['type']> =
 const handlers: { [K in AuroraRequest['type']]: MessageHandler<K> } = {
   init: handleInit,
   options: handleOptions,
+  setEngineOptions: handleSetEngineOptions,
+  setLayerOpacity: handleSetLayerOpacity,
+  setLayerOptions: handleSetLayerOptions,
   render: handleRender,
   resize: handleResize,
   uploadData: handleUploadData,
