@@ -683,6 +683,16 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   // Finalize renderer (creates bind groups)
   renderer.finalize();
 
+  // Self-apply each layer's persisted/default options to the renderer.
+  // Pre-Phase-C the host's init-dispatch sweep covered this for every
+  // built-in; once a layer migrates to the catalog/adapter path, the host
+  // no longer dispatches at init, so the worker has to push descriptor
+  // defaults (or persisted values) into the renderer itself. Idempotent
+  // for layers the host still re-dispatches at init (Phase D layers).
+  for (const [id, entry] of Object.entries(options.read().layers)) {
+    applyLayerSideEffects(id, undefined, entry);
+  }
+
   // Write declarative config uniforms for all layers
   const uniformView = renderer.getUniformView();
   for (const layer of layers) {
