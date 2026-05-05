@@ -10,6 +10,7 @@
  */
 
 import { GraticuleAnimator } from './graticule-animator';
+import { U } from '../../globe-uniforms';
 import type {
   AuroraDataEvent,
   AuroraLayer,
@@ -23,6 +24,16 @@ export interface GraticuleLodLevel {
   zoomOutPx: number;   // leave this LoD when globeRadiusPx <= this
 }
 
+export const GRATICULE_DEFAULT_LOD_LEVELS: GraticuleLodLevel[] = [
+  { spacing: 30, zoomInPx: 0,   zoomOutPx: 0 },
+  { spacing: 20, zoomInPx: 200, zoomOutPx: 170 },
+  { spacing: 15, zoomInPx: 350, zoomOutPx: 300 },
+  { spacing: 10, zoomInPx: 500, zoomOutPx: 450 },
+  { spacing: 5,  zoomInPx: 650, zoomOutPx: 600 },
+];
+
+const LABEL_MAX_RADIUS_PX = 500;
+
 export class GraticuleLayer implements AuroraLayer {
   readonly id = 'graticule';
   readonly order = 30;
@@ -32,13 +43,14 @@ export class GraticuleLayer implements AuroraLayer {
 
   constructor(
     private readonly initialGlobeRadiusPx: number,
-    private readonly lodLevels: GraticuleLodLevel[],
     private readonly linesBuffer: GPUBuffer,
   ) {}
 
   initialize(ctx: AuroraLayerContext): void {
     this.device = ctx.device;
-    this.animator = new GraticuleAnimator(this.initialGlobeRadiusPx, this.lodLevels);
+    this.animator = new GraticuleAnimator(this.initialGlobeRadiusPx, GRATICULE_DEFAULT_LOD_LEVELS);
+    // Aurora-internal uniform: written once at registration (was host's writeConfigUniforms).
+    ctx.uniformView.setFloat32(U.graticuleLabelMaxRadius, LABEL_MAX_RADIUS_PX, true);
   }
 
   onDataChanged(_ctx: AuroraLayerContext, _events: AuroraDataEvent[]): void {

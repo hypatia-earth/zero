@@ -17,6 +17,8 @@ export interface AuroraLayerContext {
   paletteTexture: PaletteTexture;
   gaussianGridBuffer: GPUBuffer;
   uniformBuffer: GPUBuffer;
+  /** CPU-side staging for the uniform buffer; per-frame writes are flushed by the host. */
+  uniformView: DataView;
 }
 
 export interface AuroraLayerFrame {

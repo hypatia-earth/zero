@@ -1,4 +1,4 @@
-import { defineLayer, withUI, withParams, withOptions, withPalettes, withCompute, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
+import { defineLayer, withUI, withParams, withOptions, withPalettes, asBuiltIn } from '../../services/layer/builder';
 
 export const layer = defineLayer('wind',
   withUI('Wind', 'Wind', 'weather'),
@@ -7,25 +7,10 @@ export const layer = defineLayer('wind',
     { model: 'ecmwf_ifs', param: 'wind_v_component_10m' },
   ),
   withPalettes('wind-speed'),
-  withConfig({
-    snakeLength:     { value: 0.25 },
-    lineWidth:       { value: 0.002 },
-    segmentsPerLine: { value: 30 },
-    stepFactor:      { value: 0.005 },
-    radius:          { value: 1.0 },
-  }),
   withOptions([
     'wind.enabled',
     'wind.opacity',
     'wind.speed',
   ]),
-  withCompute({
-    trace: 'time-change',
-  }),
-  withRender({
-    pass: 'geometry',
-    order: 20,
-    topology: 'line-list',
-  }),
   asBuiltIn(),
 );

@@ -12,8 +12,6 @@
 import type { CameraConfig } from './camera';
 import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from './built_ins/pressure/pressure-layer';
-import type { GraticuleLodLevel } from './built_ins/graticule/graticule-layer';
-import type { CitiesLodLevel } from './built_ins/cities/cities-aurora-layer';
 import { LayerStore } from './layer-store';
 import type { ZeroOptions } from '../schemas/options.schema';
 import type { TBuiltInLayer, TLayer } from '../config/types';
@@ -22,7 +20,7 @@ import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer, activeParamBindings, type ComposedShaders } from './shader-composer';
 import { LayerService, isBuiltInLayer, type LayerDeclaration } from '../services/layer/layer-service';
 import type { PaletteId } from '../services/palette-service';
-import { writeConfigUniforms, writeOptionUniforms, configValue } from './uniform-writer';
+import { writeConfigUniforms, writeOptionUniforms } from './uniform-writer';
 import { U } from './globe-uniforms';
 import { createCaptureHandler } from './capture';
 
@@ -574,22 +572,10 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   const layers = layerRegistry.getAll();
   const composedShaders = await shaderComposer.compose(layers);
 
-  const graticuleLodLevels = layerRegistry.get('graticule')!.config!.lodLevels as GraticuleLodLevel[];
-  const citiesLodLevels = layerRegistry.get('cities')?.config?.lodLevels as CitiesLodLevel[] | undefined;
-  const windConfig = layerRegistry.get('wind')!.config!;
-  const windCfg = {
-    snakeLength: configValue(windConfig, 'snakeLength'),
-    lineWidth: configValue(windConfig, 'lineWidth'),
-    segmentsPerLine: configValue(windConfig, 'segmentsPerLine'),
-    stepFactor: configValue(windConfig, 'stepFactor'),
-    radius: configValue(windConfig, 'radius'),
-  };
   await renderer.initialize(
     config.timeslotsPerLayer,
     config.windLineCount,
     composedShaders,
-    graticuleLodLevels,
-    windCfg
   );
 
   // Upload assets
@@ -600,10 +586,8 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   await renderer.loadCitiesFontAtlas(assets.cities.fontAtlas);
   renderer.uploadGaussianLUTs(assets.gaussianLats, assets.ringOffsets);
 
-  // Initialize cities layer
-  if (citiesLodLevels) {
-    renderer.initCities(assets.cities.data, assets.cities.metrics, citiesLodLevels);
-  }
+  // Initialize cities layer (LoD levels live in aurora's CITIES_DEFAULT_LOD_LEVELS)
+  renderer.initCities(assets.cities.data, assets.cities.metrics);
 
   // Finalize renderer (creates bind groups)
   renderer.finalize();

@@ -25,6 +25,13 @@ export interface CitiesLodLevel {
   zoomOutPx: number;       // leave this LoD when globeRadiusPx <= this
 }
 
+export const CITIES_DEFAULT_LOD_LEVELS: CitiesLodLevel[] = [
+  { minPopulation: 5_000_000, zoomInPx: 0,   zoomOutPx: 0 },
+  { minPopulation: 1_000_000, zoomInPx: 200, zoomOutPx: 170 },
+  { minPopulation: 300_000,   zoomInPx: 400, zoomOutPx: 350 },
+  { minPopulation: 100_000,   zoomInPx: 600, zoomOutPx: 550 },
+];
+
 /**
  * Host-provided GPU surface for cities. The host owns the lookup texture and the
  * (potentially resizable) data buffer because both participate in the host bind
@@ -53,7 +60,6 @@ export class CitiesAuroraLayer implements AuroraLayer {
 
   constructor(
     private readonly initialGlobeRadiusPx: number,
-    private readonly lodLevels: CitiesLodLevel[],
     private readonly citiesDataBuffer: ArrayBuffer,
     private readonly metricsBuffer: ArrayBuffer,
     private readonly host: CitiesAuroraLayerHost,
@@ -61,8 +67,8 @@ export class CitiesAuroraLayer implements AuroraLayer {
 
   initialize(ctx: AuroraLayerContext): void {
     this.device = ctx.device;
-    this.innerLayer = new CitiesLayer(this.citiesDataBuffer, this.metricsBuffer, this.lodLevels);
-    this.animator = new CitiesAnimator(this.innerLayer, this.initialGlobeRadiusPx, this.lodLevels);
+    this.innerLayer = new CitiesLayer(this.citiesDataBuffer, this.metricsBuffer, CITIES_DEFAULT_LOD_LEVELS);
+    this.animator = new CitiesAnimator(this.innerLayer, this.initialGlobeRadiusPx, CITIES_DEFAULT_LOD_LEVELS);
     this.uploadTier();
   }
 

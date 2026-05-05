@@ -31,6 +31,14 @@ export interface WindAuroraLayerConfig {
   radius: number;
 }
 
+export const WIND_DEFAULT_CONFIG: WindAuroraLayerConfig = {
+  snakeLength: 0.25,
+  lineWidth: 0.002,
+  segmentsPerLine: 30,
+  stepFactor: 0.005,
+  radius: 1.0,
+};
+
 /**
  * Host-supplied per-frame values that wind needs but cannot derive locally:
  * - opacity is animated by the host's per-frame opacity-decay system
@@ -67,7 +75,6 @@ export class WindAuroraLayer implements AuroraLayer {
 
   constructor(
     private readonly lineCount: number,
-    private readonly windConfig: WindAuroraLayerConfig,
     private readonly host: WindAuroraLayerHost,
   ) {}
 
@@ -77,7 +84,7 @@ export class WindAuroraLayer implements AuroraLayer {
       ctx.format,
       ctx.paletteTexture,
       this.lineCount,
-      this.windConfig,
+      WIND_DEFAULT_CONFIG,
     );
     this.paletteIndex = ctx.paletteTexture.getPaletteIndex(PALETTE_NAME);
     this.paletteCount = ctx.paletteTexture.paletteCount;

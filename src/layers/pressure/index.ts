@@ -1,4 +1,4 @@
-import { defineLayer, withUI, withParams, withOptions, withPalettes, withCompute, withRender, asBuiltIn } from '../../services/layer/builder';
+import { defineLayer, withUI, withParams, withOptions, withPalettes, asBuiltIn } from '../../services/layer/builder';
 
 export const layer = defineLayer('pressure',
   withUI('Pressure', 'Pressure', 'weather'),
@@ -10,14 +10,5 @@ export const layer = defineLayer('pressure',
     'pressure.spacing',
     'pressure.smoothing',
   ]),
-  withCompute({
-    regrid: 'data-ready',
-    contour: 'time-change',
-  }),
-  withRender({
-    pass: 'geometry',
-    order: 10,
-    topology: 'line-list',
-  }),
   asBuiltIn(),
 );

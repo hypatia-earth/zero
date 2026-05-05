@@ -8,9 +8,9 @@ import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } fro
 import { PressureAuroraLayer, type PressureAuroraLayerHost } from './built_ins/pressure/pressure-aurora-layer';
 import { WindAuroraLayer, type WindAuroraLayerHost } from './built_ins/wind/wind-aurora-layer';
 import { GRATICULE_BUFFER_SIZE } from './built_ins/graticule/graticule-animator';
-import { GraticuleLayer, type GraticuleLodLevel } from './built_ins/graticule/graticule-layer';
+import { GraticuleLayer } from './built_ins/graticule/graticule-layer';
 import { LOOKUP_WIDTH, LOOKUP_HEIGHT } from './built_ins/cities/cities-layer';
-import { CitiesAuroraLayer, type CitiesLodLevel, type CitiesAuroraLayerHost } from './built_ins/cities/cities-aurora-layer';
+import { CitiesAuroraLayer, type CitiesAuroraLayerHost } from './built_ins/cities/cities-aurora-layer';
 import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getUserLayerPaletteRangeOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset, getParamDtOffset, getParamSizeOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
@@ -154,8 +154,6 @@ export class GlobeRenderer {
     requestedSlots: number,
     windLineCount: number,
     composedShaders: ComposedShaders,
-    graticuleLodLevels: GraticuleLodLevel[],
-    windConfig: { snakeLength: number; lineWidth: number; segmentsPerLine: number; stepFactor: number; radius: number }
   ): Promise<void> {
     const shaderCode = composedShaders.main;
     const postprocessShaderCode = composedShaders.post;
@@ -305,7 +303,7 @@ export class GlobeRenderer {
       const heightCss = this.canvas.height / this.dpr;
       const initialGlobeRadiusPx = Math.asin(1 / distance) * (heightCss / fov);
       this.layerRegistry.register(
-        new GraticuleLayer(initialGlobeRadiusPx, graticuleLodLevels, this.graticuleLinesBuffer),
+        new GraticuleLayer(initialGlobeRadiusPx, this.graticuleLinesBuffer),
         this.getLayerContext(),
       );
     }
@@ -439,7 +437,7 @@ export class GlobeRenderer {
         },
       };
       this.layerRegistry.register(
-        new WindAuroraLayer(windLineCount, windConfig, windHost),
+        new WindAuroraLayer(windLineCount, windHost),
         this.getLayerContext(),
       );
     }
@@ -946,7 +944,6 @@ export class GlobeRenderer {
   initCities(
     citiesDataBuffer: ArrayBuffer,
     metricsBuffer: ArrayBuffer,
-    lodLevels: CitiesLodLevel[]
   ): void {
     const distance = this.camera.getState().distance;
     const fov = 2 * Math.atan(this.camera.getTanFov());
@@ -963,7 +960,7 @@ export class GlobeRenderer {
     };
 
     this.layerRegistry.register(
-      new CitiesAuroraLayer(initialGlobeRadiusPx, lodLevels, citiesDataBuffer, metricsBuffer, host),
+      new CitiesAuroraLayer(initialGlobeRadiusPx, citiesDataBuffer, metricsBuffer, host),
       this.getLayerContext(),
     );
   }
@@ -1305,6 +1302,7 @@ export class GlobeRenderer {
       paletteTexture: this.paletteTexture,
       gaussianGridBuffer: this.gaussianGridBuffer,
       uniformBuffer: this.uniformBuffer,
+      uniformView: this.uniformView,
     };
   }
 
