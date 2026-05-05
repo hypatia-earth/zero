@@ -266,13 +266,15 @@ export function createAuroraService(
       // Set up camera controls
       viewport = setupViewport(canvas, camera, stateService, configService, optionsService);
 
-      // Send initial options (bulk legacy channel — shrinks per-layer as
-      // typed-setter UI migration progresses).
+      // Sub-B Phase 5 closure: aurora receives all options via typed setters.
+      // The bulk 'options' message kind is gone — every aurora-relevant field
+      // dispatches through setEngineOptions / setLayerOpacity / setLayerOptions.
       const initOpts = optionsService.options.value;
-      send({ type: 'options', value: initOpts });
 
-      // Sub-B Phase 5 UI migration: typed-setter dispatch for migrated layers.
-      // Worker no longer mirrors these out of the bulk 'options' message.
+      send({ type: 'setEngineOptions', patch: {
+        timeslotsPerLayer: parseInt(initOpts.gpu.timeslotsPerLayer, 10),
+        showLogo: initOpts.debug.showLogo,
+      } });
       send({ type: 'setLayerOptions', id: 'graticule', opts: {
         fontSize: initOpts.graticule.fontSize,
         lineWidth: initOpts.graticule.lineWidth,
@@ -362,8 +364,15 @@ export function createAuroraService(
               send({ type: 'setLayerOpacity', id, value: cur.enabled ? cur.opacity : 0 });
             }
           }
+          // Engine options
+          if (opts.gpu.timeslotsPerLayer !== lastOptions.gpu.timeslotsPerLayer
+            || opts.debug.showLogo !== lastOptions.debug.showLogo) {
+            send({ type: 'setEngineOptions', patch: {
+              timeslotsPerLayer: parseInt(opts.gpu.timeslotsPerLayer, 10),
+              showLogo: opts.debug.showLogo,
+            } });
+          }
           lastOptions = opts;
-          send({ type: 'options', value: opts });
         }
       });
 

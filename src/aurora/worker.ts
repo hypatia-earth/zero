@@ -13,7 +13,7 @@ import type { CameraConfig } from './camera';
 import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from './built_ins/pressure/pressure-layer';
 import { LayerStore } from './layer-store';
-import type { ZeroOptions, PressureColorOption } from '../schemas/options.schema';
+import type { PressureColorOption } from '../schemas/options.schema';
 import { PRESSURE_COLOR_DEFAULT } from '../schemas/options.schema';
 import type { TBuiltInLayer, TLayer } from '../config/types';
 import { defaultConfig } from '../config/defaults';
@@ -21,7 +21,7 @@ import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer, activeParamBindings, type ComposedShaders } from './shader-composer';
 import { LayerService, isBuiltInLayer, type LayerDeclaration } from '../services/layer/layer-service';
 import type { PaletteId } from '../services/palette-service';
-import { writeConfigUniforms, writeOptionUniforms } from './uniform-writer';
+import { writeConfigUniforms } from './uniform-writer';
 import { U } from './globe-uniforms';
 import { createCaptureHandler } from './capture';
 import type { EngineOpts, GraticuleOpts } from './types/options';
@@ -76,10 +76,9 @@ export interface CameraSnapshot {
 
 export type AuroraRequest =
   | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; cssHeight: number; dpr: number; config: AuroraConfig; assets: AuroraAssets }
-  | { type: 'options'; value: ZeroOptions }
-  // Sub-B Phase 5 typed setters — per-layer UI migration replaces the bulk
-  // 'options' channel. Until a layer migrates its handler stays a stub that
-  // throws so any premature usage surfaces loudly.
+  // Sub-B Phase 5 typed setters — host dispatches via these for every
+  // aurora-relevant option. The bulk legacy 'options' channel was retired
+  // once every layer's UI bind-points migrated.
   | { type: 'setEngineOptions'; patch: Partial<EngineOpts> }
   | { type: 'setLayerOpacity'; id: string; value: number }
   | { type: 'setLayerOptions'; id: string; opts: unknown }
@@ -113,8 +112,6 @@ export type AuroraResponse =
 let renderer: GlobeRenderer | null = null;
 let canvas: OffscreenCanvas | null = null;
 
-// Options state (received from main thread)
-let currentOptions: ZeroOptions | null = null;
 
 // Engine-wide options (Sub-B Phase 5). Seeded from init payload, mutated by
 // either the bulk 'options' channel (legacy) or 'setEngineOptions' (new typed
@@ -769,35 +766,6 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   self.postMessage({ type: 'ready' } satisfies AuroraResponse);
 }
 
-function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void {
-  currentOptions = data.value;
-
-  // Mirror engine-relevant ZeroOptions fields into engineOpts so the bulk
-  // legacy channel and the typed setEngineOptions message converge on the
-  // same in-memory state. Once UI bind-points migrate to setEngineOptions,
-  // this mirror disappears alongside the bulk channel for these fields.
-  applyEngineOpts({
-    timeslotsPerLayer: parseInt(currentOptions.gpu.timeslotsPerLayer, 10),
-    showLogo: currentOptions.debug.showLogo,
-  });
-
-  // Per-built-in opacity has migrated — host dispatches setLayerOpacity
-  // directly, with the enabled→0 pre-multiplication applied host-side.
-
-  // Write option uniforms declaratively
-  if (renderer) {
-    const view = renderer.getUniformView();
-    writeOptionUniforms(view, currentOptions);
-
-    // graticule + cities have migrated — host dispatches typed setLayerOptions
-    // directly. No bulk-channel mirror here.
-  }
-
-  // wind has migrated — host dispatches setLayerOptions('wind',...) directly.
-
-  // pressure + rain have migrated — host dispatches setLayerOptions directly.
-}
-
 async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): Promise<void> {
   if (!canvas || !renderer) return;
   const t0 = performance.now();
@@ -1218,7 +1186,6 @@ type MessageHandler<T extends AuroraRequest['type']> =
 
 const handlers: { [K in AuroraRequest['type']]: MessageHandler<K> } = {
   init: handleInit,
-  options: handleOptions,
   setEngineOptions: handleSetEngineOptions,
   setLayerOpacity: handleSetLayerOpacity,
   setLayerOptions: handleSetLayerOptions,
