@@ -17,6 +17,7 @@ import type { PerfService } from './perf-service';
 import { Camera } from '../aurora/camera';
 import { setupViewport } from './viewport/viewport';
 import type { PaletteId } from './palette-service';
+import type { EngineOpts } from '../aurora/types/options';
 
 /** Type guard: value is an object with a palette ID field */
 function hasPaletteField(val: unknown): val is { palette: PaletteId } {
@@ -62,6 +63,8 @@ export interface AuroraService {
   activateSlots(param: string, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
   deactivateSlots(param: string): void;
   updatePalette(layer: string, paletteId: PaletteId): void;
+  /** Sub-B Phase 5 typed setter — patch aurora's engine-wide options. */
+  setEngineOptions(patch: Partial<EngineOpts>): void;
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
@@ -337,6 +340,10 @@ export function createAuroraService(
 
     updatePalette(layer: string, paletteId: PaletteId): void {
       send({ type: 'updatePalette', layer, paletteId });
+    },
+
+    setEngineOptions(patch: Partial<EngineOpts>): void {
+      send({ type: 'setEngineOptions', patch });
     },
 
     start(): void {

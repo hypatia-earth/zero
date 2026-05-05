@@ -115,6 +115,19 @@ let canvas: OffscreenCanvas | null = null;
 // Options state (received from main thread)
 let currentOptions: ZeroOptions | null = null;
 
+// Engine-wide options (Sub-B Phase 5). Seeded from init payload, mutated by
+// either the bulk 'options' channel (legacy) or 'setEngineOptions' (new typed
+// path); both routes funnel through `applyEngineOpts` so the layer of read
+// stays single-sourced.
+let engineOpts: EngineOpts = {
+  timeslotsPerLayer: 0,
+  useTimestampQueries: false,
+};
+
+function applyEngineOpts(patch: Partial<EngineOpts>): void {
+  engineOpts = { ...engineOpts, ...patch };
+}
+
 // Layer registry (for declarative mode)
 let layerRegistry: LayerService | null = null;
 
@@ -565,6 +578,9 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   canvas.width = data.width;
   canvas.height = data.height;
 
+  // Seed aurora-side engine state from init config.
+  applyEngineOpts({ timeslotsPerLayer: config.timeslotsPerLayer });
+
   // Create and initialize renderer
   // Pass dpr from main thread — workers may not have devicePixelRatio (Chrome)
   // or report incorrect values, causing graticule LoD mismatch across browsers
@@ -661,6 +677,14 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void {
   const prevOptions = currentOptions;
   currentOptions = data.value;
+
+  // Mirror engine-relevant ZeroOptions fields into engineOpts so the bulk
+  // legacy channel and the typed setEngineOptions message converge on the
+  // same in-memory state. Once UI bind-points migrate to setEngineOptions,
+  // this mirror disappears alongside the bulk channel for these fields.
+  applyEngineOpts({
+    timeslotsPerLayer: parseInt(currentOptions.gpu.timeslotsPerLayer, 10),
+  });
 
   // Write option uniforms declaratively
   if (renderer) {
@@ -777,8 +801,7 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
     allocatedMB += store.getAllocatedCount() * store.timeslotSizeMB;
     totalSlabSizeMB += store.timeslotSizeMB;
   }
-  const timeslots = parseInt(currentOptions!.gpu.timeslotsPerLayer, 10);
-  const capacityMB = totalSlabSizeMB * timeslots;
+  const capacityMB = totalSlabSizeMB * engineOpts.timeslotsPerLayer;
 
   const cpuTimeMs = performance.now() - t0;
   self.postMessage({
@@ -1041,8 +1064,8 @@ async function handleRecordBatch(data: Extract<AuroraRequest, { type: 'recordBat
 // new typed message before its layer migrated; throw loudly so we notice.
 // ============================================================
 
-function handleSetEngineOptions(_data: Extract<AuroraRequest, { type: 'setEngineOptions' }>): void {
-  throw new Error('Sub-B Phase 5: setEngineOptions handler not yet wired (engine-option migration pending)');
+function handleSetEngineOptions(data: Extract<AuroraRequest, { type: 'setEngineOptions' }>): void {
+  applyEngineOpts(data.patch);
 }
 
 function handleSetLayerOpacity(data: Extract<AuroraRequest, { type: 'setLayerOpacity' }>): void {
