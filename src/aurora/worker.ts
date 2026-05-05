@@ -696,7 +696,7 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
 
   // React to options that require buffer recreation
   if (prevOptions && currentOptions.wind.seedCount !== prevOptions.wind.seedCount) {
-    renderer!.getWindLayer().setLineCount(currentOptions.wind.seedCount);
+    renderer!.setWindSeedCount(currentOptions.wind.seedCount);
   }
 }
 

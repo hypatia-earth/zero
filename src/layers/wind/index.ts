@@ -1,5 +1,3 @@
-export { WindLayer } from './wind-layer';
-
 import { defineLayer, withUI, withParams, withOptions, withPalettes, withCompute, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
 
 export const layer = defineLayer('wind',

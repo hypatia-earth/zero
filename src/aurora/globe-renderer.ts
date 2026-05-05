@@ -6,7 +6,7 @@ import { Camera, type CameraConfig } from './camera';
 import { type ComposedShaders, activeParamBindings, type ParamBindingConfig } from './shader-composer';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
 import { PressureLayer } from '../layers/pressure';
-import { WindLayer } from '../layers/wind';
+import { WindAuroraLayer, type WindAuroraLayerHost } from './built_ins/wind/wind-aurora-layer';
 import { GRATICULE_BUFFER_SIZE } from './built_ins/graticule/graticule-animator';
 import { GraticuleLayer, type GraticuleLodLevel } from './built_ins/graticule/graticule-layer';
 import { LOOKUP_WIDTH, LOOKUP_HEIGHT } from './built_ins/cities/cities-layer';
@@ -16,7 +16,7 @@ import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
 import { createCaptureTexture, readbackFrame as readbackFrameImpl } from './capture';
 import { AuroraLayerRegistry } from './aurora-layer-registry';
-import type { AuroraLayerContext, AuroraLayerFrame } from './types/aurora-layer';
+import type { AuroraDataEvent, AuroraLayerContext, AuroraLayerFrame } from './types/aurora-layer';
 
 // Re-export for consumers
 export type { PassTimings } from './gpu-timestamp';
@@ -87,8 +87,9 @@ export class GlobeRenderer {
   private captureTexture!: GPUTexture;
   // Pressure contour layer
   private pressureLayer!: PressureLayer;
-  // Wind layer
-  private windLayer!: WindLayer;
+  // Wind layer (registered with AuroraLayerRegistry; per-frame host-handle state below)
+  private windLayerState: LayerState = { mode: 'loading', lerp: 0, time: new Date(0) };
+  private windAnimSpeed = 0;
   // Dynamic param buffers (keyed by param name) — combined t0+t1 buffers
   private paramBuffers = new Map<string, GPUBuffer>();
   // Dynamic param textures (keyed by param name) — combined t0+t1 textures for texture-backed params
@@ -404,8 +405,28 @@ export class GlobeRenderer {
     // Initialize pressure layer with configured resolution
     this.pressureLayer = new PressureLayer(this.device, this.format, this.paletteTexture);
 
-    // Initialize wind layer
-    this.windLayer = new WindLayer(this.device, this.format, this.paletteTexture, windLineCount, windConfig);
+    // Register wind AuroraLayer (built-in). Per-frame opacity / layer-state /
+    // animSpeed flow through the host handle; updateUniforms() captures them.
+    {
+      const renderer = this;
+      const windHost: WindAuroraLayerHost = {
+        getOpacity() { return renderer.currentLayerOpacities[LAYER_WIND]!; },
+        getLayerState() { return renderer.windLayerState; },
+        getAnimSpeed() { return renderer.windAnimSpeed; },
+        getShowBackface() {
+          const maxOpacity = Math.max(
+            renderer.currentLayerOpacities[LAYER_EARTH]!,
+            renderer.currentLayerOpacities[LAYER_TEMP]!,
+          );
+          const t = Math.max(0, Math.min(1, (0.3 - maxOpacity) / 0.3));
+          return t * t * (3 - 2 * t);
+        },
+      };
+      this.layerRegistry.register(
+        new WindAuroraLayer(windLineCount, windConfig, windHost),
+        this.getLayerContext(),
+      );
+    }
 
     this.resize();
   }
@@ -723,41 +744,11 @@ export class GlobeRenderer {
       }, uniforms.pressureColors);
     }
 
-    // Update wind layer based on opacity AND data readiness
-    // Don't run compute/render if buffers might be invalid
-    const windVisible = uniforms.layerOpacities[LAYER_WIND]! > 0.01 && uniforms.layerDataReady[LAYER_WIND]!;
-    this.windLayer.setEnabled(windVisible);
-
-    if (windVisible) {
-      // Advance snake animation phase
-      this.windLayer.advanceAnimation(this.frameDeltaMs, uniforms.windAnimSpeed);
-
-      // Update layer state (triggers compute when state changes)
-      this.windLayer.setState(uniforms.windState);
-
-      // Animated backface: fade in from limb as texture layers fade out
-      // Uses same logic as grid/depth: smoothstep(0.3, 0.0, maxOpacity)
-      const maxOpacity = Math.max(uniforms.layerOpacities[LAYER_EARTH]!, uniforms.layerOpacities[LAYER_TEMP]!);
-      const t = Math.max(0, Math.min(1, (0.3 - maxOpacity) / 0.3));
-      const showBackface = t * t * (3 - 2 * t);  // smoothstep
-
-      this.windLayer.updateUniforms({
-        viewProj: uniforms.viewProj,
-        eyePosition: [
-          uniforms.eyePosition[0]!,
-          uniforms.eyePosition[1]!,
-          uniforms.eyePosition[2]!,
-        ],
-        opacity: uniforms.layerOpacities[LAYER_WIND]!,
-        animPhase: this.windLayer.getAnimPhase(),
-        snakeLength: this.windLayer.getSnakeLength(),
-        lineWidth: this.windLayer.getLineWidth(),
-        showBackface,
-        radius: this.windLayer.getRadius(),
-        paletteIndex: this.paletteTexture.getPaletteIndex('wind-speed'),
-        paletteCount: this.paletteTexture.paletteCount,
-      });
-    }
+    // Wind layer: advance/setState/uniforms now run inside WindAuroraLayer.update()
+    // via the registry's updateAll dispatch. Capture per-frame inputs that the
+    // wind host handle exposes back to the layer.
+    this.windLayerState = uniforms.windState;
+    this.windAnimSpeed = uniforms.windAnimSpeed;
   }
 
   /** Upload uniform buffer to GPU. Call after all setParamState/setParamDt writes. */
@@ -814,11 +805,7 @@ export class GlobeRenderer {
     globePass.draw(3);
     globePass.end();
 
-    // COMPUTE PASS: Wind line tracing (runs before geometry rendering)
-    const hasWind = this.windLayer.isEnabled();
-    if (hasWind) {
-      this.windLayer.runCompute(commandEncoder);
-    }
+    // COMPUTE PASS: Wind line tracing dispatches via the registry (Phase 4).
     this.layerRegistry.computeAll(layerFrame);
 
     // PASS 2: Geometry layers (pressure contours, wind, etc.)
@@ -851,10 +838,7 @@ export class GlobeRenderer {
       this.pressureLayer.render(geometryPass);
     }
 
-    if (hasWind) {
-      this.windLayer.render(geometryPass);
-    }
-
+    // Wind renders inside the geometry pass via the registry's renderAll dispatch.
     this.layerRegistry.renderAll(layerFrame, geometryPass);
 
     geometryPass.end();
@@ -1055,11 +1039,23 @@ export class GlobeRenderer {
   }
 
   /**
-   * Set wind layer buffers from LayerStore (U0, V0, U1, V1)
-   * Called when active slots change
+   * Set wind layer buffers from LayerStore (U0, V0, U1, V1).
+   * Forwards to WindAuroraLayer via the registry's onDataChanged surface.
    */
   setWindLayerBuffers(u0: GPUBuffer, v0: GPUBuffer, u1: GPUBuffer, v1: GPUBuffer): void {
-    this.windLayer.setExternalBuffers(u0, v0, u1, v1, this.gaussianGridBuffer);
+    const events: AuroraDataEvent[] = [
+      { param: 'wind_u_component_10m', buffer0: u0, buffer1: u1, lerp: 0 },
+      { param: 'wind_v_component_10m', buffer0: v0, buffer1: v1, lerp: 0 },
+    ];
+    this.layerRegistry.onDataChanged('wind', events, this.getLayerContext());
+  }
+
+  /**
+   * Set wind line/seed count (responds to wind.seedCount option changes).
+   * Forwards to WindAuroraLayer via the registry's onOptionsChanged surface.
+   */
+  setWindSeedCount(seedCount: number): void {
+    this.layerRegistry.onOptionsChanged('wind', { seedCount }, this.getLayerContext());
   }
 
   /**
@@ -1221,11 +1217,6 @@ export class GlobeRenderer {
     return this.pressureLayer;
   }
 
-  /** Get wind layer for external control */
-  getWindLayer(): WindLayer {
-    return this.windLayer;
-  }
-
   /** Get uniform DataView for declarative writers */
   getUniformView(): DataView {
     return this.uniformView;
@@ -1343,7 +1334,6 @@ export class GlobeRenderer {
     this.colorTexture?.destroy();
     this.captureTexture?.destroy();
     this.pressureLayer?.dispose();
-    this.windLayer?.dispose();
     this.gpuTimestamp?.dispose();
   }
 }
