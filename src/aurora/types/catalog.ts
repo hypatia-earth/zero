@@ -9,6 +9,7 @@
 
 import type { AssetSpec } from './asset';
 import type { AuroraLayer } from './aurora-layer';
+import type { OptionDescriptor } from './options-descriptor';
 
 export type LayerCategory = 'composed' | 'composed-stateful' | 'autonomous';
 
@@ -25,6 +26,9 @@ export interface LayerCatalogEntry {
   uiHints: LayerUiHints;
   /** Typed by id at adapter sites (WindOpts | GraticuleOpts | …). */
   defaultOptions: unknown;
+  /** Per-layer option descriptors (scope-stamped 'layer', layerId pre-set).
+   *  Authored under `aurora/options/descriptors.ts`. */
+  options: OptionDescriptor[];
   requiredAssets?: AssetSpec[];
   /** Data params this layer reads (e.g., 'wind_u_component_10m'). */
   requiresParams?: string[];

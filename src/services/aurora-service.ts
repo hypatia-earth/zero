@@ -17,7 +17,7 @@ import type { PerfService } from './perf-service';
 import { Camera } from '../aurora/camera';
 import { setupViewport } from './viewport/viewport';
 import type { PaletteId } from './palette-service';
-import type { EngineOpts } from '../aurora/types/options';
+import type { EngineOpts, AuroraOptions as AuroraOptionsBlob } from '../aurora/types/options';
 import type { ZeroOptions } from '../schemas/options.schema';
 
 /** Host-side named→RGB mapping for cities label color. Aurora consumes the
@@ -84,6 +84,9 @@ export interface AuroraService {
   setLayerOptions(id: string, opts: unknown): void;
   /** Sub-B Phase 5 typed setter — pre-gated opacity 0..1 (host pre-multiplies enabled). */
   setLayerOpacity(id: string, value: number): void;
+  /** Phase B host mirror — populated from the worker's `'ready'` payload and
+   *  refreshed on every `'optionsChanged'` echo. `null` until init resolves. */
+  optionsMirror: Signal<AuroraOptionsBlob | null>;
   getCamera(): Camera;
   setCameraPosition(lat: number, lon: number, distance: number): void;
   memoryStats: Signal<{ allocatedMB: number; capacityMB: number }>;
@@ -131,6 +134,9 @@ export function createAuroraService(
   // GPU memory stats (updated each frame from worker)
   const memoryStats = signal({ allocatedMB: 0, capacityMB: 0 });
 
+  // Phase B aurora-options mirror — null until 'ready', then tracks worker.
+  const optionsMirror = signal<AuroraOptionsBlob | null>(null);
+
   // User layer error (set when shader compilation fails)
   const userLayerState = signal<{ layerId: string; error: string } | 'ok' | null>(null);
 
@@ -173,7 +179,11 @@ export function createAuroraService(
     const msg = e.data;
     switch (msg.type) {
       case 'ready':
+        optionsMirror.value = msg.options;
         onReady?.();
+        break;
+      case 'optionsChanged':
+        optionsMirror.value = msg.options;
         break;
       case 'frameComplete':
         onFrameComplete?.(msg.timing, msg.memoryMB);
@@ -518,6 +528,7 @@ export function createAuroraService(
 
     memoryStats,
     userLayerState,
+    optionsMirror,
 
     get recording() { return recording; },
     set recording(v: boolean) { recording = v; },

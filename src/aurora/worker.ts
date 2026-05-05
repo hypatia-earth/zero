@@ -14,7 +14,6 @@ import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from './built_ins/pressure/pressure-layer';
 import { LayerStore } from './layer-store';
 import type { PressureColorOption } from '../schemas/options.schema';
-import { PRESSURE_COLOR_DEFAULT } from '../schemas/options.schema';
 import type { TBuiltInLayer, TLayer } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import { getSunDirection } from '../utils/sun-position';
@@ -24,7 +23,7 @@ import type { PaletteId } from '../services/palette-service';
 import { writeConfigUniforms } from './uniform-writer';
 import { U } from './globe-uniforms';
 import { createCaptureHandler } from './capture';
-import type { EngineOpts, GraticuleOpts } from './types/options';
+import type { EngineOpts, GraticuleOpts, AuroraOptions as AuroraOptionsBlob } from './types/options';
 import { AuroraOptions } from './options';
 
 // ============================================================
@@ -103,13 +102,16 @@ export type AuroraRequest =
   | { type: 'cleanup' };
 
 export type AuroraResponse =
-  | { type: 'ready' }
+  | { type: 'ready'; options: AuroraOptionsBlob }
   | { type: 'frameComplete'; timing: { frame: number; pass1: number; pass2: number; pass3: number }; memoryMB: { allocated: number; capacity: number } }
   | { type: 'error'; message: string; fatal: boolean }
   | { type: 'userLayerResult'; layerId: string; success: boolean; error?: string }
   | { type: 'exportFrame'; bitmap: ImageBitmap }
   | { type: 'recordProgress'; frameIndex: number }
-  | { type: 'recordBatchComplete'; bitmaps: ImageBitmap[] };
+  | { type: 'recordBatchComplete'; bitmaps: ImageBitmap[] }
+  /** Echoed after every successful options mutation (update/clear); carries
+   *  the full blob so the host's mirror signal stays authoritative. */
+  | { type: 'optionsChanged'; options: AuroraOptionsBlob };
 
 // ============================================================
 // Worker state
@@ -142,26 +144,11 @@ type PressureHostOpts = {
 };
 type RainHostOpts = { animated: boolean };
 
-const options = new AuroraOptions({
-  dbName: 'aurora-db',
-  // Pre-dispatch fallbacks for fields aurora reads at render time before the
-  // host's setter sweep arrives. Options-catalog Phase A folds these into
-  // descriptor `default` values; Phase G drops this `defaults` arg entirely.
-  defaults: {
-    engine: {
-      timeslotsPerLayer: 0,
-      useTimestampQueries: false,
-    },
-    layers: {
-      wind: { opacity: 0, opts: { seedCount: 0, speed: 0 } as WindHostOpts as unknown as Record<string, unknown> },
-      pressure: {
-        opacity: 0,
-        opts: { spacing: 4, smoothing: 'light', colors: PRESSURE_COLOR_DEFAULT } as PressureHostOpts as unknown as Record<string, unknown>,
-      },
-      rain: { opacity: 0, opts: { animated: true } as RainHostOpts as unknown as Record<string, unknown> },
-    },
-  },
-});
+// Pre-dispatch fallbacks (engine + per-layer opts) come from
+// `defaultsFromCatalog()` via `AURORA_OPTIONS_DEFAULTS`. The worker no
+// longer authors a `defaults` arg here — Phase G drops the constructor
+// option entirely.
+const options = new AuroraOptions({ dbName: 'aurora-db' });
 
 function getWindOpts(): WindHostOpts { return options.read().layers.wind!.opts as WindHostOpts; }
 function getPressureOpts(): PressureHostOpts { return options.read().layers.pressure!.opts as PressureHostOpts; }
@@ -752,7 +739,14 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
     console.error('[Aurora] No layers registered for shader composition');
   }
 
-  self.postMessage({ type: 'ready' } satisfies AuroraResponse);
+  self.postMessage({ type: 'ready', options: options.read() } satisfies AuroraResponse);
+}
+
+/** Broadcast the canonical options blob after any successful mutation.
+ *  Phase B host mirror reads from this; round-trip is intentional so the
+ *  optimistic adapter writes are reconciled against persisted truth. */
+function postOptionsChanged(): void {
+  self.postMessage({ type: 'optionsChanged', options: options.read() } satisfies AuroraResponse);
 }
 
 async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): Promise<void> {
@@ -1107,10 +1101,12 @@ async function handleRecordBatch(data: Extract<AuroraRequest, { type: 'recordBat
 
 function handleSetEngineOptions(data: Extract<AuroraRequest, { type: 'setEngineOptions' }>): void {
   options.updateEngine(data.patch);
+  postOptionsChanged();
 }
 
 function handleSetLayerOpacity(data: Extract<AuroraRequest, { type: 'setLayerOpacity' }>): void {
   options.updateLayer(data.id, { opacity: data.value });
+  postOptionsChanged();
 }
 
 const KNOWN_LAYER_IDS = new Set(['graticule', 'cities', 'wind', 'pressure', 'rain']);
@@ -1123,6 +1119,7 @@ function handleSetLayerOptions(data: Extract<AuroraRequest, { type: 'setLayerOpt
   options.updateLayer(data.id, { opts: data.opts as Record<string, unknown> });
   const next = options.read().layers[data.id]!;
   applyLayerSideEffects(data.id, prev, next);
+  postOptionsChanged();
 }
 
 async function handleNukeOptions(): Promise<void> {
@@ -1130,6 +1127,7 @@ async function handleNukeOptions(): Promise<void> {
   // so any post-nuke setLayerOpacity / setLayerOptions arriving next in the
   // FIFO sees fresh defaults. The await drains the durable IDB delete.
   await options.clear();
+  postOptionsChanged();
 }
 
 async function handleCleanup(): Promise<void> {

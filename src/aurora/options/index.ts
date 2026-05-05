@@ -32,21 +32,18 @@ import {
   OPTIONS_KEY,
 } from './aurora-db';
 import { migrate, CURRENT_SCHEMA_VERSION, type PersistedOptions } from './migrations';
+import { defaultsFromCatalog } from './catalog';
 
 const DEFAULT_DEBOUNCE_MS = 300;
 
 /**
- * Aurora-side defaults. Engine fields here are placeholders — the host's
- * init seeds (timeslotsPerLayer, useTimestampQueries) overwrite them. Layer
- * entries start empty; each typed-setter populates `layers[id]` lazily.
+ * Aurora-side defaults — derived from the option catalog. Engine fields
+ * may still be overwritten by per-init seeds (e.g. host's
+ * `timeslotsPerLayer`); layer entries arrive populated from descriptors so
+ * the renderer can read sensible values before the host's typed-setter
+ * sweep dispatches the user's persisted overrides.
  */
-export const AURORA_OPTIONS_DEFAULTS: AuroraOptionsBlob = {
-  engine: {
-    timeslotsPerLayer: 0,
-    useTimestampQueries: false,
-  },
-  layers: {},
-};
+export const AURORA_OPTIONS_DEFAULTS: AuroraOptionsBlob = defaultsFromCatalog();
 
 export interface AuroraOptionsConfig {
   dbName: string;

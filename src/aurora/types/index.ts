@@ -38,3 +38,12 @@ export type {
   LayerCatalogEntry,
   AuroraLayerSpec,
 } from './catalog';
+
+export type {
+  OptionScope,
+  OptionKind,
+  OptionImpact,
+  OptionEnumValue,
+  OptionDescriptor,
+  OptionDescriptorAuthor,
+} from './options-descriptor';
