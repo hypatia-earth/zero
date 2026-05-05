@@ -1,5 +1,3 @@
-export { PressureLayer } from './pressure-layer';
-
 import { defineLayer, withUI, withParams, withOptions, withPalettes, withCompute, withRender, asBuiltIn } from '../../services/layer/builder';
 
 export const layer = defineLayer('pressure',

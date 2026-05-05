@@ -11,7 +11,7 @@
 
 import type { CameraConfig } from './camera';
 import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
-import { generateIsobarLevels } from '../layers/pressure/pressure-layer';
+import { generateIsobarLevels } from './built_ins/pressure/pressure-layer';
 import type { GraticuleLodLevel } from './built_ins/graticule/graticule-layer';
 import type { CitiesLodLevel } from './built_ins/cities/cities-aurora-layer';
 import { LayerStore } from './layer-store';

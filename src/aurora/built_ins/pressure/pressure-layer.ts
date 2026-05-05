@@ -17,9 +17,9 @@ import pressRegridCode from './regrid.wesl?static';
 import pressContourCode from './contour.wesl?static';
 import pressPrefixSumCode from './prefix-sum.wesl?static';
 import pressChaikinCode from './chaikin.wesl?static';
-import type { PressureColorOption } from '../../schemas/options.schema';
-import type { PaletteTexture } from '../../aurora/palette-texture';
-import type { PaletteId } from '../../services/palette-service';
+import type { PressureColorOption } from '../../../schemas/options.schema';
+import type { PaletteTexture } from '../../palette-texture';
+import type { PaletteId } from '../../../services/palette-service';
 
 
 /** Isobar configuration */
