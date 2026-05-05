@@ -25,6 +25,7 @@ import { writeConfigUniforms } from './uniform-writer';
 import { U } from './globe-uniforms';
 import { createCaptureHandler } from './capture';
 import type { EngineOpts, GraticuleOpts } from './types/options';
+import { AuroraOptions } from './options';
 
 // ============================================================
 // Asset types for worker transfer
@@ -82,6 +83,11 @@ export type AuroraRequest =
   | { type: 'setEngineOptions'; patch: Partial<EngineOpts> }
   | { type: 'setLayerOpacity'; id: string; value: number }
   | { type: 'setLayerOptions'; id: string; opts: unknown }
+  // Wipes aurora-db's persisted options blob and resets in-memory to defaults.
+  // Host dispatches this when the user clicks Nuke; host first clears its own
+  // zero-db keys, then sends this. Worker doesn't ack — message FIFO + sync
+  // in-memory reset ensures any post-nuke setters apply to clean state.
+  | { type: 'nukeOptions' }
   // Param-centric API
   | { type: 'uploadData'; param: string; slotIndex: number; data: Float32Array }
   | { type: 'activateSlots'; param: string; slot0: number; slot1: number; t0: number; t1: number; loadedPoints?: number }
@@ -113,89 +119,83 @@ let renderer: GlobeRenderer | null = null;
 let canvas: OffscreenCanvas | null = null;
 
 
-// Engine-wide options (Sub-B Phase 5). Seeded from init payload, mutated by
-// either the bulk 'options' channel (legacy) or 'setEngineOptions' (new typed
-// path); both routes funnel through `applyEngineOpts` so the layer of read
-// stays single-sourced.
-let engineOpts: EngineOpts = {
-  timeslotsPerLayer: 0,
-  useTimestampQueries: false,
-};
+// ============================================================
+// Aurora options — single source of truth (Sub-B Phase 4 wired)
+// ============================================================
+//
+// One in-memory canonical AuroraOptions blob, owned by `options`, which also
+// persists itself to aurora-db. Worker reads via `options.read()` and mutates
+// via `options.update*` from the typed-setter handlers. Per-layer renderer
+// side-effects live in `applyLayerSideEffects` (called after the canonical
+// mutation so it sees prev vs. next).
 
-function applyEngineOpts(patch: Partial<EngineOpts>): void {
-  engineOpts = { ...engineOpts, ...patch };
-}
-
-// Per-layer option appliers (Sub-B Phase 5). Each layer migration adds its own
-// helper here; bulk handleOptions and the typed setLayerOptions dispatch both
-// route through the same helper so legacy and new channels stay in sync.
-
-/** Graticule sub-shape the host actually drives today (lodLevels stays
- *  layer-internal until the catalog inversion in Phase 6). */
+/** Per-layer host sub-shapes used as cast targets at access sites. The full
+ *  WindOpts/PressureOpts in `aurora/types/options` use different field names
+ *  (Phase 9 cleanup); these reflect what the host actually drives today. */
 type GraticuleHostOpts = Pick<GraticuleOpts, 'fontSize' | 'lineWidth'>;
-
-function applyGraticuleOptions(opts: GraticuleHostOpts): void {
-  if (!renderer) return;
-  renderer.setGraticuleOptions(opts.fontSize, opts.lineWidth);
-}
-
-/** Cities sub-shape the host drives today. Color is an RGB triplet (0..1) —
- *  the host owns named-color → RGB translation; aurora stays neutral. */
 type CitiesHostOpts = { color: [number, number, number] };
-
-function applyCitiesOptions(opts: CitiesHostOpts): void {
-  if (!renderer) return;
-  const view = renderer.getUniformView();
-  view.setFloat32(U.cityColorR, opts.color[0], true);
-  view.setFloat32(U.cityColorG, opts.color[1], true);
-  view.setFloat32(U.cityColorB, opts.color[2], true);
-}
-
-/** Wind sub-shape the host drives today (snakeLength/lineWidth/etc. are
- *  Phase 6 catalog-inversion concerns). */
 type WindHostOpts = { seedCount: number; speed: number };
-
-let windOpts: WindHostOpts = { seedCount: 0, speed: 0 };
-
-function applyWindOptions(patch: Partial<WindHostOpts>): void {
-  const prev = windOpts;
-  windOpts = { ...prev, ...patch };
-  // Recreate seed buffers only when seedCount actually changes — matches the
-  // previous prevOptions guard. Skipped before renderer init.
-  if (renderer && patch.seedCount !== undefined && patch.seedCount !== prev.seedCount) {
-    renderer.setWindSeedCount(patch.seedCount);
-  }
-}
-
-/** Pressure sub-shape the host drives today. `colors` is the host's
- *  PressureColorOption discriminated union — the type itself moves into
- *  aurora/types/ during Phase 9 cleanup, alongside removing the host-schema
- *  import in globe-renderer. */
 type PressureHostOpts = {
   spacing: number;       // hPa (parsed from string at the adapter)
   smoothing: 'none' | 'light';
   colors: PressureColorOption;
 };
-
-let pressureOpts: PressureHostOpts = {
-  spacing: 4,
-  smoothing: 'light',
-  colors: PRESSURE_COLOR_DEFAULT,
-};
-
-function applyPressureOptions(patch: Partial<PressureHostOpts>): void {
-  pressureOpts = { ...pressureOpts, ...patch };
-}
-
-/** Rain sub-shape the host drives today (only the per-frame animated toggle;
- *  the rest of the rain surface is enabled/opacity/palette which flow through
- *  setLayerOpacity + updatePalette respectively). */
 type RainHostOpts = { animated: boolean };
 
-let rainOpts: RainHostOpts = { animated: true };
+const options = new AuroraOptions({
+  dbName: 'aurora-db',
+  // Pre-dispatch fallbacks for fields aurora reads at render time before the
+  // host's setter sweep arrives. Phase 9 (ZeroOptions shrink) makes these the
+  // schema-canonical defaults instead of mirrors of host's startup values.
+  defaults: {
+    engine: {
+      timeslotsPerLayer: 0,
+      useTimestampQueries: false,
+    },
+    layers: {
+      wind: { opacity: 0, opts: { seedCount: 0, speed: 0 } as WindHostOpts as unknown as Record<string, unknown> },
+      pressure: {
+        opacity: 0,
+        opts: { spacing: 4, smoothing: 'light', colors: PRESSURE_COLOR_DEFAULT } as PressureHostOpts as unknown as Record<string, unknown>,
+      },
+      rain: { opacity: 0, opts: { animated: true } as RainHostOpts as unknown as Record<string, unknown> },
+    },
+  },
+});
 
-function applyRainOptions(patch: Partial<RainHostOpts>): void {
-  rainOpts = { ...rainOpts, ...patch };
+function getWindOpts(): WindHostOpts { return options.read().layers.wind!.opts as WindHostOpts; }
+function getPressureOpts(): PressureHostOpts { return options.read().layers.pressure!.opts as PressureHostOpts; }
+function getRainOpts(): RainHostOpts { return options.read().layers.rain!.opts as RainHostOpts; }
+
+/** Renderer side-effects when a layer's typed-setter mutates the blob. Called
+ *  after the canonical mutation, with prev for diff-aware effects (wind seed
+ *  buffer recreation only fires when seedCount actually changes). */
+function applyLayerSideEffects(id: string, prev: { opts: unknown } | undefined, next: { opts: unknown }): void {
+  if (!renderer) return;
+  switch (id) {
+    case 'graticule': {
+      const o = next.opts as GraticuleHostOpts;
+      renderer.setGraticuleOptions(o.fontSize, o.lineWidth);
+      break;
+    }
+    case 'cities': {
+      const o = next.opts as CitiesHostOpts;
+      const view = renderer.getUniformView();
+      view.setFloat32(U.cityColorR, o.color[0], true);
+      view.setFloat32(U.cityColorG, o.color[1], true);
+      view.setFloat32(U.cityColorB, o.color[2], true);
+      break;
+    }
+    case 'wind': {
+      const newOpts = next.opts as WindHostOpts;
+      const prevOpts = prev?.opts as WindHostOpts | undefined;
+      if (newOpts.seedCount !== prevOpts?.seedCount) {
+        renderer.setWindSeedCount(newOpts.seedCount);
+      }
+      break;
+    }
+    // pressure / rain: read at render time, no immediate side-effect needed.
+  }
 }
 
 // Layer registry (for declarative mode)
@@ -469,12 +469,6 @@ let lastSmoothing = 'light';
 // Keyed by layer id, initialized from layer registry
 const animatedOpacity = new Map<string, number>();
 
-// User-intended (sans data-ready gating) target opacity per built-in layer id.
-// Populated by either the bulk 'options' channel (host pre-multiplies enabled
-// → opacity-or-zero) or 'setLayerOpacity' typed messages. updateAnimatedOpacities
-// reads from here and applies the data-ready / data-window gating.
-const targetOpacities = new Map<string, number>();
-
 let lastFrameTime = 0;
 
 /** Initialize animated opacity for all registered layers */
@@ -487,16 +481,12 @@ function initAnimatedOpacity(): void {
   }
 }
 
-function applyLayerOpacity(id: string, value: number): void {
-  targetOpacities.set(id, value);
-}
-
 /** A built-in layer counts as visible for cross-layer decisions (logo overlay,
  *  rain backface, pressure compute-skip) when its user-intended target opacity
- *  is non-zero. The host pre-multiplies enabled→opacity-or-zero into target
- *  via setLayerOpacity / bulk mirror, so this derives uniformly. */
+ *  is non-zero. The host pre-multiplies enabled→opacity-or-zero into the layer
+ *  entry's `opacity` via setLayerOpacity, so this derives uniformly. */
 function isLayerEnabled(id: string): boolean {
-  return (targetOpacities.get(id) ?? 0) > 0;
+  return (options.read().layers[id]?.opacity ?? 0) > 0;
 }
 
 
@@ -527,13 +517,13 @@ function updateAnimatedOpacities(dt: number, currentTimeMs: number): void {
   // Iterate all registered layers
   for (const layer of layerRegistry.getAll()) {
     // Source the pre-gating user-intended opacity. For built-ins it comes from
-    // targetOpacities (driven by bulk channel mirror or setLayerOpacity); for
-    // user layers it stays on the dedicated user-layer state maps.
+    // options.layers[id].opacity (driven by setLayerOpacity); for user layers
+    // it stays on the dedicated user-layer state maps.
     let userTarget: number;
     if (isBuiltInLayer(layer)) {
-      const t = targetOpacities.get(layer.id);
-      if (t === undefined) continue;  // before first options/setter delivery
-      userTarget = t;
+      const entry = options.read().layers[layer.id];
+      if (!entry) continue;  // before first options/setter delivery
+      userTarget = entry.opacity;
     } else {
       const idx = layer.userLayerIndex!;
       const enabled = userLayerEnabled.get(idx)!;
@@ -602,13 +592,11 @@ function buildLayerDataReady(): boolean[] {
 }
 
 /**
- * Build uniforms from render message state. Sub-B Phase 5 milestone: this
- * function no longer reads currentOptions — every per-frame uniform sources
- * from aurora-side worker state (engineOpts, windOpts, pressureOpts, rainOpts,
- * targetOpacities) populated via either the typed setters or the bulk-channel
- * mirror in handleOptions.
+ * Build uniforms from render message state. Reads from the canonical
+ * `options.read()` blob — engine fields and per-layer opts both live there.
  */
 function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
+  const engine = options.read().engine;
   return {
     // Camera (from render message)
     viewProj: camera.viewProj,
@@ -623,18 +611,18 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     layerDataReady: buildLayerDataReady(),
     // Wind/pressure have separate render passes with special state
     windLerp: computeLerp(getLayerSlotState('wind')!, time.getTime()),
-    windAnimSpeed: windOpts.speed,
+    windAnimSpeed: getWindOpts().speed,
     windState: {
       mode: getLayerSlotState('wind')!.dataReady ? 'pair' : 'loading',
       lerp: computeLerp(getLayerSlotState('wind')!, time.getTime()),
       time,
     },
-    pressureColors: pressureOpts.colors,
-    logoOpacity: engineOpts.showLogo && !isAnyLayerEnabled()
+    pressureColors: getPressureOpts().colors,
+    logoOpacity: engine.showLogo && !isAnyLayerEnabled()
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
     rainBackFace: isLayerEnabled('rain') && !isLayerEnabled('earth') && !isLayerEnabled('temp') ? 1 : 0,
-    rainAnimated: rainOpts.animated,
+    rainAnimated: getRainOpts().animated,
   };
 }
 
@@ -666,12 +654,13 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   canvas.width = data.width;
   canvas.height = data.height;
 
-  // Seed aurora-side engine state from init config.
-  applyEngineOpts({ timeslotsPerLayer: config.timeslotsPerLayer });
-
-  // Seed wind state from init config so the first bulk-options seedCount mirror
-  // matches and skips the redundant setWindSeedCount call.
-  windOpts = { ...windOpts, seedCount: config.windLineCount };
+  // Open aurora-db, load any persisted blob, merge with this run's host-config
+  // seeds (timeslotsPerLayer + windLineCount). After this await, options.read()
+  // is valid for the rest of init and every subsequent frame.
+  await options.init({
+    engine: { timeslotsPerLayer: config.timeslotsPerLayer },
+    layers: { wind: { opts: { seedCount: config.windLineCount } } },
+  });
 
   // Create and initialize renderer
   // Pass dpr from main thread — workers may not have devicePixelRatio (Chrome)
@@ -777,6 +766,7 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
   updateAnimatedOpacities(dt, time);
 
   // Update isobar spacing if changed
+  const pressureOpts = getPressureOpts();
   const newSpacing = pressureOpts.spacing;
   let needsContourRecompute = false;
   if (newSpacing !== lastPressureSpacing) {
@@ -794,8 +784,6 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
   }
 
   // Recompute pressure contours when time, spacing, or smoothing changes.
-  // The compute-skip gate now reads aurora's own targetOpacities via
-  // isLayerEnabled instead of currentOptions.pressure.enabled.
   const pressureState = getLayerSlotState('pressure');
   if (isLayerEnabled('pressure') && pressureState?.dataReady) {
     const currentMinute = Math.floor(time / 60000);
@@ -854,7 +842,7 @@ async function handleRender(data: Extract<AuroraRequest, { type: 'render' }>): P
     allocatedMB += store.getAllocatedCount() * store.timeslotSizeMB;
     totalSlabSizeMB += store.timeslotSizeMB;
   }
-  const capacityMB = totalSlabSizeMB * engineOpts.timeslotsPerLayer;
+  const capacityMB = totalSlabSizeMB * options.read().engine.timeslotsPerLayer;
 
   const cpuTimeMs = performance.now() - t0;
   self.postMessage({
@@ -1118,36 +1106,37 @@ async function handleRecordBatch(data: Extract<AuroraRequest, { type: 'recordBat
 // ============================================================
 
 function handleSetEngineOptions(data: Extract<AuroraRequest, { type: 'setEngineOptions' }>): void {
-  applyEngineOpts(data.patch);
+  options.updateEngine(data.patch);
 }
 
 function handleSetLayerOpacity(data: Extract<AuroraRequest, { type: 'setLayerOpacity' }>): void {
-  applyLayerOpacity(data.id, data.value);
+  options.updateLayer(data.id, { opacity: data.value });
 }
+
+const KNOWN_LAYER_IDS = new Set(['graticule', 'cities', 'wind', 'pressure', 'rain']);
 
 function handleSetLayerOptions(data: Extract<AuroraRequest, { type: 'setLayerOptions' }>): void {
-  switch (data.id) {
-    case 'graticule':
-      applyGraticuleOptions(data.opts as GraticuleHostOpts);
-      return;
-    case 'cities':
-      applyCitiesOptions(data.opts as CitiesHostOpts);
-      return;
-    case 'wind':
-      applyWindOptions(data.opts as Partial<WindHostOpts>);
-      return;
-    case 'pressure':
-      applyPressureOptions(data.opts as Partial<PressureHostOpts>);
-      return;
-    case 'rain':
-      applyRainOptions(data.opts as Partial<RainHostOpts>);
-      return;
-    default:
-      throw new Error(`Sub-B Phase 5: setLayerOptions('${data.id}') handler not yet wired (layer not migrated)`);
+  if (!KNOWN_LAYER_IDS.has(data.id)) {
+    throw new Error(`setLayerOptions('${data.id}') handler not yet wired (layer not migrated)`);
   }
+  const prev = options.read().layers[data.id];
+  options.updateLayer(data.id, { opts: data.opts as Record<string, unknown> });
+  const next = options.read().layers[data.id]!;
+  applyLayerSideEffects(data.id, prev, next);
 }
 
-function handleCleanup(): void {
+async function handleNukeOptions(): Promise<void> {
+  // Sync in-memory reset is part of clear() — completes before the await,
+  // so any post-nuke setLayerOpacity / setLayerOptions arriving next in the
+  // FIFO sees fresh defaults. The await drains the durable IDB delete.
+  await options.clear();
+}
+
+async function handleCleanup(): Promise<void> {
+  // Drain any pending debounced save before tearing down so the last drag
+  // value lands durably.
+  await options.flush();
+
   for (const buffer of paramCombinedBuffers.values()) {
     buffer.destroy();
   }
@@ -1189,6 +1178,7 @@ const handlers: { [K in AuroraRequest['type']]: MessageHandler<K> } = {
   setEngineOptions: handleSetEngineOptions,
   setLayerOpacity: handleSetLayerOpacity,
   setLayerOptions: handleSetLayerOptions,
+  nukeOptions: handleNukeOptions,
   render: handleRender,
   resize: handleResize,
   uploadData: handleUploadData,

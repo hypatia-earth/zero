@@ -52,6 +52,10 @@ export interface AuroraOptionsConfig {
   dbName: string;
   /** Debounce window for internal saves (default 300ms). */
   saveDebounceMs?: number;
+  /** Per-instance default blob, layered below persisted+seeds. Lets the
+   *  caller supply pre-dispatch fallbacks aurora itself can't know (e.g.
+   *  host-shape layer opts that arrive shortly via setter dispatch). */
+  defaults?: AuroraOptionsBlob;
 }
 
 /**
@@ -69,6 +73,9 @@ export class AuroraOptions {
   private saveDebounceMs: number;
   private dbPromise: Promise<IDBDatabase> | null = null;
 
+  /** Per-instance defaults — restored on `clear()`, layered below persisted/seeds. */
+  private readonly defaults: AuroraOptionsBlob;
+
   /** Canonical in-memory blob. Replaced atomically by every mutation. */
   private data: AuroraOptionsBlob;
 
@@ -81,7 +88,8 @@ export class AuroraOptions {
   constructor(config: AuroraOptionsConfig) {
     this.dbName = config.dbName;
     this.saveDebounceMs = config.saveDebounceMs ?? DEFAULT_DEBOUNCE_MS;
-    this.data = structuredClone(AURORA_OPTIONS_DEFAULTS);
+    this.defaults = structuredClone(config.defaults ?? AURORA_OPTIONS_DEFAULTS);
+    this.data = structuredClone(this.defaults);
   }
 
   /**
@@ -94,22 +102,33 @@ export class AuroraOptions {
     const stored = await getFromStore<PersistedOptions>(db, OPTIONS_STORE, OPTIONS_KEY);
     const persisted: AuroraOptionsBlob | null = stored ? migrate(stored).options : null;
 
+    // Merge precedence: defaults < persisted < seeds.
     const engine: EngineOpts = {
-      ...this.data.engine,
+      ...this.defaults.engine,
       ...persisted?.engine,
       ...seeds.engine,
     };
 
-    const layers: Record<string, LayerEntry> = { ...persisted?.layers };
-    if (seeds.layers) {
-      for (const [id, seed] of Object.entries(seeds.layers)) {
-        const prev = layers[id];
-        const prevOpts = (prev?.opts ?? {}) as Record<string, unknown>;
-        layers[id] = {
-          opacity: seed.opacity ?? prev?.opacity ?? 0,
-          opts: seed.opts ? { ...prevOpts, ...seed.opts } : (prev?.opts ?? {}),
-        };
+    const layers: Record<string, LayerEntry> = {};
+    const mergeOpts = (a: unknown, b: unknown): unknown => {
+      if (b === undefined) return a;
+      if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
+        return { ...a as Record<string, unknown>, ...b as Record<string, unknown> };
       }
+      return b;
+    };
+    const ids = new Set<string>([
+      ...Object.keys(this.defaults.layers),
+      ...Object.keys(persisted?.layers ?? {}),
+      ...Object.keys(seeds.layers ?? {}),
+    ]);
+    for (const id of ids) {
+      const def = this.defaults.layers[id];
+      const per = persisted?.layers[id];
+      const seed = seeds.layers?.[id];
+      const opacity = seed?.opacity ?? per?.opacity ?? def?.opacity ?? 0;
+      const opts = mergeOpts(mergeOpts(def?.opts, per?.opts), seed?.opts);
+      layers[id] = { opacity, opts: opts ?? {} };
     }
 
     this.data = { engine, layers };
@@ -147,7 +166,7 @@ export class AuroraOptions {
    * (Nuke flow doesn't need to — message FIFO + sync reset is enough).
    */
   async clear(): Promise<void> {
-    this.data = structuredClone(AURORA_OPTIONS_DEFAULTS);
+    this.data = structuredClone(this.defaults);
     this.cancelPendingSave();
     await this.enqueue(async () => {
       const db = await this.openDb();
