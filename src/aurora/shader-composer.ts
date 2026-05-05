@@ -13,7 +13,7 @@ import { link } from 'wesl';
 
 // WESL module bundles for linking
 import mainWesl from './shaders/main.wesl?link';
-import postWesl from '../layers/sun/post.wesl?link';
+import postWesl from './built_ins/sun/post.wesl?link';
 
 export interface ComposedShaders {
   main: string;

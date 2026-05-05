@@ -12,7 +12,7 @@ import package::layers::earth::base::blendBasemap;
 import package::layers::temp::temp::blendTemp;
 import package::layers::rain::rain::blendRain;
 import package::layers::clouds::clouds::blendClouds;
-import package::layers::sun::sun::blendSun;
+import package::aurora::built_ins::sun::sun::blendSun;
 import user_layer_0::blend as blendUser0;
 import user_layer_1::blend as blendUser1;
 import user_layer_2::blend as blendUser2;

@@ -5,8 +5,8 @@
 // Outputs: final color with atmosphere applied to all geometry
 
 import package::aurora::shaders::layer_helpers::u;
-import package::layers::sun::atmo::UNIT_TO_KM;
-import package::layers::sun::blend::{blendAtmosphereSpace, blendAtmosphereGlobe, ATM_EXPOSURE};
+import package::aurora::built_ins::sun::atmo::UNIT_TO_KM;
+import package::aurora::built_ins::sun::blend::{blendAtmosphereSpace, blendAtmosphereGlobe, ATM_EXPOSURE};
 
 // Bindings for post-process pass (binding(0) = uniforms from layer-helpers)
 @group(0) @binding(1) var sceneColor: texture_2d<f32>;

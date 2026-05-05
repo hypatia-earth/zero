@@ -2,8 +2,8 @@
 // Uses Bruneton LUT only for sky/space, simple math for globe
 
 import package::aurora::shaders::layer_helpers::{u, getLayerOpacity};
-import package::layers::sun::atmo::GetSkyRadiance;
-import package::layers::sun::sun::blendSun;
+import package::aurora::built_ins::sun::atmo::GetSkyRadiance;
+import package::aurora::built_ins::sun::sun::blendSun;
 import constants::LAYER_SUN;
 
 // Atmosphere LUTs (declared here for post pass; main pass doesn't use this module)
