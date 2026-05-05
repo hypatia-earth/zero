@@ -145,8 +145,8 @@ type RainHostOpts = { animated: boolean };
 const options = new AuroraOptions({
   dbName: 'aurora-db',
   // Pre-dispatch fallbacks for fields aurora reads at render time before the
-  // host's setter sweep arrives. Phase 9 (ZeroOptions shrink) makes these the
-  // schema-canonical defaults instead of mirrors of host's startup values.
+  // host's setter sweep arrives. Options-catalog Phase A folds these into
+  // descriptor `default` values; Phase G drops this `defaults` arg entirely.
   defaults: {
     engine: {
       timeslotsPerLayer: 0,
