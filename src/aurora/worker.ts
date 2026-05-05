@@ -605,11 +605,13 @@ function buildLayerDataReady(): boolean[] {
 }
 
 /**
- * Build uniforms from render message state
+ * Build uniforms from render message state. Sub-B Phase 5 milestone: this
+ * function no longer reads currentOptions — every per-frame uniform sources
+ * from aurora-side worker state (engineOpts, windOpts, pressureOpts, rainOpts,
+ * targetOpacities) populated via either the typed setters or the bulk-channel
+ * mirror in handleOptions.
  */
 function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
-  const opts = currentOptions!;
-
   return {
     // Camera (from render message)
     viewProj: camera.viewProj,
@@ -631,7 +633,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
       time,
     },
     pressureColors: pressureOpts.colors,
-    logoOpacity: opts.debug.showLogo && !isAnyLayerEnabled()
+    logoOpacity: engineOpts.showLogo && !isAnyLayerEnabled()
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
     rainBackFace: isLayerEnabled('rain') && !isLayerEnabled('earth') && !isLayerEnabled('temp') ? 1 : 0,
@@ -776,6 +778,7 @@ function handleOptions(data: Extract<AuroraRequest, { type: 'options' }>): void 
   // this mirror disappears alongside the bulk channel for these fields.
   applyEngineOpts({
     timeslotsPerLayer: parseInt(currentOptions.gpu.timeslotsPerLayer, 10),
+    showLogo: currentOptions.debug.showLogo,
   });
 
   // Mirror per-built-in opacity (host pre-multiplies enabled → opacity-or-zero)

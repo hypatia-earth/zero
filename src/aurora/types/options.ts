@@ -18,6 +18,9 @@ export interface EngineOpts {
   timeslotsPerLayer: number;
   useTimestampQueries: boolean;
   qualityScale?: number;
+  /** Show host-supplied logo overlay when no layers are visible. Optional —
+   *  hosts that don't ship a logo simply leave it false (the default). */
+  showLogo?: boolean;
   debug?: {
     wireframe: boolean;
     axes: boolean;
