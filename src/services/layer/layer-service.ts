@@ -42,7 +42,6 @@ export interface LayerDeclaration {
   // Runtime config
   params?: TModelParam[];         // Data params to fetch, each with source model
   advection?: AdvectionConfig; // Wind-advected temporal interpolation
-  options?: string[];          // Option paths to watch (e.g., ['temp.enabled'])
   palettes?: PaletteId[];      // Available palette IDs (first is default)
   blendFn?: string;            // Fragment shader blend function name
   postFn?: string;             // Post-process function name
@@ -404,11 +403,6 @@ export class LayerService {
   /** Get layers that use a specific data param */
   getLayersForParam(param: TModelParam['param']): LayerDeclaration[] {
     return this.getAll().filter(l => l.params?.some(p => p.param === param));
-  }
-
-  /** Get layers watching a specific options path */
-  getLayersWatching(optionPath: string): LayerDeclaration[] {
-    return this.getAll().filter(l => l.options?.includes(optionPath));
   }
 
   /** Check if a layer is enabled (works for both built-in and user layers).

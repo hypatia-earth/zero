@@ -3,9 +3,8 @@
  *
  * Usage:
  *   const tempLayer = defineLayer('temp',
- *     withParams(['temperature_2m'], 'ecmwf_ifs'),
- *     withOptions(['temp.enabled', 'temp.opacity', 'temp.palette']),
- *     withPalette({ source: 'temp.palette', range: [-40, 50] }),
+ *     withParams({ model: 'ecmwf_ifs', param: 'temperature_2m' }),
+ *     withPalettes('temp-classic', 'temp-hypatia'),
  *     withInterpolation('lerp'),
  *     withRender({ pass: 'surface', order: 10 }),
  *   );
@@ -54,12 +53,6 @@ export function withAdvection(config: AdvectionConfig): LayerFeature {
 export function withPalettes(...paletteIds: PaletteId[]): LayerFeature {
   return {
     apply: (d) => ({ ...d, palettes: paletteIds }),
-  };
-}
-
-export function withOptions(paths: string[]): LayerFeature {
-  return {
-    apply: (d) => ({ ...d, options: paths }),
   };
 }
 

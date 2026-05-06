@@ -1,4 +1,4 @@
-import { defineLayer, withType, withUI, withParams, withAdvection, withOptions, withPalettes, withBlend, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
+import { defineLayer, withType, withUI, withParams, withAdvection, withPalettes, withBlend, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
 import { U } from '../../aurora/globe-uniforms';
 
 export const layer = defineLayer('rain',
@@ -34,10 +34,6 @@ export const layer = defineLayer('rain',
       snow:  [1.0, 1.0, 1.0],
     },
   }),
-  withOptions([
-    'rain.enabled',
-    'rain.opacity',
-  ]),
   withBlend('blendRain'),
   withRender({
     pass: 'surface',

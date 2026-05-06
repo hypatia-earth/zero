@@ -1,4 +1,4 @@
-import { defineLayer, withType, withUI, withParams, withAdvection, withOptions, withBlend, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
+import { defineLayer, withType, withUI, withParams, withAdvection, withBlend, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
 import { U } from '../../aurora/globe-uniforms';
 
 export const layer = defineLayer('clouds',
@@ -28,7 +28,6 @@ export const layer = defineLayer('clouds',
     warmthTint:      { value: 0.6,  type: 'f32', pos: U.cloudsWarmthTint },
     edgeSteps:       { value: 3.0,  type: 'f32', pos: U.cloudsEdgeSteps },
   }),
-  withOptions(['clouds.enabled', 'clouds.opacity']),
   withBlend('blendClouds'),
   withRender({ pass: 'surface', order: 30 }),
   asBuiltIn(),

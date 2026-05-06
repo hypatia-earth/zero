@@ -18,11 +18,7 @@ import { Camera } from '../aurora/camera';
 import { setupViewport } from './viewport/viewport';
 import type { EngineOpts, AuroraOptions as AuroraOptionsBlob } from '../aurora/types/options';
 import { auroraDefaults } from '../aurora/options/schema';
-
-/** Built-in layer ids whose UI bind-points drive aurora-side opacity. Excludes
- *  'humidity' from BUILT_IN_LAYERS because it has a ZeroOptions section but no
- *  registered layer folder — it'd be a no-op dispatch. */
-const OPACITY_BUILT_INS = ['earth', 'sun', 'graticule', 'cities', 'temp', 'rain', 'clouds', 'pressure', 'wind'] as const;
+import { BUILT_IN_LAYERS } from '../config/types';
 
 // Re-export types for consumers
 export type { AuroraConfig, AuroraAssets, CameraSnapshot } from '../aurora/worker';
@@ -274,7 +270,7 @@ export function createAuroraService(
       // Phase F-C — `enabled` is canonical in stateService.enabledLayers (URL).
       // Initial dispatch per built-in, then diff-watch the signal for flips.
       let lastEnabled = stateService.enabledLayers.value;
-      for (const id of OPACITY_BUILT_INS) {
+      for (const id of BUILT_IN_LAYERS) {
         send({ type: 'setLayerEnabled', id, value: lastEnabled.has(id) });
       }
 
@@ -284,7 +280,7 @@ export function createAuroraService(
       effect(() => {
         const cur = stateService.enabledLayers.value;
         if (cur !== lastEnabled) {
-          for (const id of OPACITY_BUILT_INS) {
+          for (const id of BUILT_IN_LAYERS) {
             if (cur.has(id) !== lastEnabled.has(id)) {
               send({ type: 'setLayerEnabled', id, value: cur.has(id) });
             }

@@ -13,7 +13,7 @@ import { effect } from '@preact/signals-core';
 import { customLayerId, buildUserLayerOptions, type LayerService, type LayerDeclaration } from '../services/layer/layer-service';
 import type { AuroraService } from '../services/aurora-service';
 import type { DialogService } from '../services/dialog-service';
-import { defineLayer, withType, withUI, withParams, withPalettes, withOptions, withBlend, withShader, withRender } from '../services/layer/builder';
+import { defineLayer, withType, withUI, withParams, withPalettes, withBlend, withShader, withRender } from '../services/layer/builder';
 import type { TCustomLayer } from '../config/types';
 import { DialogHeader } from './dialog-header';
 import { getParamMeta, getPublishedModelParams, getModel, type ParamMeta, type TModelParam } from '../config/models';
@@ -267,7 +267,6 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       withUI(state.displayName, state.displayName, 'custom'),
       withParams(state.modelParam),
       withPalettes(state.paletteId),
-      withOptions([]),
       withBlend('blend'),
       withShader('main', state.shaderCode),
       withRender({ pass: 'surface', order: state.order }),
@@ -331,7 +330,6 @@ export const CreateLayerDialog: m.ClosureComponent<CreateLayerDialogAttrs> = () 
       withType('texture'),
       withUI('Preview', 'Preview', 'custom'),
       withParams(state.modelParam),
-      withOptions([]),
       withBlend('blend'),
       withShader('main', state.shaderCode),
       withRender({ pass: 'surface', order: state.order }),

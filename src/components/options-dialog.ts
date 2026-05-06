@@ -406,7 +406,6 @@ const layerLabels: Record<string, string> = {
   temp: 'Temperature',
   rain: 'Precipitation',
   clouds: 'Cloud Cover',
-  humidity: 'Humidity',
   wind: 'Wind',
   pressure: 'Pressure',
   cities: 'Cities',

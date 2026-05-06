@@ -1,13 +1,9 @@
-import { defineLayer, withType, withUI, withOptions, withBlend, withPost, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
+import { defineLayer, withType, withUI, withBlend, withPost, withRender, withConfig, asBuiltIn } from '../../services/layer/builder';
 import { U } from '../../aurora/globe-uniforms';
 
 export const layer = defineLayer('sun',
   withType('decoration'),
   withUI('Sun', 'Sun', 'celestial'),
-  withOptions([
-    'sun.enabled',
-    'sun.opacity',
-  ]),
   withBlend('blendSun'),
   withPost('postSun'),
   withConfig({

@@ -10,8 +10,6 @@
  *   3. Layer options (`LayersOpts`) — per-layer, keyed by layer id, persisted in aurora-db.
  */
 
-import type { PaletteRuntimeId } from './palette';
-
 // ─── Engine-wide options ─────────────────────────────────────────────────────
 
 export interface EngineOpts {
@@ -28,40 +26,19 @@ export interface EngineOpts {
   };
 }
 
-// ─── Per-layer options (discriminated by layer id at call sites) ─────────────
-
-export interface WindOpts {
-  snakeLength: number;
-  lineWidth: number;
-  segmentsPerLine: number;
-  stepFactor: number;
-  radius: number;
-  animSpeed: number;
-  particleCount: number;
-}
-
-export interface PressureOpts {
-  isobarSpacing: number;        // hPa
-  smoothing: number;            // 0..1
-  colorScheme: 'altitude' | 'gradient' | 'solid';
-}
+// ─── Per-layer options ───────────────────────────────────────────────────────
+// Worker-side host opts (WindHostOpts/PressureHostOpts/CitiesHostOpts/
+// TempHostOpts/RainHostOpts) live inline in `aurora/worker.ts`. The dialog
+// drives the dispatched shapes; the discriminated-by-id setLayerOptions
+// path narrows at the call site rather than via top-level types.
+//
+// GraticuleOpts is the lone export still consumed (the worker `Pick`s
+// `fontSize | lineWidth` from it).
 
 export interface GraticuleOpts {
   fontSize: number;             // CSS px (aurora applies DPR scaling)
   lineWidth: number;            // CSS px
   lodLevels: { spacing: number; zoomInPx: number; zoomOutPx: number }[];
-}
-
-export interface CitiesOpts {
-  fontScale: number;
-  tierThresholds: number[];
-}
-
-/** Shared shape for scalar-field layers (temp, rain, clouds, ocean-temp, sea-ice, wet-bulb). */
-export interface ScalarFieldOpts {
-  paletteId: PaletteRuntimeId;
-  range: [number, number];
-  blendMode: 'normal' | 'multiply' | 'screen';
 }
 
 // ─── Layer entry + map ───────────────────────────────────────────────────────

@@ -76,6 +76,5 @@
 .layer.widget.active.temp { border-left-color: var(--color-layer-temp); }
 .layer.widget.active.rain { border-left-color: var(--color-layer-rain); }
 .layer.widget.active.clouds { border-left-color: var(--color-layer-clouds); }
-.layer.widget.active.humidity { border-left-color: var(--color-layer-humidity); }
 .layer.widget.active.wind { border-left-color: var(--color-layer-wind); }
 .layer.widget.active.pressure { border-left-color: var(--color-layer-pressure); }

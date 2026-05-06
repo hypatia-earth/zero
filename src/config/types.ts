@@ -10,7 +10,7 @@ import type { TTimestep } from '../aurora/types/timestep';
 // Layer definitions
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const BUILT_IN_LAYERS = ['earth', 'sun', 'graticule', 'cities', 'temp', 'rain', 'clouds', 'humidity', 'pressure', 'wind'] as const;
+export const BUILT_IN_LAYERS = ['earth', 'sun', 'graticule', 'cities', 'temp', 'rain', 'clouds', 'pressure', 'wind'] as const;
 export type TBuiltInLayer = typeof BUILT_IN_LAYERS[number];
 
 export const CUSTOM_LAYERS = ['custom0', 'custom1', 'custom2', 'custom3', 'custom4', 'custom5', 'custom6', 'custom7'] as const;

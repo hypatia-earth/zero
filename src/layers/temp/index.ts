@@ -1,4 +1,4 @@
-import { defineLayer, withType, withUI, withParams, withOptions, withPalettes, withBlend, withRender, withShader, asBuiltIn } from '../../services/layer/builder';
+import { defineLayer, withType, withUI, withParams, withPalettes, withBlend, withRender, withShader, asBuiltIn } from '../../services/layer/builder';
 import shaderCode from './temp.wesl?raw';
 
 export const layer = defineLayer('temp',
@@ -10,9 +10,6 @@ export const layer = defineLayer('temp',
     'temp-hypatia',
     'simple-gradient',
   ),
-  withOptions([
-    'temp.enabled',
-  ]),
   withBlend('blendTemp'),
   withShader('main', shaderCode),
   withRender({

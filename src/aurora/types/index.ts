@@ -13,11 +13,7 @@ export type { SlabConfig } from './slab-config';
 
 export type {
   EngineOpts,
-  WindOpts,
-  PressureOpts,
   GraticuleOpts,
-  CitiesOpts,
-  ScalarFieldOpts,
   LayerEntry,
   LayersOpts,
   AuroraOptions,
