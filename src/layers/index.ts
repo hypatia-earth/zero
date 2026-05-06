@@ -1,30 +1,22 @@
 /**
  * Built-in Layer Declarations
  *
- * Composed built-ins (earth/sun/temp/rain/clouds) still live here and use the
- * `defineLayer` builder — Phase 6.3 (item 8) absorbs their GPU config into
- * aurora's catalog.
- *
- * Thinned built-ins (graticule/cities/wind/pressure) come from aurora's
- * catalog at `src/aurora/built_ins/catalog.ts`; the adapter below widens
- * catalog entries into the host's richer `LayerDeclaration` shape.
+ * All 9 built-ins (earth/sun/graticule/cities/temp/rain/clouds/pressure/wind)
+ * come from aurora's catalog at `src/aurora/built_ins/catalog.ts`. The shim
+ * below widens catalog entries into the host's richer `LayerDeclaration`
+ * shape; registration order is preserved by the catalog itself.
  *
  * Registered in LayerService.registerBuiltInLayers() at bootstrap.
+ *
+ * Phase 6.4 cleanup will fold the shim + this re-export into LayerService
+ * directly and shrink LayerService to user-layer registration only.
  */
 
-import { layer as earthLayer } from './earth';
-import { layer as sunLayer } from './sun';
-import { layer as tempLayer } from './temp';
-import { layer as rainLayer } from './rain';
-import { layer as cloudsLayer } from './clouds';
 import { LAYER_CATALOG } from '../aurora/built_ins/catalog';
 import type { LayerCatalogEntry } from '../aurora/types/layer-catalog';
 import type { LayerDeclaration } from '../services/layer/layer-service';
 import type { TLayer } from '../config/types';
 import type { PaletteId } from '../services/palette-service';
-
-// Re-export composed-layer declarations for consumers
-export { earthLayer, sunLayer, tempLayer, rainLayer, cloudsLayer };
 
 /**
  * Migration shim: widen aurora's `LayerCatalogEntry` (string-typed unions)
@@ -52,25 +44,5 @@ function adaptCatalogEntry(entry: LayerCatalogEntry): LayerDeclaration {
   return decl as LayerDeclaration;                                                   // QC-OK: matches defineLayer() cast
 }
 
-/**
- * All built-in layer declarations.
- *
- * Order is load-bearing: LayerService.registerBuiltIn assigns `layer.index`
- * by registration order, and shader-composer emits `LAYER_<id>` constants
- * pinned to those indices. Matches pre-Phase-6.2 order so persisted state
- * (URL ?layers, aurora-db opacities) survives the catalog migration.
- */
-const catalogById = new Map(LAYER_CATALOG.map(e => [e.id, e]));
-const fromCatalog = (id: string): LayerDeclaration => adaptCatalogEntry(catalogById.get(id)!);
-
-export const builtInLayers: LayerDeclaration[] = [
-  earthLayer,
-  sunLayer,
-  fromCatalog('graticule'),
-  fromCatalog('cities'),
-  tempLayer,
-  rainLayer,
-  cloudsLayer,
-  fromCatalog('pressure'),
-  fromCatalog('wind'),
-];
+/** All built-in layer declarations, derived from aurora's catalog. */
+export const builtInLayers: LayerDeclaration[] = LAYER_CATALOG.map(adaptCatalogEntry);
