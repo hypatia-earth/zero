@@ -5,12 +5,11 @@
 import { Camera, type CameraConfig } from './camera';
 import { type ComposedShaders, activeParamBindings, type ParamBindingConfig } from './shader-composer';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
-import { PressureAuroraLayer, type PressureAuroraLayerHost } from './built_ins/pressure/pressure-aurora-layer';
-import { WindAuroraLayer, type WindAuroraLayerHost } from './built_ins/wind/wind-aurora-layer';
+import { PressureLayer, type PressureAuroraLayerHost } from './built_ins/pressure/pressure-layer';
+import { WindLayer, type WindAuroraLayerHost } from './built_ins/wind/wind-layer';
 import { GRATICULE_BUFFER_SIZE } from './built_ins/graticule/graticule-animator';
 import { GraticuleLayer } from './built_ins/graticule/graticule-layer';
-import { LOOKUP_WIDTH, LOOKUP_HEIGHT } from './built_ins/cities/cities-layer';
-import { CitiesAuroraLayer, type CitiesAuroraLayerHost } from './built_ins/cities/cities-aurora-layer';
+import { CitiesLayer, LOOKUP_WIDTH, LOOKUP_HEIGHT, type CitiesAuroraLayerHost } from './built_ins/cities/cities-layer';
 import { U, UNIFORM_BUFFER_SIZE, getUserLayerOpacityOffset, getUserLayerPaletteIndexOffset, getUserLayerPaletteRangeOffset, getLayerOpacityOffset, getLayerDataReadyOffset, getLayerPaletteIndexOffset, getLayerPaletteRangeOffset, getParamLerpOffset, getParamReadyOffset, getParamDtOffset, getParamSizeOffset } from './globe-uniforms';
 import { GpuTimestamp, type PassTimings } from './gpu-timestamp';
 import { PaletteTexture } from './palette-texture';
@@ -87,7 +86,7 @@ export class GlobeRenderer {
   private captureTexture!: GPUTexture;
   // Pressure contour layer (registered with AuroraLayerRegistry; held to forward the
   // worker's heavy compute orchestration through getInner() — see Phase 5 escape hatch).
-  private pressureAuroraLayer!: PressureAuroraLayer;
+  private pressureLayer!: PressureLayer;
   private currentPressureColors: PressureColorOption = PRESSURE_COLOR_DEFAULT;
   // Wind layer (registered with AuroraLayerRegistry; per-frame host-handle state below)
   private windLayerState: LayerState = { mode: 'loading', lerp: 0, time: new Date(0) };
@@ -415,8 +414,8 @@ export class GlobeRenderer {
             || renderer.currentLayerOpacities[LAYER_SUN]! > 0.01;
         },
       };
-      this.pressureAuroraLayer = new PressureAuroraLayer(pressureHost);
-      this.layerRegistry.register(this.pressureAuroraLayer, this.getLayerContext());
+      this.pressureLayer = new PressureLayer(pressureHost);
+      this.layerRegistry.register(this.pressureLayer, this.getLayerContext());
     }
 
     // Register wind AuroraLayer (built-in). Per-frame opacity / layer-state /
@@ -437,7 +436,7 @@ export class GlobeRenderer {
         },
       };
       this.layerRegistry.register(
-        new WindAuroraLayer(windLineCount, windHost),
+        new WindLayer(windLineCount, windHost),
         this.getLayerContext(),
       );
     }
@@ -725,15 +724,15 @@ export class GlobeRenderer {
 
     view.setFloat32(O.globeRadiusPx, globeRadiusPx, true);
 
-    // Cities: cityFontScale uniform + LoD update both handled by CitiesAuroraLayer
+    // Cities: cityFontScale uniform + LoD update both handled by CitiesLayer
     // via the registry's updateAll dispatch in render() — no direct call here.
 
-    // Pressure: setEnabled/updateUniforms run inside PressureAuroraLayer.update()
+    // Pressure: enabled/updateUniforms run inside PressureLayer.update()
     // via the registry's updateAll dispatch. Capture per-frame inputs the host
     // handle exposes back to the layer.
     this.currentPressureColors = uniforms.pressureColors;
 
-    // Wind layer: advance/setState/uniforms now run inside WindAuroraLayer.update()
+    // Wind layer: advance/setState/uniforms now run inside WindLayer.update()
     // via the registry's updateAll dispatch. Capture per-frame inputs that the
     // wind host handle exposes back to the layer.
     this.windLayerState = uniforms.windState;
@@ -959,7 +958,7 @@ export class GlobeRenderer {
     };
 
     this.layerRegistry.register(
-      new CitiesAuroraLayer(initialGlobeRadiusPx, citiesDataBuffer, metricsBuffer, host),
+      new CitiesLayer(initialGlobeRadiusPx, citiesDataBuffer, metricsBuffer, host),
       this.getLayerContext(),
     );
   }
@@ -1027,7 +1026,7 @@ export class GlobeRenderer {
 
   /**
    * Set wind layer buffers from LayerStore (U0, V0, U1, V1).
-   * Forwards to WindAuroraLayer via the registry's onDataChanged surface.
+   * Forwards to WindLayer via the registry's onDataChanged surface.
    */
   setWindLayerBuffers(u0: GPUBuffer, v0: GPUBuffer, u1: GPUBuffer, v1: GPUBuffer): void {
     const events: AuroraDataEvent[] = [
@@ -1039,7 +1038,7 @@ export class GlobeRenderer {
 
   /**
    * Set wind line/seed count (responds to wind.seedCount option changes).
-   * Forwards to WindAuroraLayer via the registry's onOptionsChanged surface.
+   * Forwards to WindLayer via the registry's onOptionsChanged surface.
    */
   setWindSeedCount(seedCount: number): void {
     this.layerRegistry.onOptionsChanged('wind', { seedCount }, this.getLayerContext());
@@ -1144,8 +1143,8 @@ export class GlobeRenderer {
    * Call this once after Gaussian LUTs are uploaded
    */
   initializePressureLayer(): void {
-    if (!this.pressureAuroraLayer.getInner().isComputeReady()) {
-      this.pressureAuroraLayer.getInner().setExternalBuffers({
+    if (!this.pressureLayer.isComputeReady()) {
+      this.pressureLayer.setExternalBuffers({
         gaussianGrid: this.gaussianGridBuffer,
       });
     }
@@ -1158,17 +1157,17 @@ export class GlobeRenderer {
    */
   triggerPressureRegrid(slotIndex: number, inputBuffer: GPUBuffer): void {
     // Initialize pressure layer if not done
-    if (!this.pressureAuroraLayer.getInner().isComputeReady()) {
+    if (!this.pressureLayer.isComputeReady()) {
       this.initializePressureLayer();
     }
-    this.pressureAuroraLayer.getInner().regridSlot(slotIndex, inputBuffer);
+    this.pressureLayer.regridSlot(slotIndex, inputBuffer);
   }
 
   /**
    * Invalidate all pressure grid slots (called when slot indices are renumbered during shrink)
    */
   invalidatePressureGridSlots(): void {
-    this.pressureAuroraLayer.getInner().invalidateAllGridSlots();
+    this.pressureLayer.invalidateAllGridSlots();
   }
 
   uploadGaussianLUTs(lats: Float32Array, offsets: Uint32Array): void {
@@ -1224,7 +1223,7 @@ export class GlobeRenderer {
 
   /** Update level count (may resize vertex buffer) */
   setPressureLevelCount(levelCount: number): void {
-    this.pressureAuroraLayer.getInner().setLevelCount(levelCount);
+    this.pressureLayer.setLevelCount(levelCount);
   }
 
 
@@ -1244,41 +1243,41 @@ export class GlobeRenderer {
     levels: number[],
     smoothingIterations = 0
   ): void {
-    if (!this.pressureAuroraLayer.getInner().isComputeReady()) {
+    if (!this.pressureLayer.isComputeReady()) {
       console.warn('[Globe] Pressure layer not ready');
       return;
     }
 
     // Check if grid slots are ready
-    if (!this.pressureAuroraLayer.getInner().isGridSlotReady(slot0) || !this.pressureAuroraLayer.getInner().isGridSlotReady(slot1)) {
-      console.warn(`[Globe] Grid slots not ready: ${slot0}=${this.pressureAuroraLayer.getInner().isGridSlotReady(slot0)}, ${slot1}=${this.pressureAuroraLayer.getInner().isGridSlotReady(slot1)}`);
+    if (!this.pressureLayer.isGridSlotReady(slot0) || !this.pressureLayer.isGridSlotReady(slot1)) {
+      console.warn(`[Globe] Grid slots not ready: ${slot0}=${this.pressureLayer.isGridSlotReady(slot0)}, ${slot1}=${this.pressureLayer.isGridSlotReady(slot1)}`);
       return;
     }
 
     // Base vertex count per level from marching squares
-    const baseVerticesPerLevel = this.pressureAuroraLayer.getInner().getBaseVerticesPerLevel();
+    const baseVerticesPerLevel = this.pressureLayer.getBaseVerticesPerLevel();
     // Chaikin 2× per pass, so max expansion is 2^iterations
     const expansionFactor = Math.pow(2, smoothingIterations);
     const maxVerticesPerLevel = baseVerticesPerLevel * expansionFactor;
 
     // Prepare batch: write all uniforms, clear buffers, cache bind group
-    this.pressureAuroraLayer.getInner().prepareContourBatch(slot0, slot1, lerp, levels, maxVerticesPerLevel);
+    this.pressureLayer.prepareContourBatch(slot0, slot1, lerp, levels, maxVerticesPerLevel);
 
     // Batch all levels into a single command encoder
     const commandEncoder = this.device.createCommandEncoder();
 
     // Clear vertex buffer using GPU-side clearBuffer (include Chaikin expansion)
-    this.pressureAuroraLayer.getInner().clearVertexBuffer(commandEncoder, expansionFactor);
+    this.pressureLayer.clearVertexBuffer(commandEncoder, expansionFactor);
 
     let totalVertices = 0;
     for (let i = 0; i < levels.length; i++) {
       // Run contour with dynamic uniform offset
-      this.pressureAuroraLayer.getInner().runContourLevel(commandEncoder, i);
+      this.pressureLayer.runContourLevel(commandEncoder, i);
 
       // Run Chaikin smoothing passes if requested
       const vertexOffset = i * maxVerticesPerLevel;
       if (smoothingIterations > 0) {
-        const newCount = this.pressureAuroraLayer.getInner().runSmoothing(
+        const newCount = this.pressureLayer.runSmoothing(
           commandEncoder,
           smoothingIterations,
           vertexOffset,
@@ -1293,7 +1292,7 @@ export class GlobeRenderer {
 
     // Single GPU submit for all levels
     this.device.queue.submit([commandEncoder.finish()]);
-    this.pressureAuroraLayer.getInner().setVertexCount(totalVertices);
+    this.pressureLayer.setVertexCount(totalVertices);
   }
 
   /** Aurora layer registry — Phase 1: empty. Real layers register here from Phase 2 onward. */

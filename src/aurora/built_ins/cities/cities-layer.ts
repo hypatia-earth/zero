@@ -1,13 +1,52 @@
 /**
- * CitiesLayer — CPU-side city label placement and GPU buffer packing
+ * CitiesLayer — built-in AuroraLayer for city labels (MSDF text on globe).
  *
- * Receives pre-loaded cities data + font metrics from worker init.
- * Builds lookup texture, city buffer, and glyph buffer for the shader.
+ * CPU-side LoD placement + GPU buffer packing + animator-driven tier transitions.
+ * Render path is composed via main.wesl's blendCities; this layer only contributes
+ * initialize + update. GPU resources (lookup texture, font atlas, sampler) live in
+ * the host's bind group; the layer drives writes through a small host handle.
  */
 
-import type { CitiesLodLevel } from './cities-aurora-layer';
+import { CitiesAnimator } from './cities-animator';
+import { U } from '../../globe-uniforms';
+import type {
+  AuroraDataEvent,
+  AuroraLayer,
+  AuroraLayerContext,
+  AuroraLayerFrame,
+} from '../../types/aurora-layer';
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// ── LoD configuration ─────────────────────────────────────────────────────
+
+export interface CitiesLodLevel {
+  minPopulation: number;   // minimum population to show at this LoD
+  zoomInPx: number;        // enter this LoD when globeRadiusPx >= this
+  zoomOutPx: number;       // leave this LoD when globeRadiusPx <= this
+}
+
+export const CITIES_DEFAULT_LOD_LEVELS: CitiesLodLevel[] = [
+  { minPopulation: 5_000_000, zoomInPx: 0,   zoomOutPx: 0 },
+  { minPopulation: 1_000_000, zoomInPx: 200, zoomOutPx: 170 },
+  { minPopulation: 300_000,   zoomInPx: 400, zoomOutPx: 350 },
+  { minPopulation: 100_000,   zoomInPx: 600, zoomOutPx: 550 },
+];
+
+/**
+ * Host-provided GPU surface for cities. The host owns the lookup texture and the
+ * (potentially resizable) data buffer because both participate in the host bind
+ * group. The layer mutates them through this handle and signals bind group rebuild.
+ */
+export interface CitiesAuroraLayerHost {
+  readonly cityLookupTexture: GPUTexture;
+  /** Current data buffer; layer reads it, swaps via setCityDataBuffer on resize. */
+  readonly cityDataBuffer: GPUBuffer;
+  setCityDataBuffer(buf: GPUBuffer): void;
+  /** Host's CPU staging view for the uniform buffer (cityGlyphOffset write target). */
+  uniformView: DataView;
+  recreateBindGroup(): void;
+}
+
+// ── Internal types ────────────────────────────────────────────────────────
 
 interface CityRecord {
   id: number;
@@ -75,9 +114,18 @@ const COLLISION_MARGIN_LON = 0.5;
 // Max font scale applied in shader — lookup texture footprint must cover this
 const FONT_SCALE_MAX = 1.3;
 
-// ── City data ──────────────────────────────────────────────────────────────
+const ALT_THRESHOLD_KM = 3000;
+const EARTH_RADIUS_KM = 6371;
 
-export class CitiesLayer {
+// ── Layer ──────────────────────────────────────────────────────────────────
+
+export class CitiesLayer implements AuroraLayer {
+  readonly id = 'cities';
+  readonly order = 25;
+
+  private device!: GPUDevice;
+  private animator!: CitiesAnimator;
+
   private cities: CityRecord[] = [];
   private charMap = new Map<string, FontChar>();
   private fontMetrics!: FontMetrics;
@@ -93,13 +141,107 @@ export class CitiesLayer {
     glyphStartVec4: number;
   }>();
 
+  private readonly lodLevels: CitiesLodLevel[] = CITIES_DEFAULT_LOD_LEVELS;
+
   constructor(
+    private readonly initialGlobeRadiusPx: number,
     citiesDataBuffer: ArrayBuffer,
     metricsBuffer: ArrayBuffer,
-    private lodLevels: CitiesLodLevel[]
+    private readonly host: CitiesAuroraLayerHost,
   ) {
     this.parseCities(citiesDataBuffer);
     this.parseMetrics(metricsBuffer);
+  }
+
+  initialize(ctx: AuroraLayerContext): void {
+    this.device = ctx.device;
+    this.animator = new CitiesAnimator(this, this.initialGlobeRadiusPx, this.lodLevels);
+    this.uploadTier();
+  }
+
+  onDataChanged(_ctx: AuroraLayerContext, _events: AuroraDataEvent[]): void {
+    // Cities data is passed once at construction; no streaming inputs
+  }
+
+  onOptionsChanged(_ctx: AuroraLayerContext, _options: Record<string, unknown>): void {
+    // cities.opacity flows through host layer-opacities path; nothing layer-local yet
+  }
+
+  compute(_frame: AuroraLayerFrame): boolean {
+    return false;
+  }
+
+  update(frame: AuroraLayerFrame): void {
+    // Altitude gate — at high altitude we render indicators only and freeze the LoD tier.
+    // The cityFontScale uniform doubles as a shader-side gate (0 = indicators only, 1.3 = labels).
+    const cameraDistance = Math.hypot(
+      frame.eyePosition[0]!,
+      frame.eyePosition[1]!,
+      frame.eyePosition[2]!,
+    );
+    const altitudeKm = (cameraDistance - 1) * EARTH_RADIUS_KM;
+    const cityFontScale = altitudeKm > ALT_THRESHOLD_KM ? 0 : 1.3;
+    this.host.uniformView.setFloat32(U.cityFontScale, cityFontScale, true);
+
+    if (cityFontScale === 0) return;
+
+    if (this.animator.update(frame.globeRadiusPx, frame.frameDeltaMs)) {
+      this.uploadTier();
+    }
+  }
+
+  render(_frame: AuroraLayerFrame, _pass: GPURenderPassEncoder): void {
+    // Composed via blendCities in main.wesl; no separate render pass
+  }
+
+  dispose(): void {
+    // Pure TS state; nothing to release
+  }
+
+  // ── LoD / tier API (used by CitiesAnimator) ─────────────────────────────
+
+  get tierCount(): number { return this.lodLevels.length; }
+
+  /** Get LOD tier for a given globe radius in pixels */
+  getTierForRadius(globeRadiusPx: number): number {
+    for (let i = this.lodLevels.length - 1; i >= 0; i--) {
+      if (globeRadiusPx >= this.lodLevels[i]!.zoomInPx) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  get currentTierIndex(): number { return this.currentTier; }
+  set currentTierIndex(v: number) { this.currentTier = v; }
+
+  // ── Internal ───────────────────────────────────────────────────────────
+
+  private uploadTier(): void {
+    const tier = this.currentTier;
+    const data = this.buildTier(tier);
+
+    this.device.queue.writeTexture(
+      { texture: this.host.cityLookupTexture },
+      data.lookupData.buffer as ArrayBuffer,
+      { bytesPerRow: LOOKUP_WIDTH * 2 },
+      { width: LOOKUP_WIDTH, height: LOOKUP_HEIGHT },
+    );
+
+    if (data.combinedBuffer.byteLength > this.host.cityDataBuffer.size) {
+      this.host.cityDataBuffer.destroy();
+      this.host.setCityDataBuffer(this.device.createBuffer({
+        size: Math.max(32, data.combinedBuffer.byteLength),
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      }));
+    }
+    if (data.combinedBuffer.byteLength > 0) {
+      this.device.queue.writeBuffer(this.host.cityDataBuffer, 0, data.combinedBuffer);
+    }
+
+    this.host.uniformView.setUint32(U.cityGlyphOffset, data.glyphStartVec4, true);
+
+    this.host.recreateBindGroup();
   }
 
   private parseCities(buffer: ArrayBuffer): void {
@@ -317,19 +459,4 @@ export class CitiesLayer {
 
     return data;
   }
-
-  get tierCount(): number { return this.lodLevels.length; }
-
-  /** Get LOD tier for a given globe radius in pixels */
-  getTierForRadius(globeRadiusPx: number): number {
-    for (let i = this.lodLevels.length - 1; i >= 0; i--) {
-      if (globeRadiusPx >= this.lodLevels[i]!.zoomInPx) {
-        return i;
-      }
-    }
-    return 0;
-  }
-
-  get currentTierIndex(): number { return this.currentTier; }
-  set currentTierIndex(v: number) { this.currentTier = v; }
 }

@@ -5,8 +5,7 @@
  * On tier change, cross-fades opacity over ~1s.
  */
 
-import { CitiesLayer } from './cities-layer';
-import type { CitiesLodLevel } from './cities-aurora-layer';
+import type { CitiesLayer, CitiesLodLevel } from './cities-layer';
 
 const TRANSITION_DURATION = 1000; // ms
 

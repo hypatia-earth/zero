@@ -1,5 +1,5 @@
 /**
- * PressureLayer - GPU-based isobar contour rendering
+ * PressureLayer — built-in AuroraLayer for isobar pressure contours.
  *
  * Compute pipeline:
  * 1. Regrid: O1280 Gaussian → regular grid (1° or 2°)
@@ -10,6 +10,13 @@
  * Render pipeline:
  * - Line-list primitives with depth testing against globe
  * - Day/night tinting, standard pressure highlight
+ *
+ * Per-frame work (opacity gate, render uniforms with cross-layer backface-cull)
+ * runs through update/render. The compute orchestration (regrid, contour build,
+ * smoothing) is data-event-driven and remains driven by the host worker through
+ * globe-renderer forwarders that call the layer's public compute methods —
+ * transitional pattern slated for Sub-B's data-flow phase to move to typed
+ * AuroraLayer extension methods.
  */
 
 import pressRenderCode from './render.wesl?static';
@@ -17,6 +24,12 @@ import pressRegridCode from './regrid.wesl?static';
 import pressContourCode from './contour.wesl?static';
 import pressPrefixSumCode from './prefix-sum.wesl?static';
 import pressChaikinCode from './chaikin.wesl?static';
+import type {
+  AuroraDataEvent,
+  AuroraLayer,
+  AuroraLayerContext,
+  AuroraLayerFrame,
+} from '../../types/aurora-layer';
 import type { PressureColorOption } from '../../options/pressure-colors-default';
 import type { PaletteTexture } from '../../palette-texture';
 import type { PaletteId } from '../../../services/palette-service';
@@ -60,15 +73,28 @@ export interface PressureExternalBuffers {
   gaussianGrid: GPUBuffer;        // packed lats + offsets as vec2<u32>
 }
 
+export interface PressureAuroraLayerHost {
+  getOpacity(): number;
+  getColors(): PressureColorOption;
+  /**
+   * True when the globe surface (earth/temp/sun) is opaque enough that
+   * back-hemisphere isobars are occluded — performance optimization.
+   */
+  getBackfaceCull(): boolean;
+}
+
 // Constants
 const EARTH_RADIUS = 1.0;
 const SCAN_BLOCK_SIZE = 512;
 
-export class PressureLayer {
-  private device: GPUDevice;
-  private format: GPUTextureFormat;
-  private paletteTexture: PaletteTexture;
-  private uniformAlignment: number;  // Queried from device.limits
+export class PressureLayer implements AuroraLayer {
+  readonly id = 'pressure';
+  readonly order = 10;
+
+  private device!: GPUDevice;
+  private format!: GPUTextureFormat;
+  private paletteTexture!: PaletteTexture;
+  private uniformAlignment!: number;  // Queried from device.limits
 
   // Grid dimensions (fixed at 2° resolution)
   private readonly gridWidth = 180;   // 360° / 2°
@@ -134,16 +160,57 @@ export class PressureLayer {
   private currentLevelCount = 21;  // Default for 4 hPa spacing
 
 
-  constructor(device: GPUDevice, format: GPUTextureFormat, paletteTexture: PaletteTexture) {
-    this.device = device;
-    this.format = format;
-    this.paletteTexture = paletteTexture;
-    this.uniformAlignment = device.limits.minUniformBufferOffsetAlignment;
+  constructor(private readonly host: PressureAuroraLayerHost) {}
+
+  initialize(ctx: AuroraLayerContext): void {
+    this.device = ctx.device;
+    this.format = ctx.format;
+    this.paletteTexture = ctx.paletteTexture;
+    this.uniformAlignment = ctx.device.limits.minUniformBufferOffsetAlignment;
 
     this.createComputePipelines();
     this.createComputeBuffers();
     this.createRenderPipeline();
     this.createRenderBuffers();
+  }
+
+  onDataChanged(_ctx: AuroraLayerContext, _events: AuroraDataEvent[]): void {
+    // Pressure data feeds in via globe-renderer.triggerPressureRegrid; this
+    // surface is unused for now (tracked in deferred ledger).
+  }
+
+  onOptionsChanged(_ctx: AuroraLayerContext, _options: Record<string, unknown>): void {
+    // pressure.colors flows per-frame via host handle; spacing/smoothing flow
+    // through globe-renderer.setPressureLevelCount + runPressureContour.
+  }
+
+  compute(_frame: AuroraLayerFrame): boolean {
+    // Pressure compute (regrid + contour + smoothing) is orchestrated by the
+    // host worker via globe-renderer forwarders, not per-frame here.
+    return false;
+  }
+
+  update(frame: AuroraLayerFrame): void {
+    const opacity = this.host.getOpacity();
+    const visible = opacity > 0.01;
+    this.enabled = visible;
+    if (!visible) return;
+
+    this.updateUniforms({
+      viewProj: frame.viewProj,
+      eyePosition: [
+        frame.eyePosition[0]!,
+        frame.eyePosition[1]!,
+        frame.eyePosition[2]!,
+      ],
+      sunDirection: [
+        frame.sunDirection[0]!,
+        frame.sunDirection[1]!,
+        frame.sunDirection[2]!,
+      ],
+      opacity,
+      backfaceCull: this.host.getBackfaceCull(),
+    }, this.host.getColors());
   }
 
   private createComputePipelines(): void {
@@ -933,20 +1000,12 @@ export class PressureLayer {
   /**
    * Render contour lines
    */
-  render(renderPass: GPURenderPassEncoder): void {
+  render(_frame: AuroraLayerFrame, renderPass: GPURenderPassEncoder): void {
     if (this.vertexCount === 0 || !this.enabled) return;
 
     renderPass.setPipeline(this.renderPipeline);
     renderPass.setBindGroup(0, this.renderBindGroup);
     renderPass.draw(this.vertexCount);
-  }
-
-  setEnabled(enabled: boolean): void {
-    this.enabled = enabled;
-  }
-
-  isEnabled(): boolean {
-    return this.enabled;
   }
 
   getVertexCount(): number {
