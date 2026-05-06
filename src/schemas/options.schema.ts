@@ -13,18 +13,18 @@ import { getPaletteIdsEnum } from '../services/palette-service';
 // UI Metadata Types
 // ============================================================
 
-type ControlType = 'toggle' | 'slider' | 'select' | 'radio' | 'color-chips' | 'pressure-colors' | 'layer-toggle';
+export type ControlType = 'toggle' | 'slider' | 'select' | 'radio' | 'color-chips' | 'pressure-colors' | 'layer-toggle';
 
 /** Impact level for option changes */
-type OptionImpact = 'uniform' | 'recreate';
+export type OptionImpact = 'uniform' | 'recreate';
 
 /** Persistence mode: 'url' for shareable view state, 'local' for user preferences */
-type PersistMode = 'url' | 'local';
+export type PersistMode = 'url' | 'local';
 
 /** Filter determines which dialog entry points show this option */
-type OptionFilter = TLayer | 'global' | 'dataCache' | 'gpu' | 'queue' | 'capture';
+export type OptionFilter = TLayer | 'global' | 'dataCache' | 'gpu' | 'queue' | 'capture';
 
-interface UIMetadata {
+export interface UIMetadata {
   label: string;
   description?: string;
   group: 'interface' | 'regional' | 'download' | 'environmental' | 'interaction' | 'layers' | 'gpu' | 'capture' | 'advanced' | 'performance';
@@ -42,45 +42,45 @@ interface UIMetadata {
   uniform?: { type: string; pos: number };  // GPU uniform binding
 }
 
-interface SliderMeta extends UIMetadata {
+export interface SliderMeta extends UIMetadata {
   control: 'slider';
   min: number;
   max: number;
   step: number;
 }
 
-interface SelectMeta extends UIMetadata {
+export interface SelectMeta extends UIMetadata {
   control: 'select';
   options: { value: string | number; label: string; localhostOnly?: boolean; maxCores?: number }[];
 }
 
-interface ToggleMeta extends UIMetadata {
+export interface ToggleMeta extends UIMetadata {
   control: 'toggle';
 }
 
-interface RadioMeta extends UIMetadata {
+export interface RadioMeta extends UIMetadata {
   control: 'radio';
-  options: { value: string | number; label: string; localhostOnly?: boolean; minBufferSizeMB?: number }[];
+  options: { value: string | number | boolean; label: string; localhostOnly?: boolean; minBufferSizeMB?: number }[];
 }
 
-interface ColorChipsMeta extends UIMetadata {
+export interface ColorChipsMeta extends UIMetadata {
   control: 'color-chips';
   options: { value: string; label: string; color: string }[];
 }
 
-interface PressureColorsMeta extends UIMetadata {
+export interface PressureColorsMeta extends UIMetadata {
   control: 'pressure-colors';
 }
 
-interface LayerToggleMeta extends UIMetadata {
+export interface LayerToggleMeta extends UIMetadata {
   control: 'layer-toggle';
   layerId: string;  // For CSS color variable lookup
 }
 
-type OptionMeta = SliderMeta | SelectMeta | ToggleMeta | RadioMeta | ColorChipsMeta | PressureColorsMeta | LayerToggleMeta;
+export type OptionMeta = SliderMeta | SelectMeta | ToggleMeta | RadioMeta | ColorChipsMeta | PressureColorsMeta | LayerToggleMeta;
 
 /** Helper to attach metadata to Zod schema */
-function opt<T extends z.ZodTypeAny>(schema: T, meta: OptionMeta): T & { _meta: OptionMeta } {
+export function opt<T extends z.ZodTypeAny>(schema: T, meta: OptionMeta): T & { _meta: OptionMeta } {
   return Object.assign(schema, { _meta: meta });
 }
 
@@ -152,46 +152,11 @@ export const optionGroups = {
 } as const;
 
 // ============================================================
-// Pressure Color Option Schema
-// ============================================================
-
-const Color = z.tuple([z.number(), z.number(), z.number(), z.number()]);
-
-export const PressureColorOptionSchema = z.discriminatedUnion('mode', [
-  z.object({
-    mode: z.literal('solid'),
-    colors: z.tuple([Color]),           // [all]
-  }),
-  z.object({
-    mode: z.literal('gradient'),
-    colors: z.tuple([Color, Color, Color]),  // [low, ref, high]
-  }),
-  z.object({
-    mode: z.literal('normal'),
-    colors: z.tuple([Color, Color]),    // [ref, other]
-  }),
-  z.object({
-    mode: z.literal('palette'),
-    paletteId: z.string(),
-  }),
-  z.object({
-    mode: z.literal('debug'),
-  }),
-]);
-
-export type PressureColorOption = z.infer<typeof PressureColorOptionSchema>;
-
-export const PRESSURE_COLOR_DEFAULT: PressureColorOption = {
-  mode: 'solid',
-  colors: [[1, 1, 1, 0.85]],
-};
-
-// ============================================================
 // Options Schema
 // ============================================================
 
 export const optionsSchema = z.object({
-  _version: z.number().default(1),
+  _version: z.number().default(2),
 
   // ----------------------------------------------------------
   // Interface Settings
@@ -537,7 +502,7 @@ export const optionsSchema = z.object({
   }),
 
   // ----------------------------------------------------------
-  // Layer: Earth
+  // Layer: Earth (only `enabled` here; opacity lives in aurora-db)
   // ----------------------------------------------------------
   earth: z.object({
     enabled: opt(
@@ -551,24 +516,10 @@ export const optionsSchema = z.object({
         control: 'toggle',
       }
     ),
-    opacity: opt(
-      z.number().min(0.05).max(1).default(1),
-      {
-        label: 'Earth opacity',
-        description: 'Transparency of earth basemap',
-        group: 'layers',
-        filter: ['global', 'earth'],
-        order: 0,
-        control: 'slider',
-        min: 0.05,
-        max: 1,
-        step: 0.05,
-      }
-    ),
   }),
 
   // ----------------------------------------------------------
-  // Layer: Sun
+  // Layer: Sun (only `enabled` here; opacity lives in aurora-db)
   // ----------------------------------------------------------
   sun: z.object({
     enabled: opt(
@@ -582,24 +533,10 @@ export const optionsSchema = z.object({
         control: 'toggle',
       }
     ),
-    opacity: opt(
-      z.number().min(0).max(1).default(1),
-      {
-        label: 'Sun opacity',
-        group: 'layers',
-        filter: ['sun'],
-        order: 3,
-        control: 'slider',
-        min: 0,
-        max: 1,
-        step: 0.1,
-        hidden: true,  // Internal use for animation, not user-facing
-      }
-    ),
   }),
 
   // ----------------------------------------------------------
-  // Layer: Graticule (lat/lon grid overlay)
+  // Layer: Graticule (only `enabled` here; opacity/fontSize/lineWidth in aurora-db)
   // ----------------------------------------------------------
   graticule: z.object({
     enabled: opt(
@@ -613,56 +550,10 @@ export const optionsSchema = z.object({
         control: 'toggle',
       }
     ),
-    opacity: opt(
-      z.number().min(0.05).max(1).default(0.3),
-      {
-        label: 'Grid opacity',
-        description: 'Transparency of grid lines',
-        group: 'layers',
-        filter: ['global', 'graticule'],
-        order: 4,
-        control: 'slider',
-        min: 0.05,
-        max: 1,
-        step: 0.05,
-      }
-    ),
-    fontSize: opt(
-      z.number().min(8).max(24).default(12),
-      {
-        label: 'Label size',
-        description: 'Font size for graticule coordinate labels',
-        group: 'layers',
-        filter: ['global', 'graticule'],
-        order: 5,
-        control: 'slider',
-        min: 8,
-        max: 24,
-        step: 1,
-        // No uniform: here — GraticuleLayer.onOptionsChanged caches the CSS-pixel
-        // value and writes (value × frame.dpr) to U.graticuleFontSize each frame.
-      }
-    ),
-    lineWidth: opt(
-      z.number().min(1).max(5).default(1),
-      {
-        label: 'Line width',
-        description: 'Width of graticule lines in pixels',
-        group: 'layers',
-        filter: ['global', 'graticule'],
-        order: 6,
-        control: 'slider',
-        min: 1,
-        max: 5,
-        step: 0.5,
-        // No uniform: here — GraticuleLayer.onOptionsChanged caches the CSS-pixel
-        // value and writes (value × frame.dpr) to U.graticuleLineWidth each frame.
-      }
-    ),
   }),
 
   // ----------------------------------------------------------
-  // Layer: Cities
+  // Layer: Cities (only `enabled` here; opacity/color in aurora-db)
   // ----------------------------------------------------------
   cities: z.object({
     enabled: opt(
@@ -676,41 +567,10 @@ export const optionsSchema = z.object({
         control: 'toggle',
       }
     ),
-    opacity: opt(
-      z.number().min(0.05).max(1).default(0.8),
-      {
-        label: 'City label opacity',
-        description: 'Transparency of city labels',
-        group: 'layers',
-        filter: ['global', 'cities'],
-        order: 3.6,
-        control: 'slider',
-        min: 0.05,
-        max: 1,
-        step: 0.05,
-      }
-    ),
-    color: opt(
-      z.enum(['white', 'black', 'darkred', 'gold']).default('white'),
-      {
-        label: 'Label color',
-        description: 'Color of city labels and indicators',
-        group: 'layers',
-        filter: ['global', 'cities'],
-        order: 3.7,
-        control: 'color-chips',
-        options: [
-          { value: 'white', label: 'White', color: '#ffffff' },
-          { value: 'black', label: 'Black', color: '#000000' },
-          { value: 'darkred', label: 'Dark Red', color: '#8c0d0d' },
-          { value: 'gold', label: 'Gold', color: '#d9a621' },
-        ],
-      }
-    ),
   }),
 
   // ----------------------------------------------------------
-  // Layer: Temperature
+  // Layer: Temperature (palette stays here until F-B; opacity in aurora-db)
   // ----------------------------------------------------------
   temp: z.object({
     enabled: opt(
@@ -723,20 +583,6 @@ export const optionsSchema = z.object({
         order: 10,
         control: 'toggle',
         persist: 'url',
-      }
-    ),
-    opacity: opt(
-      z.number().min(0.05).max(1).default(0.6),
-      {
-        label: 'Temperature opacity',
-        description: 'Transparency of temperature layer',
-        group: 'layers',
-        filter: ['global', 'temp'],
-        order: 10,
-        control: 'slider',
-        min: 0.05,
-        max: 1,
-        step: 0.05,
       }
     ),
     palette: opt(
@@ -758,7 +604,7 @@ export const optionsSchema = z.object({
   }),
 
   // ----------------------------------------------------------
-  // Layer: Precipitation
+  // Layer: Precipitation (only `enabled` here; opacity/animated in aurora-db)
   // ----------------------------------------------------------
   rain: z.object({
     enabled: opt(
@@ -773,35 +619,10 @@ export const optionsSchema = z.object({
         persist: 'url',
       }
     ),
-    opacity: opt(
-      z.number().min(0.05).max(1).default(1.0),
-      {
-        label: 'Precipitation opacity',
-        description: 'Transparency of rain layer',
-        group: 'layers',
-        filter: ['global', 'rain'],
-        order: 11,
-        control: 'slider',
-        min: 0.05,
-        max: 1,
-        step: 0.05,
-      }
-    ),
-    animated: opt(
-      z.boolean().default(true),
-      {
-        label: 'Animate particles',
-        description: 'Animate precipitation particles',
-        group: 'layers',
-        filter: 'rain',
-        order: 12,
-        control: 'toggle',
-      }
-    ),
   }),
 
   // ----------------------------------------------------------
-  // Layer: Clouds
+  // Layer: Clouds (only `enabled` here; opacity in aurora-db)
   // ----------------------------------------------------------
   clouds: z.object({
     enabled: opt(
@@ -814,20 +635,6 @@ export const optionsSchema = z.object({
         order: 12,
         control: 'toggle',
         persist: 'url',
-      }
-    ),
-    opacity: opt(
-      z.number().min(0.05).max(1).default(0.5),
-      {
-        label: 'Cloud opacity',
-        description: 'Transparency of cloud layer',
-        group: 'layers',
-        filter: ['global', 'clouds'],
-        order: 12,
-        control: 'slider',
-        min: 0.05,
-        max: 1,
-        step: 0.05,
       }
     ),
   }),
@@ -865,7 +672,7 @@ export const optionsSchema = z.object({
   }),
 
   // ----------------------------------------------------------
-  // Layer: Wind
+  // Layer: Wind (seedCount stays here until F-B; speed/opacity in aurora-db)
   // ----------------------------------------------------------
   wind: z.object({
     enabled: opt(
@@ -898,41 +705,10 @@ export const optionsSchema = z.object({
         ],
       }
     ),
-    opacity: opt(
-      z.number().min(0.05).max(1).default(0.8),
-      {
-        label: 'Wind opacity',
-        description: 'Transparency of wind lines',
-        group: 'layers',
-        filter: ['global', 'wind'],
-        order: 15,
-        control: 'slider',
-        min: 0.05,
-        max: 1,
-        step: 0.05,
-      }
-    ),
-    speed: opt(
-      z.union([z.literal(0), z.literal(15), z.literal(30), z.literal(60)]).default(30),
-      {
-        label: 'Animation speed',
-        description: 'Speed of wind line animation (updates per second)',
-        group: 'layers',
-        filter: ['global', 'wind'],
-        order: 16,
-        control: 'radio',
-        options: [
-          { value: 0, label: 'Frozen', localhostOnly: true },
-          { value: 15, label: '15' },
-          { value: 30, label: '30' },
-          { value: 60, label: '60' },
-        ],
-      }
-    ),
   }),
 
   // ----------------------------------------------------------
-  // Layer: Pressure
+  // Layer: Pressure (only `enabled` here; spacing/smoothing/colors/opacity in aurora-db)
   // ----------------------------------------------------------
   pressure: z.object({
     enabled: opt(
@@ -945,64 +721,6 @@ export const optionsSchema = z.object({
         order: 17,
         control: 'toggle',
         persist: 'url',
-      }
-    ),
-    opacity: opt(
-      z.number().min(0.05).max(1).default(0.85),
-      {
-        label: 'Pressure opacity',
-        description: 'Transparency of isobar lines',
-        group: 'layers',
-        filter: ['global', 'pressure'],
-        order: 17,
-        control: 'slider',
-        min: 0.05,
-        max: 1,
-        step: 0.05,
-      }
-    ),
-    smoothing: opt(
-      z.enum(['none', 'light']).default('light'),
-      {
-        label: 'Smoothing',
-        description: 'Smooth isobar contour lines',
-        group: 'layers',
-        filter: ['global', 'pressure'],
-        order: 18,
-        control: 'radio',
-        options: [
-          { value: 'none', label: 'None' },
-          { value: 'light', label: 'Light' },
-          // 'strong' (2 Chaikin passes) disabled - drops every other line
-        ],
-      }
-    ),
-    spacing: opt(
-      z.enum(['4', '6', '8', '10']).default('4'),
-      {
-        label: 'Isobar spacing',
-        description: 'Pressure difference between contour lines (hPa)',
-        group: 'layers',
-        filter: ['global', 'pressure'],
-        order: 19,
-        control: 'radio',
-        options: [
-          { value: '4', label: '4 hPa' },
-          { value: '6', label: '6 hPa' },
-          { value: '8', label: '8 hPa' },
-          { value: '10', label: '10 hPa' },
-        ],
-      }
-    ),
-    colors: opt(
-      PressureColorOptionSchema.default(PRESSURE_COLOR_DEFAULT),
-      {
-        label: 'Line colors',
-        description: 'Color scheme for isobar lines',
-        group: 'layers',
-        filter: ['global', 'pressure'],
-        order: 19.5,
-        control: 'pressure-colors',
       }
     ),
   }),
@@ -1304,17 +1022,6 @@ export const optionsSchema = z.object({
         ],
       }
     ),
-    showLogo: opt(
-      z.boolean().default(true),
-      {
-        label: 'Show logo',
-        group: 'advanced',
-        filter: 'global',
-        order: 110,
-        control: 'toggle',
-        hidden: true,
-      }
-    ),
   }),
 });
 
@@ -1325,7 +1032,7 @@ export const optionsSchema = z.object({
 export type ZeroOptions = z.infer<typeof optionsSchema>;
 
 export const defaultOptions: ZeroOptions = {
-  _version: 1,
+  _version: 2,
   interface: { autocloseModal: true },
   gpu: { timeslotsPerLayer: '4', showGpuStats: false, workerPoolSize: '4', minDownloads: 4, maxDownloads: 12 },
   viewport: {
@@ -1347,27 +1054,27 @@ export const defaultOptions: ZeroOptions = {
       twoFingerPan: { invert: false },
     },
   },
-  earth: { enabled: true, opacity: 1 },
-  sun: { enabled: true, opacity: 1 },
-  graticule: { enabled: true, opacity: 0.9, fontSize: 12, lineWidth: 1.5 },
-  cities: { enabled: false, opacity: 0.8, color: 'white' },
-  temp: { enabled: true, opacity: 0.6, palette: 'temp-classic' },
-  rain: { enabled: false, opacity: 1, animated: true },
-  clouds: { enabled: false, opacity: 0.5 },
+  earth: { enabled: true },
+  sun: { enabled: true },
+  graticule: { enabled: true },
+  cities: { enabled: false },
+  temp: { enabled: true, palette: 'temp-classic' },
+  rain: { enabled: false },
+  clouds: { enabled: false },
   humidity: { enabled: false, opacity: 0.6 },
-  wind: { enabled: false, seedCount: 8192, opacity: 0.8, speed: 30 },
-  pressure: { enabled: false, opacity: 0.85, smoothing: 'light', spacing: '4', colors: PRESSURE_COLOR_DEFAULT },
+  wind: { enabled: false, seedCount: 8192 },
+  pressure: { enabled: false },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
   capture: { aspectRatio: 'free', duration: '5', fps: '15', zoomInterp: 'smooth', nativeDpr: false, paletteMode: 'fast', format: 'gif', bitrate: '3', label: true, lastCaptureType: 'simple' },
-  debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1', showLogo: true },
+  debug: { showPerfPanel: false, fpsLimit: 'off', renderScale: '1' },
 };
 
 // ============================================================
 // Utility: Extract metadata from schema
 // ============================================================
 
-interface FlatOption {
+export interface FlatOption {
   path: string;
   meta: OptionMeta;
   schema: z.ZodTypeAny;
@@ -1441,4 +1148,3 @@ export function getOptionMeta(path: string): OptionMeta | undefined {
   return optionMetaCache.get(path);
 }
 
-export type { OptionMeta, OptionFilter, OptionImpact, FlatOption, RadioMeta };

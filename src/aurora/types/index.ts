@@ -31,19 +31,3 @@ export type { AssetSpec, AssetBag } from './asset';
 export type { AuroraEvent } from './events';
 export type { AuroraStats, AuroraMemoryStats } from './stats';
 export type { PickResult } from './picking';
-
-export type {
-  LayerCategory,
-  LayerUiHints,
-  LayerCatalogEntry,
-  AuroraLayerSpec,
-} from './catalog';
-
-export type {
-  OptionScope,
-  OptionKind,
-  OptionImpact,
-  OptionEnumValue,
-  OptionDescriptor,
-  OptionDescriptorAuthor,
-} from './options-descriptor';

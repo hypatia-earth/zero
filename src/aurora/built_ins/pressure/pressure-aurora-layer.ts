@@ -18,7 +18,7 @@ import type {
   AuroraLayerContext,
   AuroraLayerFrame,
 } from '../../types/aurora-layer';
-import type { PressureColorOption } from '../../../schemas/options.schema';
+import type { PressureColorOption } from '../../options/pressure-colors-default';
 
 export interface PressureAuroraLayerHost {
   getOpacity(): number;

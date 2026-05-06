@@ -13,7 +13,7 @@ import type { CameraConfig } from './camera';
 import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from './built_ins/pressure/pressure-layer';
 import { LayerStore } from './layer-store';
-import type { PressureColorOption } from '../schemas/options.schema';
+import type { PressureColorOption } from './options/schema';
 import type { TBuiltInLayer, TLayer } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import { getSunDirection } from '../utils/sun-position';
@@ -75,7 +75,7 @@ export interface CameraSnapshot {
 }
 
 export type AuroraRequest =
-  | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; cssHeight: number; dpr: number; config: AuroraConfig; assets: AuroraAssets; initialLayerOpacities: Record<string, number> }
+  | { type: 'init'; canvas: OffscreenCanvas; width: number; height: number; cssHeight: number; dpr: number; config: AuroraConfig; assets: AuroraAssets; auroraDefaults: AuroraOptionsBlob }
   // Sub-B Phase 5 typed setters — host dispatches via these for every
   // aurora-relevant option. The bulk legacy 'options' channel was retired
   // once every layer's UI bind-points migrated.
@@ -147,11 +147,11 @@ type PressureHostOpts = {
 };
 type RainHostOpts = { animated: boolean };
 
-// Pre-dispatch fallbacks (engine + per-layer opts) come from
-// `defaultsFromCatalog()` via `AURORA_OPTIONS_DEFAULTS`. The worker no
-// longer authors a `defaults` arg here — Phase G drops the constructor
-// option entirely.
-const options = new AuroraOptions({ dbName: 'aurora-db' });
+// Aurora-db wrapper. Constructed in `handleInit` once main thread sends
+// schema-derived defaults via the init message — keeps Zod out of the
+// worker bundle. Definite-assignment assertion: every helper that touches
+// `options` runs strictly after init.
+let options!: AuroraOptions;
 
 function getWindOpts(): WindHostOpts { return options.read().layers.wind!.opts as WindHostOpts; }
 function getPressureOpts(): PressureHostOpts { return options.read().layers.pressure!.opts as PressureHostOpts; }
@@ -653,21 +653,15 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   canvas.width = data.width;
   canvas.height = data.height;
 
-  // Open aurora-db, load any persisted blob, merge with this run's host-config
-  // seeds (timeslotsPerLayer + windLineCount + per-layer opacity). After this
-  // await, options.read() is valid for the rest of init and every subsequent
-  // frame. Phase E2 — host seeds initialLayerOpacities so first-run users
-  // (or post-migration v2 blobs) get zero-db's intended opacity into aurora-db.
-  // Persisted aurora-db wins over seeds on subsequent reloads.
-  const seedLayers: Record<string, { opacity?: number; opts?: Record<string, unknown> }> = {};
-  for (const [id, op] of Object.entries(data.initialLayerOpacities)) {
-    seedLayers[id] = { opacity: op };
-  }
-  seedLayers.wind = { ...seedLayers.wind, opts: { seedCount: config.windLineCount } };
-
+  // F-A — schema-derived defaults arrive in the init message; main thread
+  // computes them via `auroraOptionsSchema.parse({})` so this worker bundle
+  // never touches Zod. Construct AuroraOptions now, then run its IDB merge:
+  // `defaults < seeds < persisted`. Wind seedCount + engine timeslotsPerLayer
+  // still seeded from host config until F-B moves them to aurora ownership.
+  options = new AuroraOptions({ dbName: 'aurora-db', defaults: data.auroraDefaults });
   await options.init({
     engine: { timeslotsPerLayer: config.timeslotsPerLayer },
-    layers: seedLayers,
+    layers: { wind: { opts: { seedCount: config.windLineCount } } },
   });
 
   // Create and initialize renderer

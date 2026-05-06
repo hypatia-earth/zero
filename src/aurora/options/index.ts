@@ -32,27 +32,25 @@ import {
   OPTIONS_KEY,
 } from './aurora-db';
 import { migrate, CURRENT_SCHEMA_VERSION, type PersistedOptions } from './migrations';
-import { defaultsFromCatalog } from './catalog';
 
 const DEFAULT_DEBOUNCE_MS = 300;
 
 /**
- * Aurora-side defaults — derived from the option catalog. Engine fields
- * may still be overwritten by per-init seeds (e.g. host's
- * `timeslotsPerLayer`); layer entries arrive populated from descriptors so
- * the renderer can read sensible values before the host's typed-setter
- * sweep dispatches the user's persisted overrides.
+ * Aurora-side defaults — supplied by the caller via `AuroraOptionsConfig.defaults`
+ * (main thread derives from `auroraOptionsSchema.parse({})` in `./schema.ts`
+ * and forwards into the worker's init message). Per-init seeds may still
+ * overwrite engine fields (e.g. host's `timeslotsPerLayer`).
  */
-export const AURORA_OPTIONS_DEFAULTS: AuroraOptionsBlob = defaultsFromCatalog();
 
 export interface AuroraOptionsConfig {
   dbName: string;
   /** Debounce window for internal saves (default 300ms). */
   saveDebounceMs?: number;
-  /** Per-instance default blob, layered below persisted+seeds. Lets the
-   *  caller supply pre-dispatch fallbacks aurora itself can't know (e.g.
-   *  host-shape layer opts that arrive shortly via setter dispatch). */
-  defaults?: AuroraOptionsBlob;
+  /** Per-instance default blob, layered below persisted+seeds. Required —
+   *  the worker bundle no longer carries Zod, so defaults are computed on
+   *  the main thread (via `auroraOptionsSchema.parse({})`) and forwarded
+   *  into the worker via the init message. */
+  defaults: AuroraOptionsBlob;
 }
 
 /**
@@ -85,7 +83,7 @@ export class AuroraOptions {
   constructor(config: AuroraOptionsConfig) {
     this.dbName = config.dbName;
     this.saveDebounceMs = config.saveDebounceMs ?? DEFAULT_DEBOUNCE_MS;
-    this.defaults = structuredClone(config.defaults ?? AURORA_OPTIONS_DEFAULTS);
+    this.defaults = structuredClone(config.defaults);
     this.data = structuredClone(this.defaults);
   }
 

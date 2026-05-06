@@ -9,7 +9,7 @@
  */
 
 import m from 'mithril';
-import type { PressureColorOption } from '../schemas/options.schema';
+import type { PressureColorOption } from '../aurora/options/schema';
 import { defaultConfig } from '../config/defaults';
 
 export interface PressureColorControlAttrs {

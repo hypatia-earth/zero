@@ -18,6 +18,7 @@ import { Camera } from '../aurora/camera';
 import { setupViewport } from './viewport/viewport';
 import type { PaletteId } from './palette-service';
 import type { EngineOpts, AuroraOptions as AuroraOptionsBlob } from '../aurora/types/options';
+import { auroraDefaults } from '../aurora/options/schema';
 
 /** Built-in layer ids whose UI bind-points drive aurora-side opacity. Excludes
  *  'humidity' from BUILT_IN_LAYERS because it has a ZeroOptions section but no
@@ -257,17 +258,13 @@ export function createAuroraService(
         assets.logo,
       ];
 
-      // Phase E2 — opacity seeds for the worker's first init() merge.
-      // Once aurora-db is populated, persisted wins over seeds; this
-      // path migrates pre-Phase-E2 zero-db opacities into aurora-db.
-      const initialLayerOpacities: Record<string, number> = {};
-      for (const id of OPACITY_BUILT_INS) {
-        initialLayerOpacities[id] = optionsService.options.value[id].opacity;
-      }
-
+      // F-A — opacity defaults come from `auroraOptionsSchema`; the
+      // post-E2 host seed loop is gone. Persisted aurora-db wins (post-E2
+      // installs already have user values), otherwise schema defaults
+      // apply via aurora's `defaults < seeds < persisted` merge.
       await new Promise<void>((resolve) => {
         onReady = () => resolve();
-        send({ type: 'init', canvas: offscreen, width, height, cssHeight: canvas!.clientHeight, dpr: window.devicePixelRatio, config, assets, initialLayerOpacities }, transferables);
+        send({ type: 'init', canvas: offscreen, width, height, cssHeight: canvas!.clientHeight, dpr: window.devicePixelRatio, config, assets, auroraDefaults }, transferables);
       });
 
       // Create camera
@@ -293,6 +290,26 @@ export function createAuroraService(
       // (intended values, not pre-multiplied).
       for (const id of OPACITY_BUILT_INS) {
         send({ type: 'setLayerEnabled', id, value: initOpts[id].enabled });
+      }
+
+      // F-A reconciliation — pre-F-A engine bottlenecks (timeslotsPerLayer,
+      // wind.seedCount) routed dialog writes to aurora-db only via the
+      // Phase D/E1 adapters; zero-db kept stale defaults. F-A's dialog
+      // reads from zero-db, so push aurora-db's persisted truth into
+      // zero-db on first boot to align both stores. F-B removes this when
+      // these fields fully relocate to aurora ownership.
+      const initialMirror = optionsMirror.value;
+      if (initialMirror) {
+        const auroraTslp = initialMirror.engine.timeslotsPerLayer;
+        const auroraSeedCount = (initialMirror.layers['wind']?.opts as { seedCount?: number } | undefined)?.seedCount;
+        optionsService.update(d => {
+          if (typeof auroraTslp === 'number') {
+            d.gpu.timeslotsPerLayer = String(auroraTslp) as typeof d.gpu.timeslotsPerLayer;
+          }
+          if (typeof auroraSeedCount === 'number') {
+            d.wind.seedCount = auroraSeedCount as typeof d.wind.seedCount;
+          }
+        });
       }
 
       // Forward options updates to worker
@@ -323,6 +340,15 @@ export function createAuroraService(
             if (opts[id].enabled !== lastOptions[id].enabled) {
               send({ type: 'setLayerEnabled', id, value: opts[id].enabled });
             }
+          }
+          // F-A bridges — until F-B relocates these to aurora ownership,
+          // dialog writes still land in zero-db (host schema rows). Mirror
+          // the change into aurora-db so the worker's runtime value tracks.
+          if (opts.gpu.timeslotsPerLayer !== lastOptions.gpu.timeslotsPerLayer) {
+            send({ type: 'setEngineOptions', patch: { timeslotsPerLayer: parseInt(opts.gpu.timeslotsPerLayer, 10) } });
+          }
+          if (opts.wind.seedCount !== lastOptions.wind.seedCount) {
+            send({ type: 'setLayerOptions', id: 'wind', opts: { seedCount: opts.wind.seedCount } });
           }
           lastOptions = opts;
         }

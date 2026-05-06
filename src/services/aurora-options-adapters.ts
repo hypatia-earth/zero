@@ -1,34 +1,33 @@
 /**
- * Per-scope option adapters — Phase B plumbing for the catalog inversion.
+ * Per-scope option adapters — F-A path-based API.
  *
- * The host's option dialog (Phase C+) renders one generic control per
- * descriptor; that control reads/writes through the adapter matched to
- * `descriptor.scope`. Adapters are domain-blind — they know how to:
- *   - `read`     a single descriptor's current value
- *   - `write`    a new value (optimistically updates source-of-truth)
- *   - `subscribe` to value changes for a single descriptor
+ * The host's options dialog renders one generic control per FlatOption,
+ * routing reads/writes through one of three adapters keyed by path prefix:
  *
- * Three sources of truth, three adapters:
- *   - `host`   → wraps `optionsService` (zero-db backed)
- *   - `engine` → wraps `auroraService.optionsMirror.engine` + dispatches
- *                 `setEngineOptions` to the worker (aurora-db backed)
- *   - `layer`  → wraps `auroraService.optionsMirror.layers[layerId]` +
- *                 dispatches `setLayerOptions`/`setLayerOpacity`
+ *   - host paths   (no `engine.` / `layers.` prefix) → `hostAdapter`
+ *     (zero-db backed via `optionsService`)
+ *   - `engine.<key>` paths                            → `engineAdapter`
+ *     (aurora-db backed; reads from `auroraService.optionsMirror.engine`,
+ *     writes via `setEngineOptions` worker dispatch)
+ *   - `layers.<id>.opacity`     paths                  → `layerAdapter`
+ *     (writes via `setLayerOpacity`)
+ *   - `layers.<id>.opts.<key>`  paths                  → `layerAdapter`
+ *     (writes via `setLayerOptions`)
  *
- * No UI consumer yet — Phase C migrates the graticule dialog section as
- * the pilot. This file is plumbing.
+ * Adapters are domain-blind — they parse the path string and dispatch to
+ * the right worker message kind. The dialog never names a layer id or
+ * engine key directly.
  */
 
-import { effect } from '@preact/signals-core';
-import type { OptionDescriptor } from '../aurora/types/options-descriptor';
+import { auroraDefaults } from '../aurora/options/schema';
+import { defaultOptions } from '../schemas/options.schema';
 import type { AuroraService } from './aurora-service';
 import type { OptionsService } from './options-service';
 
 export interface OptionsAdapter {
-  read(d: OptionDescriptor): unknown;
-  write(d: OptionDescriptor, value: unknown): void;
-  /** Subscribe to value changes for `d`; returns a disposer. */
-  subscribe(d: OptionDescriptor, fn: (value: unknown) => void): () => void;
+  read(path: string): unknown;
+  write(path: string, value: unknown): void;
+  getDefault(path: string): unknown;
 }
 
 // ─── path helpers ──────────────────────────────────────────────────────────
@@ -53,24 +52,39 @@ function setByPath(obj: Record<string, unknown>, path: string, value: unknown): 
   cur[segments[segments.length - 1]!] = value;
 }
 
+/** Decompose `layers.<id>.opacity` or `layers.<id>.opts.<key>`. */
+function parseLayerPath(path: string): { id: string; opacityOnly: boolean; key?: string } {
+  const segments = path.split('.');
+  // segments: ['layers', id, 'opacity'] or ['layers', id, 'opts', key]
+  const id = segments[1]!;
+  if (segments[2] === 'opacity' && segments.length === 3) {
+    return { id, opacityOnly: true };
+  }
+  if (segments[2] === 'opts' && segments.length === 4) {
+    return { id, opacityOnly: false, key: segments[3]! };
+  }
+  throw new Error(`layerAdapter: unrecognized layer path '${path}'`);
+}
+
+/** Strip the leading namespace (`engine.` or `layers.`). */
+function tail(path: string, prefix: string): string {
+  return path.slice(prefix.length);
+}
+
 // ─── adapters ──────────────────────────────────────────────────────────────
 
 export function createHostAdapter(optionsService: OptionsService): OptionsAdapter {
   return {
-    read(d) {
-      return getByPath(optionsService.options.value, d.key);
+    read(path) {
+      return getByPath(optionsService.options.value, path);
     },
-    write(d, value) {
+    write(path, value) {
       optionsService.update(draft => {
-        setByPath(draft as unknown as Record<string, unknown>, d.key, value);
+        setByPath(draft as unknown as Record<string, unknown>, path, value);
       });
     },
-    subscribe(d, fn) {
-      let last = getByPath(optionsService.options.value, d.key);
-      return effect(() => {
-        const cur = getByPath(optionsService.options.value, d.key);
-        if (cur !== last) { last = cur; fn(cur); }
-      });
+    getDefault(path) {
+      return getByPath(defaultOptions, path);
     },
   };
 }
@@ -78,91 +92,76 @@ export function createHostAdapter(optionsService: OptionsService): OptionsAdapte
 export function createEngineAdapter(auroraService: AuroraService): OptionsAdapter {
   const mirror = auroraService.optionsMirror;
   return {
-    read(d) {
-      return mirror.value?.engine[d.key as keyof typeof mirror.value.engine];
+    read(path) {
+      const key = tail(path, 'engine.');
+      return mirror.value?.engine[key as keyof typeof mirror.value.engine];
     },
-    write(d, value) {
-      // Optimistic: patch mirror locally so UI snaps. Worker echoes back the
-      // same value via `optionsChanged` (no-op).
+    write(path, value) {
+      const key = tail(path, 'engine.');
+      // Optimistic mirror patch — worker echoes back via 'optionsChanged'.
       const cur = mirror.value;
       if (cur) {
         mirror.value = {
           ...cur,
-          engine: { ...cur.engine, [d.key]: value },
+          engine: { ...cur.engine, [key]: value },
         };
       }
-      auroraService.setEngineOptions({ [d.key]: value });
+      auroraService.setEngineOptions({ [key]: value });
     },
-    subscribe(d, fn) {
-      let last: unknown = mirror.value?.engine[d.key as keyof typeof mirror.value.engine];
-      return effect(() => {
-        const cur = mirror.value?.engine[d.key as keyof typeof mirror.value.engine];
-        if (cur !== last) { last = cur; fn(cur); }
-      });
+    getDefault(path) {
+      const key = tail(path, 'engine.');
+      return (auroraDefaults.engine as Record<string, unknown>)[key];
     },
   };
 }
 
 export function createLayerAdapter(auroraService: AuroraService): OptionsAdapter {
   const mirror = auroraService.optionsMirror;
-  const layerId = (d: OptionDescriptor): string => {
-    if (!d.layerId) {
-      throw new Error(`layerAdapter: descriptor '${d.key}' has no layerId`);
-    }
-    return d.layerId;
-  };
-
   return {
-    read(d) {
-      const id = layerId(d);
+    read(path) {
+      const { id, opacityOnly, key } = parseLayerPath(path);
       const entry = mirror.value?.layers[id];
-      if (d.key === 'opacity') return entry?.opacity;
+      if (opacityOnly) return entry?.opacity;
       const opts = entry?.opts as Record<string, unknown> | undefined;
-      return opts?.[d.key];
+      return opts?.[key!];
     },
-    write(d, value) {
-      const id = layerId(d);
+    write(path, value) {
+      const { id, opacityOnly, key } = parseLayerPath(path);
       const cur = mirror.value;
       if (cur) {
         const entry = cur.layers[id] ?? { opacity: 0, opts: {} };
-        const nextEntry = d.key === 'opacity'
+        const nextEntry = opacityOnly
           ? { ...entry, opacity: value as number }
-          : { ...entry, opts: { ...(entry.opts as Record<string, unknown>), [d.key]: value } };
+          : { ...entry, opts: { ...(entry.opts as Record<string, unknown>), [key!]: value } };
         mirror.value = {
           ...cur,
           layers: { ...cur.layers, [id]: nextEntry },
         };
       }
-      if (d.key === 'opacity') {
+      if (opacityOnly) {
         auroraService.setLayerOpacity(id, value as number);
       } else {
-        auroraService.setLayerOptions(id, { [d.key]: value });
+        auroraService.setLayerOptions(id, { [key!]: value });
       }
     },
-    subscribe(d, fn) {
-      const id = layerId(d);
-      const readCur = (): unknown => {
-        const entry = mirror.value?.layers[id];
-        if (d.key === 'opacity') return entry?.opacity;
-        return (entry?.opts as Record<string, unknown> | undefined)?.[d.key];
-      };
-      let last = readCur();
-      return effect(() => {
-        const cur = readCur();
-        if (cur !== last) { last = cur; fn(cur); }
-      });
+    getDefault(path) {
+      const { id, opacityOnly, key } = parseLayerPath(path);
+      const layerDefaults = auroraDefaults.layers[id as keyof typeof auroraDefaults.layers];
+      if (!layerDefaults) return undefined;
+      if (opacityOnly) return layerDefaults.opacity;
+      return (layerDefaults.opts as Record<string, unknown>)[key!];
     },
   };
 }
 
-/** Bundle helper — host code that needs all three adapters can call once. */
-export function createOptionsAdapters(
-  optionsService: OptionsService,
-  auroraService: AuroraService,
-): Record<OptionDescriptor['scope'], OptionsAdapter> {
-  return {
-    host: createHostAdapter(optionsService),
-    engine: createEngineAdapter(auroraService),
-    layer: createLayerAdapter(auroraService),
-  };
+/** Path → adapter routing. The single classifier for adapter dispatch. */
+export function adapterFor(
+  path: string,
+  hostAdapter: OptionsAdapter,
+  engineAdapter: OptionsAdapter,
+  layerAdapter: OptionsAdapter,
+): OptionsAdapter {
+  if (path.startsWith('engine.')) return engineAdapter;
+  if (path.startsWith('layers.')) return layerAdapter;
+  return hostAdapter;
 }

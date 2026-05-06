@@ -9,14 +9,14 @@
 
 import m from 'mithril';
 import {
-  getOptionsGrouped,
-  getOptionsFiltered,
   optionGroups,
-  defaultOptions,
+  extractOptionsMeta,
+  optionsSchema,
   type ZeroOptions,
   type FlatOption,
-  type PressureColorOption,
+  type OptionFilter,
 } from '../schemas/options.schema';
+import { auroraOptionsSchema, type PressureColorOption } from '../aurora/options/schema';
 import type { OptionsService } from '../services/options-service';
 import type { PaletteService } from '../services/palette-service';
 import { getByPath } from '../utils/object';
@@ -28,32 +28,17 @@ import { RadioPaletteControl } from './radio-palette-control';
 import { isPaletteId } from '../services/palette-service';
 import { PressureColorControl } from './pressure-color-control';
 import { DialogHeader } from './dialog-header';
-import { getLayerOptionsCatalog } from '../aurora/options/catalog';
-import type { OptionDescriptor } from '../aurora/types/options-descriptor';
-import { createLayerAdapter, createEngineAdapter, type OptionsAdapter } from '../services/aurora-options-adapters';
+import {
+  createHostAdapter,
+  createLayerAdapter,
+  createEngineAdapter,
+  adapterFor,
+  type OptionsAdapter,
+} from '../services/aurora-options-adapters';
 import { CITY_COLORS_RGB } from '../utils/cities-colors';
-import { getEngineOptionsCatalog } from '../aurora/options/catalog';
 
-/** Phases C+D — graticule, cities, wind, pressure, and rain bind through
- *  the aurora catalog/adapter path for non-opacity fields. */
-const AURORA_CATALOG_LAYERS = new Set<string>(['graticule', 'cities', 'wind', 'pressure', 'rain']);
-
-/** Phase E2 — every built-in's opacity slider routes through layerAdapter.
- *  Synthesized descriptors (vs. catalog-authored) because Phase 6 hasn't
- *  promoted earth/sun/temp/clouds/etc. into the layer catalog yet. */
-const OPACITY_LAYER_IDS = ['earth', 'sun', 'graticule', 'cities', 'temp', 'rain', 'clouds', 'pressure', 'wind'] as const;
-
-/** Phase E1 — schema-path → engine-descriptor-key for migrated engine
- *  options. Schema still carries the option (orphan after Phase E1; Phase
- *  F drops it). Aurora-db is the authoritative store. */
-const AURORA_ENGINE_PATHS: Record<string, string> = {
-  'gpu.timeslotsPerLayer': 'timeslotsPerLayer',
-  'debug.showLogo': 'showLogo',
-};
-
-/** Delete aurora-db so a Reset All actually resets aurora-owned options
- *  (post-Phase-C, aurora-db is authoritative for migrated layers). The
- *  worker keeps the DB open so deleteDatabase fires `onblocked` rather
+/** Delete aurora-db so a Reset All actually resets aurora-owned options.
+ *  The worker keeps the DB open so deleteDatabase fires `onblocked` rather
  *  than resolving — the page reload that follows closes the connection,
  *  so we proceed regardless. */
 function deleteAuroraDb(): Promise<void> {
@@ -68,44 +53,52 @@ function deleteAuroraDb(): Promise<void> {
   });
 }
 
-/** Build a `${layerId}.${key}` → descriptor map for catalog-migrated
- *  layers, for fast path lookup inside renderOption. Recomputed per
- *  dialog instance — catalog walk is cheap. */
-function buildAuroraDescriptorMap(): Map<string, OptionDescriptor> {
-  const out = new Map<string, OptionDescriptor>();
-  for (const entry of getLayerOptionsCatalog()) {
-    if (!AURORA_CATALOG_LAYERS.has(entry.id)) continue;
-    for (const d of entry.options) out.set(`${entry.id}.${d.key}`, d);
-  }
-  // Phase E2 — synthesize one opacity descriptor per built-in. Defaults
-  // pulled from schema (transitional; Phase 6 catalog migration / Phase F
-  // schema shrink moves authoritative defaults aurora-side).
-  const schemaDefaults = defaultOptions as Record<string, { opacity?: number }>;
-  for (const id of OPACITY_LAYER_IDS) {
-    out.set(`${id}.opacity`, {
-      scope: 'layer',
-      layerId: id,
-      key: 'opacity',
-      kind: 'number',
-      default: schemaDefaults[id]?.opacity ?? 0.8,
-      min: 0.05,
-      max: 1,
-      step: 0.05,
-    });
-  }
-  return out;
+/** Walk both schemas and merge into one FlatOption[] for the dialog.
+ *  Memoized at module scope — both schemas are stable. */
+let cachedFlat: FlatOption[] | null = null;
+function getAllFlat(): FlatOption[] {
+  if (cachedFlat) return cachedFlat;
+  cachedFlat = [
+    ...extractOptionsMeta(optionsSchema),
+    ...extractOptionsMeta(auroraOptionsSchema),
+  ];
+  return cachedFlat;
 }
 
-/** Build a schema-path → engine-descriptor map for Phase-E1-migrated
- *  engine options. */
-function buildEngineDescriptorMap(): Map<string, OptionDescriptor> {
-  const out = new Map<string, OptionDescriptor>();
-  const byKey = new Map(getEngineOptionsCatalog().map(d => [d.key, d]));
-  for (const [path, key] of Object.entries(AURORA_ENGINE_PATHS)) {
-    const d = byKey.get(key);
-    if (d) out.set(path, d);
+function filterByEntryPoint(flat: FlatOption[], filter: OptionFilter): FlatOption[] {
+  return flat.filter(o => {
+    const f = o.meta.filter;
+    return Array.isArray(f) ? f.includes(filter) : f === filter;
+  });
+}
+
+function groupByGroupId(flat: FlatOption[]): Record<string, FlatOption[]> {
+  const grouped: Record<string, FlatOption[]> = {};
+  for (const opt of flat) {
+    const group = opt.meta.group;
+    if (!grouped[group]) grouped[group] = [];
+    grouped[group]!.push(opt);
   }
-  return out;
+  for (const group of Object.values(grouped)) {
+    group.sort((a, b) => a.meta.order - b.meta.order);
+  }
+  return grouped;
+}
+
+/** Extract the layer id from a path. Host paths use `<id>.<key>`; aurora
+ *  layer paths use `layers.<id>.opacity` or `layers.<id>.opts.<key>`. */
+function layerIdFromPath(path: string): string {
+  const segs = path.split('.');
+  if (segs[0] === 'layers') return segs[1] ?? '';
+  return segs[0] ?? '';
+}
+
+/** Cheap deep equality — JSON.stringify is fine for descriptor-shape
+ *  values (no functions, no cycles). Used by the chip selection check
+ *  and the modified flag for non-primitive defaults. */
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 // ============================================================
@@ -168,24 +161,8 @@ let showAdvanced = false;
 // Helpers
 // ============================================================
 
-function setOptionValue(optionsService: OptionsService, path: string, value: unknown): void {
-  optionsService.update((draft) => {
-    const keys = path.split('.');
-    let current: unknown = draft;
-    for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i];
-      if (key === undefined) return;
-      current = (current as Record<string, unknown>)[key];
-    }
-    const lastKey = keys[keys.length - 1];
-    if (lastKey === undefined) return;
-    (current as Record<string, unknown>)[lastKey] = value;
-  });
-}
-
-function isModified(path: string, currentValue: unknown): boolean {
-  const defaultValue = getByPath(defaultOptions, path);
-  return currentValue !== defaultValue;
+function isModified(adapter: OptionsAdapter, path: string, currentValue: unknown): boolean {
+  return !deepEqual(currentValue, adapter.getDefault(path));
 }
 
 function formatValue(value: number, meta: SliderFields): string {
@@ -201,12 +178,19 @@ function formatValue(value: number, meta: SliderFields): string {
 // Control renderers
 // ============================================================
 
-function renderControl(opt: FlatOption, currentValue: unknown, optionsService: OptionsService, paletteService: PaletteService, options: ZeroOptions): m.Children {
+function renderControl(
+  opt: FlatOption,
+  currentValue: unknown,
+  adapter: OptionsAdapter,
+  optionsService: OptionsService,
+  paletteService: PaletteService,
+  options: ZeroOptions,
+): m.Children {
   const { path, meta } = opt;
 
-  // Special handling for palette selection
+  // Palette selector — only host paths today (`temp.palette`).
   if (path.endsWith('.palette')) {
-    const layerId = path.split('.')[0]!;
+    const layerId = layerIdFromPath(path);
     const palettes = paletteService.getPalettes(layerId);
 
     if (!isPaletteId(currentValue)) return null;
@@ -215,19 +199,18 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
       palettes,
       selected: currentValue,
       onSelect: (paletteId) => {
-        setOptionValue(optionsService, path, paletteId);
+        adapter.write(path, paletteId);
         paletteService.setPalette(layerId, paletteId);
       }
     });
   }
 
-  // Special handling for pressure colors
-  if (path === 'pressure.colors') {
+  // Pressure colors — discriminated union, special control. Aurora path:
+  // `layers.pressure.opts.colors`.
+  if (path === 'layers.pressure.opts.colors') {
     return m(PressureColorControl, {
       value: currentValue as PressureColorOption,
-      onChange: (value: PressureColorOption) => {
-        setOptionValue(optionsService, path, value);
-      }
+      onChange: (value: PressureColorOption) => adapter.write(path, value),
     });
   }
 
@@ -239,9 +222,7 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
         m('input[type=checkbox]', {
           checked: currentValue as boolean,
           disabled,
-          onchange: (e: Event) => {
-            setOptionValue(optionsService, path, (e.target as HTMLInputElement).checked);
-          }
+          onchange: (e: Event) => adapter.write(path, (e.target as HTMLInputElement).checked),
         }),
         m('span.track')
       ]);
@@ -254,9 +235,7 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
           max: meta.max,
           step: meta.step,
           value: currentValue as number,
-          oninput: (e: Event) => {
-            setOptionValue(optionsService, path, parseFloat((e.target as HTMLInputElement).value));
-          }
+          oninput: (e: Event) => adapter.write(path, parseFloat((e.target as HTMLInputElement).value)),
         }),
         m('span.value', formatValue(currentValue as number, meta))
       ]);
@@ -268,17 +247,20 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
         (!o.maxCores || isLocalhost || navigator.hardwareConcurrency >= o.maxCores)
       );
       return m('select.select', {
-        value: currentValue,
+        value: String(currentValue),
         onchange: (e: Event) => {
-          setOptionValue(optionsService, path, (e.target as HTMLSelectElement).value);
+          const next = (e.target as HTMLSelectElement).value;
+          // Coerce string back to descriptor's value type via meta options.
+          const match = filteredOptions.find(o => String(o.value) === next);
+          adapter.write(path, match ? match.value : next);
         }
       }, filteredOptions.map(o =>
-        m('option', { value: o.value }, o.label)
+        m('option', { value: String(o.value) }, o.label)
       ));
     }
 
     case 'radio': {
-      const layerId = path.split('.')[0]!;
+      const layerId = layerIdFromPath(path);
       const isLoading = optionsService.loadingLayers.value.has(layerId);
       const groupDisabled = meta.disabled === true
         || (meta.disabledWhen !== undefined && getByPath(options, meta.disabledWhen.path) === meta.disabledWhen.equals);
@@ -295,10 +277,10 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
           }, [
             m('input[type=radio]', {
               name: path,
-              value: o.value,
+              value: String(o.value),
               checked: currentValue === o.value,
               disabled: isDisabled,
-              onchange: () => setOptionValue(optionsService, path, o.value)
+              onchange: () => adapter.write(path, o.value),
             }),
             m('span', o.label)
           ]);
@@ -307,19 +289,22 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
     }
 
     case 'color-chips': {
-      return m('div.color-chips', meta.options.map((o: { value: string; color: string }) =>
+      // Aurora persists RGB triplet; chip metadata carries named-value
+      // (`'white'`, etc.) → look up triplet via CITY_COLORS_RGB at click.
+      const rgb = currentValue as [number, number, number];
+      return m('div.color-chips', meta.options.map((o: { value: string; label: string; color: string }) =>
         m('button.color-chip', {
           key: o.value,
-          class: currentValue === o.value ? 'selected' : '',
+          class: deepEqual(rgb, CITY_COLORS_RGB[o.value as keyof typeof CITY_COLORS_RGB]) ? 'selected' : '',
           style: { backgroundColor: o.color },
-          title: o.value,
-          onclick: () => setOptionValue(optionsService, path, o.value),
+          title: o.label,
+          onclick: () => adapter.write(path, CITY_COLORS_RGB[o.value as keyof typeof CITY_COLORS_RGB]),
         })
       ));
     }
 
     case 'pressure-colors':
-      // Handled by special case before switch
+      // Handled by the early special-case branch above.
       return null;
 
     case 'layer-toggle': {
@@ -330,9 +315,7 @@ function renderControl(opt: FlatOption, currentValue: unknown, optionsService: O
         m('label.toggle', [
           m('input[type=checkbox]', {
             checked: currentValue as boolean,
-            onchange: (e: Event) => {
-              setOptionValue(optionsService, path, (e.target as HTMLInputElement).checked);
-            }
+            onchange: (e: Event) => adapter.write(path, (e.target as HTMLInputElement).checked),
           }),
           m('span.track')
         ])
@@ -371,175 +354,28 @@ function renderPrefetchSizeEstimate(options: ZeroOptions): m.Children {
   ]);
 }
 
-/** Cheap deep equality for descriptor defaults — covers arrays/objects
- *  (cities color triplet, pressure colors discriminated union) without a
- *  utility import. JSON-stringify is fine for the descriptor-shape values
- *  we author (no functions, no cycles). */
-function deepEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
-/** Look up a label hint in the schema meta for a descriptor enum value.
- *  Schema and descriptor types may diverge (e.g. pressure.spacing schema
- *  has `'4'`, descriptor has `4`), so coerce via String() when matching.
- *  Falls back to the value itself when no schema meta options exist. */
-function labelForEnumValue(opt: FlatOption, value: unknown, unit?: string): string {
-  const opts = (opt.meta as { options?: { value: unknown; label: string }[] }).options;
-  if (opts) {
-    const match = opts.find(o => String(o.value) === String(value));
-    if (match) return match.label;
-  }
-  return unit ? `${value} ${unit}` : String(value);
-}
-
-/** Aurora-catalog-driven control. One generic control per `kind`; shared
- *  row chrome (label, hint, reset) matches the schema-driven path so the
- *  pilot looks identical. */
-function renderAuroraControl(
-  opt: FlatOption,
-  descriptor: OptionDescriptor,
-  adapter: OptionsAdapter,
-): m.Children {
-  const value = adapter.read(descriptor);
-  const modified = !deepEqual(value, descriptor.default);
-
-  let control: m.Children;
-
-  // Enum descriptors render as radio or select based on the schema's
-  // control hint (transitional — Phase F drops the schema, descriptors
-  // will then need to carry the hint themselves).
-  if (descriptor.enum) {
-    if (opt.meta.control === 'select') {
-      control = m('select.select', {
-        value: String(value),
-        onchange: (e: Event) => {
-          const next = (e.target as HTMLSelectElement).value;
-          // Coerce back to descriptor's value type using the enum.
-          const match = descriptor.enum!.find(o => String(o.value) === next);
-          if (match) adapter.write(descriptor, match.value);
-        },
-      }, descriptor.enum.map(o =>
-        m('option', { value: String(o.value), key: String(o.value) }, labelForEnumValue(opt, o.value, descriptor.unit))
-      ));
-    } else {
-      control = m('div.radio-group', descriptor.enum.map(o => {
-        const selected = value === o.value;
-        return m('label.radio', {
-          key: String(o.value),
-          class: selected ? 'selected' : '',
-        }, [
-          m('input[type=radio]', {
-            name: `${descriptor.layerId ?? 'engine'}.${descriptor.key}`,
-            value: String(o.value),
-            checked: selected,
-            onchange: () => adapter.write(descriptor, o.value),
-          }),
-          m('span', labelForEnumValue(opt, o.value, descriptor.unit)),
-        ]);
-      }));
-    }
-  } else switch (descriptor.kind) {
-    case 'number':
-    case 'integer': {
-      const min = descriptor.min!;
-      const max = descriptor.max!;
-      const step = descriptor.step!;
-      control = m('div.slider', [
-        m('input[type=range]', {
-          min, max, step,
-          value: value as number,
-          oninput: (e: Event) => {
-            const next = parseFloat((e.target as HTMLInputElement).value);
-            adapter.write(descriptor, next);
-          },
-        }),
-        m('span.value', formatValue(value as number, { min, max, step })),
-      ]);
-      break;
-    }
-
-    case 'boolean': {
-      control = m('label.toggle', [
-        m('input[type=checkbox]', {
-          checked: value as boolean,
-          onchange: (e: Event) => adapter.write(descriptor, (e.target as HTMLInputElement).checked),
-        }),
-        m('span.track'),
-      ]);
-      break;
-    }
-
-    case 'rgb': {
-      // Cities color chips. Aurora persists the RGB triplet; presentation
-      // (named chips, hex previews) is host-side via schema meta + the
-      // CITY_COLORS_RGB dictionary. Phase F shrinks the schema; descriptor
-      // will then need to carry chip metadata itself.
-      const chipOpts = (opt.meta as { options?: { value: keyof typeof CITY_COLORS_RGB; label: string; color: string }[] }).options;
-      const rgb = value as [number, number, number];
-      control = m('div.color-chips', chipOpts?.map(o =>
-        m('button.color-chip', {
-          key: o.value,
-          class: deepEqual(rgb, CITY_COLORS_RGB[o.value]) ? 'selected' : '',
-          style: { backgroundColor: o.color },
-          title: o.label,
-          onclick: () => adapter.write(descriptor, CITY_COLORS_RGB[o.value]),
-        })
-      ));
-      break;
-    }
-
-    case 'pressureColors': {
-      control = m(PressureColorControl, {
-        value: value as PressureColorOption,
-        onChange: (v: PressureColorOption) => adapter.write(descriptor, v),
-      });
-      break;
-    }
-
-    default:
-      control = m('span.value', `(${descriptor.kind} not yet implemented)`);
-  }
-
-  return m('div.row', { key: opt.path, 'data-testid': opt.path }, [
-    m('div.info', [
-      m('label.label', opt.meta.label),
-      opt.meta.description ? m('span.hint', opt.meta.description) : null,
-    ].filter(Boolean)),
-    m('div.controls', [
-      m('button.reset', {
-        title: 'Reset to default',
-        onclick: () => adapter.write(descriptor, descriptor.default),
-        style: { visibility: modified ? 'visible' : 'hidden' },
-      }, '↺'),
-      control,
-    ]),
-  ]);
-}
-
 function renderOption(
   opt: FlatOption,
   options: ZeroOptions,
   optionsService: OptionsService,
   paletteService: PaletteService,
-  auroraDescByPath: Map<string, OptionDescriptor>,
-  engineDescByPath: Map<string, OptionDescriptor>,
-  layerAdapter: OptionsAdapter,
+  hostAdapter: OptionsAdapter,
   engineAdapter: OptionsAdapter,
+  layerAdapter: OptionsAdapter,
 ): m.Children {
-  // Phases C-E1 — aurora-owned descriptor takes the catalog+adapter path.
-  const layerDescriptor = auroraDescByPath.get(opt.path);
-  if (layerDescriptor) {
-    return renderAuroraControl(opt, layerDescriptor, layerAdapter);
-  }
-  const engineDescriptor = engineDescByPath.get(opt.path);
-  if (engineDescriptor) {
-    return renderAuroraControl(opt, engineDescriptor, engineAdapter);
-  }
-
-  const currentValue = getByPath(options, opt.path);
-  const modified = isModified(opt.path, currentValue);
+  const adapter = adapterFor(opt.path, hostAdapter, engineAdapter, layerAdapter);
+  const currentValue = adapter.read(opt.path);
+  const modified = isModified(adapter, opt.path, currentValue);
   const isPalette = opt.path.endsWith('.palette');
+
+  // Reset writes the default through the same adapter that owns the path.
+  // For host paths this still routes through optionsService.update via
+  // hostAdapter.write; for aurora paths it dispatches to the worker.
+  const resetButton = m('button.reset', {
+    title: 'Reset to default',
+    onclick: () => adapter.write(opt.path, adapter.getDefault(opt.path)),
+    style: { visibility: modified ? 'visible' : 'hidden' }
+  }, '↺');
 
   return m('div.row', { key: opt.path, class: isPalette ? 'palette-row' : '', 'data-testid': opt.path }, [
     m('div.info', isPalette ? [
@@ -547,22 +383,14 @@ function renderOption(
         m('label.label', opt.meta.label),
         opt.meta.description ? m('span.hint', opt.meta.description) : null
       ]),
-      m('button.reset', {
-        title: 'Reset to default',
-        onclick: () => optionsService.reset(opt.path),
-        style: { visibility: modified ? 'visible' : 'hidden' }
-      }, '↺')
+      resetButton,
     ] : [
       m('label.label', opt.meta.label),
       opt.meta.description ? m('span.hint', opt.meta.description) : null
     ].filter(Boolean)),
     m('div.controls', [
-      !isPalette ? m('button.reset', {
-        title: 'Reset to default',
-        onclick: () => optionsService.reset(opt.path),
-        style: { visibility: modified ? 'visible' : 'hidden' }
-      }, '↺') : null,
-      renderControl(opt, currentValue, optionsService, paletteService, options)
+      !isPalette ? resetButton : null,
+      renderControl(opt, currentValue, adapter, optionsService, paletteService, options),
     ].filter(Boolean))
   ]);
 }
@@ -610,13 +438,12 @@ function renderGroup(
   optionsService: OptionsService,
   paletteService: PaletteService,
   showAdvancedOptions: boolean,
-  auroraDescByPath: Map<string, OptionDescriptor>,
-  engineDescByPath: Map<string, OptionDescriptor>,
-  layerAdapter: OptionsAdapter,
+  hostAdapter: OptionsAdapter,
   engineAdapter: OptionsAdapter,
+  layerAdapter: OptionsAdapter,
   skipGroupHeader: boolean = false
 ): m.Children {
-  const ro = (opt: FlatOption) => renderOption(opt, options, optionsService, paletteService, auroraDescByPath, engineDescByPath, layerAdapter, engineAdapter);
+  const ro = (opt: FlatOption) => renderOption(opt, options, optionsService, paletteService, hostAdapter, engineAdapter, layerAdapter);
   const group = optionGroups[groupId as keyof typeof optionGroups];
   if (!group) return null;
 
@@ -638,7 +465,7 @@ function renderGroup(
   if (groupId === 'layers' && !skipGroupHeader) {
     const byLayer = new Map<string, FlatOption[]>();
     for (const opt of visibleOptions) {
-      const layerId = opt.path.split('.')[0]!;
+      const layerId = layerIdFromPath(opt.path);
       if (!byLayer.has(layerId)) byLayer.set(layerId, []);
       byLayer.get(layerId)!.push(opt);
     }
@@ -722,12 +549,10 @@ export interface OptionsDialogAttrs {
 
 export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: initialAttrs }) => {
   let windowEl: HTMLElement | null = null;
-  // Built once per dialog instance — descriptors and adapters are
-  // stable closures over auroraService.optionsMirror.
-  const auroraDescByPath = buildAuroraDescriptorMap();
-  const engineDescByPath = buildEngineDescriptorMap();
-  const layerAdapter = createLayerAdapter(initialAttrs.auroraService);
+  // Built once per dialog instance — adapters close over service refs.
+  const hostAdapter = createHostAdapter(initialAttrs.optionsService);
   const engineAdapter = createEngineAdapter(initialAttrs.auroraService);
+  const layerAdapter = createLayerAdapter(initialAttrs.auroraService);
 
   return {
     view({ attrs }) {
@@ -743,28 +568,13 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: i
     const filter = dialogService.getPayload('options')?.filter;
     const options = optionsService.options.value;
 
-    // Get options based on filter
-    let filteredGroups: Record<string, FlatOption[]>;
-
-    if (filter && filter !== 'global') {
-      // Filter mode: show only options matching the filter
-      const filtered = getOptionsFiltered(filter);
-      filteredGroups = {};
-      for (const opt of filtered) {
-        const group = opt.meta.group;
-        if (!filteredGroups[group]) filteredGroups[group] = [];
-        filteredGroups[group].push(opt);
-      }
-    } else {
-      // Global mode: show all options (respecting filter includes 'global')
-      const allOptions = getOptionsFiltered('global');
-      filteredGroups = {};
-      for (const opt of allOptions) {
-        const group = opt.meta.group;
-        if (!filteredGroups[group]) filteredGroups[group] = [];
-        filteredGroups[group].push(opt);
-      }
-    }
+    // Walk both schemas (host + aurora) into one FlatOption[] then
+    // filter/group by entry-point and group id.
+    const allFlat = getAllFlat();
+    const filteredFlat = filter && filter !== 'global'
+      ? filterByEntryPoint(allFlat, filter)
+      : filterByEntryPoint(allFlat, 'global');
+    const filteredGroups = groupByGroupId(filteredFlat);
 
     // Sort groups by order (exclude 'advanced')
     const sortedGroupIds = Object.keys(filteredGroups)
@@ -776,7 +586,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: i
       });
 
     // Check for advanced options
-    const grouped = getOptionsGrouped();
+    const grouped = groupByGroupId(allFlat);
     const advancedGroup = grouped['advanced'];
     const hasAdvanced = !filter && advancedGroup !== undefined && advancedGroup.length > 0;
 
@@ -827,7 +637,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: i
           ...sortedGroupIds.map(groupId => {
             const groupOpts = filteredGroups[groupId];
             if (!groupOpts) return null;
-            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, showAdvanced, auroraDescByPath, engineDescByPath, layerAdapter, engineAdapter, !!filter && filter !== 'global');
+            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, showAdvanced, hostAdapter, engineAdapter, layerAdapter, !!filter && filter !== 'global');
           }).filter(Boolean),
 
           // Danger zone (only in global view)
@@ -886,7 +696,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: i
 
           // Advanced group (only in global view)
           (!filter || filter === 'global') && showAdvanced && advancedGroup
-            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, true, auroraDescByPath, engineDescByPath, layerAdapter, engineAdapter)
+            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, true, hostAdapter, engineAdapter, layerAdapter)
             : null
         ].filter(Boolean)),
         m('div.footer', [

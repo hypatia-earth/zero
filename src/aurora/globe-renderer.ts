@@ -21,7 +21,7 @@ import type { AuroraDataEvent, AuroraLayerContext, AuroraLayerFrame } from './ty
 // Re-export for consumers
 export type { PassTimings } from './gpu-timestamp';
 import type { LayerState } from './types/layer-state';
-import { PRESSURE_COLOR_DEFAULT, type PressureColorOption } from '../schemas/options.schema';
+import { PRESSURE_COLOR_DEFAULT, type PressureColorOption } from './options/pressure-colors-default';
 import { PALETTE_IDS, PALETTES, type PaletteId } from '../services/palette-service';
 
 // Layer indices for uniform array access (must match registration order in BUILT_IN_LAYERS)
