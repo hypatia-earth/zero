@@ -12,8 +12,6 @@ export const layer = defineLayer('temp',
   ),
   withOptions([
     'temp.enabled',
-    'temp.opacity',
-    'temp.palette',
   ]),
   withBlend('blendTemp'),
   withShader('main', shaderCode),

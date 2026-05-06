@@ -16,6 +16,7 @@ import type { OptionsService } from '../../services/options-service';
 import type { ThemeService } from '../../services/theme-service';
 import type { StateService } from '../../services/state-service';
 import type { LayerService } from '../../services/layer/layer-service';
+import type { AuroraService } from '../../services/aurora-service';
 import { diskUnwarp } from './timebar-math';
 import { renderTimebar, getTimebarHeight } from './timebar-renderer';
 
@@ -26,6 +27,7 @@ interface TimeBarPanelAttrs {
   timestepService: TimestepService;
   themeService: ThemeService;
   layerService: LayerService;
+  auroraService: AuroraService;
 }
 
 export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode) => {
@@ -42,6 +44,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
         initialVnode.attrs.stateService.viewState.value;
         initialVnode.attrs.slotService.slotsVersion.value;
         initialVnode.attrs.timestepService.state.value;
+        initialVnode.attrs.auroraService.optionsMirror.value;
         m.redraw();
       });
       globalThis.addEventListener('resize', onResize);
@@ -53,7 +56,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     },
 
     view({ attrs }) {
-      const { optionsService, stateService, slotService, timestepService, themeService, layerService } = attrs;
+      const { optionsService, stateService, slotService, timestepService, themeService, layerService, auroraService } = attrs;
 
       // Derive window
       const window = {
@@ -169,7 +172,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       const sunEnabled = opts.sun.enabled;
 
       // Calculate window for knob rendering (based on option, not actual slots)
-      const numSlots = parseInt(opts.gpu.timeslotsPerLayer, 10);
+      const numSlots = auroraService.optionsMirror.value!.engine.timeslotsPerLayer;
       const windowTimesteps = timestepService.getWindow(viewState.time, numSlots);
       const wantedSet = new Set<string>();
       for (const ts of windowTimesteps) {

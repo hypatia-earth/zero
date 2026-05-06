@@ -7,7 +7,6 @@
 
 import { z } from 'zod';
 import type { TLayer } from '../config/types';
-import { getPaletteIdsEnum } from '../services/palette-service';
 
 // ============================================================
 // UI Metadata Types
@@ -156,7 +155,7 @@ export const optionGroups = {
 // ============================================================
 
 export const optionsSchema = z.object({
-  _version: z.number().default(2),
+  _version: z.number().default(3),
 
   // ----------------------------------------------------------
   // Interface Settings
@@ -179,30 +178,6 @@ export const optionsSchema = z.object({
   // GPU Settings
   // ----------------------------------------------------------
   gpu: z.object({
-    timeslotsPerLayer: opt(
-      z.enum(['2', '3', '4', '8', '16', '32', '64', '128', '256', '512']).default('4'),
-      {
-        label: 'Timeslots per layer',
-        description: 'More timeslots = smoother time scrubbing, more GPU memory',
-        group: 'performance',
-        filter: ['global', 'gpu', 'queue'],
-        order: 2,
-        control: 'select',
-        options: [
-          // Memory = slots × 27 MB × 4 slabs (temp + pressure + wind U/V)
-          { value: '2', label: '2 (216 MB) - Stress test', localhostOnly: true },
-          { value: '3', label: '3 (324 MB) - Minimum' },
-          { value: '4', label: '4 (432 MB) - Usable' },
-          { value: '8', label: '8 (864 MB) - Comfortable' },
-          { value: '16', label: '16 (1.7 GB) - Smooth' },
-          { value: '32', label: '32 (3.5 GB) - Standard' },
-          { value: '64', label: '64 (6.9 GB) - Extended' },
-          { value: '128', label: '128 (13.8 GB) - Pro' },
-          { value: '256', label: '256 (27.6 GB) - Ultra' },
-          { value: '512', label: '512 (55 GB) - Max' },
-        ],
-      }
-    ),
     showGpuStats: opt(
       z.boolean().default(false),
       {
@@ -570,7 +545,7 @@ export const optionsSchema = z.object({
   }),
 
   // ----------------------------------------------------------
-  // Layer: Temperature (palette stays here until F-B; opacity in aurora-db)
+  // Layer: Temperature (only `enabled` here; palette/opacity in aurora-db)
   // ----------------------------------------------------------
   temp: z.object({
     enabled: opt(
@@ -583,22 +558,6 @@ export const optionsSchema = z.object({
         order: 10,
         control: 'toggle',
         persist: 'url',
-      }
-    ),
-    palette: opt(
-      z.enum(getPaletteIdsEnum('temp')).default('temp-classic'),
-      {
-        label: 'Color palette',
-        description: 'Visual color scheme for temperature data',
-        group: 'layers',
-        filter: ['global', 'temp'],
-        order: 10.3,
-        control: 'select',
-        options: [
-          { value: 'temp-classic', label: 'Classic' },
-          { value: 'temp-hypatia', label: 'Hypatia' },
-          { value: 'simple-gradient', label: 'Gradient' },
-        ],
       }
     ),
   }),
@@ -672,7 +631,7 @@ export const optionsSchema = z.object({
   }),
 
   // ----------------------------------------------------------
-  // Layer: Wind (seedCount stays here until F-B; speed/opacity in aurora-db)
+  // Layer: Wind (only `enabled` here; seedCount/speed/opacity in aurora-db)
   // ----------------------------------------------------------
   wind: z.object({
     enabled: opt(
@@ -685,24 +644,6 @@ export const optionsSchema = z.object({
         order: 14,
         control: 'toggle',
         persist: 'url',
-      }
-    ),
-    seedCount: opt(
-      z.union([z.literal(8192), z.literal(16384), z.literal(32768), z.literal(49152), z.literal(65536)]).default(8192),
-      {
-        label: 'Wind line count',
-        description: 'Number of animated wind lines (affects performance)',
-        group: 'layers',
-        filter: ['global', 'wind'],
-        order: 14,
-        control: 'radio',
-        options: [
-          { value: 8192, label: '8K' },
-          { value: 16384, label: '16K' },
-          { value: 32768, label: '32K' },
-          { value: 49152, label: '48K' },
-          { value: 65536, label: '64K' },
-        ],
       }
     ),
   }),
@@ -1032,9 +973,9 @@ export const optionsSchema = z.object({
 export type ZeroOptions = z.infer<typeof optionsSchema>;
 
 export const defaultOptions: ZeroOptions = {
-  _version: 2,
+  _version: 3,
   interface: { autocloseModal: true },
-  gpu: { timeslotsPerLayer: '4', showGpuStats: false, workerPoolSize: '4', minDownloads: 4, maxDownloads: 12 },
+  gpu: { showGpuStats: false, workerPoolSize: '4', minDownloads: 4, maxDownloads: 12 },
   viewport: {
     physicsModel: 'inertia',
     mass: 5,
@@ -1058,11 +999,11 @@ export const defaultOptions: ZeroOptions = {
   sun: { enabled: true },
   graticule: { enabled: true },
   cities: { enabled: false },
-  temp: { enabled: true, palette: 'temp-classic' },
+  temp: { enabled: true },
   rain: { enabled: false },
   clouds: { enabled: false },
   humidity: { enabled: false, opacity: 0.6 },
-  wind: { enabled: false, seedCount: 8192 },
+  wind: { enabled: false },
   pressure: { enabled: false },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },

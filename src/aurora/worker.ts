@@ -14,7 +14,7 @@ import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
 import { generateIsobarLevels } from './built_ins/pressure/pressure-layer';
 import { LayerStore } from './layer-store';
 import type { PressureColorOption } from './options/schema';
-import type { TBuiltInLayer, TLayer } from '../config/types';
+import type { TLayer } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import { getSunDirection } from '../utils/sun-position';
 import { shaderComposer, activeParamBindings, type ComposedShaders } from './shader-composer';
@@ -55,8 +55,6 @@ export interface AuroraAssets {
 
 export interface AuroraConfig {
   cameraConfig: CameraConfig;
-  timeslotsPerLayer: number;
-  windLineCount: number;
   /** Param configs for buffer management (keyed by param name) */
   paramConfigs: Array<{ param: string; sizeMB: number }>;
   /** Built-in layer declarations (sent from main thread) */
@@ -99,7 +97,6 @@ export type AuroraRequest =
   | { type: 'registerUserLayer'; layer: LayerDeclaration }
   | { type: 'unregisterUserLayer'; layerId: string }
   | { type: 'setUserLayerOptions'; layerIndex: number; enabled?: boolean; opacity?: number; paletteIndex?: number; paletteRange?: [number, number] }
-  | { type: 'updatePalette'; layer: string; paletteId: PaletteId; range?: [number, number] }
   | { type: 'captureFrame' }
   | { type: 'recordBatch'; camera: CameraSnapshot; time: number; fixedDtMs: number; totalFrames: number }
   | { type: 'cleanup' };
@@ -139,6 +136,7 @@ let canvas: OffscreenCanvas | null = null;
  *  (Phase 9 cleanup); these reflect what the host actually drives today. */
 type GraticuleHostOpts = Pick<GraticuleOpts, 'fontSize' | 'lineWidth'>;
 type CitiesHostOpts = { color: [number, number, number] };
+type TempHostOpts = { palette: PaletteId };
 type WindHostOpts = { seedCount: number; speed: number };
 type PressureHostOpts = {
   spacing: number;       // hPa (parsed from string at the adapter)
@@ -181,6 +179,21 @@ function applyLayerSideEffects(id: string, prev: { opts: unknown } | undefined, 
       const prevOpts = prev?.opts as WindHostOpts | undefined;
       if (newOpts.seedCount !== prevOpts?.seedCount) {
         renderer.setWindSeedCount(newOpts.seedCount);
+      }
+      break;
+    }
+    case 'temp': {
+      // Palette is aurora-owned post-F-B. Range is layer-specific knowledge
+      // (was hardcoded in host's gpu-init asset block); reapply on first
+      // call. Subsequent calls only need to update the palette ID.
+      const newOpts = next.opts as TempHostOpts;
+      const prevOpts = prev?.opts as TempHostOpts | undefined;
+      if (!layerRegistry) break;
+      const layerIndex = layerRegistry.getLayerIndex('temp');
+      if (isNaN(layerIndex)) break;
+      renderer.setLayerPalette(layerIndex, 0, newOpts.palette);
+      if (prevOpts === undefined) {
+        renderer.setLayerPaletteRange(layerIndex, -40, 50);
       }
       break;
     }
@@ -656,13 +669,10 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   // F-A — schema-derived defaults arrive in the init message; main thread
   // computes them via `auroraOptionsSchema.parse({})` so this worker bundle
   // never touches Zod. Construct AuroraOptions now, then run its IDB merge:
-  // `defaults < seeds < persisted`. Wind seedCount + engine timeslotsPerLayer
-  // still seeded from host config until F-B moves them to aurora ownership.
+  // `defaults < seeds < persisted`. Post-F-B, no host seeds — aurora-db is
+  // authoritative for all engine + layer fields.
   options = new AuroraOptions({ dbName: 'aurora-db', defaults: data.auroraDefaults });
-  await options.init({
-    engine: { timeslotsPerLayer: config.timeslotsPerLayer },
-    layers: { wind: { opts: { seedCount: config.windLineCount } } },
-  });
+  await options.init({});
 
   // Create and initialize renderer
   // Pass dpr from main thread — workers may not have devicePixelRatio (Chrome)
@@ -678,13 +688,9 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
   const layers = layerRegistry.getAll();
   const composedShaders = await shaderComposer.compose(layers);
 
-  // Phase E1: aurora-db is authoritative for buffer-sizing options. The
-  // host-supplied config.{timeslotsPerLayer,windLineCount} now serve as
-  // first-run fallbacks via init seeds; persisted aurora-db wins for
-  // subsequent reloads. Use options.read() for downstream allocation.
+  // Aurora-db is authoritative for buffer-sizing options post-F-B.
   const initEngine = options.read().engine;
-  const initWindSeedCount = (options.read().layers.wind?.opts as { seedCount?: number } | undefined)?.seedCount
-    ?? config.windLineCount;
+  const initWindSeedCount = (options.read().layers.wind!.opts as WindHostOpts).seedCount;
 
   await renderer.initialize(
     initEngine.timeslotsPerLayer,
@@ -1068,17 +1074,6 @@ function handleSetUserLayerOptions(data: Extract<AuroraRequest, { type: 'setUser
   }
 }
 
-function handleUpdatePalette(data: Extract<AuroraRequest, { type: 'updatePalette' }>): void {
-  const { layer, paletteId, range } = data;
-  if (!renderer || !layerRegistry) return;
-  const layerIndex = layerRegistry.getLayerIndex(layer as TBuiltInLayer);  // QC-OK: palette updates only for built-in layers
-  if (isNaN(layerIndex)) return;
-  renderer.setLayerPalette(layerIndex, 0, paletteId);
-  if (range) {
-    renderer.setLayerPaletteRange(layerIndex, range[0], range[1]);
-  }
-}
-
 // Deferred capture: set flag, actual capture happens after next render
 const { handleCaptureFrame, flushCaptureFrame } = createCaptureHandler(() => renderer);
 
@@ -1146,7 +1141,7 @@ function handleSetLayerEnabled(data: Extract<AuroraRequest, { type: 'setLayerEna
   layerEnabled.set(data.id, data.value);
 }
 
-const KNOWN_LAYER_IDS = new Set(['graticule', 'cities', 'wind', 'pressure', 'rain']);
+const KNOWN_LAYER_IDS = new Set(['graticule', 'cities', 'temp', 'wind', 'pressure', 'rain']);
 
 function handleSetLayerOptions(data: Extract<AuroraRequest, { type: 'setLayerOptions' }>): void {
   if (!KNOWN_LAYER_IDS.has(data.id)) {
@@ -1223,7 +1218,6 @@ const handlers: { [K in AuroraRequest['type']]: MessageHandler<K> } = {
   registerUserLayer: handleRegisterUserLayer,
   unregisterUserLayer: handleUnregisterUserLayer,
   setUserLayerOptions: handleSetUserLayerOptions,
-  updatePalette: handleUpdatePalette,
   captureFrame: handleCaptureFrame,
   recordBatch: handleRecordBatch,
   cleanup: handleCleanup,

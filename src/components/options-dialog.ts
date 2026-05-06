@@ -188,7 +188,7 @@ function renderControl(
 ): m.Children {
   const { path, meta } = opt;
 
-  // Palette selector — only host paths today (`temp.palette`).
+  // Palette selector — aurora paths post-F-B (`layers.temp.opts.palette`).
   if (path.endsWith('.palette')) {
     const layerId = layerIdFromPath(path);
     const palettes = paletteService.getPalettes(layerId);
@@ -200,7 +200,6 @@ function renderControl(
       selected: currentValue,
       onSelect: (paletteId) => {
         adapter.write(path, paletteId);
-        paletteService.setPalette(layerId, paletteId);
       }
     });
   }

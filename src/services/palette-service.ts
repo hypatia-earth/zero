@@ -13,7 +13,6 @@
 
 import { signal } from '@preact/signals-core';
 import palettesJson from '../config/palettes.json';
-import type { ZeroOptions } from '../schemas/options.schema';
 
 // ============================================================
 // Types
@@ -110,18 +109,6 @@ export class PaletteService {
 
   /** Signal that increments when any palette changes (for reactivity) */
   readonly paletteChanged = signal<number>(0);
-
-  /**
-   * Restore persisted palette selections from options object.
-   * Scans for any `*.palette` field that is a valid PaletteId.
-   */
-  restoreFromOptions(options: ZeroOptions): void {
-    for (const [group, layerOpts] of Object.entries(options)) {
-      if (typeof layerOpts === 'object' && layerOpts !== null && 'palette' in layerOpts && isPaletteId(layerOpts.palette)) {
-        this.setPalette(group, layerOpts.palette);
-      }
-    }
-  }
 
   /**
    * Get available palettes for a layer (by group)

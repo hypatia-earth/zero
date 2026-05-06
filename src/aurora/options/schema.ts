@@ -20,6 +20,7 @@
 import { z } from 'zod';
 import { opt } from '../../schemas/options.schema';
 import { PRESSURE_COLOR_DEFAULT } from './pressure-colors-default';
+import { getPaletteIdsEnum } from '../../services/palette-service';
 
 // ============================================================
 // Pressure color option (moved from host's options.schema in F-A — schema
@@ -63,8 +64,6 @@ export const auroraOptionsSchema = z.object({
   // Engine — engine-wide settings persisted in aurora-db.
   // ----------------------------------------------------------
   engine: z.object({
-    // Hidden in dialog until F-B (host's `gpu.timeslotsPerLayer` is the
-    // visible row; aurora's entry exists so aurora-db carries the shape).
     timeslotsPerLayer: opt(
       z.union([
         z.literal(2), z.literal(3), z.literal(4), z.literal(8), z.literal(16),
@@ -72,6 +71,7 @@ export const auroraOptionsSchema = z.object({
       ]).default(4),
       {
         label: 'Timeslots per layer',
+        description: 'More timeslots = smoother time scrubbing, more GPU memory',
         group: 'performance',
         filter: ['global', 'gpu', 'queue'],
         order: 2,
@@ -88,7 +88,6 @@ export const auroraOptionsSchema = z.object({
           { value: 256, label: '256 (27.6 GB) - Ultra' },
           { value: 512, label: '512 (55 GB) - Max' },
         ],
-        hidden: true,
       },
     ),
     useTimestampQueries: opt(
@@ -243,7 +242,24 @@ export const auroraOptionsSchema = z.object({
           min: 0.05, max: 1, step: 0.05,
         },
       ),
-      opts: z.object({}).default({}),
+      opts: z.object({
+        palette: opt(
+          z.enum(getPaletteIdsEnum('temp')).default('temp-classic'),
+          {
+            label: 'Color palette',
+            description: 'Visual color scheme for temperature data',
+            group: 'layers',
+            filter: ['global', 'temp'],
+            order: 10.3,
+            control: 'select',
+            options: [
+              { value: 'temp-classic', label: 'Classic' },
+              { value: 'temp-hypatia', label: 'Hypatia' },
+              { value: 'simple-gradient', label: 'Gradient' },
+            ],
+          },
+        ),
+      }),
     }),
 
     rain: z.object({
@@ -304,8 +320,6 @@ export const auroraOptionsSchema = z.object({
         },
       ),
       opts: z.object({
-        // Hidden in dialog until F-B (host's `wind.seedCount` is the visible
-        // row; aurora's entry exists so aurora-db carries the shape).
         seedCount: opt(
           z.union([
             z.literal(8192), z.literal(16384), z.literal(32768),
@@ -325,7 +339,6 @@ export const auroraOptionsSchema = z.object({
               { value: 49152, label: '48K' },
               { value: 65536, label: '64K' },
             ],
-            hidden: true,
           },
         ),
         speed: opt(
@@ -427,9 +440,10 @@ export type AuroraOptionsBlob = z.infer<typeof auroraOptionsSchema>;
 export const auroraDefaults: AuroraOptionsBlob = auroraOptionsSchema.parse({
   engine: {},
   layers: {
-    earth: {}, sun: {}, temp: {}, clouds: {},
+    earth: {}, sun: {}, clouds: {},
     graticule: { opts: {} },
     cities:    { opts: {} },
+    temp:      { opts: {} },
     rain:      { opts: {} },
     wind:      { opts: {} },
     pressure:  { opts: {} },

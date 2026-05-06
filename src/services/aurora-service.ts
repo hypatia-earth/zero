@@ -16,7 +16,6 @@ import type { OptionsService } from './options-service';
 import type { PerfService } from './perf-service';
 import { Camera } from '../aurora/camera';
 import { setupViewport } from './viewport/viewport';
-import type { PaletteId } from './palette-service';
 import type { EngineOpts, AuroraOptions as AuroraOptionsBlob } from '../aurora/types/options';
 import { auroraDefaults } from '../aurora/options/schema';
 
@@ -24,11 +23,6 @@ import { auroraDefaults } from '../aurora/options/schema';
  *  'humidity' from BUILT_IN_LAYERS because it has a ZeroOptions section but no
  *  registered layer folder — it'd be a no-op dispatch. */
 const OPACITY_BUILT_INS = ['earth', 'sun', 'graticule', 'cities', 'temp', 'rain', 'clouds', 'pressure', 'wind'] as const;
-
-/** Type guard: value is an object with a palette ID field */
-function hasPaletteField(val: unknown): val is { palette: PaletteId } {
-  return typeof val === 'object' && val !== null && 'palette' in val && typeof val.palette === 'string';
-}
 
 // Re-export types for consumers
 export type { AuroraConfig, AuroraAssets, CameraSnapshot } from '../aurora/worker';
@@ -68,7 +62,6 @@ export interface AuroraService {
   uploadData(param: string, slotIndex: number, data: Float32Array): void;
   activateSlots(param: string, slot0: number, slot1: number, t0: number, t1: number, loadedPoints?: number): void;
   deactivateSlots(param: string): void;
-  updatePalette(layer: string, paletteId: PaletteId): void;
   /** Sub-B Phase 5 typed setter — patch aurora's engine-wide options. */
   setEngineOptions(patch: Partial<EngineOpts>): void;
   /** Sub-B Phase 5 typed setter — opts shape narrowed by id at the call site. */
@@ -286,69 +279,23 @@ export function createAuroraService(
       // no longer re-dispatches any of them at init or on options.value diff.
 
       // Phase E2 — `enabled` is host-owned (URL-backed). Dispatch initial
-      // values per built-in. Opacity is seeded into the init message above
-      // (intended values, not pre-multiplied).
+      // values per built-in. Opacity is seeded into aurora-db (intended
+      // values, not pre-multiplied) on first run.
       for (const id of OPACITY_BUILT_INS) {
         send({ type: 'setLayerEnabled', id, value: initOpts[id].enabled });
       }
 
-      // F-A reconciliation — pre-F-A engine bottlenecks (timeslotsPerLayer,
-      // wind.seedCount) routed dialog writes to aurora-db only via the
-      // Phase D/E1 adapters; zero-db kept stale defaults. F-A's dialog
-      // reads from zero-db, so push aurora-db's persisted truth into
-      // zero-db on first boot to align both stores. F-B removes this when
-      // these fields fully relocate to aurora ownership.
-      const initialMirror = optionsMirror.value;
-      if (initialMirror) {
-        const auroraTslp = initialMirror.engine.timeslotsPerLayer;
-        const auroraSeedCount = (initialMirror.layers['wind']?.opts as { seedCount?: number } | undefined)?.seedCount;
-        optionsService.update(d => {
-          if (typeof auroraTslp === 'number') {
-            d.gpu.timeslotsPerLayer = String(auroraTslp) as typeof d.gpu.timeslotsPerLayer;
-          }
-          if (typeof auroraSeedCount === 'number') {
-            d.wind.seedCount = auroraSeedCount as typeof d.wind.seedCount;
-          }
-        });
-      }
-
-      // Forward options updates to worker
+      // Forward `enabled` flips from zero-db/URL to the worker. All other
+      // aurora options flow via the dialog's engine/layer adapters straight
+      // to aurora-db (post-F-B no host bridges remain).
       let lastOptions = initOpts;
-      const lastPalettes = new Map<string, string>();
-      // Seed last palettes from initial options
-      for (const [group, layerOpts] of Object.entries(lastOptions)) {
-        if (hasPaletteField(layerOpts)) {
-          lastPalettes.set(group, layerOpts.palette);
-        }
-      }
       effect(() => {
         const opts = optionsService.options.value;
         if (opts !== lastOptions) {
-          // Check palette changes for any layer
-          for (const [group, layerOpts] of Object.entries(opts)) {
-            if (hasPaletteField(layerOpts) && layerOpts.palette !== lastPalettes.get(group)) {
-              lastPalettes.set(group, layerOpts.palette);
-              send({ type: 'updatePalette', layer: group, paletteId: layerOpts.palette });
-            }
-          }
-          // Phases C/D/E1 removed all per-field diff dispatches except
-          // `enabled` — opacity now flows from the dialog's layerAdapter
-          // directly to aurora-db; engine options flow via engineAdapter.
-          // The toggle still lives in zero-db/URL though, so the host
-          // bridges enabled flips into setLayerEnabled here.
           for (const id of OPACITY_BUILT_INS) {
             if (opts[id].enabled !== lastOptions[id].enabled) {
               send({ type: 'setLayerEnabled', id, value: opts[id].enabled });
             }
-          }
-          // F-A bridges — until F-B relocates these to aurora ownership,
-          // dialog writes still land in zero-db (host schema rows). Mirror
-          // the change into aurora-db so the worker's runtime value tracks.
-          if (opts.gpu.timeslotsPerLayer !== lastOptions.gpu.timeslotsPerLayer) {
-            send({ type: 'setEngineOptions', patch: { timeslotsPerLayer: parseInt(opts.gpu.timeslotsPerLayer, 10) } });
-          }
-          if (opts.wind.seedCount !== lastOptions.wind.seedCount) {
-            send({ type: 'setLayerOptions', id: 'wind', opts: { seedCount: opts.wind.seedCount } });
           }
           lastOptions = opts;
         }
@@ -416,10 +363,6 @@ export function createAuroraService(
 
     deactivateSlots(param: string): void {
       send({ type: 'deactivateSlots', param });
-    },
-
-    updatePalette(layer: string, paletteId: PaletteId): void {
-      send({ type: 'updatePalette', layer, paletteId });
     },
 
     setEngineOptions(patch: Partial<EngineOpts>): void {

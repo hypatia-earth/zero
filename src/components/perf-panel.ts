@@ -7,15 +7,18 @@
 
 import m from 'mithril';
 import type { OptionsService } from '../services/options-service';
+import type { AuroraService } from '../services/aurora-service';
 
 export interface PerfPanelAttrs {
   optionsService: OptionsService;
+  auroraService: AuroraService;
 }
 
 export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = () => {
   return {
     view({ attrs }) {
-      const opts = attrs.optionsService.options.value.gpu;
+      const gpu = attrs.optionsService.options.value.gpu;
+      const slots = attrs.auroraService.optionsMirror.value?.engine.timeslotsPerLayer ?? '—';
       return m('div.perf.panel.grid', [
         m('button.control.pill', {
           title: 'Frame timing (60-frame avg)'
@@ -37,9 +40,9 @@ export const PerfPanel: m.ClosureComponent<PerfPanelAttrs> = () => {
           m('span.label', 'globe'),
           m('span.perf-globe', '—'),
           m('span.label', 'slots'),
-          m('span.perf-slots', opts.timeslotsPerLayer),
+          m('span.perf-slots', slots),
           m('span.label', 'pool'),
-          m('span.perf-pool', `${opts.minDownloads}/${opts.workerPoolSize}`),
+          m('span.perf-pool', `${gpu.minDownloads}/${gpu.workerPoolSize}`),
         ])
       ]);
     }

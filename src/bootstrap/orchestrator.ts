@@ -89,10 +89,21 @@ async function runBootstrapInner(
   services.stateService!.setTimestepService(services.timestepService);
   await runDiscoveryPhase(services.timestepService, services.stateService!, progress);
 
+  // AuroraService constructed early — its options mirror is read by
+  // QueueService (qsParams) and SlotService for engine.timeslotsPerLayer.
+  // The mirror is null until init() resolves; lazy consumers tolerate that.
+  services.auroraService = createAuroraService(
+    services.stateService!,
+    services.configService!,
+    services.optionsService!,
+    services.perfService!
+  );
+
   // Phase 4: Assets
   progress.startStep('ASSETS');
   services.queueService = createQueueService(
     services.omService!,
+    services.auroraService,
     services.optionsService!,
     services.stateService!,
     services.timestepService,
@@ -104,27 +115,18 @@ async function runBootstrapInner(
   // Phase 5: GPU Init (worker-based)
   progress.startStep('GPU_INIT');
   services.paletteService = createPaletteService();
-  services.auroraService = createAuroraService(
-    services.stateService!,
-    services.configService!,
-    services.optionsService!,
-    services.perfService!
-  );
   services.slotService = createSlotService(
     services.timestepService,
     services.auroraService,
     services.queueService,
-    services.optionsService!,
     services.stateService!,
     services.layerService!
   );
   await runGpuInitPhase(
     canvas,
     services.auroraService,
-    services.paletteService,
     services.aboutService!,
     services.omService!,
-    services.optionsService!,
     services.configService!,
     services.layerService!,
     services.slotService,

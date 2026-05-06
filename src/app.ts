@@ -99,6 +99,7 @@ export const App: m.ClosureComponent = () => {
               !minimal && !captureActive && services.optionsService!.options.value.debug.showPerfPanel &&
                 m(PerfPanel, {
                   optionsService: services.optionsService!,
+                  auroraService: services.auroraService!,
                 }),
               !minimal && !captureActive && m(QueuePanel, {
                 queueService: services.queueService!,
@@ -122,6 +123,7 @@ export const App: m.ClosureComponent = () => {
               timestepService: services.timestepService!,
               themeService: services.themeService!,
               layerService: services.layerService!,
+              auroraService: services.auroraService!,
             }),
           ]),
           captureActive && m(CaptureOverlay, { captureService: services.captureService!, dialogService: services.dialogService!, optionsService: services.optionsService! }),

@@ -6,10 +6,8 @@
  */
 
 import type { AuroraService, AuroraConfig, AuroraAssets } from '../../services/aurora-service';
-import type { PaletteService } from '../../services/palette-service';
 import type { AboutService } from '../../services/about-service';
 import type { OmService } from '../../services/queue/om-service';
-import type { OptionsService } from '../../services/options-service';
 import type { ConfigService } from '../../services/config-service';
 import type { LayerService } from '../../services/layer/layer-service';
 import type { SlotService } from '../../services/slot-service';
@@ -20,10 +18,8 @@ import { getPublishedParams, MODEL_BUFFER_MB, type TModel } from '../../config/m
 export async function runGpuInitPhase(
   canvas: HTMLCanvasElement,
   auroraService: AuroraService,
-  paletteService: PaletteService,
   aboutService: AboutService,
   omService: OmService,
-  optionsService: OptionsService,
   configService: ConfigService,
   layerService: LayerService,
   slotService: SlotService,
@@ -37,9 +33,6 @@ export async function runGpuInitPhase(
   // Pass Gaussian LUTs to SlotService for synthetic data generation
   slotService.setGaussianLats(gaussianLats);
 
-  // Prepare config for worker
-  const timeslotsPerLayer = parseInt(optionsService.options.value.gpu.timeslotsPerLayer, 10);
-  const windLineCount = optionsService.options.value.wind.seedCount;
   // Build param configs for worker buffer creation
   // Include all published params so custom layers can use any param at runtime
   const paramModels = new Map<string, TModel>();
@@ -61,14 +54,9 @@ export async function runGpuInitPhase(
 
   const config: AuroraConfig = {
     cameraConfig: configService.getCameraConfig(),
-    timeslotsPerLayer,
-    windLineCount,
     paramConfigs,
     layers: layerService.getAll().filter(l => l.isBuiltIn),
   };
-
-  // Restore persisted palette selections from options
-  paletteService.restoreFromOptions(optionsService.options.value);
 
   // Prepare assets for transfer to worker
   await progress.run('Processing textures...', 0.1, async () => {
@@ -104,7 +92,8 @@ export async function runGpuInitPhase(
         metrics: assets.citiesMetricsBuffer,
       },
       layerPalettes: [
-        { layerIndex: layerService.getLayerIndex('temp'), slot: 0, paletteId: optionsService.options.value.temp.palette, range: [-40, 50] },
+        // temp palette + range applied by worker via applyLayerSideEffects
+        // (aurora-owned post-F-B).
         { layerIndex: layerService.getLayerIndex('rain'), slot: 0, paletteId: 'rain-wet-intensity', range: [0, 50] },
         { layerIndex: layerService.getLayerIndex('rain'), slot: 1, paletteId: 'rain-frozen-intensity' },
       ],

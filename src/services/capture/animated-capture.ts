@@ -117,7 +117,7 @@ export class AnimatedCapture {
 
   private lockDataWindow(): void {
     const ts = this.timestepService;
-    const numSlots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
+    const numSlots = this.auroraService.optionsMirror.value!.engine.timeslotsPerLayer;
     const currentTime = this.stateService.viewState.value.time;
     const window = ts.getWindow(currentTime, numSlots);
     const windowMs = window.map(t => ts.toDate(t).getTime());

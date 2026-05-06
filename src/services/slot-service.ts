@@ -15,7 +15,6 @@ import type { TModelParam } from '../config/models';
 import type { TimestepService } from './timestep/timestep-service';
 import type { AuroraService } from './aurora-service';
 import type { QueueService } from './queue/queue-service';
-import type { OptionsService } from './options-service';
 import type { StateService } from './state-service';
 import type { LayerService } from './layer/layer-service';
 import { createParamSlots, type ParamSlots, type WantedState } from './param-slots';
@@ -46,25 +45,22 @@ export class SlotService {
     private timestepService: TimestepService,
     private auroraService: AuroraService,
     private queueService: QueueService,
-    private optionsService: OptionsService,
     private stateService: StateService,
     private layerService: LayerService,
   ) {
-    this.timeslotsPerLayer = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
-
     // Effect: watch for layer/options/time changes, update active params and resize slots
     let lastActiveParams = '';
     let lastTime = '';
     let lastTimeslots = this.timeslotsPerLayer;
 
     this.disposeEffect = effect(() => {
-      const opts = this.optionsService.options.value;
       const time = this.stateService.viewState.value.time;
+      const mirror = this.auroraService.optionsMirror.value;
       void this.layerService.changed.value; // Subscribe to registry changes
 
-      if (!this.initialized) return;
+      if (!this.initialized || !mirror) return;
 
-      const newTimeslots = parseInt(opts.gpu.timeslotsPerLayer, 10);
+      const newTimeslots = mirror.engine.timeslotsPerLayer;
       const activeParams = this.collectActiveParams();
       const newActiveParamsStr = activeParams.map(mp => mp.param).sort().join(',');
       const currTime = time.toISOString().slice(11, 16);
@@ -162,7 +158,7 @@ export class SlotService {
 
   /** Pure computation: what timesteps does current time need for a given model? */
   private computeWanted(time: Date, mp: TModelParam): WantedState {
-    const numSlots = parseInt(this.optionsService.options.value.gpu.timeslotsPerLayer, 10);
+    const numSlots = this.auroraService.optionsMirror.value!.engine.timeslotsPerLayer;
     const window = this.timestepService.getWindowFor(time, numSlots, mp);
     const [t0, t1] = this.timestepService.adjacentFor(time, mp);
 

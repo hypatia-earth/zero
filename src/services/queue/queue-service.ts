@@ -13,6 +13,7 @@ import { sortByTimestep } from './sorter';
 import { QueueStatsTracker } from './stats';
 import { AdaptiveConcurrency } from './adaptive-concurrency';
 import type { OmService } from './om-service';
+import type { AuroraService } from '../aurora-service';
 import type { OptionsService } from '../options-service';
 import type { StateService } from '../state-service';
 import type { TimestepService } from '../timestep/timestep-service';
@@ -82,6 +83,7 @@ export class QueueService implements IQueueService {
   /** Reactive parameters for queue management */
   readonly qsParams = computed(() => {
     const opts = this.optionsService.options.value;
+    const mirror = this.auroraService.optionsMirror.value;
     // Trigger recompute when layer registry changes
     this.layerService.changed.value;
 
@@ -93,7 +95,7 @@ export class QueueService implements IQueueService {
     return {
       time: this.stateService.viewState.value.time,
       poolSize: parseInt(opts.gpu.workerPoolSize, 10),
-      numSlots: parseInt(opts.gpu.timeslotsPerLayer, 10),
+      numSlots: mirror?.engine.timeslotsPerLayer ?? 4,
       activeLayers,
       strategy: opts.dataCache.cacheStrategy,
     };
@@ -101,6 +103,7 @@ export class QueueService implements IQueueService {
 
   constructor(
     private omService: OmService,
+    private auroraService: AuroraService,
     private optionsService: OptionsService,
     private stateService: StateService,
     private timestepService: TimestepService,
