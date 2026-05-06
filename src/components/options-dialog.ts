@@ -23,6 +23,7 @@ import { getByPath } from '../utils/object';
 import type { ConfigService } from '../services/config-service';
 import type { DialogService } from '../services/dialog-service';
 import type { AuroraService } from '../services/aurora-service';
+import type { StateService } from '../services/state-service';
 import { clearCache, nuke } from '../services/sw-registration';
 import { RadioPaletteControl } from './radio-palette-control';
 import { isPaletteId } from '../services/palette-service';
@@ -417,6 +418,28 @@ const advancedSubgroups: Record<string, string> = {
   'debug': 'Development',
 };
 
+/** Synthesized "Enabled" toggle for the per-layer dialog section. F-C
+ *  removed `<layer>.enabled` from the host schema (URL is the truth via
+ *  stateService), so the schema walk produces no enabled row — this
+ *  helper mints one bound directly to stateService.enabledLayers. */
+function renderEnabledRow(layerId: string, stateService: StateService): m.Children {
+  const checked = stateService.enabledLayers.value.has(layerId);
+  return m('div.row', { key: `_enabled_${layerId}`, 'data-testid': `${layerId}.enabled` }, [
+    m('div.info', [
+      m('label.label', `Show ${layerLabels[layerId] ?? layerId}`),
+    ]),
+    m('div.controls', [
+      m('label.toggle', [
+        m('input[type=checkbox]', {
+          checked,
+          onchange: (e: Event) => stateService.setLayerEnabled(layerId, (e.target as HTMLInputElement).checked),
+        }),
+        m('span.track'),
+      ]),
+    ]),
+  ]);
+}
+
 function getAdvancedSubgroup(path: string): string {
   for (const prefix of Object.keys(advancedSubgroups)) {
     if (path.startsWith(prefix + '.') || path.startsWith(prefix)) {
@@ -436,11 +459,13 @@ function renderGroup(
   options: ZeroOptions,
   optionsService: OptionsService,
   paletteService: PaletteService,
+  stateService: StateService,
   showAdvancedOptions: boolean,
   hostAdapter: OptionsAdapter,
   engineAdapter: OptionsAdapter,
   layerAdapter: OptionsAdapter,
-  skipGroupHeader: boolean = false
+  filter: OptionFilter | undefined,
+  skipGroupHeader: boolean = false,
 ): m.Children {
   const ro = (opt: FlatOption) => renderOption(opt, options, optionsService, paletteService, hostAdapter, engineAdapter, layerAdapter);
   const group = optionGroups[groupId as keyof typeof optionGroups];
@@ -475,6 +500,7 @@ function renderGroup(
       ...Array.from(byLayer.entries()).map(([layerId, opts]) => {
         return m('div.subsection', { key: layerId }, [
           m('h4.title', { key: `${layerId}_title` }, layerLabels[layerId] || layerId),
+          renderEnabledRow(layerId, stateService),
           ...opts.map(ro)
         ].filter(Boolean));
       })
@@ -527,9 +553,14 @@ function renderGroup(
     ].filter(Boolean));
   }
 
+  // Filtered single-layer view: prepend the synthesized enabled toggle
+  // (host schema no longer carries `<layer>.enabled` post-F-C).
+  const isLayerFilter = groupId === 'layers' && skipGroupHeader && filter && filter !== 'global' && layerLabels[filter] !== undefined;
+
   return m('div.section', { key: groupId }, [
     !skipGroupHeader ? m('h3.title', { key: '_title' }, group.label) : null,
     !skipGroupHeader && group.description ? m('p.description', { key: '_desc' }, group.description) : null,
+    isLayerFilter ? renderEnabledRow(filter, stateService) : null,
     ...visibleOptions.map(ro)
   ].filter(Boolean));
 }
@@ -544,6 +575,7 @@ export interface OptionsDialogAttrs {
   dialogService: DialogService;
   configService: ConfigService;
   auroraService: AuroraService;
+  stateService: StateService;
 }
 
 export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: initialAttrs }) => {
@@ -555,7 +587,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: i
 
   return {
     view({ attrs }) {
-      const { optionsService, paletteService, dialogService } = attrs;
+      const { optionsService, paletteService, dialogService, stateService } = attrs;
 
     if (!dialogService.isOpen('options')) return null;
 
@@ -636,7 +668,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: i
           ...sortedGroupIds.map(groupId => {
             const groupOpts = filteredGroups[groupId];
             if (!groupOpts) return null;
-            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, showAdvanced, hostAdapter, engineAdapter, layerAdapter, !!filter && filter !== 'global');
+            return renderGroup(groupId, groupOpts, options, optionsService, paletteService, stateService, showAdvanced, hostAdapter, engineAdapter, layerAdapter, filter, !!filter && filter !== 'global');
           }).filter(Boolean),
 
           // Danger zone (only in global view)
@@ -695,7 +727,7 @@ export const OptionsDialog: m.ClosureComponent<OptionsDialogAttrs> = ({ attrs: i
 
           // Advanced group (only in global view)
           (!filter || filter === 'global') && showAdvanced && advancedGroup
-            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, true, hostAdapter, engineAdapter, layerAdapter)
+            ? renderGroup('advanced', advancedGroup, options, optionsService, paletteService, stateService, true, hostAdapter, engineAdapter, layerAdapter, filter)
             : null
         ].filter(Boolean)),
         m('div.footer', [

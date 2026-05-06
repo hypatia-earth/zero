@@ -10,7 +10,7 @@
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import { BUILT_IN_LAYERS, CUSTOM_LAYERS, type TBuiltInLayer, type TCustomLayer, type TLayerCategory } from '../../config/types';
-import type { OptionsService } from '../options-service';
+import type { StateService } from '../state-service';
 import { builtInLayers } from '../../layers';
 import { getParamMeta, getPublishedParams, type TModel, type TModelParam } from '../../config/models';
 import type { TLayer } from '../../config/types';
@@ -105,14 +105,15 @@ export class LayerService {
   private layers: Map<TLayer , LayerDeclaration> = new Map();
   private changeSignal: Signal<number> = signal(0);
   private usedUserIndices: Set<number> = new Set();
-  private userLayerEnabled: Map<TLayer , boolean> = new Map();
   private userLayerOpacity: Map<TLayer , number> = new Map();
   private nextBuiltInIndex = 0;  // Auto-increment for built-in layer indices
-  private optionsService: OptionsService | null = null;
+  private stateService: StateService | null = null;
 
-  /** Post-construction wiring for OptionsService */
-  setOptionsService(optionsService: OptionsService): void {
-    this.optionsService = optionsService;
+  /** Post-construction wiring for StateService — F-C made the canonical
+   *  enabled-set live there (URL-backed), so layer reads/writes round-trip
+   *  through it for both built-in and user layers. */
+  setStateService(stateService: StateService): void {
+    this.stateService = stateService;
   }
 
   /** Signal that increments when registry changes */
@@ -410,20 +411,11 @@ export class LayerService {
     return this.getAll().filter(l => l.options?.includes(optionPath));
   }
 
-  /** Check if a layer is enabled (works for both built-in and user layers) */
+  /** Check if a layer is enabled (works for both built-in and user layers).
+   *  Single source of truth: stateService.enabledLayers (URL-backed). */
   isLayerEnabled(id: TLayer ): boolean {
-    const layer = this.layers.get(id);
-    if (!layer) return false;
-
-    if (isBuiltInLayer(layer)) {
-      // Built-in: check OptionsService
-      const opts = this.optionsService?.options.value;
-      const layerOpts = opts?.[layer.id]; // narrowed to TBuiltInLayer by type guard
-      return (layerOpts as { enabled?: boolean } | undefined)?.enabled ?? false; // QC-OK: dynamic options lookup
-    } else {
-      // User layer: check internal map
-      return this.userLayerEnabled.get(id) ?? true; // QC-OK: new layers default enabled
-    }
+    if (!this.layers.has(id)) return false;
+    return this.stateService!.enabledLayers.value.has(id);
   }
 
   /** Get all enabled layers that have params (for TimeBar) */
@@ -584,17 +576,14 @@ export class LayerService {
     return permanent;
   }
 
-  /** Set user layer enabled state */
+  /** Set user layer enabled state — delegates to state-service (URL truth). */
   setUserLayerEnabled(id: TLayer , enabled: boolean): void {
-    this.userLayerEnabled.set(id, enabled);
-    this.changeSignal.value++;
+    this.stateService!.setLayerEnabled(id, enabled);
   }
 
   /** Toggle user layer enabled state */
   toggleUserLayer(id: TLayer ): boolean {
-    const current = this.isLayerEnabled(id);
-    this.setUserLayerEnabled(id, !current);
-    return !current;
+    return this.stateService!.toggleLayer(id);
   }
 
   /** Get user layer opacity */

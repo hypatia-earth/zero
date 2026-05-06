@@ -19,9 +19,7 @@ import {
 } from '../schemas/options.schema';
 import { deepMerge, getByPath, setByPath } from '../utils/object';
 import { debounceFlush } from '../utils/debounce-flush';
-import { builtInLayerIds } from '../config/defaults';
 import type { TBuiltInLayer } from '../config/types';
-import type { LayerService } from './layer/layer-service';
 import { updatePrefetchConfig } from './sw-registration';
 
 const DEBUG = false;
@@ -195,12 +193,6 @@ export class OptionsService {
 
   private debouncedSave = debounceFlush(() => this.save(), 500);
   private initialized = false;
-  private layerService: LayerService | null = null;
-
-  /** Post-construction wiring for LayerService */
-  setLayerService(layerService: LayerService): void {
-    this.layerService = layerService;
-  }
 
   constructor() {
     // Auto-merge when userOverrides change
@@ -339,53 +331,6 @@ export class OptionsService {
     this.logChange(oldOverrides, newOverrides);
     this.userOverrides.value = newOverrides;
     this.checkNeedsReload();
-  }
-
-  /**
-   * Set enabled layers from StateService (URL delegation)
-   */
-  setEnabledLayers(enabledSet: Set<string>): void {
-    // Built-in layers: update options
-    for (const layerId of builtInLayerIds) {
-      const shouldEnable = enabledSet.has(layerId);
-      const isEnabled = getByPath(this.options.value, `${layerId}.enabled`);
-      if (isEnabled !== shouldEnable) {
-        this.update(d => {
-          setByPath(d, `${layerId}.enabled`, shouldEnable);
-        });
-      }
-    }
-
-    // Custom layers: update LayerService
-    if (this.layerService) {
-      for (const layer of this.layerService.getAll().filter(l => !l.isBuiltIn)) {
-        const shouldEnable = enabledSet.has(layer.id);
-        if (this.layerService.isLayerEnabled(layer.id) !== shouldEnable) {
-          this.layerService.setUserLayerEnabled(layer.id, shouldEnable);
-        }
-      }
-    }
-  }
-
-  /**
-   * Get list of enabled layer IDs for URL sync (built-in + custom)
-   */
-  getEnabledLayers(): string[] {
-    // Built-in layers from options
-    const enabled: string[] = builtInLayerIds.filter(id =>
-      getByPath(this.options.value, `${id}.enabled`) === true
-    );
-
-    // Custom layers from LayerService
-    if (this.layerService) {
-      for (const layer of this.layerService.getAll().filter(l => !l.isBuiltIn)) {
-        if (this.layerService.isLayerEnabled(layer.id)) {
-          enabled.push(layer.id);
-        }
-      }
-    }
-
-    return enabled;
   }
 
   private logChange(oldOverrides: Partial<ZeroOptions>, newOverrides: Partial<ZeroOptions>): void {

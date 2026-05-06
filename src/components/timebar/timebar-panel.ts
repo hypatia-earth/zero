@@ -12,7 +12,6 @@ import m from 'mithril';
 import { effect } from '@preact/signals-core';
 import type { SlotService } from '../../services/slot-service';
 import type { TimestepService } from '../../services/timestep/timestep-service';
-import type { OptionsService } from '../../services/options-service';
 import type { ThemeService } from '../../services/theme-service';
 import type { StateService } from '../../services/state-service';
 import type { LayerService } from '../../services/layer/layer-service';
@@ -21,7 +20,6 @@ import { diskUnwarp } from './timebar-math';
 import { renderTimebar, getTimebarHeight } from './timebar-renderer';
 
 interface TimeBarPanelAttrs {
-  optionsService: OptionsService;
   stateService: StateService;
   slotService: SlotService;
   timestepService: TimestepService;
@@ -40,8 +38,8 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
   return {
     oncreate() {
       unsubscribe = effect(() => {
-        initialVnode.attrs.optionsService.options.value;
         initialVnode.attrs.stateService.viewState.value;
+        initialVnode.attrs.stateService.enabledLayers.value;
         initialVnode.attrs.slotService.slotsVersion.value;
         initialVnode.attrs.timestepService.state.value;
         initialVnode.attrs.auroraService.optionsMirror.value;
@@ -56,7 +54,7 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
     },
 
     view({ attrs }) {
-      const { optionsService, stateService, slotService, timestepService, themeService, layerService, auroraService } = attrs;
+      const { stateService, slotService, timestepService, themeService, layerService, auroraService } = attrs;
 
       // Derive window
       const window = {
@@ -165,11 +163,9 @@ export const TimeBarPanel: m.ClosureComponent<TimeBarPanelAttrs> = (initialVnode
       // Only layers with ready params
       const activeLayers = [...layerParamsMap.keys()];
 
-      const opts = optionsService.options.value;
-
       // Camera and sun state
       const viewState = stateService.viewState.value;
-      const sunEnabled = opts.sun.enabled;
+      const sunEnabled = stateService.enabledLayers.value.has('sun');
 
       // Calculate window for knob rendering (based on option, not actual slots)
       const numSlots = auroraService.optionsMirror.value!.engine.timeslotsPerLayer;

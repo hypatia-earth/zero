@@ -73,8 +73,7 @@ export function createFoundationServices(): Pick<
   const layerService = new LayerService();
   const configService = new ConfigService();
   const optionsService = new OptionsService();
-  // StateService uses effect-based decoupling: watches optionsService.options signal
-  const stateService = new StateService(configService, optionsService);
+  const stateService = new StateService(configService);
 
   const omService = new OmService(optionsService);
   const dialogService = new DialogService();
@@ -86,8 +85,7 @@ export function createFoundationServices(): Pick<
 
   // Register built-in layers and wire dependencies
   layerService.registerBuiltInLayers();
-  layerService.setOptionsService(optionsService);
-  optionsService.setLayerService(layerService);
+  layerService.setStateService(stateService);
   stateService.setLayerService(layerService);
 
   return {

@@ -271,33 +271,25 @@ export function createAuroraService(
       // Sub-B Phase 5 closure: aurora receives all options via typed setters.
       // The bulk 'options' message kind is gone — every aurora-relevant field
       // dispatches through setEngineOptions / setLayerOpacity / setLayerOptions.
-      const initOpts = optionsService.options.value;
-
-      // Phases C/D/E1 — graticule, cities, wind, pressure, rain, and the
-      // engine options (timeslotsPerLayer, showLogo) now flow exclusively
-      // through aurora-db + the dialog's layer/engine adapters. The host
-      // no longer re-dispatches any of them at init or on options.value diff.
-
-      // Phase E2 — `enabled` is host-owned (URL-backed). Dispatch initial
-      // values per built-in. Opacity is seeded into aurora-db (intended
-      // values, not pre-multiplied) on first run.
+      // Phase F-C — `enabled` is canonical in stateService.enabledLayers (URL).
+      // Initial dispatch per built-in, then diff-watch the signal for flips.
+      let lastEnabled = stateService.enabledLayers.value;
       for (const id of OPACITY_BUILT_INS) {
-        send({ type: 'setLayerEnabled', id, value: initOpts[id].enabled });
+        send({ type: 'setLayerEnabled', id, value: lastEnabled.has(id) });
       }
 
-      // Forward `enabled` flips from zero-db/URL to the worker. All other
-      // aurora options flow via the dialog's engine/layer adapters straight
-      // to aurora-db (post-F-B no host bridges remain).
-      let lastOptions = initOpts;
+      // Forward `enabled` flips from URL to the worker. All other aurora
+      // options flow via the dialog's engine/layer adapters straight to
+      // aurora-db (post-F-B no host bridges remain).
       effect(() => {
-        const opts = optionsService.options.value;
-        if (opts !== lastOptions) {
+        const cur = stateService.enabledLayers.value;
+        if (cur !== lastEnabled) {
           for (const id of OPACITY_BUILT_INS) {
-            if (opts[id].enabled !== lastOptions[id].enabled) {
-              send({ type: 'setLayerEnabled', id, value: opts[id].enabled });
+            if (cur.has(id) !== lastEnabled.has(id)) {
+              send({ type: 'setLayerEnabled', id, value: cur.has(id) });
             }
           }
-          lastOptions = opts;
+          lastEnabled = cur;
         }
       });
 

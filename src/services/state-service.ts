@@ -8,7 +8,6 @@
 
 import { signal, effect } from '@preact/signals-core';
 import { debounceFlush } from '../utils/debounce-flush';
-import type { OptionsService } from './options-service';
 import type { ConfigService } from './config-service';
 import type { LayerService } from './layer/layer-service';
 import type { TimestepService } from './timestep/timestep-service';
@@ -36,6 +35,11 @@ const DEFAULT_VIEW_STATE: ViewState = {
 
 export class StateService {
   readonly viewState = signal<ViewState>({ ...DEFAULT_VIEW_STATE });
+  /** Canonical set of enabled layer IDs (built-in + custom). URL is the
+   *  persistence boundary; F-C made this signal the in-memory truth (was
+   *  scattered across `optionsService.options.value.<layer>.enabled` +
+   *  LayerService's userLayerEnabled Map). */
+  readonly enabledLayers = signal<Set<string>>(new Set());
   readonly minimalUI = signal(false);
   readonly event: string | null = null;
 
@@ -43,7 +47,6 @@ export class StateService {
   private hasExplicitDt = false;
   private debouncedUrlSync = debounceFlush(() => this.syncToUrl(), 300);
 
-  private optionsService: OptionsService;
   private layerService: LayerService | null = null;
   private timestepService: TimestepService | null = null;
 
@@ -52,27 +55,20 @@ export class StateService {
     this.timestepService = timestepService;
   }
 
-  /** Post-construction wiring for LayerService (needed for URL sync and layer sanitization) */
+  /** Post-construction wiring for LayerService (needed for layer sanitization) */
   setLayerService(layerService: LayerService): void {
     this.layerService = layerService;
-    // Watch layer registry changes (custom layer enable/disable)
-    effect(() => {
-      layerService.changed.value;
-      this.scheduleUrlSync();
-    });
   }
 
   constructor(
     private configService: ConfigService,
-    optionsService: OptionsService
   ) {
-    this.optionsService = optionsService;
     this.event = new URLSearchParams(window.location.search).get('event');
     this.parseUrl();
 
-    // Effect-based decoupling: watch options and sync URL when they change
+    // URL sync fires whenever the canonical enabled-set changes.
     effect(() => {
-      this.optionsService.options.value;  // subscribe to options changes
+      this.enabledLayers.value;
       this.scheduleUrlSync();
     });
 
@@ -83,6 +79,32 @@ export class StateService {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') this.debouncedUrlSync.flush();
     });
+  }
+
+  /** Bulk-replace the enabled set (used by sanitize() with URL-derived IDs). */
+  applyEnabledLayers(set: Set<string>): void {
+    this.enabledLayers.value = new Set(set);
+  }
+
+  /** Set a single layer's enabled flag. No-op if value already matches. */
+  setLayerEnabled(id: string, value: boolean): void {
+    const cur = this.enabledLayers.value;
+    if (cur.has(id) === value) return;
+    const next = new Set(cur);
+    if (value) next.add(id); else next.delete(id);
+    this.enabledLayers.value = next;
+  }
+
+  /** Toggle a layer; returns the new state. */
+  toggleLayer(id: string): boolean {
+    const next = !this.enabledLayers.value.has(id);
+    this.setLayerEnabled(id, next);
+    return next;
+  }
+
+  /** Test if a layer is currently enabled. */
+  isLayerEnabled(id: string): boolean {
+    return this.enabledLayers.value.has(id);
   }
 
   /**
@@ -189,7 +211,7 @@ export class StateService {
     }
 
     // Apply sanitized layers to state
-    this.optionsService.setEnabledLayers(new Set(enabledLayers));
+    this.applyEnabledLayers(new Set(enabledLayers));
 
     // Write sanitized state to URL
     this.syncToUrl();
@@ -253,7 +275,7 @@ export class StateService {
   // URL Sync
   // ============================================================
 
-  /** Schedule URL sync (debounced). Called by OptionsService when layers change. */
+  /** Schedule URL sync (debounced). Internal — fires off enabled/viewState mutations. */
   scheduleUrlSync(): void {
     if (!this.urlSyncEnabled) return;
     this.debouncedUrlSync();
@@ -267,8 +289,18 @@ export class StateService {
     const ll = `${vs.lat.toFixed(1)},${vs.lon.toFixed(1)}`;
     const alt = Math.round(vs.altitude).toString();
 
-    // Get enabled layers from OptionsService
-    const enabledLayers = this.optionsService.getEnabledLayers();
+    // Preserve the pre-F-C URL ordering (builtInLayerIds order, then user
+    // layers in registry order) so URL strings stay stable across the
+    // refactor.
+    const set = this.enabledLayers.value;
+    const enabledLayers: string[] = builtInLayerIds.filter(id => set.has(id));
+    if (this.layerService) {
+      for (const layer of this.layerService.getAll()) {
+        if (!layer.isBuiltIn && layer.id !== '_preview' && set.has(layer.id)) {
+          enabledLayers.push(layer.id);
+        }
+      }
+    }
 
     // Build URL manually to keep commas unencoded
     let search = this.event ? `?event=${this.event}&` : '?';

@@ -406,9 +406,11 @@ export class SlotService {
     DEBUG && console.log('[ParamSlot] Initialized');
   }
 
-  /** Get active timesteps for a param */
+  /** Get active timesteps for a param. Returns [] when slots don't exist
+   *  yet — the UI may render between an enabled-layer flip and the
+   *  slot-service effect that creates the paramSlots entry. */
   getActiveTimesteps(param: TModelParam['param']): TTimestep[] {
-    return this.paramSlots.get(param)!.getActiveTimesteps();
+    return this.paramSlots.get(param)?.getActiveTimesteps() ?? [];
   }
 
   /** Check if a param has data activated in the shader */

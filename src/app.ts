@@ -70,6 +70,7 @@ export const App: m.ClosureComponent = () => {
             dialogService: services.dialogService!,
             configService: services.configService!,
             auroraService: services.auroraService!,
+            stateService: services.stateService!,
           }),
           m(AboutDialog, {
             aboutService: services.aboutService!,
@@ -88,9 +89,9 @@ export const App: m.ClosureComponent = () => {
               m(LogoPanel),
               !minimal && !captureActive && m(LayersPanel, {
                 configService: services.configService!,
-                optionsService: services.optionsService!,
                 layerRegistry: services.layerService!,
                 auroraService: services.auroraService!,
+                stateService: services.stateService!,
                 dialogService: services.dialogService!,
               }),
             ]),
@@ -117,7 +118,6 @@ export const App: m.ClosureComponent = () => {
               }),
             ]),
             !minimal && !captureActive && m(TimeBarPanel, {
-              optionsService: services.optionsService!,
               stateService: services.stateService!,
               slotService: services.slotService!,
               timestepService: services.timestepService!,

@@ -155,7 +155,7 @@ export const optionGroups = {
 // ============================================================
 
 export const optionsSchema = z.object({
-  _version: z.number().default(3),
+  _version: z.number().default(4),
 
   // ----------------------------------------------------------
   // Interface Settings
@@ -477,194 +477,10 @@ export const optionsSchema = z.object({
   }),
 
   // ----------------------------------------------------------
-  // Layer: Earth (only `enabled` here; opacity lives in aurora-db)
+  // Per-layer enabled flags relocated to stateService.enabledLayers (URL).
+  // Per-layer opacity / opts live in aurora-db. Only host-only sections
+  // (capture, prefetch, viewport, gpu, debug, dataCache, interface) remain.
   // ----------------------------------------------------------
-  earth: z.object({
-    enabled: opt(
-      z.boolean().default(true),
-      {
-        label: 'Show earth',
-        description: 'Display earth basemap',
-        group: 'layers',
-        filter: ['global', 'earth'],
-        order: 0,
-        control: 'toggle',
-      }
-    ),
-  }),
-
-  // ----------------------------------------------------------
-  // Layer: Sun (only `enabled` here; opacity lives in aurora-db)
-  // ----------------------------------------------------------
-  sun: z.object({
-    enabled: opt(
-      z.boolean().default(true),
-      {
-        label: 'Day/night shading',
-        description: 'Show sun position and day/night terminator',
-        group: 'layers',
-        filter: ['global', 'sun'],
-        order: 2,
-        control: 'toggle',
-      }
-    ),
-  }),
-
-  // ----------------------------------------------------------
-  // Layer: Graticule (only `enabled` here; opacity/fontSize/lineWidth in aurora-db)
-  // ----------------------------------------------------------
-  graticule: z.object({
-    enabled: opt(
-      z.boolean().default(true),
-      {
-        label: 'Show grid',
-        description: 'Display latitude/longitude lines',
-        group: 'layers',
-        filter: ['global', 'graticule'],
-        order: 3,
-        control: 'toggle',
-      }
-    ),
-  }),
-
-  // ----------------------------------------------------------
-  // Layer: Cities (only `enabled` here; opacity/color in aurora-db)
-  // ----------------------------------------------------------
-  cities: z.object({
-    enabled: opt(
-      z.boolean().default(false),
-      {
-        label: 'Show cities',
-        description: 'Display cities with population > 100,000 on the globe',
-        group: 'layers',
-        filter: ['global', 'cities'],
-        order: 3.5,
-        control: 'toggle',
-      }
-    ),
-  }),
-
-  // ----------------------------------------------------------
-  // Layer: Temperature (only `enabled` here; palette/opacity in aurora-db)
-  // ----------------------------------------------------------
-  temp: z.object({
-    enabled: opt(
-      z.boolean().default(true),
-      {
-        label: 'Temperature',
-        description: 'Show temperature overlay',
-        group: 'layers',
-        filter: 'temp',
-        order: 10,
-        control: 'toggle',
-        persist: 'url',
-      }
-    ),
-  }),
-
-  // ----------------------------------------------------------
-  // Layer: Precipitation (only `enabled` here; opacity/animated in aurora-db)
-  // ----------------------------------------------------------
-  rain: z.object({
-    enabled: opt(
-      z.boolean().default(false),
-      {
-        label: 'Precipitation',
-        description: 'Show rain/snow overlay',
-        group: 'layers',
-        filter: 'rain',
-        order: 11,
-        control: 'toggle',
-        persist: 'url',
-      }
-    ),
-  }),
-
-  // ----------------------------------------------------------
-  // Layer: Clouds (only `enabled` here; opacity in aurora-db)
-  // ----------------------------------------------------------
-  clouds: z.object({
-    enabled: opt(
-      z.boolean().default(false),
-      {
-        label: 'Clouds',
-        description: 'Show cloud cover overlay',
-        group: 'layers',
-        filter: 'clouds',
-        order: 12,
-        control: 'toggle',
-        persist: 'url',
-      }
-    ),
-  }),
-
-  // ----------------------------------------------------------
-  // Layer: Humidity
-  // ----------------------------------------------------------
-  humidity: z.object({
-    enabled: opt(
-      z.boolean().default(false),
-      {
-        label: 'Humidity',
-        description: 'Show relative humidity overlay',
-        group: 'layers',
-        filter: 'humidity',
-        order: 13,
-        control: 'toggle',
-        persist: 'url',
-      }
-    ),
-    opacity: opt(
-      z.number().min(0.05).max(1).default(0.6),
-      {
-        label: 'Humidity opacity',
-        description: 'Transparency of humidity layer',
-        group: 'layers',
-        filter: ['global', 'humidity'],
-        order: 13,
-        control: 'slider',
-        min: 0.05,
-        max: 1,
-        step: 0.05,
-      }
-    ),
-  }),
-
-  // ----------------------------------------------------------
-  // Layer: Wind (only `enabled` here; seedCount/speed/opacity in aurora-db)
-  // ----------------------------------------------------------
-  wind: z.object({
-    enabled: opt(
-      z.boolean().default(false),
-      {
-        label: 'Wind',
-        description: 'Show animated wind particles',
-        group: 'layers',
-        filter: 'wind',
-        order: 14,
-        control: 'toggle',
-        persist: 'url',
-      }
-    ),
-  }),
-
-  // ----------------------------------------------------------
-  // Layer: Pressure (only `enabled` here; spacing/smoothing/colors/opacity in aurora-db)
-  // ----------------------------------------------------------
-  pressure: z.object({
-    enabled: opt(
-      z.boolean().default(false),
-      {
-        label: 'Pressure',
-        description: 'Show isobar contour lines',
-        group: 'layers',
-        filter: 'pressure',
-        order: 17,
-        control: 'toggle',
-        persist: 'url',
-      }
-    ),
-  }),
 
   // ----------------------------------------------------------
   // Data Cache
@@ -973,7 +789,7 @@ export const optionsSchema = z.object({
 export type ZeroOptions = z.infer<typeof optionsSchema>;
 
 export const defaultOptions: ZeroOptions = {
-  _version: 3,
+  _version: 4,
   interface: { autocloseModal: true },
   gpu: { showGpuStats: false, workerPoolSize: '4', minDownloads: 4, maxDownloads: 12 },
   viewport: {
@@ -995,16 +811,6 @@ export const defaultOptions: ZeroOptions = {
       twoFingerPan: { invert: false },
     },
   },
-  earth: { enabled: true },
-  sun: { enabled: true },
-  graticule: { enabled: true },
-  cities: { enabled: false },
-  temp: { enabled: true },
-  rain: { enabled: false },
-  clouds: { enabled: false },
-  humidity: { enabled: false, opacity: 0.6 },
-  wind: { enabled: false },
-  pressure: { enabled: false },
   dataCache: { cacheStrategy: 'alternate' },
   prefetch: { enabled: false, forecastDays: '2', temp: true, pressure: false, wind: false },
   capture: { aspectRatio: 'free', duration: '5', fps: '15', zoomInterp: 'smooth', nativeDpr: false, paletteMode: 'fast', format: 'gif', bitrate: '3', label: true, lastCaptureType: 'simple' },

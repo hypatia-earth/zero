@@ -5,39 +5,37 @@
 import m from 'mithril';
 import { GearIcon } from './gear-icon';
 import type { ConfigService } from '../services/config-service';
-import type { OptionsService } from '../services/options-service';
 import { isBuiltInLayer, type LayerService } from '../services/layer/layer-service';
 import type { AuroraService } from '../services/aurora-service';
+import type { StateService } from '../services/state-service';
 import type { DialogService } from '../services/dialog-service';
 import { LAYER_CATEGORIES, LAYER_CATEGORY_LABELS } from '../config/types';
 
 interface LayersPanelAttrs {
   configService: ConfigService;
-  optionsService: OptionsService;
   layerRegistry: LayerService;
   auroraService: AuroraService;
+  stateService: StateService;
   dialogService: DialogService;
 }
 
 export const LayersPanel: m.ClosureComponent<LayersPanelAttrs> = () => {
   return {
     view({ attrs }) {
-      const { optionsService, layerRegistry, auroraService, dialogService } = attrs;
+      const { layerRegistry, auroraService, stateService, dialogService } = attrs;
 
       // All displayable layers: built-in + custom (exclude preview)
       const allLayers = layerRegistry.getAll().filter(l => l.id !== '_preview');
 
-      // Toggle handler for any layer
+      // Toggle handler for any layer — single path through state-service
+      // (URL-backed truth post-F-C). User layers also dispatch a worker
+      // setUserLayerOptions message for the aurora-side opacity multiplier.
       const toggleLayer = (layer: typeof allLayers[0]) => {
-        if (isBuiltInLayer(layer)) {
-          optionsService.update(draft => { draft[layer.id].enabled = !draft[layer.id].enabled; });
-        } else {
-          const enabled = layerRegistry.toggleUserLayer(layer.id);
-          if (layer.userLayerIndex !== undefined) {
-            auroraService.send({ type: 'setUserLayerOptions', layerIndex: layer.userLayerIndex, enabled });
-          }
-          m.redraw();
+        const enabled = stateService.toggleLayer(layer.id);
+        if (!isBuiltInLayer(layer) && layer.userLayerIndex !== undefined) {
+          auroraService.send({ type: 'setUserLayerOptions', layerIndex: layer.userLayerIndex, enabled });
         }
+        m.redraw();
       };
 
       // Options handler for any layer
