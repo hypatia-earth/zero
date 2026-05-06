@@ -45,4 +45,12 @@ export interface LayerCatalogEntry {
   pass?: LayerCatalogPass;
   order?: number;
   topology?: 'triangle-list' | 'line-list';
+
+  /**
+   * Marks an opaque-coverage layer that fully obscures back-hemisphere
+   * geometry of all transparent layers. When ANY backface-killer layer
+   * is enabled, transparent layers (rain/clouds/pressure/wind/cities/
+   * graticule) skip back-hemisphere rendering. Currently earth + temp.
+   */
+  backfaceKiller?: boolean;
 }

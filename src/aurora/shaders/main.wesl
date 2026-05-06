@@ -120,7 +120,7 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
   // Back-side rain (when no opaque surface layers are enabled)
   @if(LAYER_RAIN_ENABLED)
   {
-    if (u.rainBackFace > 0.0 && getLayerOpacity(LAYER_RAIN) > 0.0) {
+    if (u.backfaceKiller < 0.5 && getLayerOpacity(LAYER_RAIN) > 0.0) {
       let rainFarHit = raySphereIntersectFar(u.eyePosition, rayDir, EARTH_RADIUS);
       if (rainFarHit.valid) {
         let backLat = asin(rainFarHit.point.y);
@@ -130,9 +130,8 @@ fn fs_main(@builtin(position) fragPos: vec4f) -> FragmentOutput {
     }
   }
 
-  // Animated back-side grid: fades in from limb as surface layers fade out
-  let maxOpacity = max(getLayerOpacity(LAYER_EARTH), getLayerOpacity(LAYER_TEMP));
-  let fadeAmount = smoothstep(0.3, 0.0, maxOpacity);
+  // Animated back-side grid: enabled when no opaque-coverage layer (earth/temp) is on.
+  let fadeAmount = 1.0 - u.backfaceKiller;
   if (fadeAmount > 0.01) {
     let farHit = raySphereIntersectFar(u.eyePosition, rayDir, EARTH_RADIUS);
     if (farHit.valid) {

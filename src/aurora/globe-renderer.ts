@@ -51,7 +51,7 @@ export interface GlobeUniforms {
   windState: LayerState;  // full state for compute caching
   pressureColors: PressureColorOption;
   logoOpacity: number;       // computed from all layer opacities
-  rainBackFace: number;
+  backfaceKiller: number;
   rainAnimated: boolean;
 }
 
@@ -116,6 +116,7 @@ export class GlobeRenderer {
 
   // Track layer opacities for depth test decision
   private currentLayerOpacities = new Float32Array(16);
+  private currentBackfaceKiller = 0;
 
   // Animation timing (shared across grid, wind, etc.)
   private lastFrameTime = 0;
@@ -408,11 +409,7 @@ export class GlobeRenderer {
       const pressureHost: PressureAuroraLayerHost = {
         getOpacity() { return renderer.currentLayerOpacities[LAYER_PRESSURE]!; },
         getColors() { return renderer.currentPressureColors; },
-        getBackfaceCull() {
-          return renderer.currentLayerOpacities[LAYER_EARTH]! > 0.01
-            || renderer.currentLayerOpacities[LAYER_TEMP]! > 0.01
-            || renderer.currentLayerOpacities[LAYER_SUN]! > 0.01;
-        },
+        getBackfaceCull() { return renderer.currentBackfaceKiller > 0.5; },
       };
       this.pressureLayer = new PressureLayer(pressureHost);
       this.layerRegistry.register(this.pressureLayer, this.getLayerContext());
@@ -426,14 +423,7 @@ export class GlobeRenderer {
         getOpacity() { return renderer.currentLayerOpacities[LAYER_WIND]!; },
         getLayerState() { return renderer.windLayerState; },
         getAnimSpeed() { return renderer.windAnimSpeed; },
-        getShowBackface() {
-          const maxOpacity = Math.max(
-            renderer.currentLayerOpacities[LAYER_EARTH]!,
-            renderer.currentLayerOpacities[LAYER_TEMP]!,
-          );
-          const t = Math.max(0, Math.min(1, (0.3 - maxOpacity) / 0.3));
-          return t * t * (3 - 2 * t);
-        },
+        getShowBackface() { return 1 - renderer.currentBackfaceKiller; },
       };
       this.layerRegistry.register(
         new WindLayer(windLineCount, windHost),
@@ -702,8 +692,12 @@ export class GlobeRenderer {
     // Logo
     view.setFloat32(O.logoOpacity, uniforms.logoOpacity, true);
 
-    // Rain (dynamic: backface depends on which layers are enabled)
-    view.setFloat32(O.rainBackFace, uniforms.rainBackFace, true);
+    // Backface killer: 1 when an opaque-coverage layer (earth/temp) is enabled.
+    // Transparent layers (rain/cities/graticule/pressure/wind) skip back-hemisphere
+    // rendering when this is 1; render full sphere when 0. Driven by the
+    // backfaceKiller catalog flag (see src/aurora/built_ins/catalog.ts).
+    view.setFloat32(O.backfaceKiller, uniforms.backfaceKiller, true);
+    this.currentBackfaceKiller = uniforms.backfaceKiller;
     if (uniforms.rainAnimated) this.rainAnimTime += this.frameDeltaMs / 1000;
     view.setFloat32(O.rainAnimTime, this.rainAnimTime, true);
 

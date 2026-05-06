@@ -26,6 +26,7 @@ export const LAYER_CATALOG: readonly LayerCatalogEntry[] = [
     blendFn: 'blendBasemap',
     pass: 'surface',
     order: 0,
+    backfaceKiller: true,
   },
   {
     id: 'sun',
@@ -61,6 +62,7 @@ export const LAYER_CATALOG: readonly LayerCatalogEntry[] = [
     blendFn: 'blendTemp',
     pass: 'surface',
     order: 10,
+    backfaceKiller: true,
   },
   {
     id: 'rain',

@@ -56,7 +56,7 @@ struct Uniforms {
   rainDensity: f32,        // items per px² (0.01 = 1 per 10×10)
   rainSizePx: f32,         // particle radius in screen pixels
   rainMinMm: f32,          // minimum precipitation (mm) to render
-  rainBackFace: f32,       // 1.0 = render rain on back hemisphere
+  backfaceKiller: f32,     // 1.0 = an opaque-coverage layer (earth/temp) is enabled → skip back-hemisphere rendering for transparent layers
   rainAnimTime: f32,       // accumulated animation time (seconds, from frameDelta)
   // Cloud layer uniforms
   cloudsBrightness: f32,

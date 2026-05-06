@@ -11,6 +11,7 @@
 
 import type { CameraConfig } from './camera';
 import { GlobeRenderer, type GlobeUniforms } from './globe-renderer';
+import { LAYER_CATALOG } from './built_ins/catalog';
 import { generateIsobarLevels } from './built_ins/pressure/pressure-layer';
 import { LayerStore } from './layer-store';
 import type { PressureColorOption } from './options/schema';
@@ -633,7 +634,7 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     logoOpacity: engine.showLogo && !isAnyLayerEnabled()
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,
-    rainBackFace: isLayerEnabled('rain') && !isLayerEnabled('earth') && !isLayerEnabled('temp') ? 1 : 0,
+    backfaceKiller: LAYER_CATALOG.some(e => e.backfaceKiller && isLayerEnabled(e.id)) ? 1 : 0,
     rainAnimated: getRainOpts().animated,
   };
 }
