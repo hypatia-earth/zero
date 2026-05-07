@@ -13,7 +13,8 @@ import type { LayerService } from '../../services/layer/layer-service';
 import type { SlotService } from '../../services/slot-service';
 import type { Progress } from '../progress';
 import type { LoadedAssets } from './assets';
-import { getPublishedParams, MODEL_BUFFER_MB, type TModel } from '../../config/models';
+import { getPublishedParams, MODELS, MODEL_BUFFER_MB, type TModel } from '../../config/models';
+import type { ModelSpec } from '../../aurora/types/model-spec';
 
 export async function runGpuInitPhase(
   canvas: HTMLCanvasElement,
@@ -52,9 +53,12 @@ export async function runGpuInitPhase(
     sizeMB: MODEL_BUFFER_MB[model],
   }));
 
+  const auroraModels: ModelSpec[] = MODELS.map(m => ({ id: m.name, gridPoints: m.gridPoints }));
+
   const config: AuroraConfig = {
     cameraConfig: configService.getCameraConfig(),
     paramConfigs,
+    models: auroraModels,
     layers: layerService.getAll().filter(l => l.isBuiltIn),
   };
 

@@ -18,13 +18,14 @@ import type { PressureColorOption } from './options/schema';
 import type { TLayer } from '../config/types';
 import { defaultConfig } from '../config/defaults';
 import { getSunDirection } from './utils/sun-position';
-import { shaderComposer, activeParamBindings, type ComposedShaders } from './shader-composer';
+import { shaderComposer, setModels, activeParamBindings, type ComposedShaders } from './shader-composer';
 import { LayerService, isBuiltInLayer, type LayerDeclaration } from '../services/layer/layer-service';
 import type { PaletteId } from '../services/palette-service';
 import { writeConfigUniforms } from './uniform-writer';
 import { U } from './globe-uniforms';
 import { createCaptureHandler } from './capture';
 import type { EngineOpts, GraticuleOpts, AuroraOptions as AuroraOptionsBlob } from './types/options';
+import type { ModelSpec } from './types/model-spec';
 import { AuroraOptions } from './options';
 
 // ============================================================
@@ -58,6 +59,8 @@ export interface AuroraConfig {
   cameraConfig: CameraConfig;
   /** Param configs for buffer management (keyed by param name) */
   paramConfigs: Array<{ param: string; sizeMB: number }>;
+  /** Model registry — aurora indexes by `id` to size param buffers. */
+  models: ModelSpec[];
   /** Built-in layer declarations (sent from main thread) */
   layers: LayerDeclaration[];
 }
@@ -686,6 +689,10 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
     layerRegistry.registerBuiltIn(layer);
   }
   initAnimatedOpacity();  // Initialize opacity map for all layers
+
+  // Aurora-internal model registry — host injects via init.
+  setModels(config.models);
+
   const layers = layerRegistry.getAll();
   const composedShaders = await shaderComposer.compose(layers);
 

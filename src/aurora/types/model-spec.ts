@@ -6,8 +6,10 @@
 
 export interface ModelSpec {
   id: string;
-  grid: 'gaussian' | 'lat-lon-regular';
-  dims: {
+  /** Total grid point count — used by aurora to size GPU buffers and emit param uniforms. */
+  gridPoints: number;
+  grid?: 'gaussian' | 'lat-lon-regular';
+  dims?: {
     latCount: number;
     lonCount: number;
   };

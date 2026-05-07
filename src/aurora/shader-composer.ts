@@ -8,7 +8,7 @@
  */
 
 import type { LayerDeclaration } from '../services/layer/layer-service';
-import { getModel, type TModel } from '../config/models';
+import type { ModelSpec } from './types/model-spec';
 import { link } from 'wesl';
 
 // WESL module bundles for linking
@@ -23,7 +23,7 @@ export interface ComposedShaders {
 /** Param binding configuration */
 export interface ParamBindingConfig {
   param: string;
-  model: TModel;
+  model: string;
   index: number;
   bindingSlot: number;
   bindingType: 'storage' | 'texture';
@@ -35,10 +35,17 @@ export interface ParamBindingConfig {
 /** Active param registry - exported for globe-renderer to use */
 export let activeParamBindings: ParamBindingConfig[] = [];
 
+/** Aurora-internal model registry, populated by host via aurora.init({models}). */
+const modelRegistry = new Map<string, ModelSpec>();
+export function setModels(models: ModelSpec[]): void {
+  modelRegistry.clear();
+  for (const m of models) modelRegistry.set(m.id, m);
+}
+
 /** Static registry: fixed binding slots and metadata for all known params.
  *  packWith: shares binding slot with named partner (v packed into u's buffer)
  *  bindingType: 'storage' (default) or 'texture' — determines bind group layout entry type */
-interface ParamRegistryEntry { bindingSlot: number; bindingType?: 'storage' | 'texture'; model: TModel; categorical: boolean; packWith?: string }
+interface ParamRegistryEntry { bindingSlot: number; bindingType?: 'storage' | 'texture'; model: string; categorical: boolean; packWith?: string }
 const PARAM_REGISTRY: Record<string, ParamRegistryEntry> = {
   temperature_2m:              { bindingSlot: 50, model: 'ecmwf_ifs',   categorical: false },
   precipitation:               { bindingSlot: 51, model: 'ecmwf_ifs',   categorical: false },
@@ -168,16 +175,20 @@ export class ShaderComposer {
   private computeParamBindings(): void {
     const sorted = Object.entries(PARAM_REGISTRY)
       .sort(([a], [b]) => a.localeCompare(b));
-    activeParamBindings = sorted.map(([param, entry], idx) => ({
-      param,
-      model: entry.model,
-      index: idx,
-      bindingSlot: entry.bindingSlot,
-      bindingType: entry.bindingType ?? 'storage',
-      gridPoints: getModel(entry.model).gridPoints,
-      categorical: entry.categorical,
-      packed: !!entry.packWith,
-    }));
+    activeParamBindings = sorted.map(([param, entry], idx) => {
+      const spec = modelRegistry.get(entry.model);
+      if (!spec) throw new Error(`shader-composer: model '${entry.model}' not registered (param '${param}')`);
+      return {
+        param,
+        model: entry.model,
+        index: idx,
+        bindingSlot: entry.bindingSlot,
+        bindingType: entry.bindingType ?? 'storage',
+        gridPoints: spec.gridPoints,
+        categorical: entry.categorical,
+        packed: !!entry.packWith,
+      };
+    });
   }
 
 }
