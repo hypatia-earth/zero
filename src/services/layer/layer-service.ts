@@ -11,7 +11,8 @@
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals-core';
 import { BUILT_IN_LAYERS, CUSTOM_LAYERS, type TBuiltInLayer, type TCustomLayer, type TLayerCategory } from '../../config/types';
 import type { StateService } from '../state-service';
-import { builtInLayers } from '../../layers';
+import { LAYER_CATALOG } from '../../aurora/built_ins/catalog';
+import type { LayerCatalogEntry } from '../../aurora/types/layer-catalog';
 import { getParamMeta, getPublishedParams, type TModel, type TModelParam } from '../../config/models';
 import type { TLayer } from '../../config/types';
 import type { PaletteId } from '../palette-service';
@@ -91,6 +92,30 @@ export function buildUserLayerOptions(
     opts.paletteRange = getParamMeta(paramName).range as [number, number];
   }
   return opts;
+}
+
+/** Widen aurora's `LayerCatalogEntry` (string-typed unions) into host's
+ *  `LayerDeclaration` (literal-typed unions). Casts are runtime no-ops;
+ *  types align by construction at the catalog source. */
+function adaptCatalogEntry(entry: LayerCatalogEntry): LayerDeclaration {
+  const decl: Partial<LayerDeclaration> = {
+    id: entry.id as TLayer,                                                              // QC-OK: catalog id is built-in TLayer by construction
+    label: entry.uiHints.defaultLabel,
+    buttonLabel: entry.uiHints.defaultButtonLabel ?? entry.uiHints.defaultLabel,
+    category: entry.uiHints.defaultCategory,
+    isBuiltIn: true,
+  };
+  if (entry.type) decl.type = entry.type;
+  if (entry.params) decl.params = entry.params as NonNullable<LayerDeclaration['params']>;        // QC-OK: TModelParam shape match
+  if (entry.advection) decl.advection = entry.advection as NonNullable<LayerDeclaration['advection']>; // QC-OK: AdvectionConfig shape match
+  if (entry.palettes) decl.palettes = entry.palettes as PaletteId[];                              // QC-OK: PaletteId is string union
+  if (entry.blendFn) decl.blendFn = entry.blendFn;
+  if (entry.postFn) decl.postFn = entry.postFn;
+  if (entry.config) decl.config = entry.config;
+  if (entry.pass) decl.pass = entry.pass;
+  if (entry.order !== undefined) decl.order = entry.order;
+  if (entry.topology) decl.topology = entry.topology;
+  return decl as LayerDeclaration;                                                                // QC-OK: matches defineLayer() cast
 }
 
 // IDB constants
@@ -373,10 +398,10 @@ export class LayerService {
     this.register(declaration);
   }
 
-  /** Register all built-in layers from the layers module */
+  /** Register all built-in layers from aurora's catalog. */
   registerBuiltInLayers(): void {
-    for (const layer of builtInLayers) {
-      this.registerBuiltIn(layer);
+    for (const entry of LAYER_CATALOG) {
+      this.registerBuiltIn(adaptCatalogEntry(entry));
     }
   }
 

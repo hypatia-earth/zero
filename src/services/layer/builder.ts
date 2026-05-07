@@ -110,12 +110,6 @@ export function withSolidColor(): LayerFeature {
   };
 }
 
-export function asBuiltIn(): LayerFeature {
-  return {
-    apply: (d) => ({ ...d, isBuiltIn: true }),
-  };
-}
-
 /** Add shader code to layer declaration */
 export function withShader(type: keyof LayerShaders, code: string): LayerFeature {
   return {
