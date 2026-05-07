@@ -48,17 +48,14 @@ export const WIND_DEFAULT_CONFIG: WindAuroraLayerConfig = {
  * Host-supplied per-frame values that wind needs but cannot derive locally:
  * - layerState (mode, lerp, time) is built by the host worker from layer-slot state
  * - animSpeed is sourced from `wind.speed` option (host-owned options state)
- * - showBackface is a cross-layer occlusion-culling hint derived from EARTH/TEMP
- *   opacities; passing it lets wind skip back-hemisphere particles when those
- *   layers are opaque. Pure performance optimization.
  *
- * Per-layer opacity arrives via frame.opacity (set by the registry from the
- * host's currentLayerOpacities[] before each compute/update/render call).
+ * Per-layer opacity arrives via frame.opacity; backface-killer (used to skip
+ * back-hemisphere particles when an opaque-coverage layer is on) arrives via
+ * frame.backfaceKiller.
  */
 export interface WindAuroraLayerHost {
   getLayerState(): LayerState;
   getAnimSpeed(): number;
-  getShowBackface(): number;
 }
 
 // ── Internal types ────────────────────────────────────────────────────────
@@ -233,7 +230,7 @@ export class WindLayer implements AuroraLayer {
       animPhase: this.animPhase,
       snakeLength: this.snakeLength,
       lineWidth: this.lineWidth,
-      showBackface: this.host.getShowBackface(),
+      showBackface: 1 - frame.backfaceKiller,
       radius: this.radius,
       paletteIndex: this.paletteIndex,
       paletteCount: this.paletteCount,

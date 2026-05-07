@@ -423,7 +423,6 @@ export class GlobeRenderer {
       const renderer = this;
       const pressureHost: PressureAuroraLayerHost = {
         getColors() { return renderer.currentPressureColors; },
-        getBackfaceCull() { return renderer.currentBackfaceKiller > 0.5; },
       };
       this.pressureLayer = new PressureLayer(pressureHost);
       this.layerRegistry.register(this.pressureLayer, this.getLayerContext());
@@ -436,7 +435,6 @@ export class GlobeRenderer {
       const windHost: WindAuroraLayerHost = {
         getLayerState() { return renderer.windLayerState; },
         getAnimSpeed() { return renderer.windAnimSpeed; },
-        getShowBackface() { return 1 - renderer.currentBackfaceKiller; },
       };
       this.layerRegistry.register(
         new WindLayer(windLineCount, windHost),
@@ -768,6 +766,7 @@ export class GlobeRenderer {
       globeRadiusPx: this.currentGlobeRadiusPx,
       dpr: this.canvas.height / this.cssHeight,
       time: new Date(),
+      backfaceKiller: this.currentBackfaceKiller,
     };
     const opacityOf = (id: string): number => {
       const idx = LAYER_INDEX_BY_ID[id];

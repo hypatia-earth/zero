@@ -75,11 +75,6 @@ export interface PressureExternalBuffers {
 
 export interface PressureAuroraLayerHost {
   getColors(): PressureColorOption;
-  /**
-   * True when the globe surface (earth/temp/sun) is opaque enough that
-   * back-hemisphere isobars are occluded — performance optimization.
-   */
-  getBackfaceCull(): boolean;
 }
 
 // Constants
@@ -208,7 +203,7 @@ export class PressureLayer implements AuroraLayer {
         frame.sunDirection[2]!,
       ],
       opacity,
-      backfaceCull: this.host.getBackfaceCull(),
+      backfaceCull: frame.backfaceKiller > 0.5,
     }, this.host.getColors());
   }
 

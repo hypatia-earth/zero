@@ -33,6 +33,12 @@ export interface AuroraLayerFrame {
   /** Device pixel ratio (render pixels per CSS pixel). For screen-space sizing. */
   dpr: number;
   time: Date;
+  /**
+   * Globe-wide back-hemisphere occlusion hint (0..1). 1 when an opaque-coverage
+   * layer (earth/temp) is enabled — transparent layers can skip back-hemisphere
+   * geometry. Driven by the `backfaceKiller` catalog flag.
+   */
+  backfaceKiller: number;
 }
 
 export interface AuroraDataEvent {
