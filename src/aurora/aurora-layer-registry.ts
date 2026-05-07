@@ -58,8 +58,9 @@ export class AuroraLayerRegistry {
     if (layer) layer.onOptionsChanged(ctx, options);
   }
 
-  computeAll(frame: AuroraLayerFrame): void {
+  computeAll(frame: AuroraLayerFrame, opacityOf: (id: string) => number): void {
     for (const layer of this.byOrder) {
+      frame.opacity = opacityOf(layer.id);
       const dispatched = layer.compute(frame);
       if (typeof dispatched !== 'boolean') {
         throw new Error(`AuroraLayerRegistry.computeAll: layer "${layer.id}".compute() must return boolean`);
@@ -67,14 +68,16 @@ export class AuroraLayerRegistry {
     }
   }
 
-  updateAll(frame: AuroraLayerFrame): void {
+  updateAll(frame: AuroraLayerFrame, opacityOf: (id: string) => number): void {
     for (const layer of this.byOrder) {
+      frame.opacity = opacityOf(layer.id);
       layer.update(frame);
     }
   }
 
-  renderAll(frame: AuroraLayerFrame, pass: GPURenderPassEncoder): void {
+  renderAll(frame: AuroraLayerFrame, pass: GPURenderPassEncoder, opacityOf: (id: string) => number): void {
     for (const layer of this.byOrder) {
+      frame.opacity = opacityOf(layer.id);
       layer.render(frame, pass);
     }
   }

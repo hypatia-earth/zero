@@ -74,7 +74,6 @@ export interface PressureExternalBuffers {
 }
 
 export interface PressureAuroraLayerHost {
-  getOpacity(): number;
   getColors(): PressureColorOption;
   /**
    * True when the globe surface (earth/temp/sun) is opaque enough that
@@ -191,7 +190,7 @@ export class PressureLayer implements AuroraLayer {
   }
 
   update(frame: AuroraLayerFrame): void {
-    const opacity = this.host.getOpacity();
+    const opacity = frame.opacity;
     const visible = opacity > 0.01;
     this.enabled = visible;
     if (!visible) return;

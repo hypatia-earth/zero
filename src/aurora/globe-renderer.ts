@@ -35,6 +35,19 @@ export const LAYER_CLOUDS = 6;
 export const LAYER_PRESSURE = 7;
 export const LAYER_WIND = 8;
 
+/** Built-in layer id → uniform array index. Must match BUILT_IN_LAYERS registration order. */
+const LAYER_INDEX_BY_ID: Record<string, number> = {
+  earth: LAYER_EARTH,
+  sun: LAYER_SUN,
+  graticule: LAYER_GRATICULE,
+  cities: LAYER_CITIES,
+  temp: LAYER_TEMP,
+  rain: LAYER_RAIN,
+  clouds: LAYER_CLOUDS,
+  pressure: LAYER_PRESSURE,
+  wind: LAYER_WIND,
+};
+
 export interface GlobeUniforms {
   viewProj: Float32Array;
   viewProjInverse: Float32Array;
@@ -409,7 +422,6 @@ export class GlobeRenderer {
     {
       const renderer = this;
       const pressureHost: PressureAuroraLayerHost = {
-        getOpacity() { return renderer.currentLayerOpacities[LAYER_PRESSURE]!; },
         getColors() { return renderer.currentPressureColors; },
         getBackfaceCull() { return renderer.currentBackfaceKiller > 0.5; },
       };
@@ -422,7 +434,6 @@ export class GlobeRenderer {
     {
       const renderer = this;
       const windHost: WindAuroraLayerHost = {
-        getOpacity() { return renderer.currentLayerOpacities[LAYER_WIND]!; },
         getLayerState() { return renderer.windLayerState; },
         getAnimSpeed() { return renderer.windAnimSpeed; },
         getShowBackface() { return 1 - renderer.currentBackfaceKiller; },
@@ -744,9 +755,8 @@ export class GlobeRenderer {
     if (this.isDestroying) return { pass1Ms: NaN, pass2Ms: NaN, pass3Ms: NaN };
     const commandEncoder = this.device.createCommandEncoder();
 
-    // Aurora layer frame (Phase 1: registry empty so all dispatch is no-op).
-    // opacity/dataReady are placeholders; per-layer resolution lands when real
-    // layers register in Phase 2+.
+    // Aurora layer frame. `opacity` is rewritten per-layer by the registry
+    // before each compute/update/render call (see `opacityOf`).
     const layerFrame: AuroraLayerFrame = {
       commandEncoder,
       viewProj: this.currentViewProj,
@@ -759,7 +769,11 @@ export class GlobeRenderer {
       dpr: this.canvas.height / this.cssHeight,
       time: new Date(),
     };
-    this.layerRegistry.updateAll(layerFrame);
+    const opacityOf = (id: string): number => {
+      const idx = LAYER_INDEX_BY_ID[id];
+      return idx === undefined ? 0 : this.currentLayerOpacities[idx]!;
+    };
+    this.layerRegistry.updateAll(layerFrame, opacityOf);
     // Flush any uniformView writes layers performed during updateAll (e.g.
     // cityFontScale) before the GPU consumes the buffer in subsequent passes.
     this.uploadUniforms();
@@ -794,7 +808,7 @@ export class GlobeRenderer {
     globePass.end();
 
     // COMPUTE PASS: Wind line tracing dispatches via the registry (Phase 4).
-    this.layerRegistry.computeAll(layerFrame);
+    this.layerRegistry.computeAll(layerFrame, opacityOf);
 
     // PASS 2: Geometry layers (pressure contours, wind, etc.)
     // Renders to same color/depth textures, depth-tested against globe
@@ -822,7 +836,7 @@ export class GlobeRenderer {
     const geometryPass = commandEncoder.beginRenderPass(geometryPassDescriptor);
 
     // Pressure + wind render inside the geometry pass via the registry's renderAll dispatch.
-    this.layerRegistry.renderAll(layerFrame, geometryPass);
+    this.layerRegistry.renderAll(layerFrame, geometryPass, opacityOf);
 
     geometryPass.end();
 
