@@ -3,7 +3,7 @@
  * Pure functions for disk warp positioning and sun brightness
  */
 
-import { getSunDirection } from '../../utils/sun-position';
+import { getSunDirection } from '../../aurora/utils/sun-position';
 
 /** Disk perspective warp - compresses edges, expands center */
 export function diskWarp(t: number): number {

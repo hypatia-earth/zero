@@ -17,7 +17,7 @@ import { LayerStore } from './layer-store';
 import type { PressureColorOption } from './options/schema';
 import type { TLayer } from '../config/types';
 import { defaultConfig } from '../config/defaults';
-import { getSunDirection } from '../utils/sun-position';
+import { getSunDirection } from './utils/sun-position';
 import { shaderComposer, activeParamBindings, type ComposedShaders } from './shader-composer';
 import { LayerService, isBuiltInLayer, type LayerDeclaration } from '../services/layer/layer-service';
 import type { PaletteId } from '../services/palette-service';
