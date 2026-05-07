@@ -14,7 +14,9 @@ import type { SlotService } from '../../services/slot-service';
 import type { Progress } from '../progress';
 import type { LoadedAssets } from './assets';
 import { getPublishedParams, MODELS, MODEL_BUFFER_MB, type TModel } from '../../config/models';
+import { PALETTES, PALETTE_IDS } from '../../services/palette-service';
 import type { ModelSpec } from '../../aurora/types/model-spec';
+import type { Palette as AuroraPalette } from '../../aurora/types/palette';
 
 export async function runGpuInitPhase(
   canvas: HTMLCanvasElement,
@@ -54,11 +56,13 @@ export async function runGpuInitPhase(
   }));
 
   const auroraModels: ModelSpec[] = MODELS.map(m => ({ id: m.name, gridPoints: m.gridPoints }));
+  const auroraPalettes: AuroraPalette[] = PALETTE_IDS.map(id => PALETTES[id]!);
 
   const config: AuroraConfig = {
     cameraConfig: configService.getCameraConfig(),
     paramConfigs,
     models: auroraModels,
+    palettes: auroraPalettes,
     layers: layerService.getAll().filter(l => l.isBuiltIn),
   };
 

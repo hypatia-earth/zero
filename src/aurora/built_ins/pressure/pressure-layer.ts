@@ -32,7 +32,7 @@ import type {
 } from '../../types/aurora-layer';
 import type { PressureColorOption } from '../../options/pressure-colors-default';
 import type { PaletteTexture } from '../../palette-texture';
-import type { PaletteId } from '../../../services/palette-service';
+import type { PaletteId } from '../../types/palette';
 
 
 /** Isobar configuration */

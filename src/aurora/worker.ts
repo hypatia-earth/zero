@@ -20,7 +20,8 @@ import { defaultConfig } from '../config/defaults';
 import { getSunDirection } from './utils/sun-position';
 import { shaderComposer, setModels, activeParamBindings, type ComposedShaders } from './shader-composer';
 import { LayerService, isBuiltInLayer, type LayerDeclaration } from '../services/layer/layer-service';
-import type { PaletteId } from '../services/palette-service';
+import type { PaletteId, Palette } from './types/palette';
+import { setPalettes } from './palette-registry';
 import { writeConfigUniforms } from './uniform-writer';
 import { U } from './globe-uniforms';
 import { createCaptureHandler } from './capture';
@@ -61,6 +62,8 @@ export interface AuroraConfig {
   paramConfigs: Array<{ param: string; sizeMB: number }>;
   /** Model registry — aurora indexes by `id` to size param buffers. */
   models: ModelSpec[];
+  /** Palette registry — aurora indexes in array order for the GPU LUT. */
+  palettes: Palette[];
   /** Built-in layer declarations (sent from main thread) */
   layers: LayerDeclaration[];
 }
@@ -692,6 +695,10 @@ async function handleInit(data: Extract<AuroraRequest, { type: 'init' }>): Promi
 
   // Aurora-internal model registry — host injects via init.
   setModels(config.models);
+
+  // Aurora-internal palette registry — host injects via init. Must run
+  // before renderer.initialize() (PaletteTexture reads the registry there).
+  setPalettes(config.palettes);
 
   const layers = layerRegistry.getAll();
   const composedShaders = await shaderComposer.compose(layers);

@@ -5,7 +5,8 @@
  * Layers sample using their assigned palette index.
  */
 
-import { PALETTES, PALETTE_IDS, type Palette, type PaletteId } from '../services/palette-service';
+import type { Palette, PaletteId } from './types/palette';
+import { getPalette, getPaletteIds, getPaletteCount } from './palette-registry';
 
 const PALETTE_WIDTH = 256;  // 256 colors per palette
 
@@ -18,7 +19,7 @@ export class PaletteTexture {
   private paletteIndexMap = new Map<PaletteId, number>();
 
   constructor(device: GPUDevice) {
-    this.paletteCount = PALETTE_IDS.length;
+    this.paletteCount = getPaletteCount();
 
     // Create 256×N texture (one row per palette)
     this.texture = device.createTexture({
@@ -36,9 +37,9 @@ export class PaletteTexture {
     });
 
     // Upload all palettes
-    PALETTE_IDS.forEach((id, rowIndex) => {
+    getPaletteIds().forEach((id, rowIndex) => {
       this.paletteIndexMap.set(id, rowIndex);
-      const palette = PALETTES[id]!;
+      const palette = getPalette(id);
       const rgba = this.generateRGBA(palette);
       device.queue.writeTexture(
         { texture: this.texture, origin: [0, rowIndex, 0] },
@@ -66,8 +67,7 @@ export class PaletteTexture {
    * Check if a palette uses stepped (discrete) colors
    */
   isStepped(id: PaletteId): boolean {
-    const palette = PALETTES[id];
-    return palette ? !palette.interpolate : false;
+    return !getPalette(id).interpolate;
   }
 
   /**

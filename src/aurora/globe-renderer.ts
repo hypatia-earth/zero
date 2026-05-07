@@ -21,7 +21,8 @@ import type { AuroraDataEvent, AuroraLayerContext, AuroraLayerFrame } from './ty
 export type { PassTimings } from './gpu-timestamp';
 import type { LayerState } from './types/layer-state';
 import { PRESSURE_COLOR_DEFAULT, type PressureColorOption } from './options/pressure-colors-default';
-import { PALETTE_IDS, PALETTES, type PaletteId } from '../services/palette-service';
+import type { PaletteId } from './types/palette';
+import { getPaletteIds, isStepped } from './palette-registry';
 
 // Layer indices for uniform array access (must match registration order in BUILT_IN_LAYERS)
 export const LAYER_EARTH = 0;
@@ -313,8 +314,9 @@ export class GlobeRenderer {
 
     // Compute paletteStepped bitmask — bit i = 1 means palette i is stepped
     let steppedBitmask = 0;
-    for (let i = 0; i < PALETTE_IDS.length && i < 32; i++) {
-      if (!PALETTES[PALETTE_IDS[i]!]!.interpolate) {
+    const ids = getPaletteIds();
+    for (let i = 0; i < ids.length && i < 32; i++) {
+      if (isStepped(ids[i]!)) {
         steppedBitmask |= (1 << i);
       }
     }

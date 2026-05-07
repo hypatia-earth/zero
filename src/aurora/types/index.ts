@@ -20,7 +20,7 @@ export type {
 } from './options';
 export type { AuroraConfig } from './config';
 
-export type { Palette, PaletteStop, PaletteRuntimeId } from './palette';
+export type { Palette, PaletteStop, PaletteId } from './palette';
 export type { ModelSpec } from './model-spec';
 export type { AssetSpec, AssetBag } from './asset';
 
