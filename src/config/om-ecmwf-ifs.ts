@@ -69,24 +69,6 @@ export const ECMWF_IFS = {
       description: 'Mean sea level pressure',
       published: true, layers: ['pressure'],
     },
-    sea_ice_concentration: {
-      label: 'Sea Ice', unit: '%', range: [0, 100] as [number, number],
-      palette: 'simple-gradient' as PaletteId, sizeEstimate: 500_000,
-      description: 'Sea ice area fraction (stub — texture param validation)',
-      layers: ['sea-ice'],
-    },
-    sea_surface_temperature: {
-      label: 'Ocean Temp', unit: '°C', range: [-2, 35] as [number, number],
-      palette: 'simple-gradient' as PaletteId, sizeEstimate: 3_500_000,
-      description: 'Sea surface temperature (stub — texture param validation)',
-      layers: ['ocean-temp'],
-    },
-    dew_point_2m: {
-      label: 'Dewpoint (2m)', unit: '°C', range: [-40, 35] as [number, number],
-      palette: 'simple-gradient' as PaletteId, sizeEstimate: 3_500_000,
-      description: 'Dewpoint temperature at 2m (stub — texture param validation)',
-      layers: ['wet-bulb'],
-    },
   },
 } as const satisfies { name: string; shortName: string; root: string; bufferMB: number; gridPoints: number; params: Record<string, ParamMeta> };
 
