@@ -47,15 +47,12 @@ export const WIND_DEFAULT_CONFIG: WindAuroraLayerConfig = {
 /**
  * Host-supplied per-frame values that wind needs but cannot derive locally:
  * - layerState (mode, lerp, time) is built by the host worker from layer-slot state
- * - animSpeed is sourced from `wind.speed` option (host-owned options state)
  *
- * Per-layer opacity arrives via frame.opacity; backface-killer (used to skip
- * back-hemisphere particles when an opaque-coverage layer is on) arrives via
- * frame.backfaceKiller.
+ * Per-layer opacity arrives via frame.opacity; backface-killer arrives via
+ * frame.backfaceKiller; animSpeed is cached via onOptionsChanged.
  */
 export interface WindAuroraLayerHost {
   getLayerState(): LayerState;
-  getAnimSpeed(): number;
 }
 
 // ── Internal types ────────────────────────────────────────────────────────
@@ -144,6 +141,9 @@ export class WindLayer implements AuroraLayer {
   private lastState: LayerState | null = null;
   private needsCompute = true;
 
+  /** Animation speed (updates per second). Cached via onOptionsChanged. */
+  private animSpeed = 0;
+
   constructor(
     lineCount: number,
     private readonly host: WindAuroraLayerHost,
@@ -188,6 +188,9 @@ export class WindLayer implements AuroraLayer {
     if ('seedCount' in options && typeof options.seedCount === 'number') {
       this.setLineCount(options.seedCount);
     }
+    if ('speed' in options && typeof options.speed === 'number') {
+      this.animSpeed = options.speed;
+    }
   }
 
   compute(frame: AuroraLayerFrame): boolean {
@@ -216,7 +219,7 @@ export class WindLayer implements AuroraLayer {
     this.enabled = active;
     if (!active) return;
 
-    this.advanceAnimation(frame.frameDeltaMs, this.host.getAnimSpeed());
+    this.advanceAnimation(frame.frameDeltaMs, this.animSpeed);
     this.setState(state);
 
     this.updateUniforms({

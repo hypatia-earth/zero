@@ -158,7 +158,6 @@ type RainHostOpts = { animated: boolean };
 // `options` runs strictly after init.
 let options!: AuroraOptions;
 
-function getWindOpts(): WindHostOpts { return options.read().layers.wind!.opts as WindHostOpts; }
 function getPressureOpts(): PressureHostOpts { return options.read().layers.pressure!.opts as PressureHostOpts; }
 function getRainOpts(): RainHostOpts { return options.read().layers.rain!.opts as RainHostOpts; }
 
@@ -187,6 +186,19 @@ function applyLayerSideEffects(id: string, prev: { opts: unknown } | undefined, 
       if (newOpts.seedCount !== prevOpts?.seedCount) {
         renderer.setWindSeedCount(newOpts.seedCount);
       }
+      if (newOpts.speed !== prevOpts?.speed) {
+        renderer.setWindAnimSpeed(newOpts.speed);
+      }
+      break;
+    }
+    case 'pressure': {
+      const newOpts = next.opts as PressureHostOpts;
+      const prevOpts = prev?.opts as PressureHostOpts | undefined;
+      if (newOpts.colors !== prevOpts?.colors) {
+        renderer.setPressureColors(newOpts.colors);
+      }
+      // spacing/smoothing flow through globe-renderer.setPressureLevelCount +
+      // runPressureContour, dispatched by host-side worker code separately.
       break;
     }
     case 'temp': {
@@ -204,7 +216,7 @@ function applyLayerSideEffects(id: string, prev: { opts: unknown } | undefined, 
       }
       break;
     }
-    // pressure / rain: read at render time, no immediate side-effect needed.
+    // rain: read at render time, no immediate side-effect needed.
   }
 }
 
@@ -630,13 +642,11 @@ function buildUniforms(camera: CameraState, time: Date): GlobeUniforms {
     layerDataReady: buildLayerDataReady(),
     // Wind/pressure have separate render passes with special state
     windLerp: computeLerp(getLayerSlotState('wind')!, time.getTime()),
-    windAnimSpeed: getWindOpts().speed,
     windState: {
       mode: getLayerSlotState('wind')!.dataReady ? 'pair' : 'loading',
       lerp: computeLerp(getLayerSlotState('wind')!, time.getTime()),
       time,
     },
-    pressureColors: getPressureOpts().colors,
     logoOpacity: engine.showLogo && !isAnyLayerEnabled()
       ? 1 - Math.max(...animatedOpacity.values())
       : 0,

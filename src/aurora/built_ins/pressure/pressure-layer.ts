@@ -30,7 +30,7 @@ import type {
   AuroraLayerContext,
   AuroraLayerFrame,
 } from '../../types/aurora-layer';
-import type { PressureColorOption } from '../../options/pressure-colors-default';
+import { PRESSURE_COLOR_DEFAULT, type PressureColorOption } from '../../options/pressure-colors-default';
 import type { PaletteTexture } from '../../palette-texture';
 import type { PaletteId } from '../../types/palette';
 
@@ -71,10 +71,6 @@ interface PressureUniforms {
 /** External GPU buffers provided by GlobeRenderer (Gaussian LUTs only) */
 export interface PressureExternalBuffers {
   gaussianGrid: GPUBuffer;        // packed lats + offsets as vec2<u32>
-}
-
-export interface PressureAuroraLayerHost {
-  getColors(): PressureColorOption;
 }
 
 // Constants
@@ -153,8 +149,10 @@ export class PressureLayer implements AuroraLayer {
   private computeReady = false;
   private currentLevelCount = 21;  // Default for 4 hPa spacing
 
+  /** Pressure-line colors. Cached via onOptionsChanged. */
+  private colors: PressureColorOption = PRESSURE_COLOR_DEFAULT;
 
-  constructor(private readonly host: PressureAuroraLayerHost) {}
+  constructor() {}
 
   initialize(ctx: AuroraLayerContext): void {
     this.device = ctx.device;
@@ -173,9 +171,14 @@ export class PressureLayer implements AuroraLayer {
     // surface is unused for now (tracked in deferred ledger).
   }
 
-  onOptionsChanged(_ctx: AuroraLayerContext, _options: Record<string, unknown>): void {
-    // pressure.colors flows per-frame via host handle; spacing/smoothing flow
-    // through globe-renderer.setPressureLevelCount + runPressureContour.
+  onOptionsChanged(_ctx: AuroraLayerContext, options: Record<string, unknown>): void {
+    if ('colors' in options && options.colors !== undefined) {
+      // colors is a discriminated union { mode, colors[] }; the typed setter
+      // forwards it as-is so a structural cast is safe here.
+      this.colors = options.colors as PressureColorOption;       // QC-OK: typed setter dispatches authored value
+    }
+    // spacing/smoothing flow through globe-renderer.setPressureLevelCount +
+    // runPressureContour, not this surface.
   }
 
   compute(_frame: AuroraLayerFrame): boolean {
@@ -204,7 +207,7 @@ export class PressureLayer implements AuroraLayer {
       ],
       opacity,
       backfaceCull: frame.backfaceKiller > 0.5,
-    }, this.host.getColors());
+    }, this.colors);
   }
 
   private createComputePipelines(): void {

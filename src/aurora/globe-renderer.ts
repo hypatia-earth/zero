@@ -5,7 +5,8 @@
 import { Camera, type CameraConfig } from './camera';
 import { type ComposedShaders, activeParamBindings, type ParamBindingConfig } from './shader-composer';
 import { createAtmosphereLUTs, type AtmosphereLUTs, type AtmosphereLUTData } from './atmosphere-luts';
-import { PressureLayer, type PressureAuroraLayerHost } from './built_ins/pressure/pressure-layer';
+import { PressureLayer } from './built_ins/pressure/pressure-layer';
+import type { PressureColorOption } from './options/pressure-colors-default';
 import { WindLayer, type WindAuroraLayerHost } from './built_ins/wind/wind-layer';
 import { GRATICULE_BUFFER_SIZE } from './built_ins/graticule/graticule-animator';
 import { GraticuleLayer } from './built_ins/graticule/graticule-layer';
@@ -20,7 +21,6 @@ import type { AuroraDataEvent, AuroraLayerContext, AuroraLayerFrame } from './ty
 // Re-export for consumers
 export type { PassTimings } from './gpu-timestamp';
 import type { LayerState } from './types/layer-state';
-import { PRESSURE_COLOR_DEFAULT, type PressureColorOption } from './options/pressure-colors-default';
 import type { PaletteId } from './types/palette';
 import { getPaletteIds, isStepped } from './palette-registry';
 
@@ -61,9 +61,7 @@ export interface GlobeUniforms {
   layerDataReady: boolean[];      // indexed by LAYER_TEMP, LAYER_RAIN, etc.
   // Wind/pressure have separate render passes with special state
   windLerp: number;
-  windAnimSpeed: number;  // updates per second
   windState: LayerState;  // full state for compute caching
-  pressureColors: PressureColorOption;
   logoOpacity: number;       // computed from all layer opacities
   backfaceKiller: number;
   rainAnimated: boolean;
@@ -98,13 +96,11 @@ export class GlobeRenderer {
   // Owned capture texture — post-process renders here, readback reads from here
   // (never auto-presented, so content is stable for GPU readback on all platforms)
   private captureTexture!: GPUTexture;
-  // Pressure contour layer (registered with AuroraLayerRegistry; held to forward the
-  // worker's heavy compute orchestration through getInner() — see Phase 5 escape hatch).
+  // Pressure contour layer (registered with AuroraLayerRegistry; held to forward
+  // the worker's heavy compute orchestration through layer-specific methods).
   private pressureLayer!: PressureLayer;
-  private currentPressureColors: PressureColorOption = PRESSURE_COLOR_DEFAULT;
-  // Wind layer (registered with AuroraLayerRegistry; per-frame host-handle state below)
+  // Wind layer (registered with AuroraLayerRegistry; layerState flows through host handle).
   private windLayerState: LayerState = { mode: 'loading', lerp: 0, time: new Date(0) };
-  private windAnimSpeed = 0;
   // Dynamic param buffers (keyed by param name) — combined t0+t1 buffers
   private paramBuffers = new Map<string, GPUBuffer>();
   // Dynamic param textures (keyed by param name) — combined t0+t1 textures for texture-backed params
@@ -417,24 +413,18 @@ export class GlobeRenderer {
       primitive: { topology: 'triangle-list' },
     });
 
-    // Register pressure AuroraLayer (built-in). Per-frame opacity/colors and the
-    // cross-layer backface-cull hint flow through the host handle.
-    {
-      const renderer = this;
-      const pressureHost: PressureAuroraLayerHost = {
-        getColors() { return renderer.currentPressureColors; },
-      };
-      this.pressureLayer = new PressureLayer(pressureHost);
-      this.layerRegistry.register(this.pressureLayer, this.getLayerContext());
-    }
+    // Register pressure AuroraLayer (built-in). Per-frame opacity arrives via
+    // frame.opacity; backface-cull via frame.backfaceKiller; colors via
+    // onOptionsChanged cache.
+    this.pressureLayer = new PressureLayer();
+    this.layerRegistry.register(this.pressureLayer, this.getLayerContext());
 
-    // Register wind AuroraLayer (built-in). Per-frame opacity / layer-state /
-    // animSpeed flow through the host handle; updateUniforms() captures them.
+    // Register wind AuroraLayer (built-in). layerState still flows through the
+    // host handle (data-state, not option-derived).
     {
       const renderer = this;
       const windHost: WindAuroraLayerHost = {
         getLayerState() { return renderer.windLayerState; },
-        getAnimSpeed() { return renderer.windAnimSpeed; },
       };
       this.layerRegistry.register(
         new WindLayer(windLineCount, windHost),
@@ -732,16 +722,10 @@ export class GlobeRenderer {
     // Cities: cityFontScale uniform + LoD update both handled by CitiesLayer
     // via the registry's updateAll dispatch in render() — no direct call here.
 
-    // Pressure: enabled/updateUniforms run inside PressureLayer.update()
-    // via the registry's updateAll dispatch. Capture per-frame inputs the host
-    // handle exposes back to the layer.
-    this.currentPressureColors = uniforms.pressureColors;
-
     // Wind layer: advance/setState/uniforms now run inside WindLayer.update()
-    // via the registry's updateAll dispatch. Capture per-frame inputs that the
-    // wind host handle exposes back to the layer.
+    // via the registry's updateAll dispatch. layerState (data-state, not
+    // option-derived) still flows through the wind host handle.
     this.windLayerState = uniforms.windState;
-    this.windAnimSpeed = uniforms.windAnimSpeed;
   }
 
   /** Upload uniform buffer to GPU. Call after all setParamState/setParamDt writes. */
@@ -1051,6 +1035,16 @@ export class GlobeRenderer {
    */
   setWindSeedCount(seedCount: number): void {
     this.layerRegistry.onOptionsChanged('wind', { seedCount }, this.getLayerContext());
+  }
+
+  /** Set wind animation speed (updates per second). */
+  setWindAnimSpeed(speed: number): void {
+    this.layerRegistry.onOptionsChanged('wind', { speed }, this.getLayerContext());
+  }
+
+  /** Set pressure-line colors (mode + palette/color stops). */
+  setPressureColors(colors: PressureColorOption): void {
+    this.layerRegistry.onOptionsChanged('pressure', { colors }, this.getLayerContext());
   }
 
   /**
