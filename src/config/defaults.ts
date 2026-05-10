@@ -1,8 +1,8 @@
 /**
  * Default configuration for Hypatia Zero
  *
- * Layer declarations live in src/layers/{layer}/index.ts.
- * LayerService is the authority for layer config.
+ * Layer declarations live in src/aurora/built_ins/catalog.ts.
+ * LayerService is the authority for runtime layer config.
  */
 
 import { ALL_LAYERS, BUILT_IN_LAYERS, type ZeroConfig, type TLayer, type TBuiltInLayer } from './types';

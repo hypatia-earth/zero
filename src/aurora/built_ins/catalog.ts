@@ -1,8 +1,8 @@
 /**
  * Aurora's built-in layer catalog — pure data, source of truth for
  * built-in layer metadata. Both main thread and worker import from here;
- * the host adapts entries into its `LayerDeclaration` shape via a shim
- * during migration (see `src/layers/index.ts`).
+ * the host adapts entries into its `LayerDeclaration` shape via the
+ * `adaptCatalogEntry` shim folded into LayerService.
  *
  * Phase 6 of aurora-autarky Sub-B (catalog inversion). All 9 built-ins
  * declared here. Composed-layer GPU config (sun/rain/clouds withConfig
